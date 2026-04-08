@@ -14,7 +14,210 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      avalanche_events: {
+        Row: {
+          confidence: number | null
+          created_at: string
+          description: string | null
+          event_type: Database["public"]["Enums"]["event_type"] | null
+          features: Json | null
+          fusion_source: string | null
+          id: string
+          location: unknown
+          severity: number | null
+          source: string | null
+          timestamp: string
+        }
+        Insert: {
+          confidence?: number | null
+          created_at?: string
+          description?: string | null
+          event_type?: Database["public"]["Enums"]["event_type"] | null
+          features?: Json | null
+          fusion_source?: string | null
+          id?: string
+          location?: unknown
+          severity?: number | null
+          source?: string | null
+          timestamp?: string
+        }
+        Update: {
+          confidence?: number | null
+          created_at?: string
+          description?: string | null
+          event_type?: Database["public"]["Enums"]["event_type"] | null
+          features?: Json | null
+          fusion_source?: string | null
+          id?: string
+          location?: unknown
+          severity?: number | null
+          source?: string | null
+          timestamp?: string
+        }
+        Relationships: []
+      }
+      compute_jobs: {
+        Row: {
+          bbox: number[] | null
+          created_at: string
+          error: string | null
+          id: string
+          payload: Json | null
+          result: Json | null
+          status: Database["public"]["Enums"]["job_status"]
+          time_offset: number | null
+          type: Database["public"]["Enums"]["job_type"]
+          updated_at: string
+        }
+        Insert: {
+          bbox?: number[] | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          payload?: Json | null
+          result?: Json | null
+          status?: Database["public"]["Enums"]["job_status"]
+          time_offset?: number | null
+          type: Database["public"]["Enums"]["job_type"]
+          updated_at?: string
+        }
+        Update: {
+          bbox?: number[] | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          payload?: Json | null
+          result?: Json | null
+          status?: Database["public"]["Enums"]["job_status"]
+          time_offset?: number | null
+          type?: Database["public"]["Enums"]["job_type"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      field_reports: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          image_url: string | null
+          location: unknown
+          status: Database["public"]["Enums"]["report_status"] | null
+          timestamp: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          location?: unknown
+          status?: Database["public"]["Enums"]["report_status"] | null
+          timestamp?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          location?: unknown
+          status?: Database["public"]["Enums"]["report_status"] | null
+          timestamp?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      forecasts: {
+        Row: {
+          bbox: number[] | null
+          created_at: string
+          exposure: number | null
+          grid_data: Json | null
+          hazard: number | null
+          id: string
+          job_id: string | null
+          problem_type: string | null
+          risk_score: number | null
+          shap_values: Json | null
+          timestamp: string
+          vulnerability: number | null
+        }
+        Insert: {
+          bbox?: number[] | null
+          created_at?: string
+          exposure?: number | null
+          grid_data?: Json | null
+          hazard?: number | null
+          id?: string
+          job_id?: string | null
+          problem_type?: string | null
+          risk_score?: number | null
+          shap_values?: Json | null
+          timestamp?: string
+          vulnerability?: number | null
+        }
+        Update: {
+          bbox?: number[] | null
+          created_at?: string
+          exposure?: number | null
+          grid_data?: Json | null
+          hazard?: number | null
+          id?: string
+          job_id?: string | null
+          problem_type?: string | null
+          risk_score?: number | null
+          shap_values?: Json | null
+          timestamp?: string
+          vulnerability?: number | null
+        }
+        Relationships: []
+      }
+      model_status: {
+        Row: {
+          f1_score: number | null
+          id: string
+          last_trained: string | null
+          next_run: string | null
+          version: string | null
+        }
+        Insert: {
+          f1_score?: number | null
+          id?: string
+          last_trained?: string | null
+          next_run?: string | null
+          version?: string | null
+        }
+        Update: {
+          f1_score?: number | null
+          id?: string
+          last_trained?: string | null
+          next_run?: string | null
+          version?: string | null
+        }
+        Relationships: []
+      }
+      system_config: {
+        Row: {
+          gemini_spend_cap: number | null
+          gemini_usage: number | null
+          id: string
+          last_enrichment: string | null
+        }
+        Insert: {
+          gemini_spend_cap?: number | null
+          gemini_usage?: number | null
+          id?: string
+          last_enrichment?: string | null
+        }
+        Update: {
+          gemini_spend_cap?: number | null
+          gemini_usage?: number | null
+          id?: string
+          last_enrichment?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +226,16 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      event_type: "slab" | "loose" | "wet" | "glide" | "cornice" | "unknown"
+      job_status: "pending" | "running" | "completed" | "failed"
+      job_type:
+        | "forecast"
+        | "daily_enrichment"
+        | "sentinel_refresh"
+        | "fine_tune"
+        | "static_precompute"
+        | "field_report_enrichment"
+      report_status: "pending" | "verified" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +362,18 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      event_type: ["slab", "loose", "wet", "glide", "cornice", "unknown"],
+      job_status: ["pending", "running", "completed", "failed"],
+      job_type: [
+        "forecast",
+        "daily_enrichment",
+        "sentinel_refresh",
+        "fine_tune",
+        "static_precompute",
+        "field_report_enrichment",
+      ],
+      report_status: ["pending", "verified", "rejected"],
+    },
   },
 } as const
