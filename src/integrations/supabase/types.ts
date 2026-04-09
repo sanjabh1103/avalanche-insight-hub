@@ -135,6 +135,7 @@ export type Database = {
           exposure: number | null
           grid_data: Json | null
           hazard: number | null
+          hourly_grids: Json | null
           id: string
           job_id: string | null
           problem_type: string | null
@@ -149,6 +150,7 @@ export type Database = {
           exposure?: number | null
           grid_data?: Json | null
           hazard?: number | null
+          hourly_grids?: Json | null
           id?: string
           job_id?: string | null
           problem_type?: string | null
@@ -163,6 +165,7 @@ export type Database = {
           exposure?: number | null
           grid_data?: Json | null
           hazard?: number | null
+          hourly_grids?: Json | null
           id?: string
           job_id?: string | null
           problem_type?: string | null
@@ -175,25 +178,70 @@ export type Database = {
       }
       model_status: {
         Row: {
+          data_freshness_hours: number | null
           f1_score: number | null
           id: string
+          last_inference: string | null
           last_trained: string | null
           next_run: string | null
           version: string | null
         }
         Insert: {
+          data_freshness_hours?: number | null
           f1_score?: number | null
           id?: string
+          last_inference?: string | null
           last_trained?: string | null
           next_run?: string | null
           version?: string | null
         }
         Update: {
+          data_freshness_hours?: number | null
           f1_score?: number | null
           id?: string
+          last_inference?: string | null
           last_trained?: string | null
           next_run?: string | null
           version?: string | null
+        }
+        Relationships: []
+      }
+      mountain_terrain: {
+        Row: {
+          aspect: number
+          created_at: string
+          curvature: number
+          elevation: number
+          id: string
+          lat: number
+          lng: number
+          slope_angle: number
+          tpi: number
+          twi: number
+        }
+        Insert: {
+          aspect?: number
+          created_at?: string
+          curvature?: number
+          elevation?: number
+          id?: string
+          lat: number
+          lng: number
+          slope_angle?: number
+          tpi?: number
+          twi?: number
+        }
+        Update: {
+          aspect?: number
+          created_at?: string
+          curvature?: number
+          elevation?: number
+          id?: string
+          lat?: number
+          lng?: number
+          slope_angle?: number
+          tpi?: number
+          twi?: number
         }
         Relationships: []
       }
