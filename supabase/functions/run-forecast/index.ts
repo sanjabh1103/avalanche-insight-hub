@@ -41,20 +41,17 @@ async function fetchWeather(lat: number, lng: number): Promise<WeatherData | nul
 function computeRisk(weather: WeatherData | null, hour: number, row: number, col: number, terrainElev: number, terrainSlope: number, terrainAspect: number) {
   const h = Math.min(hour, 23);
   
-  // Weather features (real or proxy)
   const snowfall = weather?.snowfall[h] ?? (2 + Math.sin(hour * 0.5 + row * 0.3) * 3);
   const wind = weather?.windspeed[h] ?? (15 + Math.cos(hour * 0.3 + col * 0.2) * 10);
   const temp = weather?.temperature[h] ?? (-5 + Math.sin(hour * 0.4) * 8);
   const precip = weather?.precipitation[h] ?? (snowfall * 0.8);
   const windDir = weather?.winddirection[h] ?? (180 + col * 10);
 
-  // Avalanche-specific features
   const snowfall24h = weather ? weather.snowfall.slice(0, h + 1).reduce((a, b) => a + b, 0) : snowfall * (h + 1) * 0.3;
   const windLoading = wind * Math.max(0, Math.cos((windDir - terrainAspect) * Math.PI / 180));
   const tempGradient = h > 0 && weather ? (weather.temperature[h] - weather.temperature[Math.max(0, h - 3)]) : temp * 0.1;
   const snowpackProxy = Math.max(0, snowfall24h * 0.4 - Math.max(0, temp) * 0.3);
 
-  // XGBoost-style weighted ensemble
   const weights = {
     snowfall_24h: 0.25,
     wind_loading: 0.20,
@@ -108,7 +105,6 @@ function generateHourlyGrids(bbox: number[], weather: WeatherData | null) {
         const lat = latMin + r * latStep;
         const lng = lngMin + c * lngStep;
         
-        // Terrain proxies
         const elevation = 2000 + (r / GRID_SIZE) * 2500 + Math.sin(c * 0.5) * 300;
         const slope = 20 + (r / GRID_SIZE) * 25 + Math.cos(c * 0.3) * 10;
         const aspect = (c / GRID_SIZE) * 360;
@@ -134,7 +130,7 @@ serve(async (req) => {
   }
 
   try {
-    const { bbox, timeOffset = 0 } = await req.json();
+    const { bbox, timeOffset = 0, regionName } = await req.json();
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -156,6 +152,7 @@ serve(async (req) => {
     const hourlyGrids = generateHourlyGrids(bbox, weather);
     const currentCells = hourlyGrids[Math.min(timeOffset, 24)];
     const avgRisk = currentCells.reduce((s: number, c: any) => s + c.riskScore, 0) / currentCells.length;
+    const weatherSource = weather ? 'open-meteo' : 'simulation';
 
     // Store forecast with hourly grids
     const { data: forecast } = await supabase.from('forecasts').insert({
@@ -170,23 +167,32 @@ serve(async (req) => {
       hourly_grids: hourlyGrids,
     }).select('id').single();
 
-    // Update model status
+    // Update model status with last inference and data freshness
     await supabase.from('model_status').update({
       last_inference: new Date().toISOString(),
       data_freshness_hours: weather ? 0 : 999,
     }).not('id', 'is', null);
 
+    // Log analytics
+    await supabase.from('forecast_analytics').insert({
+      region_name: regionName || 'Unknown',
+      bbox,
+      weather_source: weatherSource,
+      avg_risk: avgRisk,
+      cell_count: currentCells.length,
+    });
+
     // Mark complete
     await supabase
       .from('compute_jobs')
-      .update({ status: 'completed', result: { avgRisk, cellCount: currentCells.length, weatherSource: weather ? 'open-meteo' : 'simulation' } })
+      .update({ status: 'completed', result: { avgRisk, cellCount: currentCells.length, weatherSource } })
       .eq('id', job.id);
 
     return new Response(JSON.stringify({ 
       jobId: job.id, 
       forecastId: forecast?.id,
       avgRisk,
-      weatherSource: weather ? 'open-meteo' : 'simulation',
+      weatherSource,
       hours: hourlyGrids.length,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
