@@ -27,22 +27,22 @@ export default function TimeSlider({ value, onChange, max = 24 }: Props) {
   }, [playing, tick]);
 
   return (
-    <div className="glass-panel rounded-xl px-4 py-3 flex items-center gap-3">
+    <div className="glass-panel rounded-xl px-3 md:px-4 py-3 flex items-center gap-2 md:gap-3">
       <Button
         variant="ghost"
         size="icon"
-        className="h-8 w-8 shrink-0"
+        className="h-10 w-10 md:h-8 md:w-8 shrink-0 touch-manipulation"
         onClick={() => setPlaying(!playing)}
       >
-        {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+        {playing ? <Pause className="h-5 w-5 md:h-4 md:w-4" /> : <Play className="h-5 w-5 md:h-4 md:w-4" />}
       </Button>
       <Button
         variant="ghost"
         size="icon"
-        className="h-8 w-8 shrink-0"
+        className="h-10 w-10 md:h-8 md:w-8 shrink-0 touch-manipulation"
         onClick={() => { setPlaying(false); onChange(0); }}
       >
-        <RotateCcw className="h-3.5 w-3.5" />
+        <RotateCcw className="h-4 w-4 md:h-3.5 md:w-3.5" />
       </Button>
       <Slider
         value={[value]}
@@ -50,7 +50,7 @@ export default function TimeSlider({ value, onChange, max = 24 }: Props) {
         min={0}
         max={max}
         step={1}
-        className="flex-1"
+        className="flex-1 [&_[role=slider]]:h-5 [&_[role=slider]]:w-5 md:[&_[role=slider]]:h-4 md:[&_[role=slider]]:w-4 touch-manipulation"
       />
       <span className="font-mono text-xs text-muted-foreground w-12 text-right shrink-0">
         +{value}h

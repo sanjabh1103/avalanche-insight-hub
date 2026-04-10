@@ -1,4 +1,3 @@
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { RISK_LABELS } from '@/lib/constants';
@@ -21,6 +20,8 @@ export default function RiskDashboard({ cell }: Props) {
     name: key.replace(/_/g, ' '),
     value: Number((value as number).toFixed(3)),
   })).sort((a, b) => b.value - a.value);
+
+  const maxShap = Math.max(...shapData.map(d => d.value), 0.01);
 
   return (
     <div className="space-y-3 p-3">
@@ -62,41 +63,33 @@ export default function RiskDashboard({ cell }: Props) {
         ))}
       </div>
 
-      {/* SHAP Values */}
+      {/* SHAP Values - CSS bar chart instead of recharts */}
       <Card className="border-0 bg-secondary/50">
         <CardHeader className="p-3 pb-1">
           <CardTitle className="text-xs text-muted-foreground uppercase tracking-wider">
             SHAP Feature Importance
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-3 pt-0">
-          <div className="h-40">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={shapData} layout="vertical" margin={{ left: 70, right: 8, top: 4, bottom: 4 }}>
-                <XAxis type="number" tick={{ fontSize: 10, fill: 'hsl(215 14% 55%)' }} />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  tick={{ fontSize: 9, fill: 'hsl(210 20% 82%)' }}
-                  width={65}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: 'hsl(220 18% 10%)',
-                    border: '1px solid hsl(220 14% 18%)',
-                    borderRadius: '8px',
-                    fontSize: 11,
-                    color: 'hsl(210 20% 92%)',
+        <CardContent className="p-3 pt-1 space-y-1.5">
+          {shapData.map((d, i) => (
+            <div key={d.name} className="flex items-center gap-2">
+              <span className="text-[9px] text-secondary-foreground w-16 text-right truncate font-mono">
+                {d.name}
+              </span>
+              <div className="flex-1 h-4 bg-muted rounded overflow-hidden">
+                <div
+                  className="h-full rounded transition-all duration-300"
+                  style={{
+                    width: `${(d.value / maxShap) * 100}%`,
+                    backgroundColor: `hsl(199, ${70 + i * 4}%, ${55 - i * 5}%)`,
                   }}
                 />
-                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                  {shapData.map((_, i) => (
-                    <Cell key={i} fill={`hsl(199, ${70 + i * 4}%, ${55 - i * 5}%)`} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+              </div>
+              <span className="text-[9px] font-mono text-muted-foreground w-10 text-right">
+                {d.value.toFixed(3)}
+              </span>
+            </div>
+          ))}
         </CardContent>
       </Card>
     </div>
