@@ -38,26 +38,28 @@ export default function HistoricalEventsToggle({ visible, onToggle, onEventsLoad
       .limit(50)
       .then(({ data }) => {
         if (data) {
-          const events: AvalancheEvent[] = data.map((e: any) => {
+          const events: AvalancheEvent[] = data.map((e: unknown) => {
+            const event = e as Record<string, unknown>;
             // Parse PostGIS POINT
             let lat = 0, lng = 0;
-            if (typeof e.location === 'string') {
-              const m = e.location.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/);
+            const location = event.location;
+            if (typeof location === 'string') {
+              const m = location.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/);
               if (m) { lng = parseFloat(m[1]); lat = parseFloat(m[2]); }
-            } else if (e.location && typeof e.location === 'object') {
+            } else if (location && typeof location === 'object') {
               // GeoJSON
-              const coords = (e.location as any).coordinates;
+              const coords = (location as { coordinates?: number[] }).coordinates;
               if (coords) { lng = coords[0]; lat = coords[1]; }
             }
             return {
-              id: e.id,
+              id: String(event.id || ''),
               lat, lng,
-              severity: e.severity || 3,
-              confidence: e.confidence || 0.5,
-              description: e.description || '',
-              source: e.source || 'unknown',
-              event_type: e.event_type || 'unknown',
-              timestamp: e.timestamp,
+              severity: Number(event.severity) || 3,
+              confidence: Number(event.confidence) || 0.5,
+              description: String(event.description || ''),
+              source: String(event.source || 'unknown'),
+              event_type: String(event.event_type || 'unknown'),
+              timestamp: String(event.timestamp || ''),
             };
           });
           onEventsLoaded(events);
