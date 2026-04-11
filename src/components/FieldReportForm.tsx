@@ -70,16 +70,8 @@ export default function FieldReportForm({ open, onClose }: Props) {
       }).select('id').single();
       if (error) throw error;
 
-      if (data?.id) {
-        await supabase.functions.invoke('field-report-enrichment', {
-          body: {
-            fieldReportId: data.id,
-            lat: parsedLat,
-            lng: parsedLng,
-            description: description.trim(),
-          },
-        });
-      }
+      // Note: AI enrichment happens asynchronously via daily pg_cron job
+      // Realtime subscription in Index.tsx will show marker immediately
 
       toast.success('Field report submitted');
       setDescription('');
