@@ -14,6 +14,7 @@ import RiskLegend from '@/components/RiskLegend';
 import RegionSelector, { REGIONS, type Region } from '@/components/RegionSelector';
 import DisclaimerBanner from '@/components/DisclaimerBanner';
 import ShareForecast from '@/components/ShareForecast';
+import ExportForecast from '@/components/ExportForecast';
 import HistoricalEventsToggle, { type AvalancheEvent } from '@/components/HistoricalEventsToggle';
 import { generateForecastGrid, type GridCell } from '@/lib/gridUtils';
 import { supabase } from '@/integrations/supabase/client';
@@ -31,15 +32,100 @@ export default function Index() {
   const [hourlyGrids, setHourlyGrids] = useState<GridCell[][] | null>(null);
   const [showEvents, setShowEvents] = useState(false);
   const [historicalEvents, setHistoricalEvents] = useState<AvalancheEvent[]>([]);
+  const [weatherSummary, setWeatherSummary] = useState<{ snowfall_24h: string; wind_speed: string; temperature: string; precipitation: string } | null>(null);
+
+  // Realtime subscription for avalanche_events (Story #5 + #6)
+  useEffect(() => {
+    if (!showEvents) return;
+    
+    const channel = supabase
+      .channel('avalanche-events-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'avalanche_events' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newEvent = payload.new as Record<string, unknown>;
+            
+            // Parse location
+            let lat = 0, lng = 0;
+            const location = newEvent.location;
+            if (typeof location === 'string') {
+              const m = location.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/);
+              if (m) { lng = parseFloat(m[1]); lat = parseFloat(m[2]); }
+            } else if (location && typeof location === 'object') {
+              const coords = (location as { coordinates?: number[] }).coordinates;
+              if (coords) { lng = coords[0]; lat = coords[1]; }
+            }
+            
+            const event: AvalancheEvent = {
+              id: String(newEvent.id || ''),
+              lat,
+              lng,
+              severity: Number(newEvent.severity) || 3,
+              confidence: Number(newEvent.confidence) || 0.5,
+              description: String(newEvent.description || ''),
+              source: String(newEvent.source || 'unknown'),
+              event_type: String(newEvent.event_type || 'unknown'),
+              timestamp: String(newEvent.timestamp || ''),
+            };
+            
+            setHistoricalEvents(prev => [event, ...prev]);
+            toast.info('New avalanche event detected on map');
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [showEvents]);
 
   // Auto-open sidebar on desktop
   useEffect(() => {
     if (isMobile === false) setSidebarOpen(true);
   }, [isMobile]);
 
-  // Load shared forecast from URL
+  // Load shared forecast from URL with full-state restoration
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    
+    // Parse region
+    const regionName = params.get('region');
+    if (regionName) {
+      const foundRegion = REGIONS.find(r => r.name === regionName);
+      if (foundRegion) {
+        setRegion(foundRegion);
+      } else {
+        // Try parsing custom bbox
+        const bboxParam = params.get('bbox');
+        if (bboxParam) {
+          const bbox = bboxParam.split(',').map(Number) as [number, number, number, number];
+          if (bbox.length === 4 && bbox.every(n => !isNaN(n))) {
+            const centerLat = (bbox[0] + bbox[2]) / 2;
+            const centerLng = (bbox[1] + bbox[3]) / 2;
+            setRegion({
+              name: regionName,
+              bbox,
+              center: [centerLat, centerLng],
+              zoom: 9
+            });
+          }
+        }
+      }
+    }
+    
+    // Parse hour
+    const hourParam = params.get('hour');
+    if (hourParam) {
+      const hour = parseInt(hourParam, 10);
+      if (!isNaN(hour) && hour >= 0 && hour <= 24) {
+        setTimeOffset(hour);
+      }
+    }
+    
+    // Parse forecast ID
     const sharedForecast = params.get('forecast');
     if (sharedForecast) {
       supabase
@@ -51,7 +137,19 @@ export default function Index() {
           if (data?.hourly_grids && Array.isArray(data.hourly_grids)) {
             setHourlyGrids(data.hourly_grids as unknown as GridCell[][]);
             setForecastId(sharedForecast);
-            toast.success('Loaded shared forecast');
+            
+            // Parse selected cell after grid loads
+            const cellParam = params.get('cell');
+            if (cellParam) {
+              const [row, col] = cellParam.split(',').map(Number);
+              const grid = data.hourly_grids[parseInt(hourParam || '0', 10)] as GridCell[] | undefined;
+              if (grid) {
+                const cell = grid.find(c => c.row === row && c.col === col);
+                if (cell) setSelectedCell(cell);
+              }
+            }
+            
+            toast.success('Restored shared forecast view');
           }
         });
     }
@@ -93,6 +191,7 @@ export default function Index() {
       
       if (data?.forecastId) {
         setForecastId(data.forecastId);
+        setWeatherSummary(data?.weatherSummary || null);
         const { data: forecast } = await supabase
           .from('forecasts')
           .select('hourly_grids')
@@ -105,6 +204,9 @@ export default function Index() {
       }
       
       toast.success(`Forecast complete • Source: ${data?.weatherSource || 'simulation'} • ${data?.hours || 25} hours`);
+      if (data?.weatherSummary) {
+        toast.info(`Real weather: ${data.weatherSummary.snowfall_24h}cm snow, ${data.weatherSummary.wind_speed}km/h wind`);
+      }
     } catch (err: unknown) {
       toast.success('Forecast generated (client simulation)');
     } finally {
@@ -167,7 +269,7 @@ export default function Index() {
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value="dashboard" className="flex-1 overflow-y-auto mt-0">
-                  <RiskDashboard cell={selectedCell} />
+                  <RiskDashboard cell={selectedCell} weatherSummary={weatherSummary} />
                 </TabsContent>
                 <TabsContent value="admin" className="flex-1 overflow-y-auto mt-0">
                   <AdminDashboard />
@@ -204,7 +306,18 @@ export default function Index() {
               {forecasting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mountain className="h-4 w-4" />}
               {isMobile ? 'FORECAST' : 'RUN 24H FORECAST'}
             </Button>
-            <ShareForecast forecastId={forecastId} />
+            <ShareForecast 
+              forecastId={forecastId} 
+              region={region}
+              hour={timeOffset}
+              selectedCell={selectedCell}
+            />
+            <ExportForecast 
+              grid={grid}
+              events={historicalEvents}
+              regionName={region.name}
+              hour={timeOffset}
+            />
             <HistoricalEventsToggle
               visible={showEvents}
               onToggle={() => setShowEvents(!showEvents)}

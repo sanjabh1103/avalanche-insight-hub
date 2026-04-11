@@ -2,25 +2,47 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Share2, Check } from 'lucide-react';
 import { toast } from 'sonner';
+import type { GridCell } from '@/lib/gridUtils';
+import type { Region } from '@/components/RegionSelector';
 
 interface Props {
   forecastId?: string;
+  region?: Region;
+  hour?: number;
+  selectedCell?: GridCell | null;
 }
 
-export default function ShareForecast({ forecastId }: Props) {
+export default function ShareForecast({ forecastId, region, hour = 0, selectedCell }: Props) {
   const [copied, setCopied] = useState(false);
 
   const handleShare = async () => {
-    if (!forecastId) {
-      toast.info('Run a forecast first to generate a shareable link');
-      return;
+    const params = new URLSearchParams();
+    
+    // Always include region
+    if (region) {
+      params.set('region', region.name);
+      params.set('bbox', region.bbox.join(','));
     }
-    const url = `${window.location.origin}?forecast=${forecastId}`;
+    
+    // Include hour
+    params.set('hour', String(hour));
+    
+    // Include forecast ID if available
+    if (forecastId) {
+      params.set('forecast', forecastId);
+    }
+    
+    // Include selected cell if available
+    if (selectedCell) {
+      params.set('cell', `${selectedCell.row},${selectedCell.col}`);
+    }
+    
+    const url = `${window.location.origin}?${params.toString()}`;
     
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
-      toast.success('Public forecast link copied — anyone with this link can view the risk grid');
+      toast.success('Full-state forecast link copied — restores region, hour, and selected cell');
       setTimeout(() => setCopied(false), 2000);
     } catch {
       toast.info(url);

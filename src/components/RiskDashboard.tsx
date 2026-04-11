@@ -3,11 +3,19 @@ import { Badge } from '@/components/ui/badge';
 import { RISK_LABELS } from '@/lib/constants';
 import { getRiskColor, type GridCell } from '@/lib/gridUtils';
 
-interface Props {
-  cell: GridCell | null;
+interface WeatherSummary {
+  snowfall_24h: string;
+  wind_speed: string;
+  temperature: string;
+  precipitation: string;
 }
 
-export default function RiskDashboard({ cell }: Props) {
+interface Props {
+  cell: GridCell | null;
+  weatherSummary?: WeatherSummary | null;
+}
+
+export default function RiskDashboard({ cell, weatherSummary }: Props) {
   if (!cell) {
     return (
       <div className="p-4 text-center text-muted-foreground">
@@ -62,6 +70,37 @@ export default function RiskDashboard({ cell }: Props) {
           </Card>
         ))}
       </div>
+
+      {/* Real Weather Values (Story #11 - Open-Meteo for all regions) */}
+      {weatherSummary && (
+        <Card className="border-0 bg-secondary/50">
+          <CardHeader className="p-3 pb-1">
+            <CardTitle className="text-xs text-green-400 uppercase tracking-wider">
+              Live Weather (Open-Meteo)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-3 pt-1">
+            <div className="grid grid-cols-2 gap-2 text-[10px]">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Snowfall 24h</span>
+                <span className="font-mono text-foreground">{weatherSummary.snowfall_24h} cm</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Wind Speed</span>
+                <span className="font-mono text-foreground">{weatherSummary.wind_speed} km/h</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Temperature</span>
+                <span className="font-mono text-foreground">{weatherSummary.temperature}°C</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Precipitation</span>
+                <span className="font-mono text-foreground">{weatherSummary.precipitation} mm</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* SHAP Values - CSS bar chart instead of recharts */}
       <Card className="border-0 bg-secondary/50">

@@ -204,12 +204,22 @@ serve(async (req) => {
       .update({ status: 'completed', result: { avgRisk, cellCount: currentCells.length, weatherSource } })
       .eq('id', job.id);
 
+    // Extract weather summary for SHAP display (real values for all regions including Himalayas/Andes)
+    const weatherSummary = weather ? {
+      snowfall_24h: weather.snowfall.slice(0, 24).reduce((a, b) => a + b, 0).toFixed(1),
+      wind_speed: (weather.windspeed.slice(0, 24).reduce((a, b) => a + b, 0) / 24).toFixed(1),
+      temperature: (weather.temperature.slice(0, 24).reduce((a, b) => a + b, 0) / 24).toFixed(1),
+      precipitation: weather.precipitation.slice(0, 24).reduce((a, b) => a + b, 0).toFixed(1),
+    } : null;
+
     return new Response(JSON.stringify({ 
       jobId: job.id, 
       forecastId: forecast?.id,
       avgRisk,
       weatherSource,
       hours: hourlyGrids.length,
+      weatherSummary,
+      region: { lat: centerLat, lng: centerLng },
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

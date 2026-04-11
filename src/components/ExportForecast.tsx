@@ -1,0 +1,116 @@
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Download, Check, FileSpreadsheet } from 'lucide-react';
+import { toast } from 'sonner';
+import type { GridCell } from '@/lib/gridUtils';
+import type { AvalancheEvent } from '@/components/HistoricalEventsToggle';
+
+interface Props {
+  grid?: { cells: GridCell[]; timestamp: string; bbox: [number, number, number, number] } | null;
+  events?: AvalancheEvent[];
+  regionName?: string;
+  hour?: number;
+}
+
+export default function ExportForecast({ grid, events = [], regionName = 'Unknown', hour = 0 }: Props) {
+  const [copied, setCopied] = useState(false);
+
+  const downloadCSV = () => {
+    if (!grid || grid.cells.length === 0) {
+      toast.info('Run a forecast first to export data');
+      return;
+    }
+
+    // CSV Header
+    const headers = ['row', 'col', 'lat', 'lng', 'riskScore', 'hazard', 'exposure', 'vulnerability', 'problemType', ...Object.keys(grid.cells[0]?.shapValues || {})];
+    
+    // CSV Rows
+    const rows = grid.cells.map(cell => [
+      cell.row,
+      cell.col,
+      cell.lat.toFixed(6),
+      cell.lng.toFixed(6),
+      cell.riskScore,
+      cell.hazard.toFixed(3),
+      cell.exposure.toFixed(3),
+      cell.vulnerability.toFixed(3),
+      cell.problemType,
+      ...Object.values(cell.shapValues).map(v => v.toFixed(3))
+    ]);
+
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `avalanche-forecast-${regionName.replace(/\s+/g, '-').toLowerCase()}-h${hour}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast.success(`Exported ${grid.cells.length} grid cells to CSV`);
+  };
+
+  const downloadJSON = () => {
+    if (!grid || grid.cells.length === 0) {
+      toast.info('Run a forecast first to export data');
+      return;
+    }
+
+    const data = {
+      metadata: {
+        region: regionName,
+        hour: hour,
+        timestamp: grid.timestamp,
+        bbox: grid.bbox,
+        totalCells: grid.cells.length,
+        exportedAt: new Date().toISOString()
+      },
+      grid: grid.cells,
+      events: events.map(e => ({
+        id: e.id,
+        lat: e.lat,
+        lng: e.lng,
+        severity: e.severity,
+        confidence: e.confidence,
+        description: e.description,
+        source: e.source,
+        event_type: e.event_type,
+        timestamp: e.timestamp
+      }))
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `avalanche-forecast-${regionName.replace(/\s+/g, '-').toLowerCase()}-h${hour}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast.success(`Exported forecast + ${events.length} events to JSON`);
+  };
+
+  const handleExport = () => {
+    // Try CSV first, fall back to info if no data
+    downloadCSV();
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <Button
+      variant="outline"
+      className="h-9 text-xs font-semibold gap-2 glass-panel border-0"
+      onClick={handleExport}
+    >
+      {copied ? <Check className="h-4 w-4 text-green-400" /> : <FileSpreadsheet className="h-4 w-4" />}
+      EXPORT
+    </Button>
+  );
+}
