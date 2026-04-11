@@ -82,6 +82,11 @@ serve(async (req) => {
                     });
                   }
                 }
+                // Increment Gemini usage counter
+                const { data: cfg } = await supabase.from('system_config').select('gemini_usage').limit(1).single();
+                if (cfg) {
+                  await supabase.from('system_config').update({ gemini_usage: (cfg.gemini_usage || 0) + 1 }).not('id', 'is', null);
+                }
               } catch { /* skip */ }
             }
           }

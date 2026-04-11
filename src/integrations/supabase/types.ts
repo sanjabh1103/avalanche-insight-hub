@@ -128,6 +128,36 @@ export type Database = {
         }
         Relationships: []
       }
+      forecast_analytics: {
+        Row: {
+          avg_risk: number | null
+          bbox: number[] | null
+          cell_count: number | null
+          created_at: string
+          id: string
+          region_name: string | null
+          weather_source: string | null
+        }
+        Insert: {
+          avg_risk?: number | null
+          bbox?: number[] | null
+          cell_count?: number | null
+          created_at?: string
+          id?: string
+          region_name?: string | null
+          weather_source?: string | null
+        }
+        Update: {
+          avg_risk?: number | null
+          bbox?: number[] | null
+          cell_count?: number | null
+          created_at?: string
+          id?: string
+          region_name?: string | null
+          weather_source?: string | null
+        }
+        Relationships: []
+      }
       forecasts: {
         Row: {
           bbox: number[] | null

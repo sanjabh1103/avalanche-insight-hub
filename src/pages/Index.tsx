@@ -14,18 +14,48 @@ import RiskLegend from '@/components/RiskLegend';
 import RegionSelector, { REGIONS, type Region } from '@/components/RegionSelector';
 import DisclaimerBanner from '@/components/DisclaimerBanner';
 import ShareForecast from '@/components/ShareForecast';
+import HistoricalEventsToggle, { type AvalancheEvent } from '@/components/HistoricalEventsToggle';
 import { generateForecastGrid, type GridCell } from '@/lib/gridUtils';
 import { supabase } from '@/integrations/supabase/client';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export default function Index() {
+  const isMobile = useIsMobile();
   const [region, setRegion] = useState<Region>(REGIONS[0]);
   const [timeOffset, setTimeOffset] = useState(0);
   const [selectedCell, setSelectedCell] = useState<GridCell | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [forecasting, setForecasting] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [forecastId, setForecastId] = useState<string | undefined>();
   const [hourlyGrids, setHourlyGrids] = useState<GridCell[][] | null>(null);
+  const [showEvents, setShowEvents] = useState(false);
+  const [historicalEvents, setHistoricalEvents] = useState<AvalancheEvent[]>([]);
+
+  // Auto-open sidebar on desktop
+  useEffect(() => {
+    if (isMobile === false) setSidebarOpen(true);
+  }, [isMobile]);
+
+  // Load shared forecast from URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sharedForecast = params.get('forecast');
+    if (sharedForecast) {
+      supabase
+        .from('forecasts')
+        .select('hourly_grids, bbox')
+        .eq('id', sharedForecast)
+        .single()
+        .then(({ data }) => {
+          if (data?.hourly_grids && Array.isArray(data.hourly_grids)) {
+            setHourlyGrids(data.hourly_grids as unknown as GridCell[][]);
+            setForecastId(sharedForecast);
+            toast.success('Loaded shared forecast');
+          }
+        });
+    }
+  }, []);
 
   // Use real hourly data if available, else fall back to client simulation
   const grid = useMemo(() => {
@@ -41,7 +71,8 @@ export default function Index() {
 
   const handleCellClick = useCallback((cell: GridCell) => {
     setSelectedCell(cell);
-  }, []);
+    if (isMobile) setSidebarOpen(true);
+  }, [isMobile]);
 
   const handleRegionChange = useCallback((r: Region) => {
     setRegion(r);
@@ -56,13 +87,12 @@ export default function Index() {
     toast.info('Running 24h forecast with real weather data...');
     try {
       const { data, error } = await supabase.functions.invoke('run-forecast', {
-        body: { bbox: region.bbox, timeOffset },
+        body: { bbox: region.bbox, timeOffset, regionName: region.name },
       });
       if (error) throw error;
       
       if (data?.forecastId) {
         setForecastId(data.forecastId);
-        // Load the hourly grids from the forecast
         const { data: forecast } = await supabase
           .from('forecasts')
           .select('hourly_grids')
@@ -86,7 +116,15 @@ export default function Index() {
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background">
       <DisclaimerBanner />
       
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Mobile overlay */}
+        {isMobile && sidebarOpen && (
+          <div
+            className="absolute inset-0 bg-black/50 z-20"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
         {/* Sidebar */}
         <AnimatePresence>
           {sidebarOpen && (
@@ -95,7 +133,7 @@ export default function Index() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: -320, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="w-80 h-full flex flex-col border-r border-border bg-card z-20 shrink-0 max-md:absolute max-md:left-0 max-md:top-0 max-md:bottom-0"
+              className="w-80 h-full flex flex-col border-r border-border bg-card z-30 shrink-0 absolute md:relative left-0 top-0 bottom-0"
             >
               {/* Header */}
               <div className="p-4 border-b border-border">
@@ -107,7 +145,7 @@ export default function Index() {
                       <p className="text-[10px] text-muted-foreground">Risk Intelligence Platform</p>
                     </div>
                   </div>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSidebarOpen(false)}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 touch-manipulation" onClick={() => setSidebarOpen(false)}>
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
@@ -142,38 +180,44 @@ export default function Index() {
         {/* Main Map Area */}
         <div className="flex-1 relative flex flex-col min-h-0">
           {/* Top Controls */}
-          <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
+          <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
             {!sidebarOpen && (
               <Button
                 variant="outline"
                 size="icon"
-                className="h-9 w-9 glass-panel border-0"
+                className="h-10 w-10 glass-panel border-0 touch-manipulation"
                 onClick={() => setSidebarOpen(true)}
               >
-                <Menu className="h-4 w-4" />
+                <Menu className="h-5 w-5" />
               </Button>
             )}
             <RegionSelector value={region.name} onChange={handleRegionChange} />
           </div>
 
           {/* Action Buttons */}
-          <div className="absolute top-4 right-4 z-10 flex items-center gap-2 flex-wrap justify-end">
+          <div className="absolute top-3 right-3 z-10 flex items-center gap-2 flex-wrap justify-end">
             <Button
               onClick={runForecast}
               disabled={forecasting}
-              className="h-9 text-xs font-semibold gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg"
+              className="h-10 text-xs font-semibold gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg touch-manipulation"
             >
               {forecasting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mountain className="h-4 w-4" />}
-              RUN 24H FORECAST
+              {isMobile ? 'FORECAST' : 'RUN 24H FORECAST'}
             </Button>
             <ShareForecast forecastId={forecastId} />
+            <HistoricalEventsToggle
+              visible={showEvents}
+              onToggle={() => setShowEvents(!showEvents)}
+              onEventsLoaded={setHistoricalEvents}
+              bbox={region.bbox}
+            />
             <Button
               variant="outline"
-              className="h-9 text-xs font-semibold gap-2 glass-panel border-0 text-destructive hover:text-destructive"
+              className="h-10 text-xs font-semibold gap-2 glass-panel border-0 text-destructive hover:text-destructive touch-manipulation"
               onClick={() => setReportOpen(true)}
             >
               <AlertTriangle className="h-4 w-4" />
-              REPORT
+              {isMobile ? '' : 'REPORT'}
             </Button>
           </div>
 
@@ -185,17 +229,18 @@ export default function Index() {
               onCellClick={handleCellClick}
               center={region.center}
               zoom={region.zoom}
+              historicalEvents={historicalEvents}
             />
           </div>
 
           {/* Legend */}
-          <div className="absolute bottom-20 right-4 z-10">
+          <div className="absolute bottom-20 right-3 z-10 hidden md:block">
             <RiskLegend />
           </div>
 
           {/* Data source indicator */}
           {hourlyGrids && (
-            <div className="absolute top-16 right-4 z-10">
+            <div className="absolute top-16 right-3 z-10">
               <span className="glass-panel rounded-full px-3 py-1 text-[10px] font-mono text-green-400">
                 ● LIVE DATA
               </span>
@@ -203,7 +248,7 @@ export default function Index() {
           )}
 
           {/* Timeline Scrubber */}
-          <div className="absolute bottom-4 left-4 right-4 z-10">
+          <div className="absolute bottom-3 left-3 right-3 z-10">
             <TimeSlider value={timeOffset} onChange={setTimeOffset} />
           </div>
         </div>

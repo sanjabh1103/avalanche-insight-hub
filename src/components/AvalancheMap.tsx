@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Rectangle, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Rectangle, CircleMarker, Popup, useMap } from 'react-leaflet';
 import type { LatLngBoundsExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getRiskColor, type GridCell } from '@/lib/gridUtils';
+import type { AvalancheEvent } from '@/components/HistoricalEventsToggle';
 
 interface Props {
   cells: GridCell[];
@@ -10,6 +11,7 @@ interface Props {
   onCellClick: (cell: GridCell) => void;
   center: [number, number];
   zoom: number;
+  historicalEvents?: AvalancheEvent[];
 }
 
 function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }) {
@@ -27,7 +29,14 @@ function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }
   return null;
 }
 
-export default function AvalancheMap({ cells, selectedCell, onCellClick, center, zoom }: Props) {
+function confidenceColor(confidence: number): string {
+  if (confidence >= 0.8) return '#ef4444';
+  if (confidence >= 0.6) return '#f97316';
+  if (confidence >= 0.4) return '#eab308';
+  return '#84cc16';
+}
+
+export default function AvalancheMap({ cells, selectedCell, onCellClick, center, zoom, historicalEvents = [] }: Props) {
   return (
     <MapContainer
       center={center}
@@ -65,6 +74,29 @@ export default function AvalancheMap({ cells, selectedCell, onCellClick, center,
           />
         );
       })}
+      {historicalEvents.map((evt) => (
+        <CircleMarker
+          key={evt.id}
+          center={[evt.lat, evt.lng]}
+          radius={8}
+          pathOptions={{
+            color: confidenceColor(evt.confidence),
+            fillColor: confidenceColor(evt.confidence),
+            fillOpacity: 0.7,
+            weight: 2,
+          }}
+        >
+          <Popup>
+            <div className="text-xs space-y-1" style={{ color: '#222' }}>
+              <div className="font-bold">{evt.event_type.toUpperCase()}</div>
+              <div>{evt.description}</div>
+              <div className="text-gray-500">
+                Source: {evt.source} • Confidence: {(evt.confidence * 100).toFixed(0)}%
+              </div>
+            </div>
+          </Popup>
+        </CircleMarker>
+      ))}
     </MapContainer>
   );
 }
