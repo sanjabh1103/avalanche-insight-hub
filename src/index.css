@@ -5,7 +5,61 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
 
 @layer base {
+  /* Light mode (default) */
   :root {
+    --background: 210 20% 98%;
+    --foreground: 220 20% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 10%;
+
+    --primary: 199 89% 48%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 220 20% 20%;
+
+    --muted: 210 20% 94%;
+    --muted-foreground: 215 14% 45%;
+
+    --accent: 199 89% 48%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 14% 88%;
+    --input: 220 14% 88%;
+    --ring: 199 89% 48%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 210 20% 96%;
+    --sidebar-foreground: 220 20% 20%;
+    --sidebar-primary: 199 89% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 20% 92%;
+    --sidebar-accent-foreground: 220 20% 20%;
+    --sidebar-border: 220 14% 88%;
+    --sidebar-ring: 199 89% 48%;
+
+    /* Risk colors (same for both modes for consistency) */
+    --risk-1: 142 71% 45%;
+    --risk-2: 80 60% 50%;
+    --risk-3: 45 93% 47%;
+    --risk-4: 25 95% 53%;
+    --risk-5: 0 72% 51%;
+
+    /* Glass */
+    --glass-bg: 0 0% 100% / 0.8;
+    --glass-border: 220 14% 88% / 0.5;
+  }
+
+  /* Dark mode */
+  .dark {
     --background: 220 20% 7%;
     --foreground: 210 20% 92%;
 
@@ -34,8 +88,6 @@
     --input: 220 14% 18%;
     --ring: 199 89% 48%;
 
-    --radius: 0.75rem;
-
     --sidebar-background: 220 18% 8%;
     --sidebar-foreground: 210 20% 82%;
     --sidebar-primary: 199 89% 48%;
@@ -44,13 +96,6 @@
     --sidebar-accent-foreground: 210 20% 82%;
     --sidebar-border: 220 14% 18%;
     --sidebar-ring: 199 89% 48%;
-
-    /* Risk colors */
-    --risk-1: 142 71% 45%;
-    --risk-2: 80 60% 50%;
-    --risk-3: 45 93% 47%;
-    --risk-4: 25 95% 53%;
-    --risk-5: 0 72% 51%;
 
     /* Glass */
     --glass-bg: 220 18% 10% / 0.8;
