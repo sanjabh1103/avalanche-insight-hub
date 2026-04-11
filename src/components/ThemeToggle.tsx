@@ -18,9 +18,11 @@ export default function ThemeToggle() {
   }
 
   const cycleTheme = () => {
-    if (theme === 'light') setTheme('dark');
-    else if (theme === 'dark') setTheme('system');
-    else setTheme('light');
+    if (resolvedTheme === 'dark') {
+      setTheme('light');
+    } else {
+      setTheme('dark');
+    }
   };
 
   const Icon = resolvedTheme === 'dark' ? Moon : resolvedTheme === 'light' ? Sun : Laptop;
@@ -31,7 +33,7 @@ export default function ThemeToggle() {
       size="sm"
       className="h-9 w-9 glass-panel border-0 p-0"
       onClick={cycleTheme}
-      title={`Theme: ${theme} (click to cycle)`}
+      title={`Theme: ${resolvedTheme || theme} (click to toggle)`}
     >
       <Icon className="h-4 w-4" />
       <span className="sr-only">Toggle theme</span>

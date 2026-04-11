@@ -54,7 +54,9 @@ select
   policyname,
   permissive,
   roles,
-  cmd
+  cmd,
+  qual,
+  with_check
 from pg_policies
 where schemaname = 'public'
   and tablename in (
@@ -75,4 +77,3 @@ limit 5;
 select *
 from public.model_status
 limit 5;
-

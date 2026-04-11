@@ -61,7 +61,7 @@ CREATE TABLE public.field_reports (
 
 ALTER TABLE public.field_reports ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view their own reports" ON public.field_reports FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can create reports" ON public.field_reports FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can create reports" ON public.field_reports FOR INSERT WITH CHECK (user_id IS NULL OR auth.uid() = user_id);
 CREATE POLICY "Service role can manage reports" ON public.field_reports FOR ALL USING (auth.role() = 'service_role');
 
 -- compute_jobs
