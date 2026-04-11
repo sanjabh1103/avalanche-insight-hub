@@ -56,8 +56,8 @@ export default function AdminDashboard() {
       if (error) throw error;
       toast.success(`${type.replace(/_/g, ' ')} triggered`);
       loadData();
-    } catch (err: any) {
-      toast.error(err.message || 'Job trigger failed');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Job trigger failed');
     } finally {
       setRunning(null);
     }

@@ -19,6 +19,22 @@ interface WeatherData {
   temperature: number[];
 }
 
+interface GridCell {
+  row: number;
+  col: number;
+  lat: number;
+  lng: number;
+  latEnd: number;
+  lngEnd: number;
+  riskScore: number;
+  hazard: number;
+  exposure: number;
+  vulnerability: number;
+  problemType: string;
+  rawScore: number;
+  shapValues: Record<string, number>;
+}
+
 async function fetchWeather(lat: number, lng: number): Promise<WeatherData | null> {
   try {
     const url = `${OPEN_METEO_BASE}?latitude=${lat}&longitude=${lng}&hourly=precipitation,rain,snowfall,windspeed_10m,winddirection_10m,temperature_2m&timezone=auto&forecast_days=2`;
@@ -99,10 +115,10 @@ function generateHourlyGrids(bbox: number[], weather: WeatherData | null) {
   const latStep = (latMax - latMin) / GRID_SIZE;
   const lngStep = (lngMax - lngMin) / GRID_SIZE;
   
-  const hourlyGrids: any[][] = [];
+  const hourlyGrids: GridCell[][] = [];
   
   for (let hour = 0; hour <= 24; hour++) {
-    const cells: any[] = [];
+    const cells: GridCell[] = [];
     for (let r = 0; r < GRID_SIZE; r++) {
       for (let c = 0; c < GRID_SIZE; c++) {
         const lat = latMin + r * latStep;
@@ -155,7 +171,7 @@ serve(async (req) => {
     
     const hourlyGrids = generateHourlyGrids(bbox, weather);
     const currentCells = hourlyGrids[Math.min(timeOffset, 24)];
-    const avgRisk = currentCells.reduce((s: number, c: any) => s + c.riskScore, 0) / currentCells.length;
+    const avgRisk = currentCells.reduce((s: number, c: GridCell) => s + c.riskScore, 0) / currentCells.length;
 
     // Store forecast with hourly grids
     const { data: forecast } = await supabase.from('forecasts').insert({

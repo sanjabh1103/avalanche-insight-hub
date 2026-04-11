@@ -1,3 +1,128 @@
-# Welcome to your Lovable project
+# Avalanche Insight Hub
 
-TODO: Document your project here
+Avalanche Insight Hub is a Vite + React app backed by Supabase. The repo already includes the database migrations, Edge Functions, and local Supabase config needed to run the project either against a local replica or the hosted project.
+
+## Prerequisites
+
+- Node.js 20+
+- Supabase CLI
+- Docker running locally if you want the full local Supabase stack
+
+## Local Development
+
+### Option 1: Full local Supabase replica
+
+Use this when you want the closest match to production and the ability to work offline.
+
+1. Copy the example env file:
+
+   ```bash
+   cp .env.local.example .env.local
+   ```
+
+2. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+3. Start Supabase locally:
+
+   ```bash
+   supabase start
+   ```
+
+4. If you need to serve Edge Functions locally, run:
+
+   ```bash
+   supabase functions serve --env-file .env.local
+   ```
+
+5. Start the Vite dev server:
+
+   ```bash
+   npm run dev
+   ```
+
+### Option 2: Cloud-linked development
+
+Use this if you want to edit in Windsurf immediately and point the app at the hosted Supabase project.
+
+1. Copy the example env file:
+
+   ```bash
+   cp .env.local.example .env.local
+   ```
+
+2. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` to the hosted project values.
+
+3. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+4. Start the dev server:
+
+   ```bash
+   npm run dev
+   ```
+
+## Supabase Layout
+
+- `supabase/config.toml` - local Supabase configuration
+- `supabase/migrations/` - schema and policy migrations
+- `supabase/functions/` - Edge Functions
+
+## Notes
+
+- The browser client now fails fast with a clear error if the required `VITE_SUPABASE_*` env vars are missing.
+- Field report submissions now validate coordinates before writing GeoJSON/WKT-compatible geometry values.
+
+## QA Checklist
+
+Use this after starting the app with `npm run dev`.
+
+### Supabase / Data
+
+- Open `supabase/verify_schema.sql` in the Supabase SQL Editor and confirm:
+  - `postgis` and `pgcrypto` are installed
+  - the expected enums exist
+  - the seven public tables exist
+  - RLS is enabled on all public tables
+  - the expected policies are present
+  - `system_config` and `model_status` each have at least one row
+
+- Trigger a forecast from the UI and confirm:
+  - the run button enters a loading state
+  - a row appears in `compute_jobs`
+  - a row appears in `forecasts`
+  - the map updates to show hourly data if the Edge Function succeeds
+
+- Open the Admin tab and confirm:
+  - recent jobs load
+  - the model status badge shows a version and F1 score
+  - the Gemini usage card renders
+
+- Open the Report dialog and confirm:
+  - latitude and longitude auto-fill when geolocation is allowed
+  - invalid coordinates are rejected before submit
+  - a successful submit creates a row in `field_reports`
+
+### UI / Runtime
+
+- Confirm the page loads without a blank screen.
+- Confirm the sidebar can collapse and reopen.
+- Confirm the region selector changes the map bounds.
+- Confirm the time slider changes the active hourly view.
+- Confirm the realtime-driven admin job list refreshes without console errors.
+- Confirm `npm run dev` on your machine keeps the app reachable at `http://localhost:8080/`.
+
+### What Good Looks Like
+
+- No red console errors on initial load.
+- Forecast actions work whether the data source is real weather or simulation fallback.
+- Supabase queries respect RLS:
+  - public tables are readable
+  - `field_reports` is restricted to the logged-in user
+  - service-role-only actions stay behind Edge Functions

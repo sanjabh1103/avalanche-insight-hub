@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -18,6 +18,12 @@ export default function FieldReportForm({ open, onClose }: Props) {
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const setFallbackCoordinates = useCallback(() => {
+    setLat('39.5');
+    setLng('-106.5');
+    toast.info('Using region center because browser geolocation is unavailable or was denied.');
+  }, []);
+
   useEffect(() => {
     if (open && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -25,34 +31,49 @@ export default function FieldReportForm({ open, onClose }: Props) {
           setLat(pos.coords.latitude.toFixed(6));
           setLng(pos.coords.longitude.toFixed(6));
         },
-        () => {
-          // GPS fallback - use default center
-          setLat('39.5');
-          setLng('-106.5');
-        },
+        setFallbackCoordinates,
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
       );
+    } else if (open) {
+      setFallbackCoordinates();
     }
-  }, [open]);
+  }, [open, setFallbackCoordinates]);
 
   const handleSubmit = async () => {
     if (!description.trim()) {
       toast.error('Please provide a description');
       return;
     }
+
+    const parsedLat = Number(lat);
+    const parsedLng = Number(lng);
+    if (!Number.isFinite(parsedLat) || !Number.isFinite(parsedLng)) {
+      toast.error('Please enter valid latitude and longitude values');
+      return;
+    }
+    if (parsedLat < -90 || parsedLat > 90) {
+      toast.error('Invalid latitude. Must be between -90 and 90.');
+      return;
+    }
+    if (parsedLng < -180 || parsedLng > 180) {
+      toast.error('Invalid longitude. Must be between -180 and 180.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const { error } = await supabase.from('field_reports').insert({
         user_id: user?.id,
         description: description.trim(),
-        location: `SRID=4326;POINT(${lng} ${lat})` as unknown as undefined,
+        location: `SRID=4326;POINT(${parsedLng} ${parsedLat})` as unknown,
       });
       if (error) throw error;
       toast.success('Field report submitted');
       setDescription('');
       onClose();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to submit report');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to submit report');
     } finally {
       setSubmitting(false);
     }

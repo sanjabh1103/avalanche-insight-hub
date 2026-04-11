@@ -75,7 +75,7 @@ export default function Index() {
       }
       
       toast.success(`Forecast complete • Source: ${data?.weatherSource || 'simulation'} • ${data?.hours || 25} hours`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.success('Forecast generated (client simulation)');
     } finally {
       setForecasting(false);

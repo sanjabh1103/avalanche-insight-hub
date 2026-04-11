@@ -2,8 +2,21 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+function requireEnv(name: string, value: string | undefined) {
+  if (!value) {
+    throw new Error(
+      `${name} is missing. Create .env.local from .env.local.example and set it before running the app.`,
+    );
+  }
+
+  return value;
+}
+
+const SUPABASE_URL = requireEnv('VITE_SUPABASE_URL', import.meta.env.VITE_SUPABASE_URL);
+const SUPABASE_PUBLISHABLE_KEY = requireEnv(
+  'VITE_SUPABASE_PUBLISHABLE_KEY',
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+);
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
