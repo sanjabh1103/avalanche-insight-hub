@@ -63,12 +63,24 @@ export default function FieldReportForm({ open, onClose }: Props) {
     setSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const { error } = await supabase.from('field_reports').insert({
+      const { data, error } = await supabase.from('field_reports').insert({
         user_id: user?.id,
         description: description.trim(),
         location: `SRID=4326;POINT(${parsedLng} ${parsedLat})` as unknown,
-      });
+      }).select('id').single();
       if (error) throw error;
+
+      if (data?.id) {
+        await supabase.functions.invoke('field-report-enrichment', {
+          body: {
+            fieldReportId: data.id,
+            lat: parsedLat,
+            lng: parsedLng,
+            description: description.trim(),
+          },
+        });
+      }
+
       toast.success('Field report submitted');
       setDescription('');
       onClose();

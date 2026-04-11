@@ -50,6 +50,17 @@ BEGIN
   END IF;
 END $$;
 
+-- 3b. CHECK pg_cron JOB STATUS
+-- ============================================================
+SELECT '=== DAILY ENRICHMENT CRON ===' as section;
+SELECT
+  jobid,
+  schedule,
+  jobname,
+  active
+FROM cron.job
+WHERE jobname = 'daily-enrichment-job';
+
 -- 4. VERIFY RLS POLICIES EXIST
 -- ============================================================
 SELECT '=== RLS POLICIES ===' as section;
@@ -97,3 +108,11 @@ SELECT
     THEN '✅ Coordinate constraint is ACTIVE'
     ELSE '❌ Coordinate constraint is MISSING'
   END as status;
+
+-- 8. VERIFY EDGE FUNCTION DEPLOYMENT IS AVAILABLE TO THE APP
+-- ============================================================
+SELECT '=== EDGE FUNCTIONS CHECKLIST ===' as section;
+SELECT
+  'run-forecast' as function_name
+UNION ALL SELECT 'trigger-job'
+UNION ALL SELECT 'field-report-enrichment';

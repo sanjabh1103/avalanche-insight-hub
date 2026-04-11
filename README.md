@@ -31,6 +31,18 @@ To activate daily enrichment (self-improving loop):
 2. Run the migration: `supabase/migrations/20260411193000_schedule_daily_enrichment.sql`
 3. Verify: `SELECT * FROM cron.job;`
 
+## Live Verification Order
+
+When validating the hosted project, run checks in this order:
+1. `supabase/verify_schema.sql`
+2. `select conname from pg_constraint where conname = 'field_reports_location_valid_range';`
+3. `select jobid, schedule, jobname, active from cron.job where jobname = 'daily-enrichment-job';`
+4. Deploy or confirm Edge Functions:
+   - `run-forecast`
+   - `trigger-job`
+   - `field-report-enrichment`
+5. Re-run UI smoke tests on `http://localhost:8080/` or the live app URL
+
 ## Prerequisites (Local Development)
 
 - Node.js 20+

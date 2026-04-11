@@ -15,6 +15,79 @@
 ### ⚠️ Needs Verification on Live Database
 Since this is a Lovable-managed project, the migrations need to be applied via the Lovable SQL Editor.
 
+## Live Verification Checklist
+
+Run these steps in order on the hosted Lovable/Supabase project.
+
+### 1) Verify schema and migration state
+
+1. Open the Lovable project: `https://lovable.dev/projects/449cc2d7-09f8-469d-a41b-e012a283cfb6`
+2. Go to **Database → SQL Editor**
+3. Run `supabase/verify_schema.sql`
+4. Confirm:
+   - `postgis` and `pgcrypto` are installed
+   - all public tables exist
+   - RLS is enabled on every public table
+   - policies exist for every public table
+   - `system_config` and `model_status` contain seed rows
+5. Run:
+
+```sql
+select conname
+from pg_constraint
+where conname = 'field_reports_location_valid_range';
+```
+
+Expected: one row returned.
+
+### 2) Verify pg_cron and the self-improving loop
+
+1. Run `supabase/migrations/20260411193000_schedule_daily_enrichment.sql` in SQL Editor if it has not already been applied.
+2. Run:
+
+```sql
+select jobid, schedule, jobname, active
+from cron.job
+where jobname = 'daily-enrichment-job';
+```
+
+Expected:
+- `active = true`
+- `schedule = 0 0 * * *`
+
+### 3) Verify Edge Functions are deployed
+
+Deploy or confirm both functions are present in the project:
+- `run-forecast`
+- `trigger-job`
+- `field-report-enrichment`
+
+Recommended CLI commands:
+
+```bash
+supabase functions deploy run-forecast
+supabase functions deploy trigger-job
+supabase functions deploy field-report-enrichment
+```
+
+If you are using Lovable-only deployment, confirm the functions exist in the deployed Functions UI and are reachable from the app.
+
+### 4) Run UI smoke tests
+
+Use `http://localhost:8080/` or the deployed app URL.
+
+Verify in this order:
+1. App loads without a blank screen.
+2. Run forecast for at least one region.
+3. Confirm `LIVE DATA` appears when real weather data is returned.
+4. Open Admin and confirm `Active Jobs`, `Recent Jobs`, and `Model Status` render.
+5. Enable Events and confirm markers render on the map.
+6. Submit a valid field report and confirm the event is created.
+7. Test invalid latitude and invalid longitude rejection.
+8. Export both CSV and JSON.
+9. Copy a share link and restore it in a fresh tab.
+10. Confirm the disclaimer remains visible.
+
 ## Step-by-Step Instructions
 
 ### Step 1: Open Lovable SQL Editor

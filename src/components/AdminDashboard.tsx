@@ -35,6 +35,7 @@ export default function AdminDashboard() {
   const [systemConfig, setSystemConfig] = useState<{ gemini_usage: number; gemini_spend_cap: number } | null>(null);
   const [modelStatus, setModelStatus] = useState<{ version: string; f1_score: number } | null>(null);
   const [analytics, setAnalytics] = useState<{ total: number; regions: AnalyticsRow[] }>({ total: 0, regions: [] });
+  const activeJobs = jobs.filter((job) => job.status === 'running').length;
 
   const loadData = useCallback(async () => {
     const [jobsRes, configRes, modelRes, analyticsRes] = await Promise.all([
@@ -105,6 +106,18 @@ export default function AdminDashboard() {
               {btn.label}
             </Button>
           ))}
+        </CardContent>
+      </Card>
+
+      <Card className="border-0 bg-secondary/50">
+        <CardContent className="p-3 flex items-center justify-between">
+          <div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider">Active Jobs</div>
+            <div className="text-[10px] text-muted-foreground mt-1">Realtime count of running compute jobs</div>
+          </div>
+          <Badge className="bg-amber-500/20 text-amber-300 border-0 font-mono text-xs">
+            {activeJobs}
+          </Badge>
         </CardContent>
       </Card>
 

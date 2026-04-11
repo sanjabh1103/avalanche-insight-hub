@@ -15,6 +15,7 @@ import RegionSelector, { REGIONS, type Region } from '@/components/RegionSelecto
 import DisclaimerBanner from '@/components/DisclaimerBanner';
 import ShareForecast from '@/components/ShareForecast';
 import ExportForecast from '@/components/ExportForecast';
+import ThemeToggle from '@/components/ThemeToggle';
 import HistoricalEventsToggle, { type AvalancheEvent } from '@/components/HistoricalEventsToggle';
 import { generateForecastGrid, type GridCell } from '@/lib/gridUtils';
 import { supabase } from '@/integrations/supabase/client';
@@ -294,6 +295,7 @@ export default function Index() {
               </Button>
             )}
             <RegionSelector value={region.name} onChange={handleRegionChange} />
+            <ThemeToggle />
           </div>
 
           {/* Action Buttons */}

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Download, Check, FileSpreadsheet } from 'lucide-react';
+import { Check, FileSpreadsheet, FileJson, FileSpreadsheet as CsvIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import type { GridCell } from '@/lib/gridUtils';
 import type { AvalancheEvent } from '@/components/HistoricalEventsToggle';
@@ -13,7 +13,7 @@ interface Props {
 }
 
 export default function ExportForecast({ grid, events = [], regionName = 'Unknown', hour = 0 }: Props) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<'csv' | 'json' | null>(null);
 
   const downloadCSV = () => {
     if (!grid || grid.cells.length === 0) {
@@ -97,20 +97,33 @@ export default function ExportForecast({ grid, events = [], regionName = 'Unknow
   };
 
   const handleExport = () => {
-    // Try CSV first, fall back to info if no data
     downloadCSV();
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopied('csv');
+    setTimeout(() => setCopied(null), 2000);
   };
 
   return (
-    <Button
-      variant="outline"
-      className="h-9 text-xs font-semibold gap-2 glass-panel border-0"
-      onClick={handleExport}
-    >
-      {copied ? <Check className="h-4 w-4 text-green-400" /> : <FileSpreadsheet className="h-4 w-4" />}
-      EXPORT
-    </Button>
+    <div className="flex items-center gap-2">
+      <Button
+        variant="outline"
+        className="h-9 text-xs font-semibold gap-2 glass-panel border-0"
+        onClick={handleExport}
+      >
+        {copied === 'csv' ? <Check className="h-4 w-4 text-green-400" /> : <CsvIcon className="h-4 w-4" />}
+        CSV
+      </Button>
+      <Button
+        variant="outline"
+        className="h-9 text-xs font-semibold gap-2 glass-panel border-0"
+        onClick={() => {
+          downloadJSON();
+          setCopied('json');
+          setTimeout(() => setCopied(null), 2000);
+        }}
+      >
+        {copied === 'json' ? <Check className="h-4 w-4 text-green-400" /> : <FileJson className="h-4 w-4" />}
+        JSON
+      </Button>
+    </div>
   );
 }

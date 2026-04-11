@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { History } from 'lucide-react';
+import { History, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface AvalancheEvent {
@@ -36,7 +36,11 @@ export default function HistoricalEventsToggle({ visible, onToggle, onEventsLoad
       .select('*')
       .order('timestamp', { ascending: false })
       .limit(50)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          onEventsLoaded([]);
+          return;
+        }
         if (data) {
           const events: AvalancheEvent[] = data.map((e: unknown) => {
             const event = e as Record<string, unknown>;
@@ -64,6 +68,8 @@ export default function HistoricalEventsToggle({ visible, onToggle, onEventsLoad
           });
           onEventsLoaded(events);
         }
+      })
+      .finally(() => {
         setLoading(false);
       });
   }, [visible, bbox]);
@@ -76,7 +82,7 @@ export default function HistoricalEventsToggle({ visible, onToggle, onEventsLoad
       onClick={onToggle}
       disabled={loading}
     >
-      <History className="h-4 w-4" />
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <History className="h-4 w-4" />}
       {visible ? 'HIDE' : 'SHOW'} EVENTS
     </Button>
   );

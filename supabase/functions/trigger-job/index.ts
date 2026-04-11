@@ -13,7 +13,7 @@ serve(async (req) => {
 
   try {
     const { type, bbox } = await req.json();
-    const validTypes = ['daily_enrichment', 'sentinel_refresh', 'fine_tune', 'static_precompute'];
+    const validTypes = ['daily_enrichment', 'sentinel_refresh', 'fine_tune', 'static_precompute', 'field_report_enrichment'];
     if (!validTypes.includes(type)) {
       return new Response(JSON.stringify({ error: 'Invalid job type' }), {
         status: 400,
@@ -150,6 +150,8 @@ serve(async (req) => {
 
     } else if (type === 'static_precompute') {
       result = { simulated: true, regionsComputed: 12 };
+    } else if (type === 'field_report_enrichment') {
+      result = { simulated: true, createdEvent: false };
     }
 
     await supabase
