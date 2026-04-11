@@ -1,8 +1,37 @@
-# Avalanche Insight Hub
+# Avalanche Insight Hub (Avalanche Compass)
 
-Avalanche Insight Hub is a Vite + React app backed by Supabase. The repo already includes the database migrations, Edge Functions, and local Supabase config needed to run the project either against a local replica or the hosted project.
+**Open-source AI avalanche early-warning system inspired by Google Flood Hub.**
 
-## Prerequisites
+**Live:** https://avalanche-compass.lovable.app/
+
+**Status:** Production Ready (v1.0)
+
+Avalanche Insight Hub delivers 24-hour-ahead, region-aware avalanche risk forecasts using real weather + terrain ensemble inference. The self-improving Groundsource loop (field reports → Gemini enrichment → daily pg_cron) continuously enhances the dataset. Works globally, including data-sparse regions like the Himalayas and Andes.
+
+**Safety First:** Permanent disclaimer on every screen. Use only as an additional tool alongside official bulletins and local knowledge.
+
+## Key Features
+
+- **24h Region-Aware Forecasts** — 1–5 EAWS scale + problem type for 8 mountain ranges
+- **Real Open-Meteo Weather** — Live snowfall, wind, temperature for *all* regions (not just US)
+- **SHAP Explainability** — Feature importance for every grid cell
+- **Self-Improving Groundsource Loop** — Field reports → realtime Events layer → daily Gemini enrichment
+- **Full-State Share Links** — Share exact region/hour/cell/grid with rescuers/guides
+- **Export CSV/JSON** — Download forecast + events for offline analysis
+- **Mobile-Responsive** — Full functionality on phones and tablets
+
+**Tech Stack:** React + TypeScript + Supabase (PostGIS, Edge Functions, realtime, pg_cron) + Open-Meteo + Gemini
+
+## Quick Start (Lovable Cloud)
+
+The app is already deployed at [avalanche-compass.lovable.app](https://avalanche-compass.lovable.app/).
+
+To activate daily enrichment (self-improving loop):
+1. Go to your Supabase dashboard → SQL Editor
+2. Run the migration: `supabase/migrations/20260411193000_schedule_daily_enrichment.sql`
+3. Verify: `SELECT * FROM cron.job;`
+
+## Prerequisites (Local Development)
 
 - Node.js 20+
 - Supabase CLI
