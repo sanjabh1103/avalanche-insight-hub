@@ -138,11 +138,12 @@ export default function AdminDashboard() {
       {systemConfig && (
         <Card className="border-0 bg-secondary/50">
           <CardContent className="p-3">
-            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Gemini Usage</div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Gemini API Usage (Enrichment Only)</div>
             <div className="flex items-baseline gap-1">
               <span className="text-lg font-mono font-bold text-foreground">{systemConfig.gemini_usage}</span>
               <span className="text-xs text-muted-foreground">/ {systemConfig.gemini_spend_cap} calls</span>
             </div>
+            <div className="text-[10px] text-muted-foreground mt-1">Forecasts use Open-Meteo (free). Gemini only counts during daily enrichment.</div>
             <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
               <div
                 className="h-full bg-primary rounded-full transition-all"
