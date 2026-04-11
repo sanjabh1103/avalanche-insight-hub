@@ -17,9 +17,13 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- The critical fix: allow anonymous users to submit field reports
 -- This enables the Groundsource loop
 
--- Drop restrictive policies
+-- Drop ALL existing field_reports policies first (clean slate)
+DROP POLICY IF EXISTS "Allow anonymous insert" ON public.field_reports;
+DROP POLICY IF EXISTS "Allow anonymous select" ON public.field_reports;
+DROP POLICY IF EXISTS "Users can view own reports" ON public.field_reports;
 DROP POLICY IF EXISTS "Users can create reports" ON public.field_reports;
 DROP POLICY IF EXISTS "Users can view their own reports" ON public.field_reports;
+DROP POLICY IF EXISTS "Service role can manage reports" ON public.field_reports;
 
 -- Allow ANYONE to insert field reports (anon + authenticated)
 CREATE POLICY "Allow anonymous insert" 
@@ -43,11 +47,11 @@ CREATE POLICY "Allow anonymous select"
   USING (true);
 
 -- Service role can manage all reports
-DROP POLICY IF EXISTS "Service role can manage reports" ON public.field_reports;
 CREATE POLICY "Service role can manage reports" 
   ON public.field_reports 
   FOR ALL 
-  USING (auth.role() = 'service_role');
+  TO service_role
+  USING (true);
 
 -- =============================================================================
 -- STEP 3: Add Coordinate Constraint (if not exists)
