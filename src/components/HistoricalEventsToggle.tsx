@@ -30,28 +30,26 @@ export default function HistoricalEventsToggle({ visible, onToggle, onEventsLoad
       onEventsLoaded([]);
       return;
     }
+    let cancelled = false;
     setLoading(true);
-    supabase
-      .from('avalanche_events')
-      .select('*')
-      .order('timestamp', { ascending: false })
-      .limit(50)
-      .then(({ data, error }) => {
-        if (error) {
-          onEventsLoaded([]);
-          return;
-        }
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('avalanche_events')
+          .select('*')
+          .order('timestamp', { ascending: false })
+          .limit(50);
+        if (cancelled) return;
+        if (error) { onEventsLoaded([]); return; }
         if (data) {
           const events: AvalancheEvent[] = data.map((e: unknown) => {
             const event = e as Record<string, unknown>;
-            // Parse PostGIS POINT
             let lat = 0, lng = 0;
             const location = event.location;
             if (typeof location === 'string') {
               const m = location.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/);
               if (m) { lng = parseFloat(m[1]); lat = parseFloat(m[2]); }
             } else if (location && typeof location === 'object') {
-              // GeoJSON
               const coords = (location as { coordinates?: number[] }).coordinates;
               if (coords) { lng = coords[0]; lat = coords[1]; }
             }
@@ -68,10 +66,13 @@ export default function HistoricalEventsToggle({ visible, onToggle, onEventsLoad
           });
           onEventsLoaded(events);
         }
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+      } catch {
+        if (!cancelled) onEventsLoaded([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, [visible, bbox]);
 
   return (
