@@ -10,6 +10,7 @@ interface Props {
   region?: Region;
   hour?: number;
   selectedCell?: GridCell | null;
+  expertMode?: boolean;
 }
 
 export default function ShareForecast({ forecastId, region, hour = 0, selectedCell }: Props) {
