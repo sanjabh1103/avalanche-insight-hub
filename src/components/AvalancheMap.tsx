@@ -54,30 +54,50 @@ export default function AvalancheMap({
     : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 
   // Generate smoothed polygons for high-risk cells when vector mode is on
-  const vectorPolygons = useMemo(() => {
-    if (!showVectorPolygons) return [];
-    try {
-      const turf = require('@turf/turf');
-      const highRisk = cells.filter(c => c.riskScore > 3);
-      if (!highRisk.length) return [];
-      // Create buffered polygons from cell centers
-      const features = highRisk.map(c => {
-        const centerLat = (c.lat + c.latEnd) / 2;
-        const centerLng = (c.lng + c.lngEnd) / 2;
-        const pt = turf.point([centerLng, centerLat]);
-        return turf.buffer(pt, 2, { units: 'kilometers' });
-      });
-      const fc = turf.featureCollection(features);
-      const dissolved = turf.dissolve(fc);
-      return (dissolved.features || []).map((f: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>, i: number) => {
-        const coords = f.geometry.type === 'Polygon'
-          ? [f.geometry.coordinates[0].map((c: number[]) => [c[1], c[0]] as [number, number])]
-          : f.geometry.coordinates.map((ring: number[][][]) => ring[0].map((c: number[]) => [c[1], c[0]] as [number, number]));
-        return { key: `vp-${i}`, positions: coords };
-      });
-    } catch {
-      return [];
+  const [vectorPolygons, setVectorPolygons] = useState<{key: string; positions: [number, number][][]}[]>([]);
+
+  useEffect(() => {
+    if (!showVectorPolygons) {
+      setVectorPolygons([]);
+      return;
     }
+
+    let mounted = true;
+    const generatePolygons = async () => {
+      try {
+        const turf = await import('@turf/turf');
+        const highRisk = cells.filter(c => c.riskScore > 3);
+        if (!highRisk.length || !mounted) return;
+
+        // Create buffered polygons from cell centers
+        const features = highRisk.map(c => {
+          const centerLat = (c.lat + c.latEnd) / 2;
+          const centerLng = (c.lng + c.lngEnd) / 2;
+          const pt = turf.point([centerLng, centerLat]);
+          return turf.buffer(pt, 2, { units: 'kilometers' });
+        });
+
+        const fc = turf.featureCollection(features);
+        const dissolved = turf.dissolve(fc);
+        const polygons = (dissolved.features || []).map((f: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>, i: number) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const coords = f.geometry.type === 'Polygon'
+            ? [(f.geometry.coordinates[0] as any).map((c: number[]) => [c[1], c[0]] as [number, number])]
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            : (f.geometry.coordinates as any).map((ring: number[][]) =>
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (ring[0] as any).map((c: number[]) => [c[1], c[0]] as [number, number])
+              );
+          return { key: `vp-${i}`, positions: coords };
+        });
+        if (mounted) setVectorPolygons(polygons);
+      } catch {
+        if (mounted) setVectorPolygons([]);
+      }
+    };
+
+    generatePolygons();
+    return () => { mounted = false; };
   }, [cells, showVectorPolygons]);
 
   return (
