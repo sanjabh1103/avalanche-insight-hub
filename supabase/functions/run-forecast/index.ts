@@ -57,18 +57,22 @@ async function fetchWeather(lat: number, lng: number): Promise<WeatherData | nul
 }
 
 function computeRisk(weather: WeatherData | null, hour: number, row: number, col: number, terrainElev: number, terrainSlope: number, terrainAspect: number) {
-  const h = Math.min(hour, 23);
+  const maxH = weather ? weather.snowfall.length - 1 : 71;
+  const h = Math.min(hour, maxH);
   
   const snowfall = weather?.snowfall[h] ?? (2 + Math.sin(hour * 0.5 + row * 0.3) * 3);
   const wind = weather?.windspeed[h] ?? (15 + Math.cos(hour * 0.3 + col * 0.2) * 10);
   const temp = weather?.temperature[h] ?? (-5 + Math.sin(hour * 0.4) * 8);
   const precip = weather?.precipitation[h] ?? (snowfall * 0.8);
   const windDir = weather?.winddirection[h] ?? (180 + col * 10);
-  const snowDepth = weather?.snow_depth[h] ?? (50 + row * 5 + Math.cos(col * 0.3) * 10);
+  // snow_depth may be null from Open-Meteo for some regions — use terrain-based fallback
+  const rawSnowDepth = weather?.snow_depth[h];
+  const snowDepth = (rawSnowDepth != null && rawSnowDepth > 0) ? rawSnowDepth : (50 + row * 5 + Math.cos(col * 0.3) * 10);
 
-  const snowfall24h = weather ? weather.snowfall.slice(0, h + 1).reduce((a, b) => a + b, 0) : snowfall * (h + 1) * 0.3;
+  const snowfall24h = weather ? weather.snowfall.slice(Math.max(0, h - 23), h + 1).reduce((a, b) => a + b, 0) : snowfall * Math.min(h + 1, 24) * 0.3;
   const windLoading = wind * Math.max(0, Math.cos((windDir - terrainAspect) * Math.PI / 180));
   const tempGradient = h > 0 && weather ? (weather.temperature[h] - weather.temperature[Math.max(0, h - 3)]) : temp * 0.1;
+  const snowDepthAvg = weather ? weather.snow_depth.filter(v => v != null && v > 0).reduce((a, b) => a + b, 0) / Math.max(1, weather.snow_depth.filter(v => v != null && v > 0).length) : snowDepth;
   const snowpackProxy = weather ? Math.max(0, snowDepth * 0.02 + snowfall24h * 0.3 - Math.max(0, temp) * 0.2) : Math.max(0, snowfall24h * 0.4 - Math.max(0, temp) * 0.3);
 
   const weights = {
@@ -169,7 +173,7 @@ serve(async (req) => {
     const weather = await fetchWeather(centerLat, centerLng);
     
     const hourlyGrids = generateHourlyGrids(bbox, weather, hours + 1);
-    const currentCells = hourlyGrids[Math.min(timeOffset, 24)];
+    const currentCells = hourlyGrids[Math.min(timeOffset, hourlyGrids.length - 1)];
     const avgRisk = currentCells.reduce((s: number, c: GridCell) => s + c.riskScore, 0) / currentCells.length;
     const weatherSource = weather ? 'open-meteo' : 'simulation';
 
@@ -187,10 +191,13 @@ serve(async (req) => {
     }).select('id').single();
 
     // Update model status with last inference and data freshness
-    await supabase.from('model_status').update({
-      last_inference: new Date().toISOString(),
-      data_freshness_hours: weather ? 0 : 999,
-    }).not('id', 'is', null);
+    const { data: ms } = await supabase.from('model_status').select('id').limit(1).single();
+    if (ms?.id) {
+      await supabase.from('model_status').update({
+        last_inference: new Date().toISOString(),
+        data_freshness_hours: weather ? 0 : 999,
+      }).eq('id', ms.id);
+    }
 
     // Log analytics
     await supabase.from('forecast_analytics').insert({
@@ -208,12 +215,15 @@ serve(async (req) => {
       .eq('id', job.id);
 
     // Extract weather summary for SHAP display (real values for all regions)
+    const validSnowDepth = weather?.snow_depth.filter(v => v != null && v > 0) || [];
     const weatherSummary = weather ? {
       snowfall_24h: weather.snowfall.slice(0, 24).reduce((a, b) => a + b, 0).toFixed(1),
       wind_speed: (weather.windspeed.slice(0, 24).reduce((a, b) => a + b, 0) / 24).toFixed(1),
       temperature: (weather.temperature.slice(0, 24).reduce((a, b) => a + b, 0) / 24).toFixed(1),
       precipitation: weather.precipitation.slice(0, 24).reduce((a, b) => a + b, 0).toFixed(1),
-      snow_depth: (weather.snow_depth.slice(0, 24).reduce((a, b) => a + b, 0) / 24).toFixed(1),
+      snow_depth: validSnowDepth.length > 0
+        ? (validSnowDepth.reduce((a, b) => a + b, 0) / validSnowDepth.length).toFixed(1)
+        : '0.0',
     } : null;
 
     return new Response(JSON.stringify({ 

@@ -49,7 +49,7 @@ export default function Index() {
   const [showVectorPolygons, setShowVectorPolygons] = useState(false);
   const [playingTimeline, setPlayingTimeline] = useState(false);
 
-  const maxHour = hourlyGrids ? hourlyGrids.length - 1 : 24;
+  const maxHour = hourlyGrids ? hourlyGrids.length - 1 : (expertMode ? 71 : 24);
 
   const historicalEvents = useMemo(() => {
     const merged = [...localEvents, ...remoteEvents];
@@ -153,6 +153,7 @@ export default function Index() {
     if (params.get('expert') === '1') setExpertMode(true);
 
     const sharedForecast = params.get('forecast');
+    const hourValue = hourParam ? parseInt(hourParam, 10) : 0;
     if (sharedForecast) {
       supabase.from('forecasts').select('hourly_grids, bbox').eq('id', sharedForecast).single().then(({ data }) => {
         if (data?.hourly_grids && Array.isArray(data.hourly_grids)) {
@@ -161,10 +162,14 @@ export default function Index() {
           const cellParam = params.get('cell');
           if (cellParam) {
             const [row, col] = cellParam.split(',').map(Number);
-            const grid = (data.hourly_grids as unknown as GridCell[][])[parseInt(hourParam || '0', 10)];
+            const safeHourIdx = Math.min(hourValue, (data.hourly_grids as unknown as GridCell[][]).length - 1);
+            const grid = (data.hourly_grids as unknown as GridCell[][])[safeHourIdx];
             if (grid) {
               const cell = grid.find(c => c.row === row && c.col === col);
-              if (cell) setSelectedCell(cell);
+              if (cell) {
+                setSelectedCell(cell);
+                if (!isMobile) setSidebarOpen(true);
+              }
             }
           }
           toast.success('Restored shared forecast view');
@@ -278,7 +283,7 @@ export default function Index() {
         {/* Main Map Area */}
         <div className="flex-1 relative flex flex-col min-h-0">
           {/* Top Controls */}
-          <div className="absolute top-3 left-3 z-10 flex items-center gap-2 flex-wrap">
+          <div className="absolute top-3 left-3 z-10 flex flex-col gap-2 max-w-[calc(100vw-120px)]">
             {!sidebarOpen && (
               <Button variant="outline" size="icon" className="h-10 w-10 glass-panel border-0 touch-manipulation" onClick={() => setSidebarOpen(true)} aria-label="Open sidebar">
                 <Menu className="h-5 w-5" />
@@ -288,21 +293,23 @@ export default function Index() {
               <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground pl-1 pr-1.5">Region</span>
               <RegionSelector value={region.name} onChange={handleRegionChange} />
             </div>
-            <div className="flex items-center gap-2 glass-panel rounded-xl px-2 py-2 shadow-sm">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground pl-1 pr-1.5">Display</span>
-              <ThemeToggle />
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 glass-panel rounded-xl px-2 py-2 shadow-sm">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground pl-1 pr-1.5">Display</span>
+                <ThemeToggle />
+              </div>
+              {/* Expert Mode Toggle */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-2 glass-panel rounded-xl px-3 py-2 shadow-sm">
+                    <Zap className={`h-3.5 w-3.5 ${expertMode ? 'text-amber-400' : 'text-muted-foreground'}`} />
+                    <Label className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground cursor-pointer" htmlFor="expert-toggle">Expert</Label>
+                    <Switch id="expert-toggle" checked={expertMode} onCheckedChange={setExpertMode} aria-label="Toggle Expert Mode" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>Enable impact overlays, 72h forecast, hydrograph, and vector polygons</TooltipContent>
+              </Tooltip>
             </div>
-            {/* Expert Mode Toggle */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center gap-2 glass-panel rounded-xl px-3 py-2 shadow-sm">
-                  <Zap className={`h-3.5 w-3.5 ${expertMode ? 'text-amber-400' : 'text-muted-foreground'}`} />
-                  <Label className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground cursor-pointer" htmlFor="expert-toggle">Expert</Label>
-                  <Switch id="expert-toggle" checked={expertMode} onCheckedChange={setExpertMode} aria-label="Toggle Expert Mode" />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>Enable impact overlays, 72h forecast, hydrograph, and vector polygons</TooltipContent>
-            </Tooltip>
           </div>
 
           {/* Action Buttons */}
@@ -392,7 +399,6 @@ export default function Index() {
           onSubmitted={(event) => {
             setLocalEvents((prev) => [event, ...prev]);
             setShowEvents(true);
-            toast.success('Field report submitted');
           }}
           regionCenter={region.center}
         />

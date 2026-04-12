@@ -77,8 +77,8 @@ export default function AvalancheMap({
           return turf.buffer(pt, 2, { units: 'kilometers' });
         });
 
-        const fc = turf.featureCollection(features);
-        const dissolved = turf.dissolve(fc);
+        const fc = turf.featureCollection(features as GeoJSON.Feature<GeoJSON.Polygon>[]);
+        const dissolved = turf.dissolve(fc as GeoJSON.FeatureCollection<GeoJSON.Polygon>);
         const polygons = (dissolved.features || []).map((f: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>, i: number) => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const coords = f.geometry.type === 'Polygon'
@@ -144,11 +144,9 @@ export default function AvalancheMap({
           <Popup>
             <div className="text-xs space-y-1" style={{ color: isDark ? '#ddd' : '#111' }}>
               <div className="font-bold">{evt.event_type.toUpperCase()}</div>
-              {evt.location_name && (
-                <div className={isDark ? 'text-blue-300' : 'text-blue-700'}>
-                  📍 {evt.location_name}
-                </div>
-              )}
+              <div className={isDark ? 'text-blue-300' : 'text-blue-700'}>
+                📍 {evt.location_name || `${evt.lat.toFixed(3)}°, ${evt.lng.toFixed(3)}°`}
+              </div>
               <div>{evt.description}</div>
               <div className={isDark ? 'text-gray-400' : 'text-gray-600'}>
                 Source: {evt.source} • Confidence: {(evt.confidence * 100).toFixed(0)}%

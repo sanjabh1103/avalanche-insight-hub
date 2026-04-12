@@ -94,6 +94,8 @@ export default function FieldReportForm({ open, onClose, onSubmitted, regionCent
         location_name: '',
       });
 
+      toast.success('Field report submitted successfully');
+
       // Log field_report_enrichment job for Admin panel visibility
       supabase.functions.invoke('trigger-job', {
         body: { type: 'field_report_enrichment' },

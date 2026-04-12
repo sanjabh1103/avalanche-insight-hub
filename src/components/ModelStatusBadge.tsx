@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { BrainCircuit } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -25,16 +25,16 @@ function timeAgo(dateStr: string | null): string {
 export default function ModelStatusBadge() {
   const [status, setStatus] = useState<ModelInfo | null>(null);
 
-  const loadStatus = async () => {
+  const loadStatus = useCallback(async () => {
     const { data } = await supabase
       .from('model_status')
       .select('version, f1_score, last_inference, data_freshness_hours')
       .limit(1)
       .single();
     if (data) setStatus(data as unknown as ModelInfo);
-  };
+  }, []);
 
-  useEffect(() => { loadStatus(); }, []);
+  useEffect(() => { loadStatus(); }, [loadStatus]);
 
   // Realtime sync with model_status table (BUG-11 fix)
   useRealtimeSubscription('model_status', () => { loadStatus(); });
