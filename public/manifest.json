@@ -1,0 +1,12 @@
+{
+  "name": "Avalanche Hub",
+  "short_name": "AvalancheHub",
+  "description": "AI-powered avalanche risk intelligence platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1724",
+  "theme_color": "#0ea5e9",
+  "icons": [
+    { "src": "/favicon.ico", "sizes": "64x64", "type": "image/x-icon" }
+  ]
+}

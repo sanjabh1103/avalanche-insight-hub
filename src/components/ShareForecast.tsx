@@ -10,9 +10,10 @@ interface Props {
   region?: Region;
   hour?: number;
   selectedCell?: GridCell | null;
+  expertMode?: boolean;
 }
 
-export default function ShareForecast({ forecastId, region, hour = 0, selectedCell }: Props) {
+export default function ShareForecast({ forecastId, region, hour = 0, selectedCell, expertMode }: Props) {
   const [copied, setCopied] = useState(false);
 
   const handleShare = async () => {
@@ -36,6 +37,7 @@ export default function ShareForecast({ forecastId, region, hour = 0, selectedCe
     if (selectedCell) {
       params.set('cell', `${selectedCell.row},${selectedCell.col}`);
     }
+    if (expertMode) params.set('expert', '1');
     
     const url = `${window.location.origin}?${params.toString()}`;
     
