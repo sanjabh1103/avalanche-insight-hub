@@ -37,7 +37,7 @@ interface GridCell {
 
 async function fetchWeather(lat: number, lng: number): Promise<WeatherData | null> {
   try {
-    const url = `${OPEN_METEO_BASE}?latitude=${lat}&longitude=${lng}&hourly=precipitation,rain,snowfall,windspeed_10m,winddirection_10m,temperature_2m&timezone=auto&forecast_days=2`;
+    const url = `${OPEN_METEO_BASE}?latitude=${lat}&longitude=${lng}&hourly=precipitation,rain,snowfall,windspeed_10m,winddirection_10m,temperature_2m&timezone=auto&forecast_days=3`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const data = await res.json();
