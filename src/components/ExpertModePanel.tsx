@@ -1,10 +1,12 @@
 import { motion, AnimatePresence } from 'framer-motion';
+import { useState } from 'react';
 import { X, Bell, Layers, Map as MapIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import HydrographChart from '@/components/HydrographChart';
 import { supabase } from '@/integrations/supabase/client';
@@ -34,8 +36,11 @@ export default function ExpertModePanel({
   showVectorPolygons, onToggleVectorPolygons,
   hourlyGrids, selectedCell, regionBbox,
 }: Props) {
+  const [alertsDialogOpen, setAlertsDialogOpen] = useState(false);
+  const [subscribingAlerts, setSubscribingAlerts] = useState(false);
 
   const subscribeAlerts = async () => {
+    setSubscribingAlerts(true);
     try {
       if (!('Notification' in window) || !('serviceWorker' in navigator)) {
         toast.error('Push notifications not supported in this browser');
@@ -54,8 +59,11 @@ export default function ExpertModePanel({
         region_bbox: regionBbox as unknown as number[],
       });
       toast.success('Alert subscription saved for this region');
+      setAlertsDialogOpen(false);
     } catch {
       toast.error('Failed to subscribe');
+    } finally {
+      setSubscribingAlerts(false);
     }
   };
 
@@ -105,7 +113,7 @@ export default function ExpertModePanel({
                   variant="outline"
                   size="sm"
                   className="w-full gap-2 text-xs"
-                  onClick={subscribeAlerts}
+                  onClick={() => setAlertsDialogOpen(true)}
                   aria-label="Subscribe to alerts for this region"
                 >
                   <Bell className="h-3.5 w-3.5" />
@@ -114,6 +122,30 @@ export default function ExpertModePanel({
               </CardContent>
             </Card>
           </div>
+
+          <Dialog open={alertsDialogOpen} onOpenChange={setAlertsDialogOpen}>
+            <DialogContent className="bg-card border-border max-w-sm">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-foreground">
+                  <Bell className="h-4 w-4 text-primary" />
+                  Subscribe to Alerts
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Save an alert subscription for the current region and enable browser notifications for future avalanche updates.
+                </p>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setAlertsDialogOpen(false)} disabled={subscribingAlerts}>
+                    Cancel
+                  </Button>
+                  <Button onClick={subscribeAlerts} disabled={subscribingAlerts}>
+                    Confirm Subscription
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </motion.aside>
       )}
     </AnimatePresence>

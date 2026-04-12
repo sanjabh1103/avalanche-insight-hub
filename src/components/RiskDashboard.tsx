@@ -105,7 +105,7 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Snow Depth</span>
-                <span className="font-mono text-foreground">{weatherSummary.snow_depth === '0.0' ? 'N/A' : `${weatherSummary.snow_depth} cm`}</span>
+                <span className="font-mono text-foreground">{weatherSummary.snow_depth && weatherSummary.snow_depth !== 'N/A' ? `${weatherSummary.snow_depth} cm` : '0 cm'}</span>
               </div>
             </div>
           </CardContent>

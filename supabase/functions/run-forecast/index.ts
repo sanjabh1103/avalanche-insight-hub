@@ -36,6 +36,14 @@ interface GridCell {
   shapValues: Record<string, number>;
 }
 
+function normalizeHourly(values: unknown, fallback = 0): number[] {
+  if (!Array.isArray(values)) return [];
+  return values.slice(0, 72).map((value) => {
+    const numeric = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(numeric) ? numeric : fallback;
+  });
+}
+
 async function fetchWeather(lat: number, lng: number): Promise<WeatherData | null> {
   try {
     const url = `${OPEN_METEO_BASE}?latitude=${lat}&longitude=${lng}&hourly=precipitation,rain,snowfall,snow_depth,windspeed_10m,winddirection_10m,temperature_2m&timezone=auto&forecast_days=3`;
@@ -44,12 +52,12 @@ async function fetchWeather(lat: number, lng: number): Promise<WeatherData | nul
     const data = await res.json();
     const h = data.hourly;
     return {
-      snowfall: h.snowfall?.slice(0, 72) || [],
-      precipitation: h.precipitation?.slice(0, 72) || [],
-      windspeed: h.windspeed_10m?.slice(0, 72) || [],
-      winddirection: h.winddirection_10m?.slice(0, 72) || [],
-      temperature: h.temperature_2m?.slice(0, 72) || [],
-      snow_depth: h.snow_depth?.slice(0, 72) || [],
+      snowfall: normalizeHourly(h.snowfall),
+      precipitation: normalizeHourly(h.precipitation),
+      windspeed: normalizeHourly(h.windspeed_10m),
+      winddirection: normalizeHourly(h.winddirection_10m),
+      temperature: normalizeHourly(h.temperature_2m),
+      snow_depth: normalizeHourly(h.snow_depth),
     };
   } catch {
     return null;
@@ -67,7 +75,7 @@ function computeRisk(weather: WeatherData | null, hour: number, row: number, col
   const windDir = weather?.winddirection[h] ?? (180 + col * 10);
   // snow_depth may be null from Open-Meteo for some regions — use terrain-based fallback
   const rawSnowDepth = weather?.snow_depth[h];
-  const snowDepth = (rawSnowDepth != null && rawSnowDepth > 0) ? rawSnowDepth : (50 + row * 5 + Math.cos(col * 0.3) * 10);
+  const snowDepth = Number.isFinite(rawSnowDepth) && rawSnowDepth != null && rawSnowDepth > 0 ? rawSnowDepth : (50 + row * 5 + Math.cos(col * 0.3) * 10);
 
   const snowfall24h = weather ? weather.snowfall.slice(Math.max(0, h - 23), h + 1).reduce((a, b) => a + b, 0) : snowfall * Math.min(h + 1, 24) * 0.3;
   const windLoading = wind * Math.max(0, Math.cos((windDir - terrainAspect) * Math.PI / 180));
@@ -215,7 +223,7 @@ serve(async (req) => {
       .eq('id', job.id);
 
     // Extract weather summary for SHAP display (real values for all regions)
-    const validSnowDepth = weather?.snow_depth.filter(v => v != null && v > 0) || [];
+    const validSnowDepth = weather?.snow_depth.filter(v => Number.isFinite(v) && v > 0) || [];
     const weatherSummary = weather ? {
       snowfall_24h: weather.snowfall.slice(0, 24).reduce((a, b) => a + b, 0).toFixed(1),
       wind_speed: (weather.windspeed.slice(0, 24).reduce((a, b) => a + b, 0) / 24).toFixed(1),
@@ -223,7 +231,7 @@ serve(async (req) => {
       precipitation: weather.precipitation.slice(0, 24).reduce((a, b) => a + b, 0).toFixed(1),
       snow_depth: validSnowDepth.length > 0
         ? (validSnowDepth.reduce((a, b) => a + b, 0) / validSnowDepth.length).toFixed(1)
-        : '0.0',
+        : '0',
     } : null;
 
     return new Response(JSON.stringify({ 

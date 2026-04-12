@@ -283,13 +283,13 @@ export default function Index() {
         {/* Main Map Area */}
         <div className="flex-1 relative flex flex-col min-h-0">
           {/* Top Controls */}
-          <div className="absolute top-3 left-3 z-10 flex flex-col gap-2 max-w-[calc(100vw-120px)]">
+          <div className="absolute top-3 left-3 z-50 flex flex-col gap-2 max-w-[calc(100vw-140px)]">
             {!sidebarOpen && (
               <Button variant="outline" size="icon" className="h-10 w-10 glass-panel border-0 touch-manipulation" onClick={() => setSidebarOpen(true)} aria-label="Open sidebar">
                 <Menu className="h-5 w-5" />
               </Button>
             )}
-            <div className="flex items-center gap-2 glass-panel rounded-xl px-2 py-2 shadow-sm">
+            <div className="flex items-center gap-2 glass-panel rounded-xl px-2 py-2 shadow-sm relative z-50">
               <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground pl-1 pr-1.5">Region</span>
               <RegionSelector value={region.name} onChange={handleRegionChange} />
             </div>
@@ -314,7 +314,7 @@ export default function Index() {
 
           {/* Action Buttons */}
           <div className="absolute top-3 right-3 z-10 flex items-center gap-2 flex-wrap justify-end">
-            <Button onClick={runForecast} disabled={forecasting} className="h-10 text-xs font-semibold gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg touch-manipulation" aria-label="Run forecast">
+            <Button onClick={runForecast} disabled={forecasting} className="h-10 mr-1 text-xs font-semibold gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg touch-manipulation" aria-label="Run forecast">
               {forecasting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mountain className="h-4 w-4" />}
               {isMobile ? 'FORECAST' : expertMode ? 'RUN 72H FORECAST' : 'RUN 24H FORECAST'}
             </Button>

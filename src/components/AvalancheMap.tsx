@@ -80,13 +80,10 @@ export default function AvalancheMap({
         const fc = turf.featureCollection(features as GeoJSON.Feature<GeoJSON.Polygon>[]);
         const dissolved = turf.dissolve(fc as GeoJSON.FeatureCollection<GeoJSON.Polygon>);
         const polygons = (dissolved.features || []).map((f: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>, i: number) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const coords = f.geometry.type === 'Polygon'
-            ? [(f.geometry.coordinates[0] as any).map((c: number[]) => [c[1], c[0]] as [number, number])]
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            : (f.geometry.coordinates as any).map((ring: number[][]) =>
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                (ring[0] as any).map((c: number[]) => [c[1], c[0]] as [number, number])
+            ? [f.geometry.coordinates[0].map((c) => [c[1], c[0]] as [number, number])]
+            : f.geometry.coordinates.map((polygon) =>
+                polygon[0].map((c) => [c[1], c[0]] as [number, number])
               );
           return { key: `vp-${i}`, positions: coords };
         });
