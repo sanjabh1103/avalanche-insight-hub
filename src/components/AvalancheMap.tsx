@@ -4,6 +4,7 @@ import type { LatLngBoundsExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getRiskColor, type GridCell } from '@/lib/gridUtils';
 import type { AvalancheEvent } from '@/components/HistoricalEventsToggle';
+import { useTheme } from 'next-themes';
 
 interface Props {
   cells: GridCell[];
@@ -37,11 +38,17 @@ function confidenceColor(confidence: number): string {
 }
 
 export default function AvalancheMap({ cells, selectedCell, onCellClick, center, zoom, historicalEvents = [] }: Props) {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme !== 'light';
+  const tileUrl = isDark
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+
   return (
     <MapContainer
       center={center}
       zoom={zoom}
-      className="h-full w-full z-0"
+      className="h-full w-full z-0 theme-aware-map"
       zoomControl={true}
       touchZoom={true}
       dragging={true}
@@ -49,7 +56,7 @@ export default function AvalancheMap({ cells, selectedCell, onCellClick, center,
       <MapUpdater center={center} zoom={zoom} />
       <TileLayer
         attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        url={tileUrl}
       />
       {cells.map((cell) => {
         const bounds: LatLngBoundsExpression = [
@@ -87,10 +94,13 @@ export default function AvalancheMap({ cells, selectedCell, onCellClick, center,
           }}
         >
           <Popup>
-            <div className="text-xs space-y-1" style={{ color: '#222' }}>
+            <div
+              className="text-xs space-y-1"
+              style={{ color: isDark ? '#ddd' : '#111' }}
+            >
               <div className="font-bold">{evt.event_type.toUpperCase()}</div>
               <div>{evt.description}</div>
-              <div className="text-gray-500">
+              <div className={isDark ? 'text-gray-400' : 'text-gray-600'}>
                 Source: {evt.source} • Confidence: {(evt.confidence * 100).toFixed(0)}%
               </div>
             </div>

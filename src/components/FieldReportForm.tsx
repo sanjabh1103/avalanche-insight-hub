@@ -6,13 +6,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { MapPin, Send, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import type { AvalancheEvent } from '@/components/HistoricalEventsToggle';
 
 interface Props {
   open: boolean;
   onClose: () => void;
+  onSubmitted?: (event: AvalancheEvent) => void;
 }
 
-export default function FieldReportForm({ open, onClose }: Props) {
+export default function FieldReportForm({ open, onClose, onSubmitted }: Props) {
   const [lat, setLat] = useState('');
   const [lng, setLng] = useState('');
   const [description, setDescription] = useState('');
@@ -63,17 +65,25 @@ export default function FieldReportForm({ open, onClose }: Props) {
     setSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const { data, error } = await supabase.from('field_reports').insert({
+      const { error } = await supabase.from('field_reports').insert({
         user_id: user?.id,
         description: description.trim(),
         location: `SRID=4326;POINT(${parsedLng} ${parsedLat})` as unknown,
-      }).select('id').single();
+      });
       if (error) throw error;
 
-      // Note: AI enrichment happens asynchronously via daily pg_cron job
-      // Realtime subscription in Index.tsx will show marker immediately
+      onSubmitted?.({
+        id: `field-report-${Date.now()}`,
+        lat: parsedLat,
+        lng: parsedLng,
+        severity: 3,
+        confidence: 0.6,
+        description: description.trim(),
+        source: 'field_report',
+        event_type: 'unknown',
+        timestamp: new Date().toISOString(),
+      });
 
-      toast.success('Field report submitted');
       setDescription('');
       onClose();
     } catch (err: unknown) {

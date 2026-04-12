@@ -82,7 +82,10 @@ Verify in this order:
 3. Confirm `LIVE DATA` appears when real weather data is returned.
 4. Open Admin and confirm `Active Jobs`, `Recent Jobs`, and `Model Status` render.
 5. Enable Events and confirm markers render on the map.
-6. Submit a valid field report and confirm the event is created.
+6. Submit a valid field report and confirm:
+   - green success toast appears
+   - a new marker appears immediately on the map
+   - a corresponding row appears in `field_reports`
 7. Test invalid latitude and invalid longitude rejection.
 8. Export both CSV and JSON.
 9. Copy a share link and restore it in a fresh tab.

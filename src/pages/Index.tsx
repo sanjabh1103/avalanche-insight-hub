@@ -32,8 +32,18 @@ export default function Index() {
   const [forecastId, setForecastId] = useState<string | undefined>();
   const [hourlyGrids, setHourlyGrids] = useState<GridCell[][] | null>(null);
   const [showEvents, setShowEvents] = useState(false);
-  const [historicalEvents, setHistoricalEvents] = useState<AvalancheEvent[]>([]);
+  const [remoteEvents, setRemoteEvents] = useState<AvalancheEvent[]>([]);
+  const [localEvents, setLocalEvents] = useState<AvalancheEvent[]>([]);
   const [weatherSummary, setWeatherSummary] = useState<{ snowfall_24h: string; wind_speed: string; temperature: string; precipitation: string } | null>(null);
+
+  const historicalEvents = useMemo(() => {
+    const merged = [...localEvents, ...remoteEvents];
+    const deduped = new Map<string, AvalancheEvent>();
+    merged.forEach((event) => {
+      deduped.set(event.id, event);
+    });
+    return Array.from(deduped.values());
+  }, [localEvents, remoteEvents]);
 
   // Realtime subscription for avalanche_events (Story #5 + #6)
   useEffect(() => {
@@ -71,7 +81,7 @@ export default function Index() {
               timestamp: String(newEvent.timestamp || ''),
             };
             
-            setHistoricalEvents(prev => [event, ...prev]);
+            setRemoteEvents((prev) => [event, ...prev]);
             toast.info('New avalanche event detected on map');
           }
         }
@@ -236,10 +246,10 @@ export default function Index() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: -320, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="w-80 h-full flex flex-col border-r border-border bg-card z-30 shrink-0 absolute md:relative left-0 top-0 bottom-0"
+              className="w-80 h-full flex flex-col border-r border-border bg-card z-30 shrink-0 absolute md:relative left-0 top-0 bottom-0 shadow-xl"
             >
               {/* Header */}
-              <div className="p-4 border-b border-border">
+              <div className="p-4 border-b border-border bg-card/70 backdrop-blur-sm">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Mountain className="h-6 w-6 text-primary" />
@@ -283,19 +293,29 @@ export default function Index() {
         {/* Main Map Area */}
         <div className="flex-1 relative flex flex-col min-h-0">
           {/* Top Controls */}
-          <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
+          <div className="absolute top-3 left-3 z-10 flex items-center gap-2 flex-wrap">
             {!sidebarOpen && (
               <Button
                 variant="outline"
                 size="icon"
                 className="h-10 w-10 glass-panel border-0 touch-manipulation"
                 onClick={() => setSidebarOpen(true)}
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
+                >
+                  <Menu className="h-5 w-5" />
+                </Button>
             )}
-            <RegionSelector value={region.name} onChange={handleRegionChange} />
-            <ThemeToggle />
+            <div className="flex items-center gap-2 glass-panel rounded-xl px-2 py-2 shadow-sm">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground pl-1 pr-1.5">
+                Region
+              </span>
+              <RegionSelector value={region.name} onChange={handleRegionChange} />
+            </div>
+            <div className="flex items-center gap-2 glass-panel rounded-xl px-2 py-2 shadow-sm">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground pl-1 pr-1.5">
+                Display
+              </span>
+              <ThemeToggle />
+            </div>
           </div>
 
           {/* Action Buttons */}
@@ -322,8 +342,17 @@ export default function Index() {
             />
             <HistoricalEventsToggle
               visible={showEvents}
-              onToggle={() => setShowEvents(!showEvents)}
-              onEventsLoaded={setHistoricalEvents}
+              onToggle={() => {
+                setShowEvents((current) => {
+                  const next = !current;
+                  if (!next) {
+                    setRemoteEvents([]);
+                    setLocalEvents([]);
+                  }
+                  return next;
+                });
+              }}
+              onEventsLoaded={setRemoteEvents}
               bbox={region.bbox}
             />
             <Button
@@ -369,7 +398,15 @@ export default function Index() {
         </div>
 
         {/* Field Report Modal */}
-        <FieldReportForm open={reportOpen} onClose={() => setReportOpen(false)} />
+        <FieldReportForm
+          open={reportOpen}
+          onClose={() => setReportOpen(false)}
+          onSubmitted={(event) => {
+            setLocalEvents((prev) => [event, ...prev]);
+            setShowEvents(true);
+            toast.success('Field report submitted');
+          }}
+        />
       </div>
     </div>
   );
