@@ -296,6 +296,33 @@ export type Database = {
         }
         Relationships: []
       }
+      user_alerts: {
+        Row: {
+          auth_key: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          region_bbox: number[] | null
+        }
+        Insert: {
+          auth_key: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          region_bbox?: number[] | null
+        }
+        Update: {
+          auth_key?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          region_bbox?: number[] | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
