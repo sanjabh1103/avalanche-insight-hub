@@ -99,10 +99,20 @@ export default function AvalancheMap({ cells, selectedCell, onCellClick, center,
               style={{ color: isDark ? '#ddd' : '#111' }}
             >
               <div className="font-bold">{evt.event_type.toUpperCase()}</div>
+              {evt.location_name && (
+                <div className={isDark ? 'text-blue-300' : 'text-blue-700'}>
+                  📍 {evt.location_name}
+                </div>
+              )}
               <div>{evt.description}</div>
               <div className={isDark ? 'text-gray-400' : 'text-gray-600'}>
                 Source: {evt.source} • Confidence: {(evt.confidence * 100).toFixed(0)}%
               </div>
+              {evt.timestamp && (
+                <div className={isDark ? 'text-gray-500' : 'text-gray-500'}>
+                  🕐 {new Date(evt.timestamp).toLocaleString()}
+                </div>
+              )}
             </div>
           </Popup>
         </CircleMarker>

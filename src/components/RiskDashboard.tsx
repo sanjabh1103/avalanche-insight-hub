@@ -8,6 +8,7 @@ interface WeatherSummary {
   wind_speed: string;
   temperature: string;
   precipitation: string;
+  snow_depth: string;
 }
 
 interface Props {
@@ -75,9 +76,14 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
       {weatherSummary && (
         <Card className="border-0 bg-secondary/50">
           <CardHeader className="p-3 pb-1">
-            <CardTitle className="text-xs text-green-400 uppercase tracking-wider">
-              Live Weather (Open-Meteo)
-            </CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-xs text-green-400 uppercase tracking-wider">
+                Live Weather (Open-Meteo)
+              </CardTitle>
+              <Badge className="bg-green-500/20 text-green-400 border-0 text-[8px] px-1.5 py-0">
+                ● LIVE
+              </Badge>
+            </div>
           </CardHeader>
           <CardContent className="p-3 pt-1">
             <div className="grid grid-cols-2 gap-2 text-[10px]">
@@ -96,6 +102,10 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Precipitation</span>
                 <span className="font-mono text-foreground">{weatherSummary.precipitation} mm</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Snow Depth</span>
+                <span className="font-mono text-foreground">{weatherSummary.snow_depth} cm</span>
               </div>
             </div>
           </CardContent>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { BrainCircuit } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 
 interface ModelInfo {
   version: string;
@@ -24,16 +25,19 @@ function timeAgo(dateStr: string | null): string {
 export default function ModelStatusBadge() {
   const [status, setStatus] = useState<ModelInfo | null>(null);
 
-  useEffect(() => {
-    supabase
+  const loadStatus = async () => {
+    const { data } = await supabase
       .from('model_status')
       .select('version, f1_score, last_inference, data_freshness_hours')
       .limit(1)
-      .single()
-      .then(({ data }) => {
-        if (data) setStatus(data as unknown as ModelInfo);
-      });
-  }, []);
+      .single();
+    if (data) setStatus(data as unknown as ModelInfo);
+  };
+
+  useEffect(() => { loadStatus(); }, []);
+
+  // Realtime sync with model_status table (BUG-11 fix)
+  useRealtimeSubscription('model_status', () => { loadStatus(); });
 
   if (!status) return null;
 

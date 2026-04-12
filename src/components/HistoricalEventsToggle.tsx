@@ -13,6 +13,7 @@ export interface AvalancheEvent {
   source: string;
   event_type: string;
   timestamp: string;
+  location_name?: string;
 }
 
 interface Props {
@@ -55,6 +56,10 @@ export default function HistoricalEventsToggle({ visible, onToggle, onEventsLoad
               const coords = (location as { coordinates?: number[] }).coordinates;
               if (coords) { lng = coords[0]; lat = coords[1]; }
             }
+            // Extract location_name from features JSONB or fallback
+            const features = event.features as Record<string, unknown> | null;
+            const locationName = features?.location_name ? String(features.location_name) : '';
+
             return {
               id: String(event.id || ''),
               lat, lng,
@@ -64,6 +69,7 @@ export default function HistoricalEventsToggle({ visible, onToggle, onEventsLoad
               source: String(event.source || 'unknown'),
               event_type: String(event.event_type || 'unknown'),
               timestamp: String(event.timestamp || ''),
+              location_name: locationName,
             };
           });
           onEventsLoaded(events);

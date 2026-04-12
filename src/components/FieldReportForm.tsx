@@ -12,34 +12,43 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onSubmitted?: (event: AvalancheEvent) => void;
+  regionCenter?: [number, number];
 }
 
-export default function FieldReportForm({ open, onClose, onSubmitted }: Props) {
+export default function FieldReportForm({ open, onClose, onSubmitted, regionCenter }: Props) {
   const [lat, setLat] = useState('');
   const [lng, setLng] = useState('');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const setFallbackCoordinates = useCallback(() => {
-    setLat('39.5');
-    setLng('-106.5');
-    toast.info('Using region center because browser geolocation is unavailable or was denied.');
-  }, []);
+    const fallbackLat = regionCenter?.[0] ?? 39.5;
+    const fallbackLng = regionCenter?.[1] ?? -106.5;
+    setLat(fallbackLat.toFixed(4));
+    setLng(fallbackLng.toFixed(4));
+    toast.info('Using region center for default coordinates.');
+  }, [regionCenter]);
 
   useEffect(() => {
-    if (open && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setLat(pos.coords.latitude.toFixed(6));
-          setLng(pos.coords.longitude.toFixed(6));
-        },
-        setFallbackCoordinates,
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
-      );
-    } else if (open) {
-      setFallbackCoordinates();
+    if (open) {
+      // Always default to region center first, then try browser geolocation
+      const defaultLat = regionCenter?.[0] ?? 39.5;
+      const defaultLng = regionCenter?.[1] ?? -106.5;
+      setLat(defaultLat.toFixed(4));
+      setLng(defaultLng.toFixed(4));
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            setLat(pos.coords.latitude.toFixed(6));
+            setLng(pos.coords.longitude.toFixed(6));
+          },
+          () => { /* already set to region center */ },
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
+        );
+      }
     }
-  }, [open, setFallbackCoordinates]);
+  }, [open, regionCenter]);
 
   const handleSubmit = async () => {
     if (!description.trim()) {
@@ -82,7 +91,13 @@ export default function FieldReportForm({ open, onClose, onSubmitted }: Props) {
         source: 'field_report',
         event_type: 'unknown',
         timestamp: new Date().toISOString(),
+        location_name: '',
       });
+
+      // Log field_report_enrichment job for Admin panel visibility
+      supabase.functions.invoke('trigger-job', {
+        body: { type: 'field_report_enrichment' },
+      }).catch(() => { /* non-blocking */ });
 
       setDescription('');
       onClose();

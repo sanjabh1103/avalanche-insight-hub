@@ -34,7 +34,7 @@ export default function Index() {
   const [showEvents, setShowEvents] = useState(false);
   const [remoteEvents, setRemoteEvents] = useState<AvalancheEvent[]>([]);
   const [localEvents, setLocalEvents] = useState<AvalancheEvent[]>([]);
-  const [weatherSummary, setWeatherSummary] = useState<{ snowfall_24h: string; wind_speed: string; temperature: string; precipitation: string } | null>(null);
+  const [weatherSummary, setWeatherSummary] = useState<{ snowfall_24h: string; wind_speed: string; temperature: string; precipitation: string; snow_depth: string } | null>(null);
 
   const historicalEvents = useMemo(() => {
     const merged = [...localEvents, ...remoteEvents];
@@ -69,6 +69,10 @@ export default function Index() {
               if (coords) { lng = coords[0]; lat = coords[1]; }
             }
             
+            // Extract location_name from features JSONB
+            const features = newEvent.features as Record<string, unknown> | null;
+            const locationName = features?.location_name ? String(features.location_name) : '';
+
             const event: AvalancheEvent = {
               id: String(newEvent.id || ''),
               lat,
@@ -79,6 +83,7 @@ export default function Index() {
               source: String(newEvent.source || 'unknown'),
               event_type: String(newEvent.event_type || 'unknown'),
               timestamp: String(newEvent.timestamp || ''),
+              location_name: locationName,
             };
             
             setRemoteEvents((prev) => [event, ...prev]);
@@ -406,6 +411,7 @@ export default function Index() {
             setShowEvents(true);
             toast.success('Field report submitted');
           }}
+          regionCenter={region.center}
         />
       </div>
     </div>

@@ -17,6 +17,7 @@ interface WeatherData {
   windspeed: number[];
   winddirection: number[];
   temperature: number[];
+  snow_depth: number[];
 }
 
 interface GridCell {
@@ -37,7 +38,7 @@ interface GridCell {
 
 async function fetchWeather(lat: number, lng: number): Promise<WeatherData | null> {
   try {
-    const url = `${OPEN_METEO_BASE}?latitude=${lat}&longitude=${lng}&hourly=precipitation,rain,snowfall,windspeed_10m,winddirection_10m,temperature_2m&timezone=auto&forecast_days=2`;
+    const url = `${OPEN_METEO_BASE}?latitude=${lat}&longitude=${lng}&hourly=precipitation,rain,snowfall,snow_depth,windspeed_10m,winddirection_10m,temperature_2m&timezone=auto&forecast_days=2`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const data = await res.json();
@@ -48,6 +49,7 @@ async function fetchWeather(lat: number, lng: number): Promise<WeatherData | nul
       windspeed: h.windspeed_10m?.slice(0, 24) || [],
       winddirection: h.winddirection_10m?.slice(0, 24) || [],
       temperature: h.temperature_2m?.slice(0, 24) || [],
+      snow_depth: h.snow_depth?.slice(0, 24) || [],
     };
   } catch {
     return null;
@@ -62,11 +64,12 @@ function computeRisk(weather: WeatherData | null, hour: number, row: number, col
   const temp = weather?.temperature[h] ?? (-5 + Math.sin(hour * 0.4) * 8);
   const precip = weather?.precipitation[h] ?? (snowfall * 0.8);
   const windDir = weather?.winddirection[h] ?? (180 + col * 10);
+  const snowDepth = weather?.snow_depth[h] ?? (50 + row * 5 + Math.cos(col * 0.3) * 10);
 
   const snowfall24h = weather ? weather.snowfall.slice(0, h + 1).reduce((a, b) => a + b, 0) : snowfall * (h + 1) * 0.3;
   const windLoading = wind * Math.max(0, Math.cos((windDir - terrainAspect) * Math.PI / 180));
   const tempGradient = h > 0 && weather ? (weather.temperature[h] - weather.temperature[Math.max(0, h - 3)]) : temp * 0.1;
-  const snowpackProxy = Math.max(0, snowfall24h * 0.4 - Math.max(0, temp) * 0.3);
+  const snowpackProxy = weather ? Math.max(0, snowDepth * 0.02 + snowfall24h * 0.3 - Math.max(0, temp) * 0.2) : Math.max(0, snowfall24h * 0.4 - Math.max(0, temp) * 0.3);
 
   const weights = {
     snowfall_24h: 0.25,
@@ -204,12 +207,13 @@ serve(async (req) => {
       .update({ status: 'completed', result: { avgRisk, cellCount: currentCells.length, weatherSource } })
       .eq('id', job.id);
 
-    // Extract weather summary for SHAP display (real values for all regions including Himalayas/Andes)
+    // Extract weather summary for SHAP display (real values for all regions)
     const weatherSummary = weather ? {
       snowfall_24h: weather.snowfall.slice(0, 24).reduce((a, b) => a + b, 0).toFixed(1),
       wind_speed: (weather.windspeed.slice(0, 24).reduce((a, b) => a + b, 0) / 24).toFixed(1),
       temperature: (weather.temperature.slice(0, 24).reduce((a, b) => a + b, 0) / 24).toFixed(1),
       precipitation: weather.precipitation.slice(0, 24).reduce((a, b) => a + b, 0).toFixed(1),
+      snow_depth: (weather.snow_depth.slice(0, 24).reduce((a, b) => a + b, 0) / 24).toFixed(1),
     } : null;
 
     return new Response(JSON.stringify({ 
