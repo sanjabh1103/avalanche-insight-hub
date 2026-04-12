@@ -43,8 +43,11 @@ async function fetchWeather(lat: number, lng: number): Promise<WeatherData | nul
     const data = await res.json();
     const h = data.hourly;
     return {
-      snowfall: h.snowfall?.slice(0, 24) || [],
-      precipitation: h.precipitation?.slice(0, 24) || [],
+      snowfall: h.snowfall?.slice(0, 72) || [],
+      precipitation: h.precipitation?.slice(0, 72) || [],
+      windspeed: h.windspeed_10m?.slice(0, 72) || [],
+      winddirection: h.winddirection_10m?.slice(0, 72) || [],
+      temperature: h.temperature_2m?.slice(0, 72) || [],
       windspeed: h.windspeed_10m?.slice(0, 24) || [],
       winddirection: h.winddirection_10m?.slice(0, 24) || [],
       temperature: h.temperature_2m?.slice(0, 24) || [],
@@ -107,14 +110,14 @@ function computeRisk(weather: WeatherData | null, hour: number, row: number, col
   return { riskScore, hazard, exposure, vulnerability, rawScore, shapValues, problemType: PROBLEM_TYPES[problemIdx] };
 }
 
-function generateHourlyGrids(bbox: number[], weather: WeatherData | null) {
+function generateHourlyGrids(bbox: number[], weather: WeatherData | null, totalHours = 25) {
   const [latMin, lngMin, latMax, lngMax] = bbox;
   const latStep = (latMax - latMin) / GRID_SIZE;
   const lngStep = (lngMax - lngMin) / GRID_SIZE;
   
   const hourlyGrids: GridCell[][] = [];
   
-  for (let hour = 0; hour <= 24; hour++) {
+  for (let hour = 0; hour < totalHours; hour++) {
     const cells: GridCell[] = [];
     for (let r = 0; r < GRID_SIZE; r++) {
       for (let c = 0; c < GRID_SIZE; c++) {
@@ -146,7 +149,7 @@ serve(async (req) => {
   }
 
   try {
-    const { bbox, timeOffset = 0, regionName } = await req.json();
+    const { bbox, timeOffset = 0, regionName, hours = 24 } = await req.json();
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -165,7 +168,7 @@ serve(async (req) => {
     const centerLng = (bbox[1] + bbox[3]) / 2;
     const weather = await fetchWeather(centerLat, centerLng);
     
-    const hourlyGrids = generateHourlyGrids(bbox, weather);
+    const hourlyGrids = generateHourlyGrids(bbox, weather, hours + 1);
     const currentCells = hourlyGrids[Math.min(timeOffset, 24)];
     const avgRisk = currentCells.reduce((s: number, c: GridCell) => s + c.riskScore, 0) / currentCells.length;
     const weatherSource = weather ? 'open-meteo' : 'simulation';
