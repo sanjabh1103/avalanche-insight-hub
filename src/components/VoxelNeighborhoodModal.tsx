@@ -59,7 +59,6 @@ let lastRequestTime = 0;
 let consecutiveFailures = 0;
 const MIN_REQUEST_INTERVAL = 5000; // 5 seconds minimum between requests
 const MAX_RETRIES = 3;
-let pendingRequest: Promise<VoxelCoordinate[]> | null = null;
 
 function bboxToQuery(bbox: [number, number, number, number]) {
   const [latMin, lngMin, latMax, lngMax] = bbox;
@@ -102,28 +101,33 @@ function getBaseColor(type: BaseBlock['type']): THREE.Color {
   return new THREE.Color('#d1d5db'); // ground
 }
 
+// Store the in-progress promise for deduplication
+let pendingPromise: Promise<VoxelCoordinate[]> | null = null;
+
 async function fetchOSMData(bbox: [number, number, number, number], retryCount = 0): Promise<VoxelCoordinate[]> {
-  // Deduplication: return pending request if already fetching
-  if (pendingRequest) {
-    return pendingRequest;
+  // Deduplication: if a fetch is already in progress, return that promise
+  if (pendingPromise) {
+    return pendingPromise;
   }
   
-  // Circuit breaker: add extra delay if we've had recent failures
-  const circuitBreakerDelay = Math.min(consecutiveFailures * 3000, 15000);
-  
-  // Rate limiting: ensure minimum interval between requests
-  const now = Date.now();
-  const timeSinceLastRequest = now - lastRequestTime;
-  const requiredDelay = Math.max(MIN_REQUEST_INTERVAL, circuitBreakerDelay);
-  
-  if (timeSinceLastRequest < requiredDelay) {
-    await new Promise(resolve => setTimeout(resolve, requiredDelay - timeSinceLastRequest));
-  }
-  
-  const query = bboxToQuery(bbox);
-  
-  const doFetch = async (): Promise<VoxelCoordinate[]> => {
+  // Create and store the promise IMMEDIATELY (synchronously)
+  // This prevents race conditions where multiple calls slip through
+  pendingPromise = (async (): Promise<VoxelCoordinate[]> => {
     try {
+      // Circuit breaker: add extra delay if we've had recent failures
+      const circuitBreakerDelay = Math.min(consecutiveFailures * 3000, 15000);
+      
+      // Rate limiting: ensure minimum interval between requests
+      const now = Date.now();
+      const timeSinceLastRequest = now - lastRequestTime;
+      const requiredDelay = Math.max(MIN_REQUEST_INTERVAL, circuitBreakerDelay);
+      
+      if (timeSinceLastRequest < requiredDelay) {
+        await new Promise(resolve => setTimeout(resolve, requiredDelay - timeSinceLastRequest));
+      }
+      
+      const query = bboxToQuery(bbox);
+      
       lastRequestTime = Date.now();
       const res = await fetch(OVERPASS_URL, {
         method: 'POST',
@@ -223,12 +227,11 @@ async function fetchOSMData(bbox: [number, number, number, number], retryCount =
       consecutiveFailures++;
       throw err;
     } finally {
-      pendingRequest = null;
+      pendingPromise = null;
     }
-  };
+  })();
   
-  pendingRequest = doFetch();
-  return pendingRequest;
+  return pendingPromise;
 }
 
 // ---- Three.js scene ----
