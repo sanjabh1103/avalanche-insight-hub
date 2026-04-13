@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect, lazy, Suspense } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mountain, AlertTriangle, Settings, BarChart3, Loader2, Menu, X, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ import ExportForecast from '@/components/ExportForecast';
 import ThemeToggle from '@/components/ThemeToggle';
 import HistoricalEventsToggle, { type AvalancheEvent } from '@/components/HistoricalEventsToggle';
 import ExpertModePanel from '@/components/ExpertModePanel';
-const VoxelNeighborhoodModal = lazy(() => import('@/components/VoxelNeighborhoodModal'));
+import VoxelNeighborhoodModal from '@/components/VoxelNeighborhoodModal';
 import { generateForecastGrid, type GridCell } from '@/lib/gridUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { useIsMobile } from '@/hooks/use-mobile';
