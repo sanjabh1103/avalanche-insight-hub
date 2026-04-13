@@ -26,6 +26,7 @@ interface Props {
   hourlyGrids: GridCell[][] | null;
   selectedCell: GridCell | null;
   regionBbox: [number, number, number, number];
+  onToggle3D: () => void;
 }
 
 export default function ExpertModePanel({
