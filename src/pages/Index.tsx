@@ -60,10 +60,20 @@ export default function Index() {
     return Array.from(deduped.values());
   }, [localEvents, remoteEvents]);
 
-  // Toggle expert mode
+  // B8/B11 fix: Toggle expert mode — open sidebar when expert mode turns ON;
+  // only RESET overlays when expert mode turns OFF (not just when sidebar closes).
+  // Closing the sidebar (X button) does NOT reset expertMode or overlays.
   useEffect(() => {
-    if (expertMode) setExpertPanelOpen(true);
-    else { setExpertPanelOpen(false); setShowHeatmap(false); setShowRoads(false); setShowInfra(false); setShowVectorPolygons(false); }
+    if (expertMode) {
+      setExpertPanelOpen(true);
+    } else {
+      setExpertPanelOpen(false);
+      // Only clear overlays when Expert Mode is actually turned OFF
+      setShowHeatmap(false);
+      setShowRoads(false);
+      setShowInfra(false);
+      setShowVectorPolygons(false);
+    }
   }, [expertMode]);
 
   // Keyboard shortcuts
@@ -79,7 +89,45 @@ export default function Index() {
     return () => window.removeEventListener('keydown', handler);
   }, [forecasting, maxHour]);
 
+  // B7 fix: auto-load events from DB when heatmap overlay toggled ON in Expert Mode
+  useEffect(() => {
+    if (!showHeatmap) return;
+    supabase
+      .from('avalanche_events')
+      .select('id, location, severity, confidence, description, source, event_type, timestamp, features')
+      .limit(200)
+      .then(({ data }) => {
+        if (!data || data.length === 0) return;
+        const parsed: AvalancheEvent[] = data.map((row) => {
+          let lat = 0, lng = 0;
+          const loc = row.location;
+          if (typeof loc === 'string') {
+            const m = loc.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/);
+            if (m) { lng = parseFloat(m[1]); lat = parseFloat(m[2]); }
+          } else if (loc && typeof loc === 'object') {
+            const coords = (loc as { coordinates?: number[] }).coordinates;
+            if (coords) { lng = coords[0]; lat = coords[1]; }
+          }
+          const features = row.features as Record<string, unknown> | null;
+          return {
+            id: String(row.id || ''),
+            lat, lng,
+            severity: Number(row.severity) || 3,
+            confidence: Number(row.confidence) || 0.5,
+            description: String(row.description || ''),
+            source: String(row.source || 'unknown'),
+            event_type: String(row.event_type || 'unknown'),
+            timestamp: String(row.timestamp || ''),
+            location_name: features?.location_name ? String(features.location_name) : '',
+          };
+        });
+        setRemoteEvents(parsed);
+        toast.info(`Loaded ${parsed.length} historical events for heatmap`);
+      });
+  }, [showHeatmap]);
+
   // Realtime subscription for avalanche_events
+
   useEffect(() => {
     if (!showEvents) return;
     const channel = supabase
@@ -315,7 +363,11 @@ export default function Index() {
           </div>
 
           {/* Action Buttons */}
-          <div className="absolute top-3 right-3 z-10 flex items-center gap-2 flex-wrap justify-end">
+          {/* B9 fix: shift left when expert panel is open to avoid being obscured by the w-80 sidebar */}
+          <div
+            className="absolute top-3 z-10 flex items-center gap-2 flex-wrap justify-end transition-all duration-300"
+            style={{ right: expertPanelOpen ? 'calc(20rem + 0.75rem)' : '0.75rem' }}
+          >
             <Button onClick={runForecast} disabled={forecasting} className="h-10 mr-1 text-xs font-semibold gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg touch-manipulation" aria-label="Run forecast">
               {forecasting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mountain className="h-4 w-4" />}
               {isMobile ? 'FORECAST' : expertMode ? 'RUN 72H FORECAST' : 'RUN 24H FORECAST'}
@@ -378,6 +430,7 @@ export default function Index() {
         </div>
 
         {/* Expert Mode Right Panel */}
+        {/* B8 fix: closing the sidebar ONLY hides it — does NOT turn off Expert Mode or reset overlays */}
         <ExpertModePanel
           open={expertPanelOpen}
           onClose={() => setExpertPanelOpen(false)}

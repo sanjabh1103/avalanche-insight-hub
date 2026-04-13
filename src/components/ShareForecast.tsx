@@ -47,8 +47,11 @@ export default function ShareForecast({ forecastId, region, hour = 0, selectedCe
       toast.success('Full-state forecast link copied — restores region, hour, and selected cell');
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast.info(url);
+      // B10 fix: clipboard API blocked (e.g. non-HTTPS or permissions denied) —
+      // show the URL in a toast so the user can copy it manually
+      toast.info(`Copy this link: ${url}`, { duration: 10000 });
     }
+
   };
 
   return (
