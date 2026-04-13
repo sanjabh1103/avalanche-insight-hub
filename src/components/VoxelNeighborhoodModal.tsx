@@ -17,6 +17,11 @@ interface BaseBlock {
   levelInfo?: number;
 }
 
+interface OSMGeometryPoint {
+  lat: number;
+  lon: number;
+}
+
 interface VoxelCoordinate {
   x: number;
   y: number;
@@ -48,6 +53,11 @@ const WORLD_SIZE = 60; // 60x60 strict grid
 
 // ---- In-memory session cache ----
 const sessionCache = new Map<string, VoxelCoordinate[]>();
+
+// ---- Rate limiting state ----
+let lastRequestTime = 0;
+const MIN_REQUEST_INTERVAL = 2000; // 2 seconds between requests
+let pendingRequest: Promise<VoxelCoordinate[]> | null = null;
 
 function bboxToQuery(bbox: [number, number, number, number]) {
   const [latMin, lngMin, latMax, lngMax] = bbox;
@@ -90,80 +100,119 @@ function getBaseColor(type: BaseBlock['type']): THREE.Color {
   return new THREE.Color('#d1d5db'); // ground
 }
 
-async function fetchOSMData(bbox: [number, number, number, number]): Promise<VoxelCoordinate[]> {
-  const query = bboxToQuery(bbox);
-  const res = await fetch(OVERPASS_URL, {
-    method: 'POST',
-    body: `data=${encodeURIComponent(query)}`,
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  });
-  const data = await res.json();
+async function fetchOSMData(bbox: [number, number, number, number], retryCount = 0): Promise<VoxelCoordinate[]> {
+  // Rate limiting: ensure minimum interval between requests
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastRequestTime;
+  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+    await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest));
+  }
   
-  // 2D grid to track what's at x,z
-  const gridMap = new Map<string, BaseBlock>();
-
-  // Ground plane
-  for (let x = -WORLD_SIZE / 2; x < WORLD_SIZE / 2; x++) {
-    for (let z = -WORLD_SIZE / 2; z < WORLD_SIZE / 2; z++) {
-      const [lat, lng] = localToGeo(x, z, bbox);
-      gridMap.set(`${x},${z}`, { type: 'ground', lat, lng });
-    }
+  // Deduplication: return pending request if same bbox is being fetched
+  const cacheKey = `voxel_grid_${bbox.join(',')}`;
+  if (pendingRequest) {
+    return pendingRequest;
   }
-
-  for (const el of (data.elements || [])) {
-    const tags = (el.tags || {}) as Record<string, string>;
-
-    if (el.type === 'way' && tags.building && (el.center || el.geometry)) {
-      const levels = parseInt(tags['building:levels'] || '3', 10);
-      const height = Math.max(2, Math.min(8, levels));
-      const geom = el.geometry || [];
-      const pts = el.center ? [el.center] : geom;
-      pts.forEach((p: any) => {
-        const [x, z] = geoToLocal(p.lat, p.lon, bbox);
-        gridMap.set(`${x},${z}`, { type: 'building', lat: p.lat, lng: p.lon, levelInfo: height });
+  
+  const query = bboxToQuery(bbox);
+  
+  const doFetch = async (): Promise<VoxelCoordinate[]> => {
+    try {
+      lastRequestTime = Date.now();
+      const res = await fetch(OVERPASS_URL, {
+        method: 'POST',
+        body: `data=${encodeURIComponent(query)}`,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
-    } else if (el.type === 'way' && tags.highway && el.geometry) {
-      el.geometry.forEach((p: any) => {
-        const [x, z] = geoToLocal(p.lat, p.lon, bbox);
-        // Only overwrite ground, not buildings
-        if (gridMap.get(`${x},${z}`)?.type === 'ground') {
-          gridMap.set(`${x},${z}`, { type: 'road', lat: p.lat, lng: p.lon });
+      
+      // Handle 429 Too Many Requests with exponential backoff
+      if (res.status === 429) {
+        if (retryCount < 3) {
+          const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return fetchOSMData(bbox, retryCount + 1);
         }
-      });
-    } else if (el.type === 'way' && tags.landuse && (el.center || el.geometry)) {
-      const pts = el.center ? [el.center] : (el.geometry || []);
-      pts.forEach((p: any) => {
-        const [x, z] = geoToLocal(p.lat, p.lon, bbox);
-        if (gridMap.get(`${x},${z}`)?.type === 'ground') {
-          gridMap.set(`${x},${z}`, { type: 'forest', lat: p.lat, lng: p.lon });
-        }
-      });
-    } else if (el.type === 'node' && tags.aerialway) {
-      const [x, z] = geoToLocal(el.lat, el.lon, bbox);
-      gridMap.set(`${x},${z}`, { type: 'lift', lat: el.lat, lng: el.lon });
-    }
-  }
-
-  // Convert map to 3D voxel coordinates (extrude)
-  const voxels: VoxelCoordinate[] = [];
-  gridMap.forEach((block, key) => {
-    const [x, z] = key.split(',').map(Number);
-    // Base layer
-    voxels.push({ x, y: 0, z, data: block });
-    
-    // Extrude buildings
-    if (block.type === 'building') {
-      const h = block.levelInfo || 3;
-      for (let y = 1; y < h; y++) {
-        voxels.push({ x, y, z, data: block });
+        throw new Error('Rate limit exceeded. Please wait a moment and try again.');
       }
-    } else if (block.type === 'lift') {
-      voxels.push({ x, y: 1, z, data: block });
-      voxels.push({ x, y: 2, z, data: block });
-    }
-  });
+      
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      
+      const data = await res.json();
+      
+      // 2D grid to track what's at x,z
+      const gridMap = new Map<string, BaseBlock>();
 
-  return voxels;
+      // Ground plane
+      for (let x = -WORLD_SIZE / 2; x < WORLD_SIZE / 2; x++) {
+        for (let z = -WORLD_SIZE / 2; z < WORLD_SIZE / 2; z++) {
+          const [lat, lng] = localToGeo(x, z, bbox);
+          gridMap.set(`${x},${z}`, { type: 'ground', lat, lng });
+        }
+      }
+
+      for (const el of (data.elements || [])) {
+        const tags = (el.tags || {}) as Record<string, string>;
+
+        if (el.type === 'way' && tags.building && (el.center || el.geometry)) {
+          const levels = parseInt(tags['building:levels'] || '3', 10);
+          const height = Math.max(2, Math.min(8, levels));
+          const geom = el.geometry || [];
+          const pts = el.center ? [el.center] : geom;
+          pts.forEach((p: OSMGeometryPoint) => {
+            const [x, z] = geoToLocal(p.lat, p.lon, bbox);
+            gridMap.set(`${x},${z}`, { type: 'building', lat: p.lat, lng: p.lon, levelInfo: height });
+          });
+        } else if (el.type === 'way' && tags.highway && el.geometry) {
+          el.geometry.forEach((p: OSMGeometryPoint) => {
+            const [x, z] = geoToLocal(p.lat, p.lon, bbox);
+            // Only overwrite ground, not buildings
+            if (gridMap.get(`${x},${z}`)?.type === 'ground') {
+              gridMap.set(`${x},${z}`, { type: 'road', lat: p.lat, lng: p.lon });
+            }
+          });
+        } else if (el.type === 'way' && tags.landuse && (el.center || el.geometry)) {
+          const pts = el.center ? [el.center] : (el.geometry || []);
+          pts.forEach((p: OSMGeometryPoint) => {
+            const [x, z] = geoToLocal(p.lat, p.lon, bbox);
+            if (gridMap.get(`${x},${z}`)?.type === 'ground') {
+              gridMap.set(`${x},${z}`, { type: 'forest', lat: p.lat, lng: p.lon });
+            }
+          });
+        } else if (el.type === 'node' && tags.aerialway) {
+          const [x, z] = geoToLocal(el.lat, el.lon, bbox);
+          gridMap.set(`${x},${z}`, { type: 'lift', lat: el.lat, lng: el.lon });
+        }
+      }
+
+      // Convert map to 3D voxel coordinates (extrude)
+      const voxels: VoxelCoordinate[] = [];
+      gridMap.forEach((block, key) => {
+        const [x, z] = key.split(',').map(Number);
+        // Base layer
+        voxels.push({ x, y: 0, z, data: block });
+        
+        // Extrude buildings
+        if (block.type === 'building') {
+          const h = block.levelInfo || 3;
+          for (let y = 1; y < h; y++) {
+            voxels.push({ x, y, z, data: block });
+          }
+        } else if (block.type === 'lift') {
+          voxels.push({ x, y: 1, z, data: block });
+          voxels.push({ x, y: 2, z, data: block });
+        }
+      });
+
+      return voxels;
+    } finally {
+      pendingRequest = null;
+    }
+  };
+  
+  pendingRequest = doFetch();
+  return pendingRequest;
 }
 
 // ---- Three.js scene ----
