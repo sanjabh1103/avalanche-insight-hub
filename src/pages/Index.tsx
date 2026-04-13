@@ -396,18 +396,16 @@ export default function Index() {
         />
 
         {/* 3D Voxel Modal */}
-        <Suspense fallback={null}>
-          {show3DModal && (
-            <VoxelNeighborhoodModal
-              open={show3DModal}
-              onClose={() => setShow3DModal(false)}
-              bbox={region.bbox}
-              gridCells={grid.cells}
-              hourlyGrids={hourlyGrids}
-              timeOffset={timeOffset}
-            />
-          )}
-        </Suspense>
+        {show3DModal && (
+          <VoxelNeighborhoodModal
+            open={show3DModal}
+            onClose={() => setShow3DModal(false)}
+            bbox={region.bbox}
+            gridCells={grid.cells}
+            hourlyGrids={hourlyGrids}
+            timeOffset={timeOffset}
+          />
+        )}
 
         {/* Field Report Modal */}
         <FieldReportForm
