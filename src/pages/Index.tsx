@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mountain, AlertTriangle, Settings, BarChart3, Loader2, Menu, X, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,7 @@ import ExportForecast from '@/components/ExportForecast';
 import ThemeToggle from '@/components/ThemeToggle';
 import HistoricalEventsToggle, { type AvalancheEvent } from '@/components/HistoricalEventsToggle';
 import ExpertModePanel from '@/components/ExpertModePanel';
+const VoxelNeighborhoodModal = lazy(() => import('@/components/VoxelNeighborhoodModal'));
 import { generateForecastGrid, type GridCell } from '@/lib/gridUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -47,6 +48,7 @@ export default function Index() {
   const [showRoads, setShowRoads] = useState(false);
   const [showInfra, setShowInfra] = useState(false);
   const [showVectorPolygons, setShowVectorPolygons] = useState(false);
+  const [show3DModal, setShow3DModal] = useState(false);
   const [playingTimeline, setPlayingTimeline] = useState(false);
 
   const maxHour = hourlyGrids ? hourlyGrids.length - 1 : (expertMode ? 71 : 24);
@@ -390,7 +392,22 @@ export default function Index() {
           hourlyGrids={hourlyGrids}
           selectedCell={selectedCell}
           regionBbox={region.bbox}
+          onToggle3D={() => setShow3DModal(true)}
         />
+
+        {/* 3D Voxel Modal */}
+        <Suspense fallback={null}>
+          {show3DModal && (
+            <VoxelNeighborhoodModal
+              open={show3DModal}
+              onClose={() => setShow3DModal(false)}
+              bbox={region.bbox}
+              gridCells={grid.cells}
+              hourlyGrids={hourlyGrids}
+              timeOffset={timeOffset}
+            />
+          )}
+        </Suspense>
 
         {/* Field Report Modal */}
         <FieldReportForm
