@@ -101,17 +101,16 @@ function getBaseColor(type: BaseBlock['type']): THREE.Color {
 }
 
 async function fetchOSMData(bbox: [number, number, number, number], retryCount = 0): Promise<VoxelCoordinate[]> {
+  // Deduplication: return pending request if already fetching
+  if (pendingRequest) {
+    return pendingRequest;
+  }
+  
   // Rate limiting: ensure minimum interval between requests
   const now = Date.now();
   const timeSinceLastRequest = now - lastRequestTime;
   if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
     await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest));
-  }
-  
-  // Deduplication: return pending request if same bbox is being fetched
-  const cacheKey = `voxel_grid_${bbox.join(',')}`;
-  if (pendingRequest) {
-    return pendingRequest;
   }
   
   const query = bboxToQuery(bbox);

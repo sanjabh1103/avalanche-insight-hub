@@ -11,6 +11,31 @@ interface Props {
 
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 
+// Shared rate limiting state across component instances
+let lastRequestTime = 0;
+const MIN_REQUEST_INTERVAL = 2000; // 2 seconds between requests
+
+async function rateLimitedFetch(url: string, options: RequestInit, retryCount = 0): Promise<Response> {
+  // Wait if needed to respect rate limit
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastRequestTime;
+  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+    await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest));
+  }
+  
+  lastRequestTime = Date.now();
+  const res = await fetch(url, options);
+  
+  // Handle 429 with exponential backoff
+  if (res.status === 429 && retryCount < 3) {
+    const delay = Math.pow(2, retryCount) * 1000;
+    await new Promise(resolve => setTimeout(resolve, delay));
+    return rateLimitedFetch(url, options, retryCount + 1);
+  }
+  
+  return res;
+}
+
 function buildQuery(bbox: [number, number, number, number], type: 'roads' | 'infra'): string {
   const [latMin, lngMin, latMax, lngMax] = bbox;
   const b = `${latMin},${lngMin},${latMax},${lngMax}`;
@@ -35,16 +60,21 @@ export default function ImpactOverlays({ bbox, showRoads, showInfrastructure }: 
     let cancelled = false;
     setLoading(true);
 
-    const queries: Promise<void>[] = [];
+    // Sequential fetching with rate limiting to avoid 429 errors
+    const fetchPromises: Promise<void>[] = [];
 
     if (showRoads) {
-      queries.push(
-        fetch(OVERPASS_URL, {
+      fetchPromises.push(
+        rateLimitedFetch(OVERPASS_URL, {
           method: 'POST',
           body: `data=${encodeURIComponent(buildQuery(bbox, 'roads'))}`,
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         })
-          .then(r => r.json())
+          .then(r => {
+            if (r.status === 429) throw new Error('Rate limit exceeded');
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.json();
+          })
           .then(data => {
             if (cancelled) return;
             const elements = data.elements || [];
@@ -74,13 +104,17 @@ export default function ImpactOverlays({ bbox, showRoads, showInfrastructure }: 
     }
 
     if (showInfrastructure) {
-      queries.push(
-        fetch(OVERPASS_URL, {
+      fetchPromises.push(
+        rateLimitedFetch(OVERPASS_URL, {
           method: 'POST',
           body: `data=${encodeURIComponent(buildQuery(bbox, 'infra'))}`,
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         })
-          .then(r => r.json())
+          .then(r => {
+            if (r.status === 429) throw new Error('Rate limit exceeded');
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.json();
+          })
           .then(data => {
             if (cancelled) return;
             const elements = data.elements || [];
@@ -108,20 +142,27 @@ export default function ImpactOverlays({ bbox, showRoads, showInfrastructure }: 
               toast.info('No villages or ski lifts found in this region');
             }
           })
-          .catch(() => {
-            if (!cancelled) toast.error('Villages/Lifts overlay failed — Overpass API unavailable');
+          .catch((err) => {
+            if (!cancelled) {
+              if (err.message === 'Rate limit exceeded') {
+                toast.error('Overpass API rate limit — please wait a moment');
+              } else {
+                toast.error('Infrastructure overlay failed — Overpass API unavailable');
+              }
+            }
           })
       );
     }
 
-    Promise.all(queries).finally(() => { if (!cancelled) setLoading(false); });
+    // Execute all fetches (they'll be rate-limited sequentially)
+    Promise.all(fetchPromises).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
 
     return () => {
       cancelled = true;
-      layersRef.current.forEach(l => map.removeLayer(l));
-      layersRef.current = [];
     };
-  }, [map, bbox, showRoads, showInfrastructure]);
+  }, [bbox, showRoads, showInfrastructure, map]);
 
   return loading ? (
     <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] glass-panel rounded-full px-4 py-2 text-xs text-muted-foreground">
