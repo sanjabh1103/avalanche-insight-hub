@@ -54,9 +54,11 @@ const WORLD_SIZE = 60; // 60x60 strict grid
 // ---- In-memory session cache ----
 const sessionCache = new Map<string, VoxelCoordinate[]>();
 
-// ---- Rate limiting state ----
+// ---- Rate limiting state (module-level singleton) ----
 let lastRequestTime = 0;
-const MIN_REQUEST_INTERVAL = 2000; // 2 seconds between requests
+let consecutiveFailures = 0;
+const MIN_REQUEST_INTERVAL = 5000; // 5 seconds minimum between requests
+const MAX_RETRIES = 3;
 let pendingRequest: Promise<VoxelCoordinate[]> | null = null;
 
 function bboxToQuery(bbox: [number, number, number, number]) {
@@ -106,11 +108,16 @@ async function fetchOSMData(bbox: [number, number, number, number], retryCount =
     return pendingRequest;
   }
   
+  // Circuit breaker: add extra delay if we've had recent failures
+  const circuitBreakerDelay = Math.min(consecutiveFailures * 3000, 15000);
+  
   // Rate limiting: ensure minimum interval between requests
   const now = Date.now();
   const timeSinceLastRequest = now - lastRequestTime;
-  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
-    await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest));
+  const requiredDelay = Math.max(MIN_REQUEST_INTERVAL, circuitBreakerDelay);
+  
+  if (timeSinceLastRequest < requiredDelay) {
+    await new Promise(resolve => setTimeout(resolve, requiredDelay - timeSinceLastRequest));
   }
   
   const query = bboxToQuery(bbox);
@@ -124,19 +131,26 @@ async function fetchOSMData(bbox: [number, number, number, number], retryCount =
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
       
-      // Handle 429 Too Many Requests with exponential backoff
-      if (res.status === 429) {
-        if (retryCount < 3) {
-          const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
-          await new Promise(resolve => setTimeout(resolve, delay));
-          return fetchOSMData(bbox, retryCount + 1);
-        }
-        throw new Error('Rate limit exceeded. Please wait a moment and try again.');
+      // Handle 429 (Rate Limit) and 504 (Gateway Timeout) with exponential backoff
+      if ((res.status === 429 || res.status === 504) && retryCount < MAX_RETRIES) {
+        consecutiveFailures++;
+        // Longer delays with jitter: 3s, 6s, 12s
+        const delay = Math.pow(2, retryCount) * 3000 + Math.random() * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return fetchOSMData(bbox, retryCount + 1);
+      }
+      
+      // Track failures for circuit breaker
+      if (res.status === 429 || res.status >= 500) {
+        consecutiveFailures++;
       }
       
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
+      
+      // Reset failure count on success
+      consecutiveFailures = 0;
       
       const data = await res.json();
       
@@ -205,6 +219,9 @@ async function fetchOSMData(bbox: [number, number, number, number], retryCount =
       });
 
       return voxels;
+    } catch (err) {
+      consecutiveFailures++;
+      throw err;
     } finally {
       pendingRequest = null;
     }
@@ -338,7 +355,14 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
       setBlocks(raw);
       sessionCache.set(cacheKey, raw);
     } catch (err) {
-      setFetchError('Could not fetch OSM data — check your connection and try again.');
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('504') || msg.includes('timeout') || msg.includes('Gateway')) {
+        setFetchError('Overpass API server is overloaded (504). Please wait 30 seconds and try again.');
+      } else if (msg.includes('429')) {
+        setFetchError('Rate limit exceeded. Please wait a moment before retrying.');
+      } else {
+        setFetchError('Could not fetch OSM data — check your connection and try again.');
+      }
       setBlocks([]);
     } finally {
       setLoading(false);

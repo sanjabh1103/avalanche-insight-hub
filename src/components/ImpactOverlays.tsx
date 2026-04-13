@@ -11,29 +11,52 @@ interface Props {
 
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 
-// Shared rate limiting state across component instances
+// Shared rate limiting state across ALL component instances (module-level singleton)
 let lastRequestTime = 0;
-const MIN_REQUEST_INTERVAL = 2000; // 2 seconds between requests
+let consecutiveFailures = 0;
+const MIN_REQUEST_INTERVAL = 5000; // 5 seconds minimum between requests
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 2000; // Start with 2s delay
 
 async function rateLimitedFetch(url: string, options: RequestInit, retryCount = 0): Promise<Response> {
-  // Wait if needed to respect rate limit
+  // Circuit breaker: if we've had many failures, add extra backoff
+  const circuitBreakerDelay = Math.min(consecutiveFailures * 3000, 15000); // Max 15s extra delay
+  
+  // Rate limiting: ensure minimum interval between requests
   const now = Date.now();
   const timeSinceLastRequest = now - lastRequestTime;
-  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
-    await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest));
+  const requiredDelay = Math.max(MIN_REQUEST_INTERVAL, circuitBreakerDelay);
+  
+  if (timeSinceLastRequest < requiredDelay) {
+    await new Promise(resolve => setTimeout(resolve, requiredDelay - timeSinceLastRequest));
   }
   
   lastRequestTime = Date.now();
-  const res = await fetch(url, options);
   
-  // Handle 429 with exponential backoff
-  if (res.status === 429 && retryCount < 3) {
-    const delay = Math.pow(2, retryCount) * 1000;
-    await new Promise(resolve => setTimeout(resolve, delay));
-    return rateLimitedFetch(url, options, retryCount + 1);
+  try {
+    const res = await fetch(url, options);
+    
+    // Handle 429 (Rate Limit) and 504 (Gateway Timeout) with exponential backoff
+    if ((res.status === 429 || res.status === 504) && retryCount < MAX_RETRIES) {
+      consecutiveFailures++;
+      // Longer delays: 3s, 6s, 12s for retries
+      const delay = Math.pow(2, retryCount) * 3000 + Math.random() * 1000; // Add jitter
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return rateLimitedFetch(url, options, retryCount + 1);
+    }
+    
+    // Reset failure count on success
+    if (res.ok) {
+      consecutiveFailures = 0;
+    } else if (res.status === 429 || res.status >= 500) {
+      consecutiveFailures++;
+    }
+    
+    return res;
+  } catch (err) {
+    consecutiveFailures++;
+    throw err;
   }
-  
-  return res;
 }
 
 function buildQuery(bbox: [number, number, number, number], type: 'roads' | 'infra'): string {
