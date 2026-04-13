@@ -4,19 +4,24 @@ import { Button } from '@/components/ui/button';
 import { AlertTriangle, RefreshCw, Loader2, Info } from 'lucide-react';
 import { RISK_COLORS, RISK_LABELS, GRID_SIZE } from '@/lib/constants';
 import type { GridCell } from '@/lib/gridUtils';
-import { Canvas, ThreeEvent } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
+import { Canvas, ThreeEvent, useFrame } from '@react-three/fiber';
+import { OrbitControls, Instances, Instance } from '@react-three/drei';
 import { useTheme } from 'next-themes';
+import * as THREE from 'three';
 
 // ---- types ----
-interface VoxelBlock {
-  x: number;
-  y: number;
-  z: number;
-  h: number;
+interface BaseBlock {
   type: 'building' | 'road' | 'forest' | 'lift' | 'ground';
   lat: number;
   lng: number;
+  levelInfo?: number;
+}
+
+interface VoxelCoordinate {
+  x: number;
+  y: number;
+  z: number;
+  data: BaseBlock;
 }
 
 interface HoveredInfo {
@@ -26,6 +31,7 @@ interface HoveredInfo {
   lat: number;
   lng: number;
   color: string;
+  problemType?: string;
 }
 
 interface Props {
@@ -38,10 +44,10 @@ interface Props {
 }
 
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
-const WORLD_SIZE = 80;
+const WORLD_SIZE = 60; // 60x60 strict grid
 
-// ---- In-memory session cache (survives re-opens within same browser session) ----
-const sessionCache = new Map<string, VoxelBlock[]>();
+// ---- In-memory session cache ----
+const sessionCache = new Map<string, VoxelCoordinate[]>();
 
 function bboxToQuery(bbox: [number, number, number, number]) {
   const [latMin, lngMin, latMax, lngMax] = bbox;
@@ -51,29 +57,40 @@ function bboxToQuery(bbox: [number, number, number, number]) {
     way["highway"](${b});
     way["landuse"~"forest|grass|meadow"](${b});
     node["aerialway"](${b});
-  );out body geom;`;
+  );out center geom;`;
 }
 
 function geoToLocal(lat: number, lng: number, bbox: [number, number, number, number]): [number, number] {
   const [latMin, lngMin, latMax, lngMax] = bbox;
-  const x = ((lng - lngMin) / (lngMax - lngMin)) * WORLD_SIZE - WORLD_SIZE / 2;
-  const z = ((lat - latMin) / (latMax - latMin)) * WORLD_SIZE - WORLD_SIZE / 2;
+  const x = Math.floor(((lng - lngMin) / (lngMax - lngMin)) * WORLD_SIZE) - WORLD_SIZE / 2;
+  const z = Math.floor(((lat - latMin) / (latMax - latMin)) * WORLD_SIZE) - WORLD_SIZE / 2;
   return [x, -z];
+}
+
+function localToGeo(x: number, z: number, bbox: [number, number, number, number]): [number, number] {
+  const [latMin, lngMin, latMax, lngMax] = bbox;
+  const lng = ((x + WORLD_SIZE / 2) / WORLD_SIZE) * (lngMax - lngMin) + lngMin;
+  const lat = ((-z + WORLD_SIZE / 2) / WORLD_SIZE) * (latMax - latMin) + latMin;
+  return [lat, lng];
 }
 
 function findRiskForPosition(lat: number, lng: number, cells: GridCell[]): GridCell | undefined {
   return cells.find(c => lat >= c.lat && lat < c.latEnd && lng >= c.lng && lng < c.lngEnd);
 }
 
-function riskToColor(score: number): string {
-  return RISK_COLORS[Math.max(1, Math.min(5, Math.round(score)))] || RISK_COLORS[1];
-}
-
-function typeName(type: VoxelBlock['type']): string {
+function typeName(type: BaseBlock['type']): string {
   return { building: 'Building', road: 'Road', forest: 'Forest / Meadow', lift: 'Ski Lift', ground: 'Terrain' }[type];
 }
 
-async function fetchOSMData(bbox: [number, number, number, number]): Promise<VoxelBlock[]> {
+function getBaseColor(type: BaseBlock['type']): THREE.Color {
+  if (type === 'road') return new THREE.Color('#9ca3af');
+  if (type === 'lift') return new THREE.Color('#c084fc');
+  if (type === 'forest') return new THREE.Color('#22c55e');
+  if (type === 'building') return new THREE.Color('#f3f4f6');
+  return new THREE.Color('#d1d5db'); // ground
+}
+
+async function fetchOSMData(bbox: [number, number, number, number]): Promise<VoxelCoordinate[]> {
   const query = bboxToQuery(bbox);
   const res = await fetch(OVERPASS_URL, {
     method: 'POST',
@@ -81,86 +98,136 @@ async function fetchOSMData(bbox: [number, number, number, number]): Promise<Vox
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   });
   const data = await res.json();
-  const blocks: VoxelBlock[] = [];
+  
+  // 2D grid to track what's at x,z
+  const gridMap = new Map<string, BaseBlock>();
 
-  // Ground plane always generated
-  for (let gx = -WORLD_SIZE / 2; gx < WORLD_SIZE / 2; gx += 2) {
-    for (let gz = -WORLD_SIZE / 2; gz < WORLD_SIZE / 2; gz += 2) {
-      const lat = bbox[0] + (((-gz) + WORLD_SIZE / 2) / WORLD_SIZE) * (bbox[2] - bbox[0]);
-      const lng = bbox[1] + ((gx + WORLD_SIZE / 2) / WORLD_SIZE) * (bbox[3] - bbox[1]);
-      blocks.push({ x: gx, y: 0, z: gz, h: 0.3, type: 'ground', lat, lng });
+  // Ground plane
+  for (let x = -WORLD_SIZE / 2; x < WORLD_SIZE / 2; x++) {
+    for (let z = -WORLD_SIZE / 2; z < WORLD_SIZE / 2; z++) {
+      const [lat, lng] = localToGeo(x, z, bbox);
+      gridMap.set(`${x},${z}`, { type: 'ground', lat, lng });
     }
   }
 
   for (const el of (data.elements || [])) {
     const tags = (el.tags || {}) as Record<string, string>;
 
-    if (el.type === 'way' && tags.building && el.geometry) {
+    if (el.type === 'way' && tags.building && (el.center || el.geometry)) {
       const levels = parseInt(tags['building:levels'] || '3', 10);
       const height = Math.max(2, Math.min(8, levels));
-      const geom = el.geometry as { lat: number; lon: number }[];
-      const centerLat = geom.reduce((s: number, p: { lat: number }) => s + p.lat, 0) / geom.length;
-      const centerLng = geom.reduce((s: number, p: { lon: number }) => s + p.lon, 0) / geom.length;
-      const [x, z] = geoToLocal(centerLat, centerLng, bbox);
-      blocks.push({ x: Math.round(x), y: height / 2, z: Math.round(z), h: height, type: 'building', lat: centerLat, lng: centerLng });
+      const geom = el.geometry || [];
+      const pts = el.center ? [el.center] : geom;
+      pts.forEach((p: any) => {
+        const [x, z] = geoToLocal(p.lat, p.lon, bbox);
+        gridMap.set(`${x},${z}`, { type: 'building', lat: p.lat, lng: p.lon, levelInfo: height });
+      });
     } else if (el.type === 'way' && tags.highway && el.geometry) {
-      const geom = el.geometry as { lat: number; lon: number }[];
-      for (let i = 0; i < geom.length; i += 3) {
-        const [x, z] = geoToLocal(geom[i].lat, geom[i].lon, bbox);
-        blocks.push({ x: Math.round(x), y: 0.15, z: Math.round(z), h: 0.3, type: 'road', lat: geom[i].lat, lng: geom[i].lon });
-      }
-    } else if (el.type === 'way' && tags.landuse && el.geometry) {
-      const geom = el.geometry as { lat: number; lon: number }[];
-      const centerLat = geom.reduce((s: number, p: { lat: number }) => s + p.lat, 0) / geom.length;
-      const centerLng = geom.reduce((s: number, p: { lon: number }) => s + p.lon, 0) / geom.length;
-      const [x, z] = geoToLocal(centerLat, centerLng, bbox);
-      blocks.push({ x: Math.round(x), y: 0.5, z: Math.round(z), h: 1, type: 'forest', lat: centerLat, lng: centerLng });
+      el.geometry.forEach((p: any) => {
+        const [x, z] = geoToLocal(p.lat, p.lon, bbox);
+        // Only overwrite ground, not buildings
+        if (gridMap.get(`${x},${z}`)?.type === 'ground') {
+          gridMap.set(`${x},${z}`, { type: 'road', lat: p.lat, lng: p.lon });
+        }
+      });
+    } else if (el.type === 'way' && tags.landuse && (el.center || el.geometry)) {
+      const pts = el.center ? [el.center] : (el.geometry || []);
+      pts.forEach((p: any) => {
+        const [x, z] = geoToLocal(p.lat, p.lon, bbox);
+        if (gridMap.get(`${x},${z}`)?.type === 'ground') {
+          gridMap.set(`${x},${z}`, { type: 'forest', lat: p.lat, lng: p.lon });
+        }
+      });
     } else if (el.type === 'node' && tags.aerialway) {
       const [x, z] = geoToLocal(el.lat, el.lon, bbox);
-      blocks.push({ x: Math.round(x), y: 1, z: Math.round(z), h: 2, type: 'lift', lat: el.lat, lng: el.lon });
+      gridMap.set(`${x},${z}`, { type: 'lift', lat: el.lat, lng: el.lon });
     }
   }
 
-  return blocks;
-}
-
-function dedupeBlocks(blocks: VoxelBlock[]): VoxelBlock[] {
-  const seen = new Set<string>();
-  return blocks.filter(b => {
-    const key = `${Math.round(b.x)},${Math.round(b.z)},${b.type}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
+  // Convert map to 3D voxel coordinates (extrude)
+  const voxels: VoxelCoordinate[] = [];
+  gridMap.forEach((block, key) => {
+    const [x, z] = key.split(',').map(Number);
+    // Base layer
+    voxels.push({ x, y: 0, z, data: block });
+    
+    // Extrude buildings
+    if (block.type === 'building') {
+      const h = block.levelInfo || 3;
+      for (let y = 1; y < h; y++) {
+        voxels.push({ x, y, z, data: block });
+      }
+    } else if (block.type === 'lift') {
+      voxels.push({ x, y: 1, z, data: block });
+      voxels.push({ x, y: 2, z, data: block });
+    }
   });
+
+  return voxels;
 }
 
 // ---- Three.js scene ----
 function VoxelScene({
-  blocks,
+  voxels,
   cells,
   onHover,
   onHoverEnd,
 }: {
-  blocks: VoxelBlock[];
+  voxels: VoxelCoordinate[];
   cells: GridCell[];
   onHover: (info: HoveredInfo) => void;
   onHoverEnd: () => void;
 }) {
-  const coloredBlocks = useMemo(() => {
-    return blocks.map(b => {
-      let color: string;
-      let riskScore = 1;
-      if (b.type === 'road') color = '#6b7280';
-      else if (b.type === 'lift') color = '#a78bfa';
-      else if (b.type === 'forest') color = '#166534';
-      else {
-        const cell = findRiskForPosition(b.lat, b.lng, cells);
-        riskScore = cell?.riskScore ?? 1;
-        color = cell ? riskToColor(cell.riskScore) : '#374151';
-      }
-      return { ...b, color, riskScore };
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const colorObj = useMemo(() => new THREE.Color(), []);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+
+  // Update instanced mesh positions only once
+  useEffect(() => {
+    if (!meshRef.current) return;
+    voxels.forEach((v, i) => {
+      dummy.position.set(v.x, v.y, v.z);
+      dummy.updateMatrix();
+      meshRef.current!.setMatrixAt(i, dummy.matrix);
     });
-  }, [blocks, cells]);
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  }, [voxels, dummy]);
+
+  // Update colors (reactively to cells changing via timeline scrub)
+  useEffect(() => {
+    if (!meshRef.current) return;
+    voxels.forEach((v, i) => {
+      const baseC = getBaseColor(v.data.type);
+      const cell = findRiskForPosition(v.data.lat, v.data.lng, cells);
+      if (cell) {
+        const riskC = new THREE.Color(RISK_COLORS[Math.max(1, Math.min(5, Math.round(cell.riskScore)))]);
+        // Tint the base color strongly with the risk color
+        baseC.lerp(riskC, 0.7); 
+      }
+      meshRef.current!.setColorAt(i, baseC);
+    });
+    if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
+  }, [voxels, cells]);
+
+  const handlePointerMove = useCallback((e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
+    if (e.instanceId !== undefined && e.instanceId !== null) {
+      const v = voxels[e.instanceId];
+      if (v) {
+        const cell = findRiskForPosition(v.data.lat, v.data.lng, cells);
+        const score = Math.max(1, Math.min(5, Math.round(cell?.riskScore || 1)));
+        onHover({
+          type: typeName(v.data.type),
+          riskLabel: RISK_LABELS[score] ?? 'Unknown',
+          riskScore: score,
+          lat: v.data.lat,
+          lng: v.data.lng,
+          color: RISK_COLORS[score] || '#333',
+          problemType: cell?.problemType,
+        });
+      }
+    }
+  }, [voxels, cells, onHover]);
 
   return (
     <>
@@ -175,48 +242,27 @@ function VoxelScene({
         minDistance={10}
         maxDistance={120}
       />
-      {coloredBlocks.map((b, i) => (
-        <mesh
-          key={i}
-          position={[b.x, b.y, b.z]}
-          onClick={(e: ThreeEvent<MouseEvent>) => {
-            e.stopPropagation();
-            const score = Math.max(1, Math.min(5, Math.round(b.riskScore)));
-            onHover({
-              type: typeName(b.type),
-              riskLabel: RISK_LABELS[score] ?? 'Unknown',
-              riskScore: score,
-              lat: b.lat,
-              lng: b.lng,
-              color: b.color,
-            });
-          }}
-          onPointerMissed={() => onHoverEnd()}
-        >
-          <boxGeometry args={[
-            b.type === 'road' ? 1.5 : 1,
-            b.h,
-            b.type === 'road' ? 1.5 : 1,
-          ]} />
-          <meshStandardMaterial color={b.color} />
-        </mesh>
-      ))}
+      <instancedMesh
+        ref={meshRef}
+        args={[undefined, undefined, voxels.length]}
+        onPointerMove={handlePointerMove}
+        onPointerOut={() => onHoverEnd()}
+      >
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial />
+      </instancedMesh>
     </>
   );
 }
 
 // ---- Main modal ----
 export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells, hourlyGrids, timeOffset }: Props) {
-  // B2 fix: distinct states — null=never fetched, []=fetch error, [...]=data
-  const [blocks, setBlocks] = useState<VoxelBlock[] | null>(null);
+  const [blocks, setBlocks] = useState<VoxelCoordinate[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [sparseRegion, setSparseRegion] = useState(false);
-
-  // B3 fix: tooltip state
   const [hovered, setHovered] = useState<HoveredInfo | null>(null);
 
-  // B5 fix: theme-aware canvas background
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme !== 'light';
   const canvasBg = isDark ? '#0a0a0a' : '#f1f5f9';
@@ -226,7 +272,7 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
     return gridCells;
   }, [hourlyGrids, timeOffset, gridCells]);
 
-  const cacheKey = useMemo(() => `voxel_${bbox.join(',')}`, [bbox]);
+  const cacheKey = useMemo(() => `voxel_grid_${bbox.join(',')}`, [bbox]);
 
   const fetchBlocks = useCallback(async () => {
     setLoading(true);
@@ -235,19 +281,14 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
     setHovered(null);
     try {
       const raw = await fetchOSMData(bbox);
-      const deduped = dedupeBlocks(raw);
-
-      // B4/B13 fix: detect sparse regions (fewer than 5 non-ground elements)
-      const structureCount = deduped.filter(b => b.type !== 'ground').length;
+      
+      const structureCount = raw.filter(b => b.data.type !== 'ground').length;
       if (structureCount < 5) {
         setSparseRegion(true);
       }
 
-      setBlocks(deduped);
-
-      // B12 fix: write to both in-memory session cache and localStorage
-      sessionCache.set(cacheKey, deduped);
-      try { localStorage.setItem(cacheKey, JSON.stringify(deduped)); } catch {}
+      setBlocks(raw);
+      sessionCache.set(cacheKey, raw);
     } catch (err) {
       setFetchError('Could not fetch OSM data — check your connection and try again.');
       setBlocks([]);
@@ -260,25 +301,13 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
     if (!open) return;
     setHovered(null);
 
-    // B12 fix: check in-memory session cache first (instant), then localStorage, then fetch
     const memCached = sessionCache.get(cacheKey);
     if (memCached) {
       setBlocks(memCached);
-      const sc = memCached.filter(b => b.type !== 'ground').length < 5;
+      const sc = memCached.filter(b => b.data.type !== 'ground').length < 5;
       setSparseRegion(sc);
       return;
     }
-    try {
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        const parsed = JSON.parse(cached) as VoxelBlock[];
-        sessionCache.set(cacheKey, parsed); // promote to memory cache
-        setBlocks(parsed);
-        const sc = parsed.filter(b => b.type !== 'ground').length < 5;
-        setSparseRegion(sc);
-        return;
-      }
-    } catch {}
     fetchBlocks();
   }, [open, cacheKey, fetchBlocks]);
 
@@ -288,9 +317,6 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      {/* B6 fix: prevent ANY outside pointer event from closing the modal.
-          This means timeline scrubber, play button, toolbar, region selector
-          — none of them will dismiss the 3D modal. Only X button or Escape closes it. */}
       <DialogContent
         className="max-w-[95vw] w-[95vw] h-[90vh] max-h-[90vh] p-0 bg-card border-border flex flex-col"
         aria-label="3D Neighborhood Risk Map"
@@ -303,29 +329,25 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
           </DialogTitle>
         </DialogHeader>
 
-        {/* B1 fix: RED disclaimer banner (was amber) */}
         <div className="bg-red-500/15 px-4 py-1.5 flex items-center gap-2 shrink-0 border-b border-red-500/30">
           <AlertTriangle className="h-3 w-3 shrink-0 text-red-400" />
           <span className="text-red-400 text-[10px]"><strong>Experimental 3D visualization</strong> — for illustration only</span>
         </div>
 
-        {/* B4/B13 fix: sparse region banner */}
         {sparseRegion && !loading && hasRealData && (
           <div className="bg-blue-500/10 px-4 py-1 flex items-center gap-2 shrink-0 border-b border-blue-500/20">
             <Info className="h-3 w-3 shrink-0 text-blue-400" />
-            <span className="text-blue-400 text-[10px]">Limited OSM building data for this region — showing terrain risk grid only</span>
+            <span className="text-blue-400 text-[10px]">Limited OSM building data for this region — showing terrain risk map</span>
           </div>
         )}
 
-        {/* B5 fix: canvas background now theme-aware via style prop */}
         <div className="flex-1 relative min-h-0" style={{ background: canvasBg }}>
           {loading ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <span className="text-sm text-muted-foreground">Generating voxel map from OpenStreetMap… (est. 4–8s)</span>
+              <span className="text-sm text-muted-foreground">Generating true voxel map… (est. 4–8s)</span>
             </div>
           ) : fetchError ? (
-            // B13 fix: differentiated error for network failure
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground text-sm px-8 text-center">
               <AlertTriangle className="h-8 w-8 text-red-400" />
               <span>{fetchError}</span>
@@ -336,32 +358,29 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
               style={{ width: '100%', height: '100%', background: canvasBg }}
             >
               <VoxelScene
-                blocks={blocks!}
+                voxels={blocks!}
                 cells={currentCells}
                 onHover={setHovered}
                 onHoverEnd={() => setHovered(null)}
               />
             </Canvas>
           ) : (
-            // B2 fix: only shown when blocks=[] (fetch returned empty, not null=pre-fetch)
             <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
               No voxel data available for this region
             </div>
           )}
 
-          {/* B3 fix: click tooltip overlay */}
           {hovered && (
-            <div className="absolute top-3 left-3 z-20 glass-panel rounded-lg p-3 space-y-1.5 min-w-[160px] pointer-events-none">
+            <div className="absolute top-3 left-3 z-20 glass-panel rounded-lg p-3 space-y-1.5 min-w-[200px] pointer-events-none">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: hovered.color }} />
                 <span className="text-xs font-semibold text-foreground">{hovered.riskLabel} Risk</span>
               </div>
-              <div className="text-[10px] text-muted-foreground space-y-0.5">
-                <div>Type: {hovered.type}</div>
-                <div>Lat: {hovered.lat.toFixed(4)}°</div>
-                <div>Lng: {hovered.lng.toFixed(4)}°</div>
+              <div className="text-[10px] text-muted-foreground space-y-0.5 mt-2">
+                <div><strong>Type:</strong> {hovered.type}</div>
+                {hovered.problemType && <div><strong>Problem:</strong> {hovered.problemType}</div>}
+                <div><strong>Coords:</strong> {hovered.lat.toFixed(4)}°, {hovered.lng.toFixed(4)}°</div>
               </div>
-              <div className="text-[9px] text-muted-foreground/60">Click elsewhere to dismiss</div>
             </div>
           )}
 
@@ -387,7 +406,7 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
 
         <div className="p-3 border-t border-border text-[10px] text-muted-foreground flex items-center justify-between shrink-0">
           <span>3D view inspired by <a href="https://github.com/louis-e/arnis" target="_blank" rel="noopener noreferrer" className="underline text-primary/70 hover:text-primary">Arnis</a> (github.com/louis-e/arnis)</span>
-          <span>Hour {timeOffset} • {currentCells.length} cells</span>
+          <span>Hour {timeOffset} • {currentCells.length} cells • {blocks?.length || 0} voxels</span>
         </div>
       </DialogContent>
     </Dialog>
