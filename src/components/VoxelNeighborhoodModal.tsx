@@ -418,14 +418,20 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
 
         <div className="flex-1 relative min-h-0" style={{ background: canvasBg }}>
           {loading ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+            <div 
+              className="absolute inset-0 flex flex-col items-center justify-center gap-3"
+              style={{ background: canvasBg }}
+            >
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <span className="text-sm text-muted-foreground">Generating true voxel map… (est. 4–8s)</span>
             </div>
           ) : fetchError ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground text-sm px-8 text-center">
+            <div 
+              className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-foreground text-sm px-8 text-center"
+              style={{ background: canvasBg }}
+            >
               <AlertTriangle className="h-8 w-8 text-red-400" />
-              <span>{fetchError}</span>
+              <span className="max-w-md">{fetchError}</span>
             </div>
           ) : hasRealData ? (
             <Canvas
@@ -440,7 +446,10 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
               />
             </Canvas>
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
+            <div 
+              className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm"
+              style={{ background: canvasBg }}
+            >
               No voxel data available for this region
             </div>
           )}
