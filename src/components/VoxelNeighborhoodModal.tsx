@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, RefreshCw, Loader2, Info } from 'lucide-react';
 import { RISK_COLORS, RISK_LABELS, GRID_SIZE } from '@/lib/constants';
@@ -299,7 +299,6 @@ function VoxelScene({
 
   return (
     <>
-      <color attach="background" args={['transparent']} />
       <ambientLight intensity={0.6} />
       <directionalLight position={[30, 50, 20]} intensity={0.8} />
       <OrbitControls
@@ -402,6 +401,9 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
           <DialogTitle className="flex items-center gap-2 text-foreground text-base">
             <span className="text-lg">🧊</span> 3D Neighborhood Risk Map
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Explore a 3D neighborhood risk view generated from OpenStreetMap structures and the current avalanche risk grid.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="bg-red-500/15 px-4 py-1.5 flex items-center gap-2 shrink-0 border-b border-red-500/30">

@@ -6,7 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import HydrographChart from '@/components/HydrographChart';
 import { supabase } from '@/integrations/supabase/client';
@@ -141,6 +141,9 @@ export default function ExpertModePanel({
                   <Bell className="h-4 w-4 text-primary" />
                   Subscribe to Alerts
                 </DialogTitle>
+                <DialogDescription>
+                  Save an alert subscription for the current region and enable browser notifications for future avalanche updates.
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { MapPin, Send, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -104,6 +104,9 @@ export default function FieldReportForm({ open, onClose, onSubmitted, regionCent
             <MapPin className="h-5 w-5 text-destructive" />
             Report Avalanche Observation
           </DialogTitle>
+          <DialogDescription>
+            Submit a field observation with coordinates and a short avalanche description.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
