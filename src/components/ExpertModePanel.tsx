@@ -102,7 +102,15 @@ export default function ExpertModePanel({
                 <ToggleRow label="Villages & Ski Lifts" tooltip="Show villages, towns, and aerial lifts" checked={showInfra} onToggle={onToggleInfra} />
                 <ToggleRow label="Activity Heatmap" tooltip="Historical avalanche event density" checked={showHeatmap} onToggle={onToggleHeatmap} />
                 <ToggleRow label="Vector Polygons" tooltip="Smooth high-risk cells into slope-path polygons (Turf.js)" checked={showVectorPolygons} onToggle={onToggleVectorPolygons} />
-              </CardContent>
+                <div className="flex items-center justify-between">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label className="text-xs cursor-pointer">3D Neighborhood</Label>
+                    </TooltipTrigger>
+                    <TooltipContent side="left" className="text-xs">Generate block-by-block Minecraft-style map of your exact area using real OSM data</TooltipContent>
+                  </Tooltip>
+                  <Button variant="outline" size="sm" className="h-7 text-[10px] px-2" onClick={onToggle3D}>Open 3D</Button>
+                </div>
             </Card>
 
             {/* Hydrograph */}
