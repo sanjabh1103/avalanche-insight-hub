@@ -1,16 +1,11 @@
-import { lazy, Suspense, useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
 import { RISK_COLORS, RISK_LABELS, GRID_SIZE } from '@/lib/constants';
 import type { GridCell } from '@/lib/gridUtils';
-
-const ThreeCanvas = lazy(() =>
-  import('@react-three/fiber').then(m => ({ default: m.Canvas }))
-);
-const OrbitControlsImport = lazy(() =>
-  import('@react-three/drei').then(m => ({ default: m.OrbitControls }))
-);
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls } from '@react-three/drei';
 
 // ---- types ----
 interface VoxelBlock {
@@ -33,8 +28,7 @@ interface Props {
 }
 
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
-const BLOCK_SIZE = 1;
-const WORLD_SIZE = 80; // blocks per axis
+const WORLD_SIZE = 80;
 
 function bboxToQuery(bbox: [number, number, number, number]) {
   const [latMin, lngMin, latMax, lngMax] = bbox;
@@ -113,7 +107,6 @@ async function fetchOSMData(bbox: [number, number, number, number]): Promise<Vox
   return blocks;
 }
 
-// Deduplicate by rounding to integer grid
 function dedupeBlocks(blocks: VoxelBlock[]): VoxelBlock[] {
   const seen = new Set<string>();
   return blocks.filter(b => {
@@ -124,11 +117,8 @@ function dedupeBlocks(blocks: VoxelBlock[]): VoxelBlock[] {
   });
 }
 
-// ---- Three.js scene components ----
+// ---- Three.js scene ----
 function VoxelScene({ blocks, cells }: { blocks: VoxelBlock[]; cells: GridCell[] }) {
-  const [hovered, setHovered] = useState<VoxelBlock | null>(null);
-
-  // Simple approach: individual boxes colored by risk
   const coloredBlocks = useMemo(() => {
     return blocks.map(b => {
       let color: string;
@@ -147,49 +137,35 @@ function VoxelScene({ blocks, cells }: { blocks: VoxelBlock[]; cells: GridCell[]
     <>
       <ambientLight intensity={0.6} />
       <directionalLight position={[30, 50, 20]} intensity={0.8} />
-      <Suspense fallback={null}>
-        <OrbitControlsImport
-          enablePan
-          enableZoom
-          enableRotate
-          maxPolarAngle={Math.PI / 2.2}
-          minDistance={10}
-          maxDistance={120}
-        />
-      </Suspense>
+      <OrbitControls
+        enablePan
+        enableZoom
+        enableRotate
+        maxPolarAngle={Math.PI / 2.2}
+        minDistance={10}
+        maxDistance={120}
+      />
       {coloredBlocks.map((b, i) => (
         <mesh
           key={i}
-          position={[b.x * BLOCK_SIZE, b.y, b.z * BLOCK_SIZE]}
-          onPointerOver={(e) => { e.stopPropagation(); setHovered(b); }}
-          onPointerOut={() => setHovered(null)}
+          position={[b.x, b.y, b.z]}
         >
           <boxGeometry args={[
-            b.type === 'road' ? 1.5 : BLOCK_SIZE,
+            b.type === 'road' ? 1.5 : 1,
             b.h,
-            b.type === 'road' ? 1.5 : BLOCK_SIZE,
+            b.type === 'road' ? 1.5 : 1,
           ]} />
           <meshStandardMaterial color={b.color} />
         </mesh>
       ))}
-      {hovered && (
-        <HoverLabel block={hovered} cells={cells} />
-      )}
     </>
   );
-}
-
-function HoverLabel({ block, cells }: { block: VoxelBlock; cells: GridCell[] }) {
-  const cell = findRiskForPosition(block.lat, block.lng, cells);
-  // Use Html from drei for 3D tooltip
-  return null; // Tooltip handled in DOM overlay
 }
 
 // ---- Main modal ----
 export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells, hourlyGrids, timeOffset }: Props) {
   const [blocks, setBlocks] = useState<VoxelBlock[] | null>(null);
   const [loading, setLoading] = useState(false);
-  const [hoveredInfo, setHoveredInfo] = useState<{ risk: number; type: string; problem: string } | null>(null);
 
   const currentCells = useMemo(() => {
     if (hourlyGrids && hourlyGrids[timeOffset]) return hourlyGrids[timeOffset];
@@ -214,7 +190,6 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
 
   useEffect(() => {
     if (!open) return;
-    // Try cache first
     try {
       const cached = localStorage.getItem(cacheKey);
       if (cached) { setBlocks(JSON.parse(cached)); return; }
@@ -233,39 +208,30 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
           </DialogTitle>
         </DialogHeader>
 
-        {/* Disclaimer inside modal */}
         <div className="bg-amber-500/10 px-4 py-1.5 flex items-center gap-2 shrink-0 border-b border-amber-500/20">
           <AlertTriangle className="h-3 w-3 shrink-0 text-amber-400" />
           <span className="text-amber-400 text-[10px]"><strong>Experimental 3D visualization</strong> — for illustration only</span>
         </div>
 
-        <div className="flex-1 relative bg-zinc-950 min-h-0">
+        <div className="flex-1 relative min-h-0" style={{ background: '#0a0a0a' }}>
           {loading ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <span className="text-sm text-muted-foreground">Generating voxel map from OpenStreetMap… (est. 4–8s)</span>
             </div>
           ) : blocks && blocks.length > 0 ? (
-            <Suspense fallback={
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
-            }>
-              <ThreeCanvas
-                camera={{ position: [40, 40, 40], fov: 50 }}
-                style={{ width: '100%', height: '100%' }}
-                onPointerMissed={() => setHoveredInfo(null)}
-              >
-                <VoxelScene blocks={blocks} cells={currentCells} />
-              </ThreeCanvas>
-            </Suspense>
+            <Canvas
+              camera={{ position: [40, 40, 40], fov: 50 }}
+              style={{ width: '100%', height: '100%' }}
+            >
+              <VoxelScene blocks={blocks} cells={currentCells} />
+            </Canvas>
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
               No voxel data available for this region
             </div>
           )}
 
-          {/* Refresh button */}
           <Button
             variant="outline"
             size="sm"
@@ -276,7 +242,6 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
             <RefreshCw className="h-3 w-3" /> Refresh 3D Map
           </Button>
 
-          {/* Risk legend overlay */}
           <div className="absolute bottom-3 left-3 z-10 glass-panel rounded-lg p-2 space-y-1">
             {[1, 2, 3, 4, 5].map(level => (
               <div key={level} className="flex items-center gap-2">
@@ -287,7 +252,6 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
           </div>
         </div>
 
-        {/* Footer */}
         <div className="p-3 border-t border-border text-[10px] text-muted-foreground flex items-center justify-between shrink-0">
           <span>3D view inspired by <a href="https://github.com/louis-e/arnis" target="_blank" rel="noopener noreferrer" className="underline text-primary/70 hover:text-primary">Arnis</a> (github.com/louis-e/arnis)</span>
           <span>Hour {timeOffset} • {currentCells.length} cells</span>
