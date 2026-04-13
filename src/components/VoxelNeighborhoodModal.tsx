@@ -127,10 +127,8 @@ function dedupeBlocks(blocks: VoxelBlock[]): VoxelBlock[] {
 // ---- Three.js scene components ----
 function VoxelScene({ blocks, cells }: { blocks: VoxelBlock[]; cells: GridCell[] }) {
   const [hovered, setHovered] = useState<VoxelBlock | null>(null);
-  const meshRef = useRef<THREE.InstancedMesh>(null);
 
-  // We need Three imported for InstancedMesh usage — use simpler approach with individual boxes
-  // For perf, group by type and use one mesh per type
+  // Simple approach: individual boxes colored by risk
   const coloredBlocks = useMemo(() => {
     return blocks.map(b => {
       let color: string;

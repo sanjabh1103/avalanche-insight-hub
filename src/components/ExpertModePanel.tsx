@@ -36,6 +36,7 @@ export default function ExpertModePanel({
   showInfra, onToggleInfra,
   showVectorPolygons, onToggleVectorPolygons,
   hourlyGrids, selectedCell, regionBbox,
+  onToggle3D,
 }: Props) {
   const [alertsDialogOpen, setAlertsDialogOpen] = useState(false);
   const [subscribingAlerts, setSubscribingAlerts] = useState(false);
