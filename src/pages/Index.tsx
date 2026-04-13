@@ -47,6 +47,7 @@ export default function Index() {
   const [showRoads, setShowRoads] = useState(false);
   const [showInfra, setShowInfra] = useState(false);
   const [showVectorPolygons, setShowVectorPolygons] = useState(false);
+  const [show3DModal, setShow3DModal] = useState(false);
   const [playingTimeline, setPlayingTimeline] = useState(false);
 
   const maxHour = hourlyGrids ? hourlyGrids.length - 1 : (expertMode ? 71 : 24);

@@ -111,6 +111,7 @@ export default function ExpertModePanel({
                   </Tooltip>
                   <Button variant="outline" size="sm" className="h-7 text-[10px] px-2" onClick={onToggle3D}>Open 3D</Button>
                 </div>
+              </CardContent>
             </Card>
 
             {/* Hydrograph */}
