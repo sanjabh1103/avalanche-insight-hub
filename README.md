@@ -4,7 +4,7 @@
 
 **Live:** https://avalanche-compass.lovable.app/
 
-**Status:** Production Ready (v1.0)
+**Status:** Production Ready (v1.0) | Last Deploy: 2025-04-14
 
 Avalanche Insight Hub delivers 24-hour-ahead, region-aware avalanche risk forecasts using real weather + terrain ensemble inference. The self-improving Groundsource loop (field reports → Gemini enrichment → daily pg_cron) continuously enhances the dataset. Works globally, including data-sparse regions like the Himalayas and Andes.
 
