@@ -10,7 +10,11 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "jobs:snow-cover": "echo 'Trigger snow-cover refresh job - uses ingest-snow-cover edge function'",
+    "jobs:activity": "echo 'Trigger recent activity refresh - uses recent-activity-refresh edge function'",
+    "jobs:label": "echo 'Trigger forecast outcome labeling - uses label-forecast-outcomes edge function'",
+    "jobs:evaluate": "echo 'Trigger evaluation run - uses run-evaluation edge function'"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
