@@ -36,6 +36,18 @@ interface GridCell {
   shapValues: Record<string, number>;
 }
 
+interface ForecastMetadata {
+  uncertaintyScore: number;
+  uncertaintyReasons: string[];
+  inputCompletenessScore: number;
+  labelSupportScore: number;
+  modelVersion: string;
+  featureVersion: string;
+  dataSnapshotId: string;
+  calibrationProfile: string;
+  thresholdProfile: string;
+}
+
 function normalizeHourly(values: unknown, fallback = 0): number[] {
   if (!Array.isArray(values)) return [];
   return values.slice(0, 72).map((value) => {
@@ -155,22 +167,78 @@ function generateHourlyGrids(bbox: number[], weather: WeatherData | null, totalH
   return hourlyGrids;
 }
 
+function buildForecastMetadata(weather: WeatherData | null, hours: number, modelVersion: string): ForecastMetadata {
+  const uncertaintyReasons: string[] = [];
+  let inputCompletenessScore = 1;
+
+  if (!weather) {
+    uncertaintyReasons.push('weather_fallback_simulation');
+    inputCompletenessScore -= 0.45;
+  } else {
+    const snowDepthValues = weather.snow_depth.filter((value) => Number.isFinite(value) && value > 0);
+    if (snowDepthValues.length === 0) {
+      uncertaintyReasons.push('snow_depth_missing');
+      inputCompletenessScore -= 0.15;
+    }
+
+    const sparseSnowfall = weather.snowfall.filter((value) => Number.isFinite(value)).length < Math.min(24, hours);
+    if (sparseSnowfall) {
+      uncertaintyReasons.push('short_weather_window');
+      inputCompletenessScore -= 0.1;
+    }
+  }
+
+  if (hours > 24) {
+    uncertaintyReasons.push('extended_lead_time');
+    inputCompletenessScore -= 0.1;
+  }
+
+  const normalizedCompleteness = Math.max(0.1, Math.min(1, Number(inputCompletenessScore.toFixed(3))));
+  const uncertaintyScore = Number((1 - normalizedCompleteness).toFixed(3));
+
+  return {
+    uncertaintyScore,
+    uncertaintyReasons,
+    inputCompletenessScore: normalizedCompleteness,
+    labelSupportScore: 0,
+    modelVersion,
+    featureVersion: 'heuristic-weather-v1',
+    dataSnapshotId: `${new Date().toISOString().slice(0, 13)}:00Z`,
+    calibrationProfile: 'global-default-v1',
+    thresholdProfile: 'heuristic-risk-bands-v1',
+  };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    const { bbox, timeOffset = 0, regionName, hours = 24 } = await req.json();
+    const { bbox, timeOffset = 0, regionName, hours = 24, hazard_type: hazardType = 'avalanche' } = await req.json();
+    if (hazardType !== 'avalanche') {
+      return new Response(JSON.stringify({ error: 'Only avalanche forecasts are currently supported' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
+    const { data: modelStatus } = await supabase
+      .from('model_status')
+      .select('id, version')
+      .eq('hazard_type', hazardType)
+      .limit(1)
+      .single();
+
     // Create job
     const { data: job, error: jobErr } = await supabase
       .from('compute_jobs')
-      .insert({ type: 'forecast', status: 'running', bbox, time_offset: timeOffset })
+      .insert({ type: 'forecast', status: 'running', bbox, time_offset: timeOffset, hazard_type: hazardType })
       .select('id')
       .single();
     if (jobErr) throw jobErr;
@@ -184,10 +252,12 @@ serve(async (req) => {
     const currentCells = hourlyGrids[Math.min(timeOffset, hourlyGrids.length - 1)];
     const avgRisk = currentCells.reduce((s: number, c: GridCell) => s + c.riskScore, 0) / currentCells.length;
     const weatherSource = weather ? 'open-meteo' : 'simulation';
+    const metadata = buildForecastMetadata(weather, hours, modelStatus?.version || 'v1.0.0-sim');
 
     // Store forecast with hourly grids
     const { data: forecast } = await supabase.from('forecasts').insert({
       job_id: job.id,
+      hazard_type: hazardType,
       bbox,
       risk_score: avgRisk,
       hazard: currentCells[0]?.hazard ?? 0,
@@ -196,30 +266,61 @@ serve(async (req) => {
       grid_data: currentCells,
       shap_values: currentCells[0]?.shapValues ?? {},
       hourly_grids: hourlyGrids,
+      uncertainty_score: metadata.uncertaintyScore,
+      uncertainty_reasons: metadata.uncertaintyReasons,
+      input_completeness_score: metadata.inputCompletenessScore,
+      label_support_score: metadata.labelSupportScore,
+      model_version: metadata.modelVersion,
+      feature_version: metadata.featureVersion,
+      data_snapshot_id: metadata.dataSnapshotId,
+      calibration_profile_version: metadata.calibrationProfile,
+      threshold_profile_version: metadata.thresholdProfile,
     }).select('id').single();
 
     // Update model status with last inference and data freshness
-    const { data: ms } = await supabase.from('model_status').select('id').limit(1).single();
+    const { data: ms } = await supabase
+      .from('model_status')
+      .select('id')
+      .eq('hazard_type', hazardType)
+      .limit(1)
+      .single();
     if (ms?.id) {
       await supabase.from('model_status').update({
         last_inference: new Date().toISOString(),
         data_freshness_hours: weather ? 0 : 999,
+        feature_version: metadata.featureVersion,
+        calibration_profile_version: metadata.calibrationProfile,
+        threshold_profile_version: metadata.thresholdProfile,
       }).eq('id', ms.id);
     }
 
     // Log analytics
     await supabase.from('forecast_analytics').insert({
+      hazard_type: hazardType,
       region_name: regionName || 'Unknown',
       bbox,
       weather_source: weatherSource,
       avg_risk: avgRisk,
       cell_count: currentCells.length,
+      avg_uncertainty: metadata.uncertaintyScore,
+      model_version: metadata.modelVersion,
+      calibration_profile_version: metadata.calibrationProfile,
     });
 
     // Mark complete
     await supabase
       .from('compute_jobs')
-      .update({ status: 'completed', result: { avgRisk, cellCount: currentCells.length, weatherSource } })
+      .update({
+        status: 'completed',
+        result: {
+          avgRisk,
+          cellCount: currentCells.length,
+          weatherSource,
+          uncertaintyScore: metadata.uncertaintyScore,
+          modelVersion: metadata.modelVersion,
+          calibrationProfile: metadata.calibrationProfile,
+        },
+      })
       .eq('id', job.id);
 
     // Extract weather summary for SHAP display (real values for all regions)
@@ -242,6 +343,11 @@ serve(async (req) => {
       hours: hourlyGrids.length,
       weatherSummary,
       region: { lat: centerLat, lng: centerLng },
+      hazard_type: hazardType,
+      model_version: metadata.modelVersion,
+      uncertainty_score: metadata.uncertaintyScore,
+      data_sources: [weatherSource],
+      calibration_profile: metadata.calibrationProfile,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

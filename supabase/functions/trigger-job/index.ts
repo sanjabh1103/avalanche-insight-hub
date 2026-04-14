@@ -26,10 +26,27 @@ serve(async (req) => {
   }
 
   try {
-    const { type, bbox } = await req.json();
-    const validTypes = ['daily_enrichment', 'sentinel_refresh', 'fine_tune', 'static_precompute', 'field_report_enrichment'];
+    const { type, bbox, hazard_type: hazardType = 'avalanche' } = await req.json();
+    const validTypes = [
+      'daily_enrichment',
+      'sentinel_refresh',
+      'fine_tune',
+      'static_precompute',
+      'field_report_enrichment',
+      'snow_cover_refresh',
+      'recent_activity_refresh',
+      'label_forecast_outcomes',
+      'run_evaluation',
+      'retrain_avalanche_model',
+    ];
     if (!validTypes.includes(type)) {
       return new Response(JSON.stringify({ error: 'Invalid job type' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    if (hazardType !== 'avalanche') {
+      return new Response(JSON.stringify({ error: 'Only avalanche jobs are currently supported' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -42,7 +59,7 @@ serve(async (req) => {
 
     const { data: job, error: jobErr } = await supabase
       .from('compute_jobs')
-      .insert({ type, status: 'running' })
+      .insert({ type, status: 'running', hazard_type: hazardType })
       .select('id')
       .single();
     if (jobErr) throw jobErr;
@@ -189,6 +206,16 @@ serve(async (req) => {
       result = { simulated: true, regionsComputed: 12 };
     } else if (type === 'field_report_enrichment') {
       result = { simulated: true, createdEvent: false };
+    } else if (type === 'snow_cover_refresh') {
+      result = { simulated: true, hazard_type: hazardType, refresh_target: 'snow_cover_snapshots' };
+    } else if (type === 'recent_activity_refresh') {
+      result = { simulated: true, hazard_type: hazardType, refresh_target: 'avalanche_recent_activity_features' };
+    } else if (type === 'label_forecast_outcomes') {
+      result = { simulated: true, hazard_type: hazardType, labels_generated: 0 };
+    } else if (type === 'run_evaluation') {
+      result = { simulated: true, hazard_type: hazardType, evaluation_status: 'queued' };
+    } else if (type === 'retrain_avalanche_model') {
+      result = { simulated: true, hazard_type: hazardType, training_status: 'queued' };
     }
 
     await supabase

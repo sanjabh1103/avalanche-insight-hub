@@ -2,12 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Zap, Satellite, BrainCircuit, Database, TrendingUp } from 'lucide-react';
+import { Loader2, Zap, Satellite, BrainCircuit, Database, TrendingUp, CloudSnow, Activity, Tag, BarChart3, FileCheck, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 
-type JobType = 'daily_enrichment' | 'sentinel_refresh' | 'fine_tune' | 'static_precompute';
+type JobType = 'daily_enrichment' | 'sentinel_refresh' | 'fine_tune' | 'static_precompute' | 'snow_cover_refresh' | 'recent_activity_refresh' | 'label_forecast_outcomes' | 'run_evaluation' | 'retrain_avalanche_model' | 'field_report_enrichment';
 
 interface JobRow {
   id: string;
@@ -22,18 +22,24 @@ interface AnalyticsRow {
   count: number;
 }
 
-const JOB_BUTTONS: { type: JobType; label: string; icon: React.ReactNode }[] = [
-  { type: 'daily_enrichment', label: 'Run Enrichment', icon: <Zap className="h-4 w-4" /> },
-  { type: 'sentinel_refresh', label: 'Refresh Sentinel-1', icon: <Satellite className="h-4 w-4" /> },
-  { type: 'fine_tune', label: 'Fine-Tune Model', icon: <BrainCircuit className="h-4 w-4" /> },
-  { type: 'static_precompute', label: 'Static Pre-Compute', icon: <Database className="h-4 w-4" /> },
+const JOB_BUTTONS: { type: JobType; label: string; icon: React.ReactNode; description?: string }[] = [
+  { type: 'daily_enrichment', label: 'Run Enrichment', icon: <Zap className="h-4 w-4" />, description: 'News + Gemini event extraction' },
+  { type: 'sentinel_refresh', label: 'Refresh Sentinel-1', icon: <Satellite className="h-4 w-4" />, description: 'ASF metadata search' },
+  { type: 'snow_cover_refresh', label: 'Snow Cover', icon: <CloudSnow className="h-4 w-4" />, description: 'NASA GIBS snow summary' },
+  { type: 'recent_activity_refresh', label: 'Recent Activity', icon: <Activity className="h-4 w-4" />, description: 'Materialize event summaries' },
+  { type: 'label_forecast_outcomes', label: 'Label Outcomes', icon: <Tag className="h-4 w-4" />, description: 'Match forecasts to events' },
+  { type: 'run_evaluation', label: 'Run Evaluation', icon: <BarChart3 className="h-4 w-4" />, description: 'Compute metrics by slice' },
+  { type: 'field_report_enrichment', label: 'Normalize Reports', icon: <FileCheck className="h-4 w-4" />, description: 'Process field reports' },
+  { type: 'retrain_avalanche_model', label: 'Retrain Model', icon: <RefreshCw className="h-4 w-4" />, description: 'External training trigger' },
+  { type: 'fine_tune', label: 'Fine-Tune Model', icon: <BrainCircuit className="h-4 w-4" />, description: 'Simulated F1 improvement' },
+  { type: 'static_precompute', label: 'Static Pre-Compute', icon: <Database className="h-4 w-4" />, description: 'Region pre-computation' },
 ];
 
 export default function AdminDashboard() {
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [running, setRunning] = useState<string | null>(null);
   const [systemConfig, setSystemConfig] = useState<{ gemini_usage: number; gemini_spend_cap: number } | null>(null);
-  const [modelStatus, setModelStatus] = useState<{ version: string; f1_score: number } | null>(null);
+  const [modelStatus, setModelStatus] = useState<{ version: string; f1_score: number; calibration_profile_version?: string; threshold_profile_version?: string } | null>(null);
   const [analytics, setAnalytics] = useState<{ total: number; regions: AnalyticsRow[] }>({ total: 0, regions: [] });
   const activeJobs = jobs.filter((job) => job.status === 'running').length;
 
@@ -63,8 +69,16 @@ export default function AdminDashboard() {
   const triggerJob = async (type: JobType) => {
     setRunning(type);
     try {
+      // Build job payload based on type
+      const payload: Record<string, unknown> = { type, hazard_type: 'avalanche' };
+      
+      // Add bbox for jobs that need spatial context
+      if (['sentinel_refresh', 'snow_cover_refresh'].includes(type)) {
+        payload.bbox = [-107.5, 38.5, -105.5, 40.5]; // Default Colorado region - should come from current view
+      }
+      
       const { data, error } = await supabase.functions.invoke('trigger-job', {
-        body: { type },
+        body: payload,
       });
       if (error) throw error;
       toast.success(`${type.replace(/_/g, ' ')} triggered successfully`);
@@ -92,20 +106,26 @@ export default function AdminDashboard() {
         <CardHeader className="p-3 pb-1">
           <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground">System Controls</CardTitle>
         </CardHeader>
-        <CardContent className="p-3 pt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {JOB_BUTTONS.map((btn) => (
-            <Button
-              key={btn.type}
-              variant="outline"
-              size="sm"
-              className="text-xs h-10 justify-start gap-2"
-              disabled={running !== null}
-              onClick={() => triggerJob(btn.type)}
-            >
-              {running === btn.type ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : btn.icon}
-              {btn.label}
-            </Button>
-          ))}
+        <CardContent className="p-3 pt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {JOB_BUTTONS.map((btn) => (
+              <Button
+                key={btn.type}
+                variant="outline"
+                size="sm"
+                className="text-xs h-auto py-2 justify-start gap-2"
+                disabled={running !== null}
+                onClick={() => triggerJob(btn.type)}
+                title={btn.description}
+              >
+                {running === btn.type ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" /> : <span className="shrink-0">{btn.icon}</span>}
+                <span className="truncate">{btn.label}</span>
+              </Button>
+            ))}
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-2">
+            New: Snow Cover, Activity, Labeling, Evaluation for avalanche accuracy roadmap
+          </div>
         </CardContent>
       </Card>
 
@@ -172,12 +192,22 @@ export default function AdminDashboard() {
         <Card className="border-0 bg-secondary/50">
           <CardContent className="p-3">
             <div className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Model Status</div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-2">
               <span className="font-mono text-sm text-foreground">{modelStatus.version}</span>
               <Badge className="bg-green-500/20 text-green-400 border-0 font-mono text-xs">
                 F1: {modelStatus.f1_score.toFixed(3)}
               </Badge>
             </div>
+            {modelStatus.calibration_profile_version && (
+              <div className="text-[10px] text-muted-foreground">
+                Calibration: {modelStatus.calibration_profile_version}
+              </div>
+            )}
+            {modelStatus.threshold_profile_version && (
+              <div className="text-[10px] text-muted-foreground">
+                Thresholds: {modelStatus.threshold_profile_version}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
