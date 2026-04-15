@@ -84,7 +84,11 @@ export default function FieldReportForm({ open, onClose, onSubmitted, regionCent
         location_name: '',
       });
 
-      const { error: enrichmentError } = await supabase.functions.invoke('field-report-enrichment', {
+      // B9 fix: Show success toast immediately after successful insert (before enrichment and close)
+      toast.success('Field report submitted successfully');
+
+      // Fire enrichment async - don't block UI on this
+      supabase.functions.invoke('field-report-enrichment', {
         body: {
           fieldReportId: report.id,
           lat: parsedLat,
@@ -92,12 +96,11 @@ export default function FieldReportForm({ open, onClose, onSubmitted, regionCent
           description: description.trim(),
           hazard_type: 'avalanche',
         },
+      }).then(({ error: enrichmentError }) => {
+        if (enrichmentError) {
+          console.error('field-report-enrichment failed', enrichmentError);
+        }
       });
-      if (enrichmentError) {
-        console.error('field-report-enrichment failed', enrichmentError);
-      }
-
-      toast.success('Field report submitted successfully');
 
       setDescription('');
       onClose();

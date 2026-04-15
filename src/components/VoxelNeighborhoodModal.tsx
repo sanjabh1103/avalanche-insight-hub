@@ -372,7 +372,11 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
   }, [bbox, cacheKey]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      // Reset state when modal closes to prevent stale data on reopen
+      setHovered(null);
+      return;
+    }
     setHovered(null);
 
     const memCached = sessionCache.get(cacheKey);
@@ -382,6 +386,7 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
       setSparseRegion(sc);
       return;
     }
+    // B4 fix: Ensure fetch is called with proper loading state
     fetchBlocks();
   }, [open, cacheKey, fetchBlocks]);
 

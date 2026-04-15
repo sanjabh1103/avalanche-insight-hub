@@ -200,7 +200,9 @@ export default function Index() {
     }
     const hourParam = params.get('hour');
     if (hourParam) { const h = parseInt(hourParam, 10); if (!isNaN(h) && h >= 0) setTimeOffset(h); }
+    // B10 fix: Parse expert and 3d params from URL
     if (params.get('expert') === '1') setExpertMode(true);
+    if (params.get('3d') === '1') setShow3DModal(true);
 
     const sharedForecast = params.get('forecast');
     const hourValue = hourParam ? parseInt(hourParam, 10) : 0;
@@ -363,16 +365,19 @@ export default function Index() {
           </div>
 
           {/* Action Buttons */}
-          {/* B9 fix: shift left when expert panel is open to avoid being obscured by the w-80 sidebar */}
+          {/* B3/B9 fix: shift left when expert panel OR sidebar is open to avoid being obscured */}
           <div
             className="absolute top-3 z-10 flex items-center gap-2 flex-wrap justify-end transition-all duration-300"
-            style={{ right: expertPanelOpen ? 'calc(20rem + 0.75rem)' : '0.75rem' }}
+            style={{
+              right: (expertPanelOpen || (sidebarOpen && isMobile)) ? 'calc(20rem + 0.75rem)' : '0.75rem',
+              maxWidth: sidebarOpen && isMobile ? 'calc(100vw - 21rem)' : 'auto'
+            }}
           >
             <Button onClick={runForecast} disabled={forecasting} className="h-10 mr-1 text-xs font-semibold gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg touch-manipulation" aria-label="Run forecast">
               {forecasting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mountain className="h-4 w-4" />}
               {isMobile ? 'FORECAST' : expertMode ? 'RUN 72H FORECAST' : 'RUN 24H FORECAST'}
             </Button>
-            <ShareForecast forecastId={forecastId} region={region} hour={timeOffset} selectedCell={selectedCell} expertMode={expertMode} />
+            <ShareForecast forecastId={forecastId} region={region} hour={timeOffset} selectedCell={selectedCell} expertMode={expertMode} show3D={show3DModal} />
             <ExportForecast grid={grid} events={historicalEvents} regionName={region.name} hour={timeOffset} />
             <HistoricalEventsToggle
               visible={showEvents}

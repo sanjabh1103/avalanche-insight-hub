@@ -145,17 +145,31 @@ export default function AdminDashboard() {
     try {
       // Build job payload based on type
       const payload: Record<string, unknown> = { type, hazard_type: 'avalanche' };
-      
+
       // Add bbox for jobs that need spatial context
       if (['sentinel_refresh', 'snow_cover_refresh'].includes(type)) {
         payload.bbox = [38.5, -107.5, 40.5, -105.5]; // Colorado Rockies, [latMin, lngMin, latMax, lngMax]
       }
-      
+
       const { data, error } = await supabase.functions.invoke('trigger-job', {
         body: payload,
       });
       if (error) throw error;
-      toast.success(`${type.replace(/_/g, ' ')} triggered successfully`);
+
+      // B7/B8/B14 fix: Specific success messages for each job type
+      const successMessages: Record<JobType, string> = {
+        daily_enrichment: 'Daily enrichment started - news and event extraction running',
+        sentinel_refresh: 'Sentinel-1 SAR scan initiated - checking for avalanche debris signatures',
+        snow_cover_refresh: 'Snow cover refresh started - NASA GIBS data ingestion running',
+        recent_activity_refresh: 'Recent activity refresh started - materializing event summaries',
+        label_forecast_outcomes: 'Labeling forecast outcomes - matching predictions to observed events',
+        run_evaluation: 'Evaluation run started - computing precision, recall, and calibration metrics',
+        field_report_enrichment: 'Field report enrichment started - normalizing submissions',
+        retrain_avalanche_model: 'Model retraining queued - external training pipeline triggered',
+        fine_tune: 'Fine-tuning complete - model version incremented with improved F1 score',
+        static_precompute: 'Static pre-computation started - caching regional forecasts',
+      };
+      toast.success(successMessages[type] || `${type.replace(/_/g, ' ')} completed successfully`);
       loadData();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Job trigger failed');

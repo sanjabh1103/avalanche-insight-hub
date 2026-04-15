@@ -11,9 +11,10 @@ interface Props {
   hour?: number;
   selectedCell?: GridCell | null;
   expertMode?: boolean;
+  show3D?: boolean;
 }
 
-export default function ShareForecast({ forecastId, region, hour = 0, selectedCell, expertMode }: Props) {
+export default function ShareForecast({ forecastId, region, hour = 0, selectedCell, expertMode, show3D }: Props) {
   const [copied, setCopied] = useState(false);
 
   const handleShare = async () => {
@@ -37,19 +38,23 @@ export default function ShareForecast({ forecastId, region, hour = 0, selectedCe
     if (selectedCell) {
       params.set('cell', `${selectedCell.row},${selectedCell.col}`);
     }
+    // B10 fix: Include expert mode and 3D view state in URL
     if (expertMode) params.set('expert', '1');
-    
+    if (show3D) params.set('3d', '1');
+
     const url = `${window.location.origin}?${params.toString()}`;
-    
+
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
-      toast.success('Full-state forecast link copied — restores region, hour, and selected cell');
+      toast.success('Full-state forecast link copied - restores region, hour, expert mode, and 3D view');
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // B10 fix: clipboard API blocked (e.g. non-HTTPS or permissions denied) —
-      // show the URL in a toast so the user can copy it manually
-      toast.info(`Copy this link: ${url}`, { duration: 10000 });
+    } catch (err) {
+      // B10 fix: clipboard API blocked (e.g. non-HTTPS or permissions denied) -
+      // show error toast with manual copy option
+      toast.error('Could not auto-copy link. Please copy manually.', { duration: 5000 });
+      // Also show the URL in a toast so the user can copy it manually
+      toast.info(`Copy this link: ${url}`, { duration: 15000 });
     }
 
   };
