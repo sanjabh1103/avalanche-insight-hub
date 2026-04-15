@@ -13,15 +13,21 @@ function requireEnv(name: string, value: string | undefined) {
 }
 
 const SUPABASE_URL = requireEnv('VITE_SUPABASE_URL', import.meta.env.VITE_SUPABASE_URL);
-const SUPABASE_PUBLISHABLE_KEY = requireEnv(
-  'VITE_SUPABASE_PUBLISHABLE_KEY',
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-);
+const SUPABASE_ANON_KEY =
+  import.meta.env.VITE_SUPABASE_ANON_KEY ??
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const SUPABASE_API_KEY = requireEnv('VITE_SUPABASE_ANON_KEY or VITE_SUPABASE_PUBLISHABLE_KEY', SUPABASE_ANON_KEY);
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_API_KEY, {
+  global: {
+    headers: {
+      Authorization: `Bearer ${SUPABASE_API_KEY}`,
+      apikey: SUPABASE_API_KEY,
+    },
+  },
   auth: {
     storage: localStorage,
     persistSession: true,
