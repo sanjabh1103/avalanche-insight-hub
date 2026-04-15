@@ -59,6 +59,7 @@ interface Props {
 
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 const WORLD_SIZE = 60; // 60x60 strict grid
+const OVERPASS_FETCH_TIMEOUT_MS = 10000;
 
 // ---- In-memory session cache ----
 const sessionCache = new Map<string, VoxelCoordinate[]>();
@@ -78,6 +79,20 @@ function bboxToQuery(bbox: [number, number, number, number]) {
     way["landuse"~"forest|grass|meadow"](${b});
     node["aerialway"](${b});
   );out center geom;`;
+}
+
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(new Error('Overpass request timed out')), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 function geoToLocal(lat: number, lng: number, bbox: [number, number, number, number]): [number, number] {
@@ -217,11 +232,11 @@ async function fetchOSMData(bbox: [number, number, number, number]): Promise<Vox
         const query = bboxToQuery(bbox);
 
         lastRequestTime = Date.now();
-        const res = await fetch(OVERPASS_URL, {
+        const res = await fetchWithTimeout(OVERPASS_URL, {
           method: 'POST',
           body: `data=${encodeURIComponent(query)}`,
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        });
+        }, OVERPASS_FETCH_TIMEOUT_MS);
 
         if (res.status === 429 || res.status === 504) {
           consecutiveFailures++;
