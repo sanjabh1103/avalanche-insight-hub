@@ -240,11 +240,15 @@ function VoxelScene({
   cells,
   onHover,
   onHoverEnd,
+  onRenderReady,
+  onRenderError,
 }: {
   voxels: VoxelCoordinate[];
   cells: GridCell[];
   onHover: (info: HoveredInfo) => void;
   onHoverEnd: () => void;
+  onRenderReady: () => void;
+  onRenderError: (error: Error) => void;
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const colorObj = useMemo(() => new THREE.Color(), []);
@@ -253,28 +257,38 @@ function VoxelScene({
   // Update instanced mesh positions only once
   useEffect(() => {
     if (!meshRef.current) return;
-    voxels.forEach((v, i) => {
-      dummy.position.set(v.x, v.y, v.z);
-      dummy.updateMatrix();
-      meshRef.current!.setMatrixAt(i, dummy.matrix);
-    });
-    meshRef.current.instanceMatrix.needsUpdate = true;
+    try {
+      voxels.forEach((v, i) => {
+        dummy.position.set(v.x, v.y, v.z);
+        dummy.updateMatrix();
+        meshRef.current!.setMatrixAt(i, dummy.matrix);
+      });
+      meshRef.current.instanceMatrix.needsUpdate = true;
+      onRenderReady();
+    } catch (error) {
+      onRenderError(error instanceof Error ? error : new Error('Failed to prepare voxel matrices'));
+    }
   }, [voxels, dummy]);
 
   // Update colors (reactively to cells changing via timeline scrub)
   useEffect(() => {
     if (!meshRef.current) return;
-    voxels.forEach((v, i) => {
-      const baseC = getBaseColor(v.data.type);
-      const cell = findRiskForPosition(v.data.lat, v.data.lng, cells);
-      if (cell) {
-        const riskC = new THREE.Color(RISK_COLORS[Math.max(1, Math.min(5, Math.round(cell.riskScore)))]);
-        // Tint the base color strongly with the risk color
-        baseC.lerp(riskC, 0.7); 
-      }
-      meshRef.current!.setColorAt(i, baseC);
-    });
-    if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
+    try {
+      voxels.forEach((v, i) => {
+        const baseC = getBaseColor(v.data.type);
+        const cell = findRiskForPosition(v.data.lat, v.data.lng, cells);
+        if (cell) {
+          const riskC = new THREE.Color(RISK_COLORS[Math.max(1, Math.min(5, Math.round(cell.riskScore)))]);
+          // Tint the base color strongly with the risk color
+          baseC.lerp(riskC, 0.7);
+        }
+        meshRef.current!.setColorAt(i, baseC);
+      });
+      if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
+      onRenderReady();
+    } catch (error) {
+      onRenderError(error instanceof Error ? error : new Error('Failed to color voxel instances'));
+    }
   }, [voxels, cells]);
 
   const handlePointerMove = useCallback((e: ThreeEvent<PointerEvent>) => {
@@ -324,11 +338,53 @@ function VoxelScene({
   );
 }
 
+function VoxelFallbackCanvas({
+  voxels,
+  cells,
+  canvasBg,
+}: {
+  voxels: VoxelCoordinate[];
+  cells: GridCell[];
+  canvasBg: string;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const width = canvas.width;
+    const height = canvas.height;
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = canvasBg;
+    ctx.fillRect(0, 0, width, height);
+
+    const scaleX = width / WORLD_SIZE;
+    const scaleY = height / WORLD_SIZE;
+
+    for (const voxel of voxels.slice(0, 2500)) {
+      const cell = findRiskForPosition(voxel.data.lat, voxel.data.lng, cells);
+      const riskScore = Math.max(1, Math.min(5, Math.round(cell?.riskScore || 1)));
+      ctx.fillStyle = RISK_COLORS[riskScore] || '#334155';
+      const x = Math.round((voxel.x + WORLD_SIZE / 2) * scaleX);
+      const y = Math.round((voxel.z + WORLD_SIZE / 2) * scaleY);
+      const size = voxel.data.type === 'building' ? 3 : voxel.data.type === 'road' ? 2 : 1.5;
+      ctx.fillRect(x, y, size, size);
+    }
+  }, [voxels, cells, canvasBg]);
+
+  return <canvas ref={canvasRef} width={900} height={700} className="w-full h-full" />;
+}
+
 // ---- Main modal ----
 export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells, hourlyGrids, timeOffset }: Props) {
   const [blocks, setBlocks] = useState<VoxelCoordinate[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [renderError, setRenderError] = useState<string | null>(null);
+  const [renderReady, setRenderReady] = useState(false);
   const [sparseRegion, setSparseRegion] = useState(false);
   const [hovered, setHovered] = useState<HoveredInfo | null>(null);
 
@@ -346,6 +402,8 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
   const fetchBlocks = useCallback(async () => {
     setLoading(true);
     setFetchError(null);
+    setRenderError(null);
+    setRenderReady(false);
     setSparseRegion(false);
     setHovered(null);
     try {
@@ -373,10 +431,23 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
     }
   }, [bbox, cacheKey]);
 
+  const handleRenderReady = useCallback(() => {
+    setRenderReady(true);
+    setLoading(false);
+    setRenderError(null);
+  }, []);
+
+  const handleRenderError = useCallback((error: Error) => {
+    console.error('Voxel render failed:', error);
+    setRenderError(error.message || '3D rendering failed');
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
     if (!open) {
       // Reset state when modal closes to prevent stale data on reopen
       setHovered(null);
+      setLoading(false);
       return;
     }
     setHovered(null);
@@ -397,7 +468,6 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
   // hasRealData: blocks has been loaded (null = loading, [] or [..] = loaded)
   // We always get ground voxels from OSM so blocks.length > 0 is always true after a successful fetch
   const hasRealData = blocks !== null && blocks.length > 0;
-
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent
@@ -444,7 +514,7 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
               <AlertTriangle className="h-8 w-8 text-red-400" />
               <span className="max-w-md">{fetchError}</span>
             </div>
-          ) : hasRealData ? (
+          ) : hasRealData && !renderError ? (
             <Canvas
               camera={{ position: [40, 40, 40], fov: 50 }}
               style={{ width: '100%', height: '100%', background: canvasBg }}
@@ -454,14 +524,28 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
                 cells={currentCells}
                 onHover={setHovered}
                 onHoverEnd={() => setHovered(null)}
+                onRenderReady={handleRenderReady}
+                onRenderError={handleRenderError}
               />
             </Canvas>
+          ) : hasRealData ? (
+            <VoxelFallbackCanvas voxels={blocks!} cells={currentCells} canvasBg={canvasBg} />
           ) : (
             <div 
-              className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm"
+              className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground text-sm px-8 text-center"
               style={{ background: canvasBg }}
             >
-              No voxel data available for this region
+              {renderError ? (
+                <>
+                  <span className="text-red-400 font-medium">3D render fallback active</span>
+                  <span>{renderError}</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-medium">3D canvas is unavailable right now</span>
+                  <span>Rendering the voxel dataset in fallback mode.</span>
+                </>
+              )}
             </div>
           )}
 

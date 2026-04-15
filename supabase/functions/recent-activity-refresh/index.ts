@@ -148,129 +148,142 @@ serve(async (req) => {
       regionSummary.elevationRange = { min: minElev, max: maxElev };
     }
 
-    // Store region-level summary
-    const { data: feature, error: featureErr } = await supabase
-      .from('recent_activity_features')
-      .upsert({
-        region_name: regionName || 'global',
-        cell_row: null,
-        cell_col: null,
-        window_start: windowStart.toISOString(),
-        window_end: windowEnd.toISOString(),
-        window_days: windowDays,
-        total_event_count: regionSummary.count,
-        verified_event_count: regionSummary.verifiedCount,
-        training_eligible_count: (events || []).filter((e: any) => e.label_role === 'training_label').length,
-        weighted_severity_sum: Number(regionSummary.weightedSeverity.toFixed(2)),
-        max_severity_in_window: regionSummary.maxSeverity,
-        unique_aspect_buckets: Array.from(regionSummary.aspectBuckets),
-        elevation_range_m: regionSummary.elevationRange,
-        sources: regionSummary.sourceBreakdown,
-        data_completeness_score: events && events.length > 0 ? 1.0 : 0.5,
-        materialized_at: new Date().toISOString(),
-        materialization_job_id: job.id,
-      }, {
-        onConflict: 'region_name,cell_row,cell_col,window_start,window_end'
-      })
-      .select('id')
-      .single();
+    const workPromise = Promise.resolve().then(async () => {
+      // Store region-level summary
+      const { data: feature, error: featureErr } = await supabase
+        .from('recent_activity_features')
+        .upsert({
+          region_name: regionName || 'global',
+          cell_row: null,
+          cell_col: null,
+          window_start: windowStart.toISOString(),
+          window_end: windowEnd.toISOString(),
+          window_days: windowDays,
+          total_event_count: regionSummary.count,
+          verified_event_count: regionSummary.verifiedCount,
+          training_eligible_count: (events || []).filter((e: any) => e.label_role === 'training_label').length,
+          weighted_severity_sum: Number(regionSummary.weightedSeverity.toFixed(2)),
+          max_severity_in_window: regionSummary.maxSeverity,
+          unique_aspect_buckets: Array.from(regionSummary.aspectBuckets),
+          elevation_range_m: regionSummary.elevationRange,
+          sources: regionSummary.sourceBreakdown,
+          data_completeness_score: events && events.length > 0 ? 1.0 : 0.5,
+          materialized_at: new Date().toISOString(),
+          materialization_job_id: job.id,
+        }, {
+          onConflict: 'region_name,cell_row,cell_col,window_start,window_end'
+        })
+        .select('id')
+        .single();
 
-    if (featureErr) throw featureErr;
+      if (featureErr) throw featureErr;
 
-    let cellSummaries = 0;
+      let cellSummaries = 0;
 
-    // If requested, also materialize per-cell summaries (expensive, so optional)
-    if (materializeCells && regionName) {
-      // Get recent forecasts for this region to extract cell coordinates
-      const { data: recentForecasts } = await supabase
-        .from('forecasts')
-        .select('id, hourly_grids')
-        .eq('hazard_type', hazardType)
-        .order('created_at', { ascending: false })
-        .limit(1);
+      // If requested, also materialize per-cell summaries (expensive, so optional)
+      if (materializeCells && regionName) {
+        // Get recent forecasts for this region to extract cell coordinates
+        const { data: recentForecasts } = await supabase
+          .from('forecasts')
+          .select('id, hourly_grids')
+          .eq('hazard_type', hazardType)
+          .order('created_at', { ascending: false })
+          .limit(1);
 
-      if (recentForecasts && recentForecasts.length > 0 && recentForecasts[0].hourly_grids) {
-        const grid = recentForecasts[0].hourly_grids[0];
-        if (Array.isArray(grid)) {
-          const cellFeatures = [];
-          
-          for (const cell of grid) {
-            if (!cell || typeof cell.lat !== 'number') continue;
+        if (recentForecasts && recentForecasts.length > 0 && recentForecasts[0].hourly_grids) {
+          const grid = recentForecasts[0].hourly_grids[0];
+          if (Array.isArray(grid)) {
+            const cellFeatures = [];
 
-            // Find events near this cell
-            const cellEvents = (events || []).filter((e: any) => {
-              const locMatch = e.location?.match(/POINT\(([^ ]+) ([^ ]+)\)/);
-              if (!locMatch) return false;
-              
-              const eLng = parseFloat(locMatch[1]);
-              const eLat = parseFloat(locMatch[2]);
-              
-              // Rough 5km distance check
-              const latDiff = Math.abs(eLat - cell.lat);
-              const lngDiff = Math.abs(eLng - cell.lng);
-              return latDiff < 0.045 && lngDiff < 0.045; // ~5km at mid latitudes
-            });
+            for (const cell of grid) {
+              if (!cell || typeof cell.lat !== 'number') continue;
 
-            if (cellEvents.length === 0) continue;
+              // Find events near this cell
+              const cellEvents = (events || []).filter((e: any) => {
+                const locMatch = e.location?.match(/POINT\(([^ ]+) ([^ ]+)\)/);
+                if (!locMatch) return false;
 
-            const cellSummary: EventSummary = {
-              count: 0,
-              verifiedCount: 0,
-              weightedSeverity: 0,
-              maxSeverity: 0,
-              sourceBreakdown: {},
-              aspectBuckets: new Set(),
-              elevationRange: null,
-            };
+                const eLng = parseFloat(locMatch[1]);
+                const eLat = parseFloat(locMatch[2]);
 
-            for (const event of cellEvents) {
-              cellSummary.count++;
-              if (event.verification_status === 'verified' || event.verification_status === 'expert_verified') {
-                cellSummary.verifiedCount++;
+                // Rough 5km distance check
+                const latDiff = Math.abs(eLat - cell.lat);
+                const lngDiff = Math.abs(eLng - cell.lng);
+                return latDiff < 0.045 && lngDiff < 0.045; // ~5km at mid latitudes
+              });
+
+              if (cellEvents.length === 0) continue;
+
+              const cellSummary: EventSummary = {
+                count: 0,
+                verifiedCount: 0,
+                weightedSeverity: 0,
+                maxSeverity: 0,
+                sourceBreakdown: {},
+                aspectBuckets: new Set(),
+                elevationRange: null,
+              };
+
+              for (const event of cellEvents) {
+                cellSummary.count++;
+                if (event.verification_status === 'verified' || event.verification_status === 'expert_verified') {
+                  cellSummary.verifiedCount++;
+                }
+
+                const recencyWeight = calculateRecencyWeight(event.timestamp, windowEnd);
+                cellSummary.weightedSeverity += (event.severity || 3) * recencyWeight;
+                cellSummary.maxSeverity = Math.max(cellSummary.maxSeverity, event.severity || 3);
+
+                const source = event.source || 'unknown';
+                cellSummary.sourceBreakdown[source] = (cellSummary.sourceBreakdown[source] || 0) + 1;
+
+                if (event.aspect_bucket) {
+                  cellSummary.aspectBuckets.add(event.aspect_bucket);
+                }
               }
-              
-              const recencyWeight = calculateRecencyWeight(event.timestamp, windowEnd);
-              cellSummary.weightedSeverity += (event.severity || 3) * recencyWeight;
-              cellSummary.maxSeverity = Math.max(cellSummary.maxSeverity, event.severity || 3);
-              
-              const source = event.source || 'unknown';
-              cellSummary.sourceBreakdown[source] = (cellSummary.sourceBreakdown[source] || 0) + 1;
-              
-              if (event.aspect_bucket) {
-                cellSummary.aspectBuckets.add(event.aspect_bucket);
-              }
+
+              cellFeatures.push({
+                region_name: regionName,
+                cell_row: cell.row,
+                cell_col: cell.col,
+                window_start: windowStart.toISOString(),
+                window_end: windowEnd.toISOString(),
+                window_days: windowDays,
+                total_event_count: cellSummary.count,
+                verified_event_count: cellSummary.verifiedCount,
+                weighted_severity_sum: Number(cellSummary.weightedSeverity.toFixed(2)),
+                max_severity_in_window: cellSummary.maxSeverity,
+                unique_aspect_buckets: Array.from(cellSummary.aspectBuckets),
+                sources: cellSummary.sourceBreakdown,
+                data_completeness_score: 1.0,
+                materialized_at: new Date().toISOString(),
+                materialization_job_id: job.id,
+              });
             }
 
-            cellFeatures.push({
-              region_name: regionName,
-              cell_row: cell.row,
-              cell_col: cell.col,
-              window_start: windowStart.toISOString(),
-              window_end: windowEnd.toISOString(),
-              window_days: windowDays,
-              total_event_count: cellSummary.count,
-              verified_event_count: cellSummary.verifiedCount,
-              weighted_severity_sum: Number(cellSummary.weightedSeverity.toFixed(2)),
-              max_severity_in_window: cellSummary.maxSeverity,
-              unique_aspect_buckets: Array.from(cellSummary.aspectBuckets),
-              sources: cellSummary.sourceBreakdown,
-              data_completeness_score: 1.0,
-              materialized_at: new Date().toISOString(),
-              materialization_job_id: job.id,
-            });
-          }
-
-          if (cellFeatures.length > 0) {
-            await supabase
-              .from('recent_activity_features')
-              .upsert(cellFeatures, {
-                onConflict: 'region_name,cell_row,cell_col,window_start,window_end'
-              });
-            cellSummaries = cellFeatures.length;
+            if (cellFeatures.length > 0) {
+              await supabase
+                .from('recent_activity_features')
+                .upsert(cellFeatures, {
+                  onConflict: 'region_name,cell_row,cell_col,window_start,window_end'
+                });
+              cellSummaries = cellFeatures.length;
+            }
           }
         }
       }
-    }
+
+      return {
+        feature,
+        cellSummaries,
+      };
+    });
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Recent activity refresh timed out after 30s')), 30000);
+    });
+
+    const { feature, cellSummaries } = await Promise.race([workPromise, timeoutPromise]);
 
     const result = {
       feature_id: feature?.id,
@@ -295,6 +308,29 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (supabaseUrl && serviceRoleKey) {
+      try {
+        const supabase = createClient(supabaseUrl, serviceRoleKey);
+        const { data: latestJob } = await supabase
+          .from('compute_jobs')
+          .select('id')
+          .eq('type', 'recent_activity_refresh')
+          .eq('status', 'running')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (latestJob?.id) {
+          await supabase
+            .from('compute_jobs')
+            .update({ status: 'failed', error: (err as Error).message })
+            .eq('id', latestJob.id);
+        }
+      } catch {
+        // Best effort only; original error still returns to caller.
+      }
+    }
     return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

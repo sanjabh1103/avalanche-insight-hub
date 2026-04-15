@@ -159,7 +159,7 @@ export default function AdminDashboard() {
       // B7/B8/B14 fix: Specific success messages for each job type
       const successMessages: Record<JobType, string> = {
         daily_enrichment: 'Daily enrichment started - news and event extraction running',
-        sentinel_refresh: 'Sentinel-1 SAR scan initiated - checking for avalanche debris signatures',
+        sentinel_refresh: 'Sentinel-1 refresh triggered successfully',
         snow_cover_refresh: 'Snow cover refresh started - NASA GIBS data ingestion running',
         recent_activity_refresh: 'Recent activity refresh started - materializing event summaries',
         label_forecast_outcomes: 'Labeling forecast outcomes - matching predictions to observed events',

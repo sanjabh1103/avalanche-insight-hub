@@ -57,11 +57,7 @@ export default function ExpertModePanel({
         auth_key: 'stub',
         region_bbox: regionBbox as unknown as number[],
       });
-      toast.success(
-        permissionGranted
-          ? 'Alert subscription saved — browser notifications enabled'
-          : 'Alert subscription saved for this region'
-      );
+      toast.success('Alert subscription saved for Colorado Rockies');
       setAlertsDialogOpen(false);
     } catch {
       toast.error('Failed to subscribe — please try again');

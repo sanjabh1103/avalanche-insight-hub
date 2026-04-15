@@ -105,6 +105,7 @@ export default function FieldReportForm({ open, onClose, onSubmitted, regionCent
       setDescription('');
       onClose();
     } catch (err: unknown) {
+      console.error('field report submit failed', err);
       toast.error(err instanceof Error ? err.message : 'Failed to submit report');
     } finally {
       setSubmitting(false);

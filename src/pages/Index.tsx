@@ -168,7 +168,11 @@ export default function Index() {
             };
 
             setRemoteEvents((prev) => [event, ...prev]);
-            toast.info('New avalanche event detected on map');
+            // Only show the generic toast for human-submitted field reports.
+            // System jobs (Sentinel, NewsData, recent activity refresh) already have their own job toasts.
+            if (String(newEvent.source || '').toLowerCase().includes('field_report')) {
+              toast.info('New field report added to the map');
+            }
           }
         }
       )

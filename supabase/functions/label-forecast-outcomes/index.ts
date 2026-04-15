@@ -202,8 +202,14 @@ serve(async (req) => {
           getVerificationRank(e.verification_status) >= minVerificationRank
         );
 
-        // Process each hour and cell
+        // Process each hour and cell for this forecast only
         const outcomes = [];
+
+        if (eligibleEvents.length === 0) {
+          totalSkipped++;
+          continue;
+        }
+
         for (let hour = 0; hour < hourlyGrids.length; hour++) {
           const grid = hourlyGrids[hour];
           if (!Array.isArray(grid)) continue;
@@ -282,7 +288,7 @@ serve(async (req) => {
           }
         }
 
-        // Batch insert outcomes
+        // Batch insert outcomes for this forecast only
         if (outcomes.length > 0) {
           const { error: insertErr } = await supabase
             .from('forecast_outcomes')
@@ -295,9 +301,9 @@ serve(async (req) => {
       }
     };
 
-    // Race labeling against 120-second timeout
+    // Race labeling against a hard timeout so jobs don't remain stuck running
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Labeling timed out after 120s — partial results saved')), 120000)
+      setTimeout(() => reject(new Error('Labeling timed out after 30s — partial results saved')), 30000)
     );
 
     try {
@@ -336,6 +342,29 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (supabaseUrl && serviceRoleKey) {
+      try {
+        const supabase = createClient(supabaseUrl, serviceRoleKey);
+        const { data: latestJob } = await supabase
+          .from('compute_jobs')
+          .select('id')
+          .eq('type', 'label_forecast_outcomes')
+          .eq('status', 'running')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (latestJob?.id) {
+          await supabase
+            .from('compute_jobs')
+            .update({ status: 'failed', error: (err as Error).message })
+            .eq('id', latestJob.id);
+        }
+      } catch {
+        // Best effort only; original error still returns to caller.
+      }
+    }
     return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
