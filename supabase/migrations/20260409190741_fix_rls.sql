@@ -1,5 +1,5 @@
 -- IMMEDIATE RLS FIX - Run this in Supabase Dashboard SQL Editor
--- Project: rmzipvwqafrxhhuinggf (or qnymbecjgeaoxsfphrti if different)
+-- Project: fzheroisjhxnairglelv (or qnymbecjgeaoxsfphrti if different)
 
 -- =====================================================
 -- FIX 1: Enable RLS on ALL tables (idempotent - safe to re-run)
@@ -62,8 +62,7 @@ CREATE POLICY "Service role can manage terrain" ON public.mountain_terrain FOR A
 SELECT 
   schemaname,
   tablename,
-  rowsecurity,
-  forcerowsecurity
+  rowsecurity
 FROM pg_tables 
 JOIN pg_class ON pg_class.relname = tablename
 WHERE schemaname = 'public' 

@@ -22,6 +22,55 @@ interface AnalyticsRow {
   count: number;
 }
 
+interface EvaluationRunRow {
+  id: string;
+  run_name: string;
+  status: string;
+  created_at: string;
+  model_version: string;
+  label_version: string;
+  overall_brier_score: number | null;
+  overall_precision_risk4: number | null;
+  overall_precision_risk3: number | null;
+  overall_recall: number | null;
+  overall_ece: number | null;
+  overall_false_alarm_rate: number | null;
+}
+
+interface ForecastOutcomeRow {
+  id: string;
+  forecast_id: string;
+  hazard_type: string;
+  forecast_hour: number;
+  cell_row: number;
+  cell_col: number;
+  event_observed: boolean;
+  severity_label: string | null;
+  label_confidence: number;
+  created_at: string;
+}
+
+interface EvaluationMetricRow {
+  id: string;
+  slice_type: string;
+  slice_value: string;
+  precision_risk3: number | null;
+  recall_risk3: number | null;
+  ece: number | null;
+  false_alarm_rate: number | null;
+  total_forecasts: number;
+  observed_events: number;
+  created_at: string;
+}
+
+interface FieldReportRow {
+  id: string;
+  created_at: string;
+  description: string | null;
+  review_status: string;
+  training_eligible: boolean;
+}
+
 const JOB_BUTTONS: { type: JobType; label: string; icon: React.ReactNode; description?: string }[] = [
   { type: 'daily_enrichment', label: 'Run Enrichment', icon: <Zap className="h-4 w-4" />, description: 'News + Gemini event extraction' },
   { type: 'sentinel_refresh', label: 'Refresh Sentinel-1', icon: <Satellite className="h-4 w-4" />, description: 'ASF metadata search' },
@@ -39,20 +88,37 @@ export default function AdminDashboard() {
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [running, setRunning] = useState<string | null>(null);
   const [systemConfig, setSystemConfig] = useState<{ gemini_usage: number; gemini_spend_cap: number } | null>(null);
-  const [modelStatus, setModelStatus] = useState<{ version: string; f1_score: number; calibration_profile_version?: string; threshold_profile_version?: string } | null>(null);
+  const [modelStatus, setModelStatus] = useState<{ version: string; f1_score: number; feature_version?: string; calibration_profile_version?: string; threshold_profile_version?: string } | null>(null);
   const [analytics, setAnalytics] = useState<{ total: number; regions: AnalyticsRow[] }>({ total: 0, regions: [] });
+  const [evaluationRuns, setEvaluationRuns] = useState<EvaluationRunRow[]>([]);
+  const [evaluationMetrics, setEvaluationMetrics] = useState<EvaluationMetricRow[]>([]);
+  const [forecastOutcomes, setForecastOutcomes] = useState<ForecastOutcomeRow[]>([]);
+  const [fieldReports, setFieldReports] = useState<FieldReportRow[]>([]);
   const activeJobs = jobs.filter((job) => job.status === 'running').length;
 
   const loadData = useCallback(async () => {
-    const [jobsRes, configRes, modelRes, analyticsRes] = await Promise.all([
+    const [
+      jobsRes,
+      configRes,
+      modelRes,
+      analyticsRes,
+      evaluationRunsRes,
+      evaluationMetricsRes,
+      outcomesRes,
+      reportsRes,
+    ] = await Promise.all([
       supabase.from('compute_jobs').select('*').order('created_at', { ascending: false }).limit(10),
       supabase.from('system_config').select('*').limit(1).single(),
       supabase.from('model_status').select('*').limit(1).single(),
       supabase.from('forecast_analytics').select('*').order('created_at', { ascending: false }).limit(100),
+      supabase.from('evaluation_runs').select('*').order('created_at', { ascending: false }).limit(5),
+      supabase.from('evaluation_metrics').select('*').order('created_at', { ascending: false }).limit(10),
+      supabase.from('forecast_outcomes').select('*').order('created_at', { ascending: false }).limit(5),
+      supabase.from('field_reports').select('id, created_at, description, review_status, training_eligible').order('created_at', { ascending: false }).limit(5),
     ]);
     if (jobsRes.data) setJobs(jobsRes.data as unknown as JobRow[]);
     if (configRes.data) setSystemConfig(configRes.data as unknown as { gemini_usage: number; gemini_spend_cap: number });
-    if (modelRes.data) setModelStatus(modelRes.data as unknown as { version: string; f1_score: number });
+    if (modelRes.data) setModelStatus(modelRes.data as unknown as { version: string; f1_score: number; feature_version?: string; calibration_profile_version?: string; threshold_profile_version?: string });
     if (analyticsRes.data) {
       const rows = analyticsRes.data as unknown as { region_name: string }[];
       const regionMap = new Map<string, number>();
@@ -60,11 +126,19 @@ export default function AdminDashboard() {
       const regions = Array.from(regionMap.entries()).map(([region_name, count]) => ({ region_name, count })).sort((a, b) => b.count - a.count);
       setAnalytics({ total: rows.length, regions: regions.slice(0, 5) });
     }
+    if (evaluationRunsRes.data) setEvaluationRuns(evaluationRunsRes.data as unknown as EvaluationRunRow[]);
+    if (evaluationMetricsRes.data) setEvaluationMetrics(evaluationMetricsRes.data as unknown as EvaluationMetricRow[]);
+    if (outcomesRes.data) setForecastOutcomes(outcomesRes.data as unknown as ForecastOutcomeRow[]);
+    if (reportsRes.data) setFieldReports(reportsRes.data as unknown as FieldReportRow[]);
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
 
   useRealtimeSubscription('compute_jobs', () => { loadData(); });
+  useRealtimeSubscription('evaluation_runs', () => { loadData(); });
+  useRealtimeSubscription('evaluation_metrics', () => { loadData(); });
+  useRealtimeSubscription('forecast_outcomes', () => { loadData(); });
+  useRealtimeSubscription('field_reports', () => { loadData(); });
 
   const triggerJob = async (type: JobType) => {
     setRunning(type);
@@ -74,7 +148,7 @@ export default function AdminDashboard() {
       
       // Add bbox for jobs that need spatial context
       if (['sentinel_refresh', 'snow_cover_refresh'].includes(type)) {
-        payload.bbox = [-107.5, 38.5, -105.5, 40.5]; // Default Colorado region - should come from current view
+        payload.bbox = [38.5, -107.5, 40.5, -105.5]; // Colorado Rockies, [latMin, lngMin, latMax, lngMax]
       }
       
       const { data, error } = await supabase.functions.invoke('trigger-job', {
@@ -167,6 +241,145 @@ export default function AdminDashboard() {
         </CardContent>
       </Card>
 
+      {/* Evaluation + Outcomes */}
+      <Card className="border-0 bg-secondary/50">
+        <CardHeader className="p-3 pb-1">
+          <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <BarChart3 className="h-3 w-3" />
+            Evaluation Runs
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-3 pt-1 space-y-2">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Forecast Outcomes</div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-lg font-mono font-bold text-foreground">{forecastOutcomes.length}</span>
+            <span className="text-xs text-muted-foreground">recent labels</span>
+          </div>
+          {forecastOutcomes.length > 0 ? (
+            <div className="space-y-1.5 max-h-36 overflow-y-auto">
+              {forecastOutcomes.map((outcome) => (
+                <div key={outcome.id} className="flex items-center justify-between text-[10px] gap-2 border-b border-border/50 last:border-0 pb-1">
+                  <div className="min-w-0">
+                    <div className="font-mono text-muted-foreground truncate">
+                      h{outcome.forecast_hour} • r{outcome.cell_row} c{outcome.cell_col}
+                    </div>
+                    <div className="text-muted-foreground truncate">
+                      {outcome.hazard_type} • {outcome.severity_label || 'none'}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Badge className={outcome.event_observed ? 'bg-green-500/20 text-green-400 border-0' : 'bg-muted text-muted-foreground border-0'}>
+                      {outcome.event_observed ? 'OBS' : 'NO EVT'}
+                    </Badge>
+                    <span className="font-mono text-foreground">{outcome.label_confidence.toFixed(2)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground">No labeled outcomes yet</div>
+          )}
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground pt-1">Latest Evaluation</div>
+          {evaluationRuns.length > 0 ? (
+            <div className="space-y-1.5">
+              <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px]">
+                <div className="text-muted-foreground">Prec @ risk4</div>
+                <div className="font-mono text-foreground text-right">
+                  {evaluationRuns[0].overall_precision_risk4?.toFixed(2) ?? 'n/a'}
+                </div>
+                <div className="text-muted-foreground">Prec @ risk3</div>
+                <div className="font-mono text-foreground text-right">
+                  {evaluationRuns[0].overall_precision_risk3?.toFixed(2) ?? 'n/a'}
+                </div>
+                <div className="text-muted-foreground">Recall</div>
+                <div className="font-mono text-foreground text-right">
+                  {evaluationRuns[0].overall_recall?.toFixed(2) ?? 'n/a'}
+                </div>
+                <div className="text-muted-foreground">ECE</div>
+                <div className="font-mono text-foreground text-right">
+                  {evaluationRuns[0].overall_ece?.toFixed(3) ?? 'n/a'}
+                </div>
+                <div className="text-muted-foreground">False alarm</div>
+                <div className="font-mono text-foreground text-right">
+                  {evaluationRuns[0].overall_false_alarm_rate?.toFixed(2) ?? 'n/a'}
+                </div>
+                <div className="text-muted-foreground">Brier</div>
+                <div className="font-mono text-foreground text-right">
+                  {evaluationRuns[0].overall_brier_score?.toFixed(3) ?? 'n/a'}
+                </div>
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                Latest run: {evaluationRuns[0].run_name} • {evaluationRuns[0].model_version}
+              </div>
+              <div className="space-y-1.5">
+                {evaluationRuns.slice(1, 3).map((run) => (
+                  <div key={run.id} className="flex items-center justify-between text-[10px]">
+                    <span className="text-muted-foreground truncate">{run.run_name} • {run.model_version}</span>
+                    <Badge className={`border-0 ${statusColor(run.status)}`}>{run.status}</Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground">No evaluation runs yet</div>
+          )}
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground pt-1">Slice Metrics</div>
+          {evaluationMetrics.length > 0 ? (
+            <div className="space-y-1.5 max-h-36 overflow-y-auto">
+              {evaluationMetrics.slice(0, 4).map((metric) => (
+                <div key={metric.id} className="flex items-center justify-between gap-2 text-[10px] border-b border-border/50 last:border-0 pb-1">
+                  <div className="min-w-0">
+                    <div className="font-mono text-muted-foreground truncate">
+                      {metric.slice_type}: {metric.slice_value}
+                    </div>
+                    <div className="text-muted-foreground truncate">
+                      {metric.total_forecasts} forecasts • {metric.observed_events} observed
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-mono text-foreground">P3 {metric.precision_risk3?.toFixed(2) ?? 'n/a'}</span>
+                    <span className="font-mono text-foreground">R3 {metric.recall_risk3?.toFixed(2) ?? 'n/a'}</span>
+                    <span className="font-mono text-foreground">ECE {metric.ece?.toFixed(3) ?? 'n/a'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground">No slice metrics yet</div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Field Reports */}
+      <Card className="border-0 bg-secondary/50">
+        <CardHeader className="p-3 pb-1">
+          <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <FileCheck className="h-3 w-3" />
+            Field Reports
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-3 pt-1 space-y-1.5">
+          {fieldReports.length === 0 ? (
+            <div className="text-xs text-muted-foreground">No recent field reports</div>
+          ) : (
+            fieldReports.map((report) => (
+              <div key={report.id} className="flex items-start justify-between gap-2 text-[10px] border-b border-border/50 last:border-0 pb-1">
+                <div className="min-w-0">
+                  <div className="font-mono text-muted-foreground truncate">{new Date(report.created_at).toLocaleString()}</div>
+                  <div className="text-muted-foreground line-clamp-2">{report.description || 'No description'}</div>
+                </div>
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <Badge className={`border-0 ${statusColor(report.review_status || 'pending')}`}>{report.review_status || 'pending'}</Badge>
+                  <span className="text-[9px] text-muted-foreground font-mono">
+                    {report.training_eligible ? 'TRAINING OK' : 'REVIEW ONLY'}
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
       {/* System Config */}
       {systemConfig && (
         <Card className="border-0 bg-secondary/50">
@@ -198,6 +411,11 @@ export default function AdminDashboard() {
                 F1: {modelStatus.f1_score.toFixed(3)}
               </Badge>
             </div>
+            {modelStatus.feature_version && (
+              <div className="text-[10px] text-muted-foreground">
+                Feature: {modelStatus.feature_version}
+              </div>
+            )}
             {modelStatus.calibration_profile_version && (
               <div className="text-[10px] text-muted-foreground">
                 Calibration: {modelStatus.calibration_profile_version}

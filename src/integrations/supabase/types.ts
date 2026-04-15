@@ -95,39 +95,6 @@ export type Database = {
         }
         Relationships: []
       }
-      field_reports: {
-        Row: {
-          created_at: string
-          description: string | null
-          id: string
-          image_url: string | null
-          location: unknown
-          status: Database["public"]["Enums"]["report_status"] | null
-          timestamp: string
-          user_id: string | null
-        }
-        Insert: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          image_url?: string | null
-          location?: unknown
-          status?: Database["public"]["Enums"]["report_status"] | null
-          timestamp?: string
-          user_id?: string | null
-        }
-        Update: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          image_url?: string | null
-          location?: unknown
-          status?: Database["public"]["Enums"]["report_status"] | null
-          timestamp?: string
-          user_id?: string | null
-        }
-        Relationships: []
-      }
       forecast_analytics: {
         Row: {
           avg_risk: number | null
@@ -323,6 +290,950 @@ export type Database = {
         }
         Relationships: []
       }
+      field_reports: {
+        Row: {
+          aspect: string | null
+          confidence: number | null
+          created_at: string
+          dedupe_group_id: string | null
+          description: string | null
+          elevation_m: number | null
+          hazard_type: string
+          id: string
+          image_url: string | null
+          location: unknown
+          location_precision_m: number | null
+          normalization_version: string | null
+          normalized_event_type: string | null
+          normalized_severity: string | null
+          reporter_reliability_score: number | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          review_status: string
+          snow_description: string | null
+          status: string | null
+          terrain_context: string | null
+          timestamp: string
+          training_eligible: boolean
+          trigger_type: string | null
+          user_id: string | null
+        }
+        Insert: {
+          aspect?: string | null
+          confidence?: number | null
+          created_at?: string
+          dedupe_group_id?: string | null
+          description?: string | null
+          elevation_m?: number | null
+          hazard_type?: string
+          id?: string
+          image_url?: string | null
+          location?: unknown
+          location_precision_m?: number | null
+          normalization_version?: string | null
+          normalized_event_type?: string | null
+          normalized_severity?: string | null
+          reporter_reliability_score?: number | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          review_status?: string
+          snow_description?: string | null
+          status?: string | null
+          terrain_context?: string | null
+          timestamp?: string
+          training_eligible?: boolean
+          trigger_type?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          aspect?: string | null
+          confidence?: number | null
+          created_at?: string
+          dedupe_group_id?: string | null
+          description?: string | null
+          elevation_m?: number | null
+          hazard_type?: string
+          id?: string
+          image_url?: string | null
+          location?: unknown
+          location_precision_m?: number | null
+          normalization_version?: string | null
+          normalized_event_type?: string | null
+          normalized_severity?: string | null
+          reporter_reliability_score?: number | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          review_status?: string
+          snow_description?: string | null
+          status?: string | null
+          terrain_context?: string | null
+          timestamp?: string
+          training_eligible?: boolean
+          trigger_type?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_reports_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      forecast_outcomes: {
+        Row: {
+          created_at: string
+          distance_to_nearest_event_m: number | null
+          elevation_band_compatible: boolean | null
+          event_observed: boolean
+          excluded_from_training: boolean
+          forecast_hour: number
+          forecast_id: string
+          hazard_type: string
+          id: string
+          label_confidence: number
+          label_version: string
+          nearest_event_id: string | null
+          outcome_window_end: string
+          outcome_window_start: string
+          predicted_hazard: number
+          predicted_risk_score: number
+          severity_label: string | null
+          spatial_tolerance_m: number
+          temporal_tolerance_hours: number
+          updated_at: string
+          cell_col: number
+          cell_row: number
+          exclusion_reason: string | null
+        }
+        Insert: {
+          created_at?: string
+          distance_to_nearest_event_m?: number | null
+          elevation_band_compatible?: boolean | null
+          event_observed?: boolean
+          excluded_from_training?: boolean
+          forecast_hour: number
+          forecast_id: string
+          hazard_type?: string
+          id?: string
+          label_confidence?: number
+          label_version?: string
+          nearest_event_id?: string | null
+          outcome_window_end: string
+          outcome_window_start: string
+          predicted_hazard: number
+          predicted_risk_score: number
+          severity_label?: string | null
+          spatial_tolerance_m?: number
+          temporal_tolerance_hours?: number
+          updated_at?: string
+          cell_col: number
+          cell_row: number
+          exclusion_reason?: string | null
+        }
+        Update: {
+          created_at?: string
+          distance_to_nearest_event_m?: number | null
+          elevation_band_compatible?: boolean | null
+          event_observed?: boolean
+          excluded_from_training?: boolean
+          forecast_hour?: number
+          forecast_id?: string
+          hazard_type?: string
+          id?: string
+          label_confidence?: number
+          label_version?: string
+          nearest_event_id?: string | null
+          outcome_window_end?: string
+          outcome_window_start?: string
+          predicted_hazard?: number
+          predicted_risk_score?: number
+          severity_label?: string | null
+          spatial_tolerance_m?: number
+          temporal_tolerance_hours?: number
+          updated_at?: string
+          cell_col?: number
+          cell_row?: number
+          exclusion_reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forecast_outcomes_forecast_id_fkey"
+            columns: ["forecast_id"]
+            isOneToOne: false
+            referencedRelation: "forecasts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      evaluation_runs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          hazard_type: string
+          id: string
+          label_version: string
+          model_version: string
+          overall_brier_score: number | null
+          overall_ece: number | null
+          overall_false_alarm_rate: number | null
+          overall_precision_risk3: number | null
+          overall_precision_risk4: number | null
+          overall_recall: number | null
+          regions_evaluated: string[]
+          run_name: string
+          status: string
+          threshold_profile_version: string
+          eval_end_date: string
+          eval_start_date: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          hazard_type?: string
+          id?: string
+          label_version: string
+          model_version: string
+          overall_brier_score?: number | null
+          overall_ece?: number | null
+          overall_false_alarm_rate?: number | null
+          overall_precision_risk3?: number | null
+          overall_precision_risk4?: number | null
+          overall_recall?: number | null
+          regions_evaluated?: string[]
+          run_name: string
+          status?: string
+          threshold_profile_version: string
+          eval_end_date: string
+          eval_start_date: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          hazard_type?: string
+          id?: string
+          label_version?: string
+          model_version?: string
+          overall_brier_score?: number | null
+          overall_ece?: number | null
+          overall_false_alarm_rate?: number | null
+          overall_precision_risk3?: number | null
+          overall_precision_risk4?: number | null
+          overall_recall?: number | null
+          regions_evaluated?: string[]
+          run_name?: string
+          status?: string
+          threshold_profile_version?: string
+          eval_end_date?: string
+          eval_start_date?: string
+        }
+        Relationships: []
+      }
+      evaluation_metrics: {
+        Row: {
+          created_at: string
+          ece: number | null
+          evaluation_run_id: string
+          false_alarm_rate: number | null
+          false_positives: number | null
+          f1_risk3: number | null
+          f1_risk4: number | null
+          id: string
+          observed_events: number
+          precision_risk3: number | null
+          precision_risk4: number | null
+          recall_risk3: number | null
+          recall_risk4: number | null
+          risk_distribution: Json | null
+          slice_type: string
+          slice_value: string
+          total_cells: number
+          total_forecasts: number
+          true_positives: number | null
+          reliability_data: Json | null
+        }
+        Insert: {
+          created_at?: string
+          ece?: number | null
+          evaluation_run_id: string
+          false_alarm_rate?: number | null
+          false_positives?: number | null
+          f1_risk3?: number | null
+          f1_risk4?: number | null
+          id?: string
+          observed_events: number
+          precision_risk3?: number | null
+          precision_risk4?: number | null
+          recall_risk3?: number | null
+          recall_risk4?: number | null
+          risk_distribution?: Json | null
+          slice_type: string
+          slice_value: string
+          total_cells: number
+          total_forecasts: number
+          true_positives?: number | null
+          reliability_data?: Json | null
+        }
+        Update: {
+          created_at?: string
+          ece?: number | null
+          evaluation_run_id?: string
+          false_alarm_rate?: number | null
+          false_positives?: number | null
+          f1_risk3?: number | null
+          f1_risk4?: number | null
+          id?: string
+          observed_events?: number
+          precision_risk3?: number | null
+          precision_risk4?: number | null
+          recall_risk3?: number | null
+          recall_risk4?: number | null
+          risk_distribution?: Json | null
+          slice_type?: string
+          slice_value?: string
+          total_cells?: number
+          total_forecasts?: number
+          true_positives?: number | null
+          reliability_data?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "evaluation_metrics_evaluation_run_id_fkey"
+            columns: ["evaluation_run_id"]
+            isOneToOne: false
+            referencedRelation: "evaluation_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      snow_cover_snapshots: {
+        Row: {
+          bbox: number[]
+          captured_at: string
+          created_at: string
+          coverage_ratio: number | null
+          elevation_band_stats: Json
+          id: string
+          ingestion_job_id: string | null
+          processing_version: string
+          quality_score: number | null
+          source: string
+          source_layer: string | null
+          source_url: string | null
+          valid_for_region: string
+        }
+        Insert: {
+          bbox: number[]
+          captured_at: string
+          created_at?: string
+          coverage_ratio?: number | null
+          elevation_band_stats?: Json
+          id?: string
+          ingestion_job_id?: string | null
+          processing_version?: string
+          quality_score?: number | null
+          source?: string
+          source_layer?: string | null
+          source_url?: string | null
+          valid_for_region: string
+        }
+        Update: {
+          bbox?: number[]
+          captured_at?: string
+          created_at?: string
+          coverage_ratio?: number | null
+          elevation_band_stats?: Json
+          id?: string
+          ingestion_job_id?: string | null
+          processing_version?: string
+          quality_score?: number | null
+          source?: string
+          source_layer?: string | null
+          source_url?: string | null
+          valid_for_region?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "snow_cover_snapshots_ingestion_job_id_fkey"
+            columns: ["ingestion_job_id"]
+            isOneToOne: false
+            referencedRelation: "compute_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recent_activity_features: {
+        Row: {
+          cell_col: number | null
+          cell_row: number | null
+          data_completeness_score: number
+          elevation_range_m: Json | null
+          id: string
+          materialization_job_id: string | null
+          materialized_at: string
+          region_name: string
+          sources: Json
+          total_event_count: number
+          training_eligible_count: number
+          unique_aspect_buckets: string[] | null
+          verified_event_count: number
+          weighted_severity_sum: number
+          window_days: number
+          window_end: string
+          window_start: string
+          event_density_per_km2: number | null
+          max_severity_in_window: number | null
+        }
+        Insert: {
+          cell_col?: number | null
+          cell_row?: number | null
+          data_completeness_score?: number
+          elevation_range_m?: Json | null
+          id?: string
+          materialization_job_id?: string | null
+          materialized_at?: string
+          region_name: string
+          sources?: Json
+          total_event_count?: number
+          training_eligible_count?: number
+          unique_aspect_buckets?: string[] | null
+          verified_event_count?: number
+          weighted_severity_sum?: number
+          window_days?: number
+          window_end: string
+          window_start: string
+          event_density_per_km2?: number | null
+          max_severity_in_window?: number | null
+        }
+        Update: {
+          cell_col?: number | null
+          cell_row?: number | null
+          data_completeness_score?: number
+          elevation_range_m?: Json | null
+          id?: string
+          materialization_job_id?: string | null
+          materialized_at?: string
+          region_name?: string
+          sources?: Json
+          total_event_count?: number
+          training_eligible_count?: number
+          unique_aspect_buckets?: string[] | null
+          verified_event_count?: number
+          weighted_severity_sum?: number
+          window_days?: number
+          window_end?: string
+          window_start?: string
+          event_density_per_km2?: number | null
+          max_severity_in_window?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recent_activity_features_materialization_job_id_fkey"
+            columns: ["materialization_job_id"]
+            isOneToOne: false
+            referencedRelation: "compute_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      feature_completeness_log: {
+        Row: {
+          forecast_id: string
+          id: string
+          logged_at: string
+          missing_features: string[]
+          overall_completeness: number
+          recent_activity_available: boolean
+          recent_activity_feature_id: string | null
+          recent_activity_window_days: number | null
+          snow_cover_age_hours: number | null
+          snow_cover_available: boolean
+          snow_cover_snapshot_id: string | null
+          terrain_available: boolean
+          weather_available: boolean
+          weather_freshness_hours: number | null
+          weather_source: string | null
+        }
+        Insert: {
+          forecast_id: string
+          id?: string
+          logged_at?: string
+          missing_features?: string[]
+          overall_completeness: number
+          recent_activity_available?: boolean
+          recent_activity_feature_id?: string | null
+          recent_activity_window_days?: number | null
+          snow_cover_age_hours?: number | null
+          snow_cover_available?: boolean
+          snow_cover_snapshot_id?: string | null
+          terrain_available?: boolean
+          weather_available?: boolean
+          weather_freshness_hours?: number | null
+          weather_source?: string | null
+        }
+        Update: {
+          forecast_id?: string
+          id?: string
+          logged_at?: string
+          missing_features?: string[]
+          overall_completeness?: number
+          recent_activity_available?: boolean
+          recent_activity_feature_id?: string | null
+          recent_activity_window_days?: number | null
+          snow_cover_age_hours?: number | null
+          snow_cover_available?: boolean
+          snow_cover_snapshot_id?: string | null
+          terrain_available?: boolean
+          weather_available?: boolean
+          weather_freshness_hours?: number | null
+          weather_source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feature_completeness_log_forecast_id_fkey"
+            columns: ["forecast_id"]
+            isOneToOne: false
+            referencedRelation: "forecasts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calibration_profiles: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          description: string | null
+          feature_scalars: Json
+          hazard_type: string
+          id: string
+          post_processing_rules: Json
+          profile_version: string
+          region_name: string
+          season_window: string | null
+          status: string
+          trained_on_evaluation_run_id: string | null
+          uncertainty_base: number
+          uncertainty_per_missing_feature: number
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          description?: string | null
+          feature_scalars?: Json
+          hazard_type?: string
+          id?: string
+          post_processing_rules?: Json
+          profile_version: string
+          region_name: string
+          season_window?: string | null
+          status?: string
+          trained_on_evaluation_run_id?: string | null
+          uncertainty_base?: number
+          uncertainty_per_missing_feature?: number
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          description?: string | null
+          feature_scalars?: Json
+          hazard_type?: string
+          id?: string
+          post_processing_rules?: Json
+          profile_version?: string
+          region_name?: string
+          season_window?: string | null
+          status?: string
+          trained_on_evaluation_run_id?: string | null
+          uncertainty_base?: number
+          uncertainty_per_missing_feature?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calibration_profiles_trained_on_evaluation_run_id_fkey"
+            columns: ["trained_on_evaluation_run_id"]
+            isOneToOne: false
+            referencedRelation: "evaluation_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      threshold_profiles: {
+        Row: {
+          alert_threshold_risk: number
+          approved_at: string | null
+          approved_by: string | null
+          calibration_method: string
+          created_at: string
+          description: string | null
+          derived_from_evaluation_run_id: string | null
+          expected_false_alarm_rate: number | null
+          expected_precision_risk3: number | null
+          expected_recall_risk3: number | null
+          hazard_type: string
+          id: string
+          profile_version: string
+          region_name: string
+          risk_1_max: number
+          risk_2_max: number
+          risk_3_max: number
+          risk_4_max: number
+          severe_alert_threshold_risk: number
+          season_window: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          alert_threshold_risk?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          calibration_method?: string
+          created_at?: string
+          description?: string | null
+          derived_from_evaluation_run_id?: string | null
+          expected_false_alarm_rate?: number | null
+          expected_precision_risk3?: number | null
+          expected_recall_risk3?: number | null
+          hazard_type?: string
+          id?: string
+          profile_version: string
+          region_name?: string
+          risk_1_max?: number
+          risk_2_max?: number
+          risk_3_max?: number
+          risk_4_max?: number
+          severe_alert_threshold_risk?: number
+          season_window?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          alert_threshold_risk?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          calibration_method?: string
+          created_at?: string
+          description?: string | null
+          derived_from_evaluation_run_id?: string | null
+          expected_false_alarm_rate?: number | null
+          expected_precision_risk3?: number | null
+          expected_recall_risk3?: number | null
+          hazard_type?: string
+          id?: string
+          profile_version?: string
+          region_name?: string
+          risk_1_max?: number
+          risk_2_max?: number
+          risk_3_max?: number
+          risk_4_max?: number
+          severe_alert_threshold_risk?: number
+          season_window?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "threshold_profiles_derived_from_evaluation_run_id_fkey"
+            columns: ["derived_from_evaluation_run_id"]
+            isOneToOne: false
+            referencedRelation: "evaluation_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      promotion_events: {
+        Row: {
+          automatic: boolean
+          created_at: string
+          decision: string
+          decision_reason: string | null
+          decided_by: string | null
+          event_type: string
+          evaluation_run_id: string | null
+          hazard_type: string
+          id: string
+          new_version: string
+          previous_version: string | null
+          region_name: string | null
+          triggering_metrics: Json
+        }
+        Insert: {
+          automatic?: boolean
+          created_at?: string
+          decision: string
+          decision_reason?: string | null
+          decided_by?: string | null
+          event_type: string
+          evaluation_run_id?: string | null
+          hazard_type?: string
+          id?: string
+          new_version: string
+          previous_version?: string | null
+          region_name?: string | null
+          triggering_metrics: Json
+        }
+        Update: {
+          automatic?: boolean
+          created_at?: string
+          decision?: string
+          decision_reason?: string | null
+          decided_by?: string | null
+          event_type?: string
+          evaluation_run_id?: string | null
+          hazard_type?: string
+          id?: string
+          new_version?: string
+          previous_version?: string | null
+          region_name?: string | null
+          triggering_metrics?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promotion_events_evaluation_run_id_fkey"
+            columns: ["evaluation_run_id"]
+            isOneToOne: false
+            referencedRelation: "evaluation_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rollback_state: {
+        Row: {
+          can_rollback_to: boolean
+          calibration_profile_version: string | null
+          created_at: string
+          hazard_type: string
+          id: string
+          model_version: string | null
+          region_name: string
+          rolled_back_at: string | null
+          rolled_back_by: string | null
+          snapshot_metrics: Json | null
+          threshold_profile_version: string | null
+        }
+        Insert: {
+          can_rollback_to?: boolean
+          calibration_profile_version?: string | null
+          created_at?: string
+          hazard_type?: string
+          id?: string
+          model_version?: string | null
+          region_name?: string
+          rolled_back_at?: string | null
+          rolled_back_by?: string | null
+          snapshot_metrics?: Json | null
+          threshold_profile_version?: string | null
+        }
+        Update: {
+          can_rollback_to?: boolean
+          calibration_profile_version?: string | null
+          created_at?: string
+          hazard_type?: string
+          id?: string
+          model_version?: string | null
+          region_name?: string
+          rolled_back_at?: string | null
+          rolled_back_by?: string | null
+          snapshot_metrics?: Json | null
+          threshold_profile_version?: string | null
+        }
+        Relationships: []
+      }
+      model_registry: {
+        Row: {
+          activated_at: string | null
+          activated_by: string | null
+          activation_evaluation_run_id: string | null
+          created_at: string
+          feature_importance: Json | null
+          feature_version: string
+          hazard_type: string
+          id: string
+          model_artifact_url: string | null
+          model_type: string
+          model_version: string
+          retired_at: string | null
+          retired_reason: string | null
+          status: string
+          superseded_by_version: string | null
+          training_dataset_version: string | null
+          training_f1: number | null
+          training_precision: number | null
+          training_recall: number | null
+          training_run_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          activated_at?: string | null
+          activated_by?: string | null
+          activation_evaluation_run_id?: string | null
+          created_at?: string
+          feature_importance?: Json | null
+          feature_version: string
+          hazard_type?: string
+          id?: string
+          model_artifact_url?: string | null
+          model_type?: string
+          model_version: string
+          retired_at?: string | null
+          retired_reason?: string | null
+          status?: string
+          superseded_by_version?: string | null
+          training_dataset_version?: string | null
+          training_f1?: number | null
+          training_precision?: number | null
+          training_recall?: number | null
+          training_run_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          activated_at?: string | null
+          activated_by?: string | null
+          activation_evaluation_run_id?: string | null
+          created_at?: string
+          feature_importance?: Json | null
+          feature_version?: string
+          hazard_type?: string
+          id?: string
+          model_artifact_url?: string | null
+          model_type?: string
+          model_version?: string
+          retired_at?: string | null
+          retired_reason?: string | null
+          status?: string
+          superseded_by_version?: string | null
+          training_dataset_version?: string | null
+          training_f1?: number | null
+          training_precision?: number | null
+          training_recall?: number | null
+          training_run_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "model_registry_activation_evaluation_run_id_fkey"
+            columns: ["activation_evaluation_run_id"]
+            isOneToOne: false
+            referencedRelation: "evaluation_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      active_learning_queue: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          forecast_id: string
+          forecast_outcome_id: string | null
+          hazard_type: string
+          id: string
+          priority_score: number
+          reason: string
+          resolution: string | null
+          resolution_notes: string | null
+          review_status: string
+          uncertainty_score: number | null
+          predicted_risk: number | null
+          resolved_at: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          forecast_id: string
+          forecast_outcome_id?: string | null
+          hazard_type?: string
+          id?: string
+          priority_score?: number
+          reason: string
+          resolution?: string | null
+          resolution_notes?: string | null
+          review_status?: string
+          uncertainty_score?: number | null
+          predicted_risk?: number | null
+          resolved_at?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          forecast_id?: string
+          forecast_outcome_id?: string | null
+          hazard_type?: string
+          id?: string
+          priority_score?: number
+          reason?: string
+          resolution?: string | null
+          resolution_notes?: string | null
+          review_status?: string
+          uncertainty_score?: number | null
+          predicted_risk?: number | null
+          resolved_at?: string | null
+        }
+        Relationships: []
+      }
+      label_matching_policies: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          exclude_manual_events: boolean
+          exclude_unverified_reports: boolean
+          elevation_band_width_m: number
+          elevation_flexibility_m: number
+          hazard_type: string
+          id: string
+          lead_time_discount_factor: number
+          min_event_verification: string
+          min_forecast_confidence: number
+          policy_version: string
+          spatial_tolerance_m: number
+          temporal_tolerance_hours: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          exclude_manual_events?: boolean
+          exclude_unverified_reports?: boolean
+          elevation_band_width_m?: number
+          elevation_flexibility_m?: number
+          hazard_type?: string
+          id?: string
+          lead_time_discount_factor?: number
+          min_event_verification?: string
+          min_forecast_confidence?: number
+          policy_version: string
+          spatial_tolerance_m?: number
+          temporal_tolerance_hours?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          exclude_manual_events?: boolean
+          exclude_unverified_reports?: boolean
+          elevation_band_width_m?: number
+          elevation_flexibility_m?: number
+          hazard_type?: string
+          id?: string
+          lead_time_discount_factor?: number
+          min_event_verification?: string
+          min_forecast_confidence?: number
+          policy_version?: string
+          spatial_tolerance_m?: number
+          temporal_tolerance_hours?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -332,6 +1243,7 @@ export type Database = {
     }
     Enums: {
       event_type: "slab" | "loose" | "wet" | "glide" | "cornice" | "unknown"
+      hazard_type: "avalanche"
       job_status: "pending" | "running" | "completed" | "failed"
       job_type:
         | "forecast"
@@ -340,7 +1252,15 @@ export type Database = {
         | "fine_tune"
         | "static_precompute"
         | "field_report_enrichment"
+        | "snow_cover_refresh"
+        | "recent_activity_refresh"
+        | "label_forecast_outcomes"
+        | "run_evaluation"
+        | "retrain_avalanche_model"
       report_status: "pending" | "verified" | "rejected"
+      verification_status: "unverified" | "weak" | "verified" | "expert_verified"
+      label_role: "training_label" | "display_only" | "excluded"
+      review_status: "pending" | "under_review" | "approved" | "rejected" | "needs_info"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -477,8 +1397,17 @@ export const Constants = {
         "fine_tune",
         "static_precompute",
         "field_report_enrichment",
+        "snow_cover_refresh",
+        "recent_activity_refresh",
+        "label_forecast_outcomes",
+        "run_evaluation",
+        "retrain_avalanche_model",
       ],
       report_status: ["pending", "verified", "rejected"],
+      hazard_type: ["avalanche"],
+      verification_status: ["unverified", "weak", "verified", "expert_verified"],
+      label_role: ["training_label", "display_only", "excluded"],
+      review_status: ["pending", "under_review", "approved", "rejected", "needs_info"],
     },
   },
 } as const

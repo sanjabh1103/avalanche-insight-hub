@@ -121,7 +121,7 @@ git commit -m "fix: normalize field report geometry payload"
 - [ ] **Step 2: Add the env example**
 
 ```env
-VITE_SUPABASE_PROJECT_ID="rmzipvwqafrxhhuinggf"
+VITE_SUPABASE_PROJECT_ID="fzheroisjhxnairglelv"
 VITE_SUPABASE_PUBLISHABLE_KEY="your-anon-key-here"
 VITE_SUPABASE_URL="http://127.0.0.1:54321"
 ```
@@ -172,4 +172,3 @@ Confirm:
 - [ ] **Step 5: Record the final verification state**
 
 Capture the exact command outputs and any residual environment assumptions in the final handoff.
-

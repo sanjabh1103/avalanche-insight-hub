@@ -58,12 +58,18 @@ export default function FieldReportForm({ open, onClose, onSubmitted, regionCent
     setSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const { error } = await supabase.from('field_reports').insert({
+      const { data: report, error } = await supabase.from('field_reports').insert({
         user_id: user?.id,
+        hazard_type: 'avalanche',
+        review_status: 'pending',
+        training_eligible: false,
         description: description.trim(),
         location: `SRID=4326;POINT(${parsedLng} ${parsedLat})` as unknown,
-      });
+      }).select('id').single();
       if (error) throw error;
+      if (!report?.id) {
+        throw new Error('Failed to create field report');
+      }
 
       onSubmitted?.({
         id: `field-report-${Date.now()}`,
@@ -78,14 +84,20 @@ export default function FieldReportForm({ open, onClose, onSubmitted, regionCent
         location_name: '',
       });
 
-      setTimeout(() => {
-        toast.success('Field report submitted successfully');
-      }, 0);
+      const { error: enrichmentError } = await supabase.functions.invoke('field-report-enrichment', {
+        body: {
+          fieldReportId: report.id,
+          lat: parsedLat,
+          lng: parsedLng,
+          description: description.trim(),
+          hazard_type: 'avalanche',
+        },
+      });
+      if (enrichmentError) {
+        console.error('field-report-enrichment failed', enrichmentError);
+      }
 
-      // Log field_report_enrichment job for Admin panel visibility
-      supabase.functions.invoke('trigger-job', {
-        body: { type: 'field_report_enrichment' },
-      }).catch(() => { /* non-blocking */ });
+      toast.success('Field report submitted successfully');
 
       setDescription('');
       onClose();

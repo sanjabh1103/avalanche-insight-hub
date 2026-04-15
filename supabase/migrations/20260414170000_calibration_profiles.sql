@@ -57,12 +57,15 @@ CREATE INDEX IF NOT EXISTS idx_calibration_profiles_region
 CREATE TABLE IF NOT EXISTS public.threshold_profiles (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   profile_version text NOT NULL UNIQUE,
-  
+
   -- Scope
   region_name text NOT NULL DEFAULT 'global',
   season_window text DEFAULT 'all',
   hazard_type public.hazard_type NOT NULL DEFAULT 'avalanche',
-  
+
+  -- Documentation
+  description text,
+
   -- Threshold definitions (raw score 0-1 to risk 1-5)
   -- Using explicit columns for type safety and clarity
   risk_1_max double precision NOT NULL DEFAULT 0.20, -- score <= this = risk 1

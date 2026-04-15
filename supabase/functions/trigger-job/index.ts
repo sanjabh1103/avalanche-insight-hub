@@ -15,6 +15,34 @@ async function reverseGeocode(lat: number, lng: number): Promise<string> {
   }
 }
 
+async function invokeEdgeFunction(functionName: string, payload: Record<string, unknown>) {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`${functionName} failed (${response.status}): ${text}`);
+  }
+
+  return text ? JSON.parse(text) as Record<string, unknown> : {};
+}
+
+const delegatedJobTypes = new Set([
+  'snow_cover_refresh',
+  'recent_activity_refresh',
+  'label_forecast_outcomes',
+  'run_evaluation',
+]);
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -24,6 +52,8 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
+
+  let jobId: string | null = null;
 
   try {
     const { type, bbox, hazard_type: hazardType = 'avalanche' } = await req.json();
@@ -52,6 +82,38 @@ serve(async (req) => {
       });
     }
 
+    if (delegatedJobTypes.has(type)) {
+      const delegatedPayload: Record<string, unknown> = { hazard_type: hazardType };
+      if (type === 'snow_cover_refresh') {
+        delegatedPayload.region_name = 'global';
+        delegatedPayload.bbox = bbox || [-180, -90, 180, 90];
+        delegatedPayload.date = new Date().toISOString().split('T')[0];
+      } else if (type === 'recent_activity_refresh') {
+        delegatedPayload.region_name = 'global';
+        delegatedPayload.window_days = 7;
+        delegatedPayload.materialize_cells = false;
+      } else if (type === 'label_forecast_outcomes') {
+        delegatedPayload.days_back = 30;
+      } else if (type === 'run_evaluation') {
+        delegatedPayload.days_back = 30;
+      }
+
+      const result = await invokeEdgeFunction(
+        type === 'recent_activity_refresh'
+          ? 'recent-activity-refresh'
+          : type === 'label_forecast_outcomes'
+            ? 'label-forecast-outcomes'
+            : type === 'run_evaluation'
+              ? 'run-evaluation'
+              : 'ingest-snow-cover',
+        delegatedPayload,
+      );
+
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -63,6 +125,7 @@ serve(async (req) => {
       .select('id')
       .single();
     if (jobErr) throw jobErr;
+    jobId = job.id;
 
     let result: Record<string, unknown> = {};
 
@@ -207,13 +270,29 @@ serve(async (req) => {
     } else if (type === 'field_report_enrichment') {
       result = { simulated: true, createdEvent: false };
     } else if (type === 'snow_cover_refresh') {
-      result = { simulated: true, hazard_type: hazardType, refresh_target: 'snow_cover_snapshots' };
+      result = await invokeEdgeFunction('ingest-snow-cover', {
+        hazard_type: hazardType,
+        region_name: 'global',
+        bbox: bbox || [-180, -90, 180, 90],
+        date: new Date().toISOString().split('T')[0],
+      });
     } else if (type === 'recent_activity_refresh') {
-      result = { simulated: true, hazard_type: hazardType, refresh_target: 'avalanche_recent_activity_features' };
+      result = await invokeEdgeFunction('recent-activity-refresh', {
+        hazard_type: hazardType,
+        region_name: 'global',
+        window_days: 7,
+        materialize_cells: false,
+      });
     } else if (type === 'label_forecast_outcomes') {
-      result = { simulated: true, hazard_type: hazardType, labels_generated: 0 };
+      result = await invokeEdgeFunction('label-forecast-outcomes', {
+        hazard_type: hazardType,
+        days_back: 30,
+      });
     } else if (type === 'run_evaluation') {
-      result = { simulated: true, hazard_type: hazardType, evaluation_status: 'queued' };
+      result = await invokeEdgeFunction('run-evaluation', {
+        hazard_type: hazardType,
+        days_back: 30,
+      });
     } else if (type === 'retrain_avalanche_model') {
       result = { simulated: true, hazard_type: hazardType, training_status: 'queued' };
     }
@@ -221,12 +300,25 @@ serve(async (req) => {
     await supabase
       .from('compute_jobs')
       .update({ status: 'completed', result })
-      .eq('id', job.id);
+      .eq('id', jobId);
 
     return new Response(JSON.stringify({ jobId: job.id, result }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (supabaseUrl && serviceRoleKey && jobId) {
+      try {
+        const supabase = createClient(supabaseUrl, serviceRoleKey);
+        await supabase
+          .from('compute_jobs')
+          .update({ status: 'failed', error: (err as Error).message })
+          .eq('id', jobId);
+      } catch {
+        // Best effort only; original error still returns to caller.
+      }
+    }
     return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

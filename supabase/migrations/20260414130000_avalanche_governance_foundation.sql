@@ -45,7 +45,7 @@ ALTER TABLE public.model_status
 
 ALTER TABLE public.avalanche_events
   ADD COLUMN IF NOT EXISTS hazard_type public.hazard_type NOT NULL DEFAULT 'avalanche',
-  ADD COLUMN IF NOT EXISTS event_geom geometry(Geometry, 4326),
+  ADD COLUMN IF NOT EXISTS event_geom extensions.geometry(Geometry, 4326),
   ADD COLUMN IF NOT EXISTS event_subtype text,
   ADD COLUMN IF NOT EXISTS trigger_type text,
   ADD COLUMN IF NOT EXISTS size_scale text,

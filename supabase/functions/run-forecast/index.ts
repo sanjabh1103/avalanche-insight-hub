@@ -209,6 +209,27 @@ function buildForecastMetadata(weather: WeatherData | null, hours: number, model
   };
 }
 
+async function invokeEdgeFunction(functionName: string, body: Record<string, unknown>) {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`${functionName} failed (${response.status}): ${text}`);
+  }
+
+  return text ? JSON.parse(text) as Record<string, unknown> : {};
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -216,12 +237,6 @@ serve(async (req) => {
 
   try {
     const { bbox, timeOffset = 0, regionName, hours = 24, hazard_type: hazardType = 'avalanche' } = await req.json();
-    if (hazardType !== 'avalanche') {
-      return new Response(JSON.stringify({ error: 'Only avalanche forecasts are currently supported' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
@@ -306,6 +321,31 @@ serve(async (req) => {
       model_version: metadata.modelVersion,
       calibration_profile_version: metadata.calibrationProfile,
     });
+
+    const downstreamRefreshes = hazardType === 'avalanche'
+      ? [
+          invokeEdgeFunction('ingest-snow-cover', {
+            hazard_type: hazardType,
+            region_name: regionName || 'global',
+            bbox,
+            date: new Date().toISOString().split('T')[0],
+          }),
+          invokeEdgeFunction('recent-activity-refresh', {
+            hazard_type: hazardType,
+            region_name: regionName || 'global',
+            window_days: 7,
+            materialize_cells: false,
+          }),
+        ]
+      : [];
+
+    if (downstreamRefreshes.length > 0) {
+      const settled = await Promise.allSettled(downstreamRefreshes);
+      const failures = settled.filter((item) => item.status === 'rejected') as PromiseRejectedResult[];
+      if (failures.length > 0) {
+        console.warn('Downstream refresh failures:', failures.map((failure) => failure.reason));
+      }
+    }
 
     // Mark complete
     await supabase

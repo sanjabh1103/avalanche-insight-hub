@@ -1,8 +1,8 @@
 # Supabase Setup Guide - Lovable Project
 
 ## Project Details
-- **Supabase Project ID**: `rmzipvwqafrxhhuinggf`
-- **Supabase URL**: `https://rmzipvwqafrxhhuinggf.supabase.co`
+- **Supabase Project ID**: `fzheroisjhxnairglelv`
+- **Supabase URL**: `https://fzheroisjhxnairglelv.supabase.co`
 - **Lovable Project**: `https://lovable.dev/projects/449cc2d7-09f8-469d-a41b-e012a283cfb6`
 
 ## Current Status
@@ -124,7 +124,7 @@ If any table shows "DISABLED" or constraint is missing:
 2. Run:
 ```bash
 supabase login --token YOUR_TOKEN
-supabase link --project-ref rmzipvwqafrxhhuinggf
+supabase link --project-ref fzheroisjhxnairglelv
 supabase db push
 ```
 

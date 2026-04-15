@@ -10,8 +10,8 @@ BEGIN
       CHECK (
         location IS NULL
         OR (
-          ST_Y(location::geometry) BETWEEN -90 AND 90
-          AND ST_X(location::geometry) BETWEEN -180 AND 180
+          ST_Y(location::extensions.geometry) BETWEEN -90 AND 90
+          AND ST_X(location::extensions.geometry) BETWEEN -180 AND 180
         )
       );
   END IF;

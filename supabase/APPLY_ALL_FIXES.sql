@@ -86,7 +86,7 @@ BEGIN
       'daily-enrichment-job',
       '0 0 * * *',
       'SELECT net.http_post(
-        url:=''https://rmzipvwqafrxhhuinggf.supabase.co/functions/v1/trigger-job'',
+        url:=''https://fzheroisjhxnairglelv.supabase.co/functions/v1/trigger-job'',
         headers:=''{"Content-Type": "application/json"}''::jsonb,
         body:=''{"type": "daily_enrichment"}''::jsonb
       )'

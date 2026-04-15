@@ -10,7 +10,7 @@ SELECT cron.schedule(
   'daily-enrichment-job',      -- job name
   '0 0 * * *',                 -- cron expression: midnight UTC daily
   'SELECT net.http_post(
-    url:=''https://rmzipvwqafrxhhuinggf.supabase.co/functions/v1/trigger-job'',
+    url:=''https://fzheroisjhxnairglelv.supabase.co/functions/v1/trigger-job'',
     headers:=''{"Content-Type": "application/json", "Authorization": "Bearer " || (SELECT anon_key FROM pgsodium.decrypt_auth_data())}''::jsonb,
     body:=''{"type": "daily_enrichment"}''::jsonb
   )'
