@@ -22,6 +22,15 @@ interface OSMGeometryPoint {
   lon: number;
 }
 
+interface OSMElement {
+  type?: 'way' | 'node';
+  tags?: Record<string, string>;
+  center?: OSMGeometryPoint;
+  geometry?: OSMGeometryPoint[];
+  lat?: number;
+  lon?: number;
+}
+
 interface VoxelCoordinate {
   x: number;
   y: number;
@@ -85,6 +94,85 @@ function localToGeo(x: number, z: number, bbox: [number, number, number, number]
   return [lat, lng];
 }
 
+function buildTerrainFallback(bbox: [number, number, number, number]): VoxelCoordinate[] {
+  const voxels: VoxelCoordinate[] = [];
+
+  for (let x = -WORLD_SIZE / 2; x < WORLD_SIZE / 2; x++) {
+    for (let z = -WORLD_SIZE / 2; z < WORLD_SIZE / 2; z++) {
+      const [lat, lng] = localToGeo(x, z, bbox);
+      voxels.push({ x, y: 0, z, data: { type: 'ground', lat, lng } });
+    }
+  }
+
+  return voxels;
+}
+
+function buildVoxelGridFromOSM(data: { elements?: OSMElement[] }, bbox: [number, number, number, number]): VoxelCoordinate[] {
+  // 2D grid to track what's at x,z
+  const gridMap = new Map<string, BaseBlock>();
+
+  // Ground plane
+  for (let x = -WORLD_SIZE / 2; x < WORLD_SIZE / 2; x++) {
+    for (let z = -WORLD_SIZE / 2; z < WORLD_SIZE / 2; z++) {
+      const [lat, lng] = localToGeo(x, z, bbox);
+      gridMap.set(`${x},${z}`, { type: 'ground', lat, lng });
+    }
+  }
+
+  for (const el of (data.elements || [])) {
+    const tags = (el.tags || {}) as Record<string, string>;
+
+    if (el.type === 'way' && tags.building && (el.center || el.geometry)) {
+      const levels = parseInt(tags['building:levels'] || '3', 10);
+      const height = Math.max(2, Math.min(8, levels));
+      const geom = el.geometry || [];
+      const pts = el.center ? [el.center] : geom;
+      pts.forEach((p: OSMGeometryPoint) => {
+        const [x, z] = geoToLocal(p.lat, p.lon, bbox);
+        gridMap.set(`${x},${z}`, { type: 'building', lat: p.lat, lng: p.lon, levelInfo: height });
+      });
+    } else if (el.type === 'way' && tags.highway && el.geometry) {
+      el.geometry.forEach((p: OSMGeometryPoint) => {
+        const [x, z] = geoToLocal(p.lat, p.lon, bbox);
+        // Only overwrite ground, not buildings
+        if (gridMap.get(`${x},${z}`)?.type === 'ground') {
+          gridMap.set(`${x},${z}`, { type: 'road', lat: p.lat, lng: p.lon });
+        }
+      });
+    } else if (el.type === 'way' && tags.landuse && (el.center || el.geometry)) {
+      const pts = el.center ? [el.center] : (el.geometry || []);
+      pts.forEach((p: OSMGeometryPoint) => {
+        const [x, z] = geoToLocal(p.lat, p.lon, bbox);
+        if (gridMap.get(`${x},${z}`)?.type === 'ground') {
+          gridMap.set(`${x},${z}`, { type: 'forest', lat: p.lat, lng: p.lon });
+        }
+      });
+    } else if (el.type === 'node' && tags.aerialway) {
+      const [x, z] = geoToLocal(el.lat, el.lon, bbox);
+      gridMap.set(`${x},${z}`, { type: 'lift', lat: el.lat, lng: el.lon });
+    }
+  }
+
+  // Convert map to 3D voxel coordinates (extrude)
+  const voxels: VoxelCoordinate[] = [];
+  gridMap.forEach((block, key) => {
+    const [x, z] = key.split(',').map(Number);
+    voxels.push({ x, y: 0, z, data: block });
+
+    if (block.type === 'building') {
+      const h = block.levelInfo || 3;
+      for (let y = 1; y < h; y++) {
+        voxels.push({ x, y, z, data: block });
+      }
+    } else if (block.type === 'lift') {
+      voxels.push({ x, y: 1, z, data: block });
+      voxels.push({ x, y: 2, z, data: block });
+    }
+  });
+
+  return voxels;
+}
+
 function findRiskForPosition(lat: number, lng: number, cells: GridCell[]): GridCell | undefined {
   return cells.find(c => lat >= c.lat && lat < c.latEnd && lng >= c.lng && lng < c.lngEnd);
 }
@@ -104,128 +192,60 @@ function getBaseColor(type: BaseBlock['type']): THREE.Color {
 // Store the in-progress promise for deduplication
 let pendingPromise: Promise<VoxelCoordinate[]> | null = null;
 
-async function fetchOSMData(bbox: [number, number, number, number], retryCount = 0): Promise<VoxelCoordinate[]> {
+async function fetchOSMData(bbox: [number, number, number, number]): Promise<VoxelCoordinate[]> {
   // Deduplication: if a fetch is already in progress, return that promise
   if (pendingPromise) {
     return pendingPromise;
   }
-  
+
   // Create and store the promise IMMEDIATELY (synchronously)
   // This prevents race conditions where multiple calls slip through
   pendingPromise = (async (): Promise<VoxelCoordinate[]> => {
     try {
       // Circuit breaker: add extra delay if we've had recent failures
       const circuitBreakerDelay = Math.min(consecutiveFailures * 3000, 15000);
-      
-      // Rate limiting: ensure minimum interval between requests
-      const now = Date.now();
-      const timeSinceLastRequest = now - lastRequestTime;
-      const requiredDelay = Math.max(MIN_REQUEST_INTERVAL, circuitBreakerDelay);
-      
-      if (timeSinceLastRequest < requiredDelay) {
-        await new Promise(resolve => setTimeout(resolve, requiredDelay - timeSinceLastRequest));
-      }
-      
-      const query = bboxToQuery(bbox);
-      
-      lastRequestTime = Date.now();
-      const res = await fetch(OVERPASS_URL, {
-        method: 'POST',
-        body: `data=${encodeURIComponent(query)}`,
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      });
-      
-      // Handle 429 (Rate Limit) and 504 (Gateway Timeout) with exponential backoff
-      if ((res.status === 429 || res.status === 504) && retryCount < MAX_RETRIES) {
-        consecutiveFailures++;
-        // Longer delays with jitter: 3s, 6s, 12s
-        const delay = Math.pow(2, retryCount) * 3000 + Math.random() * 1000;
-        await new Promise(resolve => setTimeout(resolve, delay));
-        return fetchOSMData(bbox, retryCount + 1);
-      }
-      
-      // Track failures for circuit breaker
-      if (res.status === 429 || res.status >= 500) {
-        consecutiveFailures++;
-      }
-      
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
-      
-      // Reset failure count on success
-      consecutiveFailures = 0;
-      
-      const data = await res.json();
-      
-      // 2D grid to track what's at x,z
-      const gridMap = new Map<string, BaseBlock>();
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        // Rate limiting: ensure minimum interval between requests
+        const now = Date.now();
+        const timeSinceLastRequest = now - lastRequestTime;
+        const requiredDelay = Math.max(MIN_REQUEST_INTERVAL, circuitBreakerDelay);
 
-      // Ground plane
-      for (let x = -WORLD_SIZE / 2; x < WORLD_SIZE / 2; x++) {
-        for (let z = -WORLD_SIZE / 2; z < WORLD_SIZE / 2; z++) {
-          const [lat, lng] = localToGeo(x, z, bbox);
-          gridMap.set(`${x},${z}`, { type: 'ground', lat, lng });
+        if (timeSinceLastRequest < requiredDelay) {
+          await new Promise(resolve => setTimeout(resolve, requiredDelay - timeSinceLastRequest));
         }
-      }
 
-      for (const el of (data.elements || [])) {
-        const tags = (el.tags || {}) as Record<string, string>;
+        const query = bboxToQuery(bbox);
 
-        if (el.type === 'way' && tags.building && (el.center || el.geometry)) {
-          const levels = parseInt(tags['building:levels'] || '3', 10);
-          const height = Math.max(2, Math.min(8, levels));
-          const geom = el.geometry || [];
-          const pts = el.center ? [el.center] : geom;
-          pts.forEach((p: OSMGeometryPoint) => {
-            const [x, z] = geoToLocal(p.lat, p.lon, bbox);
-            gridMap.set(`${x},${z}`, { type: 'building', lat: p.lat, lng: p.lon, levelInfo: height });
-          });
-        } else if (el.type === 'way' && tags.highway && el.geometry) {
-          el.geometry.forEach((p: OSMGeometryPoint) => {
-            const [x, z] = geoToLocal(p.lat, p.lon, bbox);
-            // Only overwrite ground, not buildings
-            if (gridMap.get(`${x},${z}`)?.type === 'ground') {
-              gridMap.set(`${x},${z}`, { type: 'road', lat: p.lat, lng: p.lon });
-            }
-          });
-        } else if (el.type === 'way' && tags.landuse && (el.center || el.geometry)) {
-          const pts = el.center ? [el.center] : (el.geometry || []);
-          pts.forEach((p: OSMGeometryPoint) => {
-            const [x, z] = geoToLocal(p.lat, p.lon, bbox);
-            if (gridMap.get(`${x},${z}`)?.type === 'ground') {
-              gridMap.set(`${x},${z}`, { type: 'forest', lat: p.lat, lng: p.lon });
-            }
-          });
-        } else if (el.type === 'node' && tags.aerialway) {
-          const [x, z] = geoToLocal(el.lat, el.lon, bbox);
-          gridMap.set(`${x},${z}`, { type: 'lift', lat: el.lat, lng: el.lon });
-        }
-      }
+        lastRequestTime = Date.now();
+        const res = await fetch(OVERPASS_URL, {
+          method: 'POST',
+          body: `data=${encodeURIComponent(query)}`,
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        });
 
-      // Convert map to 3D voxel coordinates (extrude)
-      const voxels: VoxelCoordinate[] = [];
-      gridMap.forEach((block, key) => {
-        const [x, z] = key.split(',').map(Number);
-        // Base layer
-        voxels.push({ x, y: 0, z, data: block });
-        
-        // Extrude buildings
-        if (block.type === 'building') {
-          const h = block.levelInfo || 3;
-          for (let y = 1; y < h; y++) {
-            voxels.push({ x, y, z, data: block });
+        if (res.status === 429 || res.status === 504) {
+          consecutiveFailures++;
+          if (attempt < MAX_RETRIES) {
+            const delay = Math.pow(2, attempt) * 3000 + Math.random() * 1000;
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
           }
-        } else if (block.type === 'lift') {
-          voxels.push({ x, y: 1, z, data: block });
-          voxels.push({ x, y: 2, z, data: block });
+          console.warn('Overpass API unavailable after retries, using terrain fallback');
+          return buildTerrainFallback(bbox);
         }
-      });
 
-      return voxels;
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+
+        consecutiveFailures = 0;
+        const data = await res.json();
+        return buildVoxelGridFromOSM(data, bbox);
+      }
     } catch (err) {
       consecutiveFailures++;
-      throw err;
+      console.warn('Failed to load OSM voxel data, using terrain fallback', err);
+      return buildTerrainFallback(bbox);
     } finally {
       pendingPromise = null;
     }
