@@ -15,15 +15,19 @@ async function reverseGeocode(lat: number, lng: number): Promise<string> {
   }
 }
 
-async function invokeEdgeFunction(functionName: string, payload: Record<string, unknown>) {
+async function invokeEdgeFunction(
+  functionName: string,
+  payload: Record<string, unknown>,
+  authorizationHeader: string | null,
+  apiKeyHeader: string | null,
+) {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${serviceRoleKey}`,
-      apikey: serviceRoleKey,
+      Authorization: authorizationHeader ?? `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')!}`,
+      apikey: apiKeyHeader ?? Deno.env.get('SUPABASE_ANON_KEY')!,
     },
     body: JSON.stringify(payload),
   });
@@ -54,6 +58,8 @@ serve(async (req) => {
   }
 
   let jobId: string | null = null;
+  const callerAuthorization = req.headers.get('authorization');
+  const callerApiKey = req.headers.get('apikey');
 
   try {
     const { type, bbox, hazard_type: hazardType = 'avalanche' } = await req.json();
@@ -107,6 +113,8 @@ serve(async (req) => {
               ? 'run-evaluation'
               : 'ingest-snow-cover',
         delegatedPayload,
+        callerAuthorization,
+        callerApiKey,
       );
 
       return new Response(JSON.stringify(result), {
@@ -275,24 +283,24 @@ serve(async (req) => {
         region_name: 'global',
         bbox: bbox || [-180, -90, 180, 90],
         date: new Date().toISOString().split('T')[0],
-      });
+      }, callerAuthorization, callerApiKey);
     } else if (type === 'recent_activity_refresh') {
       result = await invokeEdgeFunction('recent-activity-refresh', {
         hazard_type: hazardType,
         region_name: 'global',
         window_days: 7,
         materialize_cells: false,
-      });
+      }, callerAuthorization, callerApiKey);
     } else if (type === 'label_forecast_outcomes') {
       result = await invokeEdgeFunction('label-forecast-outcomes', {
         hazard_type: hazardType,
         days_back: 30,
-      });
+      }, callerAuthorization, callerApiKey);
     } else if (type === 'run_evaluation') {
       result = await invokeEdgeFunction('run-evaluation', {
         hazard_type: hazardType,
         days_back: 30,
-      });
+      }, callerAuthorization, callerApiKey);
     } else if (type === 'retrain_avalanche_model') {
       result = { simulated: true, hazard_type: hazardType, training_status: 'queued' };
     }

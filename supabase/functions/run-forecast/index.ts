@@ -211,13 +211,13 @@ function buildForecastMetadata(weather: WeatherData | null, hours: number, model
 
 async function invokeEdgeFunction(functionName: string, body: Record<string, unknown>) {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
   const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${serviceRoleKey}`,
-      apikey: serviceRoleKey,
+      Authorization: `Bearer ${anonKey}`,
+      apikey: anonKey,
     },
     body: JSON.stringify(body),
   });
