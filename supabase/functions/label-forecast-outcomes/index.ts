@@ -142,142 +142,182 @@ serve(async (req) => {
     let totalLabeled = 0;
     let totalSkipped = 0;
 
-    for (const forecast of (forecasts || [])) {
-      // Check if already labeled
-      const { data: existing } = await supabase
-        .from('forecast_outcomes')
-        .select('id')
-        .eq('forecast_id', forecast.id)
-        .limit(1);
-      
-      if (existing && existing.length > 0) {
-        totalSkipped++;
-        continue;
-      }
+    // Early exit guard: no forecasts found → mark complete with 0 labels immediately
+    if (!forecasts || forecasts.length === 0) {
+      const earlyResult = {
+        forecasts_processed: 0,
+        total_outcomes_labeled: 0,
+        forecasts_skipped: 0,
+        labeling_policy: policy,
+        note: 'No matching forecasts found in window. Completed with 0 labels.',
+      };
+      await supabase
+        .from('compute_jobs')
+        .update({ status: 'completed', result: earlyResult })
+        .eq('id', job.id);
+      return new Response(JSON.stringify(earlyResult), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
-      const hourlyGrids = forecast.hourly_grids || [];
-      const bbox = forecast.bbox || [0, 0, 0, 0];
-      const forecastTime = new Date(forecast.created_at);
-      
-      // Define outcome window (when events would verify this forecast)
-      const windowStart = new Date(forecastTime);
-      const windowEnd = new Date(forecastTime);
-      windowEnd.setHours(windowEnd.getHours() + policy.temporal_tolerance_hours);
+    // Wrap the labeling work in a timeout race to prevent stuck-running jobs
+    const labelingWork = async () => {
+      for (const forecast of forecasts) {
+        // Check if already labeled
+        const { data: existing } = await supabase
+          .from('forecast_outcomes')
+          .select('id')
+          .eq('forecast_id', forecast.id)
+          .limit(1);
+        
+        if (existing && existing.length > 0) {
+          totalSkipped++;
+          continue;
+        }
 
-      // Fetch candidate events in bbox + time window
-      // Expand bbox by tolerance
-      const latBuffer = policy.spatial_tolerance_m / 111000;
-      const lngBuffer = policy.spatial_tolerance_m / (111000 * Math.cos(bbox[0] * Math.PI / 180));
-      const searchBbox = [
-        bbox[0] - latBuffer,
-        bbox[1] - lngBuffer,
-        bbox[2] + latBuffer,
-        bbox[3] + lngBuffer,
-      ];
+        const hourlyGrids = forecast.hourly_grids || [];
+        const bbox = forecast.bbox || [0, 0, 0, 0];
+        const forecastTime = new Date(forecast.created_at);
+        
+        // Define outcome window (when events would verify this forecast)
+        const windowStart = new Date(forecastTime);
+        const windowEnd = new Date(forecastTime);
+        windowEnd.setHours(windowEnd.getHours() + policy.temporal_tolerance_hours);
 
-      const { data: events } = await supabase
-        .from('avalanche_events')
-        .select('id, location, timestamp, severity, verification_status, elevation_m, label_role')
-        .eq('hazard_type', hazardType)
-        .gte('timestamp', windowStart.toISOString())
-        .lte('timestamp', windowEnd.toISOString())
-        .not('label_role', 'eq', 'excluded');
+        // Fetch candidate events in bbox + time window
+        // Expand bbox by tolerance
+        const latBuffer = policy.spatial_tolerance_m / 111000;
+        const lngBuffer = policy.spatial_tolerance_m / (111000 * Math.cos(bbox[0] * Math.PI / 180));
+        
+        const { data: events } = await supabase
+          .from('avalanche_events')
+          .select('id, location, timestamp, severity, verification_status, elevation_m, label_role')
+          .eq('hazard_type', hazardType)
+          .gte('timestamp', windowStart.toISOString())
+          .lte('timestamp', windowEnd.toISOString())
+          .not('label_role', 'eq', 'excluded');
 
-      // Filter events by verification threshold
-      const eligibleEvents = (events || []).filter((e: any) => 
-        getVerificationRank(e.verification_status) >= minVerificationRank
-      );
+        // Filter events by verification threshold
+        const eligibleEvents = (events || []).filter((e: any) => 
+          getVerificationRank(e.verification_status) >= minVerificationRank
+        );
 
-      // Process each hour and cell
-      const outcomes = [];
-      for (let hour = 0; hour < hourlyGrids.length; hour++) {
-        const grid = hourlyGrids[hour];
-        if (!Array.isArray(grid)) continue;
+        // Process each hour and cell
+        const outcomes = [];
+        for (let hour = 0; hour < hourlyGrids.length; hour++) {
+          const grid = hourlyGrids[hour];
+          if (!Array.isArray(grid)) continue;
 
-        for (const cell of grid) {
-          if (!cell || typeof cell.row !== 'number') continue;
+          for (const cell of grid) {
+            if (!cell || typeof cell.row !== 'number') continue;
 
-          const cellElevation = estimateElevation(cell.row, 20, 1000, 4500);
-          
-          // Find nearest matching event
-          let nearestEvent: any = null;
-          let nearestDistance = Infinity;
-          let isElevationCompatible = false;
-
-          for (const event of eligibleEvents) {
-            // Parse location
-            const locMatch = event.location?.match(/POINT\(([^ ]+) ([^ ]+)\)/);
-            if (!locMatch) continue;
+            const cellElevation = estimateElevation(cell.row, 20, 1000, 4500);
             
-            const eventLng = parseFloat(locMatch[1]);
-            const eventLat = parseFloat(locMatch[2]);
-            
-            const distance = haversineDistance(cell.lat, cell.lng, eventLat, eventLng);
-            const elevOk = checkElevationCompatible(
-              cellElevation,
-              event.elevation_m,
-              policy.elevation_flexibility_m
-            );
+            // Find nearest matching event
+            let nearestEvent: any = null;
+            let nearestDistance = Infinity;
+            let isElevationCompatible = false;
 
-            if (distance <= policy.spatial_tolerance_m && elevOk) {
-              if (distance < nearestDistance) {
-                nearestDistance = distance;
-                nearestEvent = event;
-                isElevationCompatible = true;
+            for (const event of eligibleEvents) {
+              // Parse location
+              const locMatch = event.location?.match(/POINT\(([^ ]+) ([^ ]+)\)/);
+              if (!locMatch) continue;
+              
+              const eventLng = parseFloat(locMatch[1]);
+              const eventLat = parseFloat(locMatch[2]);
+              
+              const distance = haversineDistance(cell.lat, cell.lng, eventLat, eventLng);
+              const elevOk = checkElevationCompatible(
+                cellElevation,
+                event.elevation_m,
+                policy.elevation_flexibility_m
+              );
+
+              if (distance <= policy.spatial_tolerance_m && elevOk) {
+                if (distance < nearestDistance) {
+                  nearestDistance = distance;
+                  nearestEvent = event;
+                  isElevationCompatible = true;
+                }
               }
             }
-          }
 
-          // Determine label
-          const eventObserved = nearestEvent !== null;
-          const severityLabel = nearestEvent ? 
-            (nearestEvent.severity >= 4 ? 'severe' : 
-             nearestEvent.severity >= 3 ? 'moderate' : 'minor') : 'none';
+            // Determine label
+            const eventObserved = nearestEvent !== null;
+            const severityLabel = nearestEvent ? 
+              (nearestEvent.severity >= 4 ? 'severe' : 
+               nearestEvent.severity >= 3 ? 'moderate' : 'minor') : 'none';
+            
+            // Label confidence based on match quality
+            let labelConfidence = 0.5;
+            if (eventObserved) {
+              const distanceScore = Math.max(0, 1 - nearestDistance / policy.spatial_tolerance_m);
+              const verificationScore = getVerificationRank(nearestEvent.verification_status) / 3;
+              const elevationScore = isElevationCompatible ? 1.0 : 0.5;
+              labelConfidence = (distanceScore * 0.4 + verificationScore * 0.4 + elevationScore * 0.2);
+            }
+
+            outcomes.push({
+              forecast_id: forecast.id,
+              hazard_type: hazardType,
+              cell_row: cell.row,
+              cell_col: cell.col,
+              forecast_hour: hour,
+              predicted_risk_score: Math.round(cell.riskScore || 1),
+              predicted_hazard: cell.hazard || 0,
+              outcome_window_start: windowStart.toISOString(),
+              outcome_window_end: windowEnd.toISOString(),
+              event_observed: eventObserved,
+              severity_label: severityLabel,
+              distance_to_nearest_event_m: eventObserved ? nearestDistance : null,
+              nearest_event_id: nearestEvent?.id || null,
+              label_confidence: Number(labelConfidence.toFixed(3)),
+              label_version: 'v1.0.0',
+              spatial_tolerance_m: policy.spatial_tolerance_m,
+              temporal_tolerance_hours: policy.temporal_tolerance_hours,
+              elevation_band_compatible: isElevationCompatible,
+              excluded_from_training: !eventObserved && labelConfidence < 0.3,
+              exclusion_reason: !eventObserved && labelConfidence < 0.3 ? 'low_confidence_negative' : null,
+            });
+          }
+        }
+
+        // Batch insert outcomes
+        if (outcomes.length > 0) {
+          const { error: insertErr } = await supabase
+            .from('forecast_outcomes')
+            .insert(outcomes);
           
-          // Label confidence based on match quality
-          let labelConfidence = 0.5;
-          if (eventObserved) {
-            const distanceScore = Math.max(0, 1 - nearestDistance / policy.spatial_tolerance_m);
-            const verificationScore = getVerificationRank(nearestEvent.verification_status) / 3;
-            const elevationScore = isElevationCompatible ? 1.0 : 0.5;
-            labelConfidence = (distanceScore * 0.4 + verificationScore * 0.4 + elevationScore * 0.2);
+          if (!insertErr) {
+            totalLabeled += outcomes.length;
           }
-
-          outcomes.push({
-            forecast_id: forecast.id,
-            hazard_type: hazardType,
-            cell_row: cell.row,
-            cell_col: cell.col,
-            forecast_hour: hour,
-            predicted_risk_score: Math.round(cell.riskScore || 1),
-            predicted_hazard: cell.hazard || 0,
-            outcome_window_start: windowStart.toISOString(),
-            outcome_window_end: windowEnd.toISOString(),
-            event_observed: eventObserved,
-            severity_label: severityLabel,
-            distance_to_nearest_event_m: eventObserved ? nearestDistance : null,
-            nearest_event_id: nearestEvent?.id || null,
-            label_confidence: Number(labelConfidence.toFixed(3)),
-            label_version: 'v1.0.0',
-            spatial_tolerance_m: policy.spatial_tolerance_m,
-            temporal_tolerance_hours: policy.temporal_tolerance_hours,
-            elevation_band_compatible: isElevationCompatible,
-            excluded_from_training: !eventObserved && labelConfidence < 0.3,
-            exclusion_reason: !eventObserved && labelConfidence < 0.3 ? 'low_confidence_negative' : null,
-          });
         }
       }
+    };
 
-      // Batch insert outcomes
-      if (outcomes.length > 0) {
-        const { error: insertErr } = await supabase
-          .from('forecast_outcomes')
-          .insert(outcomes);
-        
-        if (!insertErr) {
-          totalLabeled += outcomes.length;
-        }
-      }
+    // Race labeling against 120-second timeout
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Labeling timed out after 120s — partial results saved')), 120000)
+    );
+
+    try {
+      await Promise.race([labelingWork(), timeoutPromise]);
+    } catch (timeoutErr) {
+      // Mark job completed with partial results rather than leaving it 'running'
+      const partialResult = {
+        forecasts_processed: (forecasts || []).length,
+        total_outcomes_labeled: totalLabeled,
+        forecasts_skipped: totalSkipped,
+        labeling_policy: policy,
+        warning: (timeoutErr as Error).message,
+      };
+      await supabase
+        .from('compute_jobs')
+        .update({ status: 'completed', result: partialResult })
+        .eq('id', job.id);
+      return new Response(JSON.stringify(partialResult), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const result = {

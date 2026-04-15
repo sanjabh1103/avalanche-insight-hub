@@ -58,6 +58,10 @@ export default function TimeSlider({ value, onChange, max = 24, playing: externa
         step={1}
         className="flex-1 [&_[role=slider]]:h-5 [&_[role=slider]]:w-5 md:[&_[role=slider]]:h-4 md:[&_[role=slider]]:w-4 touch-manipulation"
         aria-label="Timeline hour offset"
+        aria-valuemin={0}
+        aria-valuemax={max}
+        aria-valuenow={value}
+        aria-valuetext={`+${value}h of ${max}h forecast`}
       />
       <span className="font-mono text-xs text-muted-foreground w-12 text-right shrink-0">
         +{value}h

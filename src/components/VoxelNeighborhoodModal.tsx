@@ -309,15 +309,17 @@ function VoxelScene({
         minDistance={10}
         maxDistance={120}
       />
-      <instancedMesh
-        ref={meshRef}
-        args={[undefined, undefined, voxels.length]}
-        onPointerMove={handlePointerMove}
-        onPointerOut={() => onHoverEnd()}
-      >
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial />
-      </instancedMesh>
+      {voxels.length > 0 && (
+        <instancedMesh
+          ref={meshRef}
+          args={[undefined, undefined, voxels.length]}
+          onPointerMove={handlePointerMove}
+          onPointerOut={() => onHoverEnd()}
+        >
+          <boxGeometry args={[1, 1, 1]} />
+          <meshStandardMaterial />
+        </instancedMesh>
+      )}
     </>
   );
 }
@@ -392,6 +394,8 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
 
   if (!open) return null;
 
+  // hasRealData: blocks has been loaded (null = loading, [] or [..] = loaded)
+  // We always get ground voxels from OSM so blocks.length > 0 is always true after a successful fetch
   const hasRealData = blocks !== null && blocks.length > 0;
 
   return (

@@ -78,22 +78,27 @@ serve(async (req) => {
     const windowStart = new Date();
     windowStart.setDate(windowStart.getDate() - windowDays);
 
-    // Base query for events
-    let eventsQuery = supabase
+    // Base query for events — fetch all in the time window then filter by region client-side
+    // NOTE: filtering via .or('location_name.ilike...') fails because location_name is stored
+    // inside features JSONB and is not a real column. We select features here to do post-filter.
+    const eventsQuery = supabase
       .from('avalanche_events')
-      .select('id, location, timestamp, severity, verification_status, source, label_role, elevation_m, aspect_bucket')
+      .select('id, location, timestamp, severity, verification_status, source, label_role, elevation_m, aspect_bucket, features')
       .eq('hazard_type', hazardType)
       .gte('timestamp', windowStart.toISOString())
       .lte('timestamp', windowEnd.toISOString())
       .not('label_role', 'eq', 'excluded');
 
-    if (regionName) {
-      // Filter by region via location-based heuristics or stored region
-      eventsQuery = eventsQuery.or(`features->>location_name.ilike.%${regionName}%,location_name.ilike.%${regionName}%`);
-    }
-
-    const { data: events, error: eventsErr } = await eventsQuery;
+    const { data: rawEvents, error: eventsErr } = await eventsQuery;
     if (eventsErr) throw eventsErr;
+
+    // Client-side region filter using features->location_name JSONB field
+    const events = regionName
+      ? (rawEvents || []).filter((e: any) => {
+          const locName = (e.features as Record<string, unknown>)?.location_name;
+          return typeof locName === 'string' && locName.toLowerCase().includes(regionName.toLowerCase());
+        })
+      : (rawEvents || []);
 
     // Summarize by region level
     const regionSummary: EventSummary = {

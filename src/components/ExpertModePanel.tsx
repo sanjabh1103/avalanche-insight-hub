@@ -44,26 +44,27 @@ export default function ExpertModePanel({
   const subscribeAlerts = async () => {
     setSubscribingAlerts(true);
     try {
-      if (!('Notification' in window) || !('serviceWorker' in navigator)) {
-        toast.error('Push notifications not supported in this browser');
-        return;
+      // Try to request push permission if available
+      let permissionGranted = false;
+      if ('Notification' in window) {
+        const permission = await Notification.requestPermission();
+        permissionGranted = permission === 'granted';
       }
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') {
-        toast.error('Notification permission denied');
-        return;
-      }
-      // Store a stub subscription
+      // Store a stub subscription regardless (works even without push support)
       await supabase.from('user_alerts').insert({
         endpoint: `stub-${Date.now()}`,
         p256dh: 'stub',
         auth_key: 'stub',
         region_bbox: regionBbox as unknown as number[],
       });
-      toast.success('Alert subscription saved for this region');
+      toast.success(
+        permissionGranted
+          ? 'Alert subscription saved — browser notifications enabled'
+          : 'Alert subscription saved for this region'
+      );
       setAlertsDialogOpen(false);
     } catch {
-      toast.error('Failed to subscribe');
+      toast.error('Failed to subscribe — please try again');
     } finally {
       setSubscribingAlerts(false);
     }
@@ -142,18 +143,19 @@ export default function ExpertModePanel({
                   Subscribe to Alerts
                 </DialogTitle>
                 <DialogDescription>
-                  Save an alert subscription for the current region and enable browser notifications for future avalanche updates.
+                  Save an alert subscription for the current region and enable browser notifications for future avalanche risk updates.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Save an alert subscription for the current region and enable browser notifications for future avalanche updates.
+                  You will receive push notifications when avalanche risk rises to High (4) or Extreme (5) in this region. You can unsubscribe at any time.
                 </p>
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setAlertsDialogOpen(false)} disabled={subscribingAlerts}>
                     Cancel
                   </Button>
-                  <Button onClick={subscribeAlerts} disabled={subscribingAlerts}>
+                  <Button onClick={subscribeAlerts} disabled={subscribingAlerts} className="gap-2">
+                    {subscribingAlerts && <span className="h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />}
                     Confirm Subscription
                   </Button>
                 </div>

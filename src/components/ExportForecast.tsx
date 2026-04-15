@@ -21,8 +21,9 @@ export default function ExportForecast({ grid, events = [], regionName = 'Unknow
       return;
     }
 
-    // CSV Header
-    const headers = ['row', 'col', 'lat', 'lng', 'riskScore', 'hazard', 'exposure', 'vulnerability', 'problemType', ...Object.keys(grid.cells[0]?.shapValues || {})];
+    // CSV Header — guard against cells with missing shapValues (e.g. simulated grid)
+    const firstShapKeys = Object.keys(grid.cells[0]?.shapValues ?? {});
+    const headers = ['row', 'col', 'lat', 'lng', 'riskScore', 'hazard', 'exposure', 'vulnerability', 'problemType', ...firstShapKeys];
     
     // CSV Rows
     const rows = grid.cells.map(cell => [
@@ -35,7 +36,7 @@ export default function ExportForecast({ grid, events = [], regionName = 'Unknow
       cell.exposure.toFixed(3),
       cell.vulnerability.toFixed(3),
       cell.problemType,
-      ...Object.values(cell.shapValues).map(v => v.toFixed(3))
+      ...firstShapKeys.map(k => (cell.shapValues?.[k] ?? 0).toFixed(3))
     ]);
 
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');

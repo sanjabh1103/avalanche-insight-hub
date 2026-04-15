@@ -104,18 +104,30 @@ serve(async (req) => {
         delegatedPayload.days_back = 30;
       }
 
-      const result = await invokeEdgeFunction(
-        type === 'recent_activity_refresh'
-          ? 'recent-activity-refresh'
-          : type === 'label_forecast_outcomes'
-            ? 'label-forecast-outcomes'
-            : type === 'run_evaluation'
-              ? 'run-evaluation'
-              : 'ingest-snow-cover',
-        delegatedPayload,
-        callerAuthorization,
-        callerApiKey,
-      );
+      // Delegated job: invoke child function and proxy the response back.  
+      // The child function manages its OWN compute_job row (insert + update).
+      // We do NOT create a separate job row here to avoid 'stuck running' duplicates.
+      let result: Record<string, unknown>;
+      try {
+        result = await invokeEdgeFunction(
+          type === 'recent_activity_refresh'
+            ? 'recent-activity-refresh'
+            : type === 'label_forecast_outcomes'
+              ? 'label-forecast-outcomes'
+              : type === 'run_evaluation'
+                ? 'run-evaluation'
+                : 'ingest-snow-cover',
+          delegatedPayload,
+          callerAuthorization,
+          callerApiKey,
+        );
+      } catch (delegatedErr) {
+        // Surface the child function error cleanly rather than returning 500 with no detail
+        return new Response(JSON.stringify({ error: (delegatedErr as Error).message }), {
+          status: 502,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
 
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -277,30 +289,6 @@ serve(async (req) => {
       result = { simulated: true, regionsComputed: 12 };
     } else if (type === 'field_report_enrichment') {
       result = { simulated: true, createdEvent: false };
-    } else if (type === 'snow_cover_refresh') {
-      result = await invokeEdgeFunction('ingest-snow-cover', {
-        hazard_type: hazardType,
-        region_name: 'global',
-        bbox: bbox || [-180, -90, 180, 90],
-        date: new Date().toISOString().split('T')[0],
-      }, callerAuthorization, callerApiKey);
-    } else if (type === 'recent_activity_refresh') {
-      result = await invokeEdgeFunction('recent-activity-refresh', {
-        hazard_type: hazardType,
-        region_name: 'global',
-        window_days: 7,
-        materialize_cells: false,
-      }, callerAuthorization, callerApiKey);
-    } else if (type === 'label_forecast_outcomes') {
-      result = await invokeEdgeFunction('label-forecast-outcomes', {
-        hazard_type: hazardType,
-        days_back: 30,
-      }, callerAuthorization, callerApiKey);
-    } else if (type === 'run_evaluation') {
-      result = await invokeEdgeFunction('run-evaluation', {
-        hazard_type: hazardType,
-        days_back: 30,
-      }, callerAuthorization, callerApiKey);
     } else if (type === 'retrain_avalanche_model') {
       result = { simulated: true, hazard_type: hazardType, training_status: 'queued' };
     }

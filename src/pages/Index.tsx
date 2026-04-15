@@ -365,9 +365,9 @@ export default function Index() {
           </div>
 
           {/* Action Buttons */}
-          {/* B3/B9 fix: shift left when expert panel OR sidebar is open to avoid being obscured */}
+          {/* B3 fix: z-50 ensures buttons render above region combobox (also z-50) */}
           <div
-            className="absolute top-3 z-10 flex items-center gap-2 flex-wrap justify-end transition-all duration-300"
+            className="absolute top-3 z-50 flex items-center gap-2 flex-wrap justify-end transition-all duration-300"
             style={{
               right: (expertPanelOpen || (sidebarOpen && isMobile)) ? 'calc(20rem + 0.75rem)' : '0.75rem',
               maxWidth: sidebarOpen && isMobile ? 'calc(100vw - 21rem)' : 'auto'
