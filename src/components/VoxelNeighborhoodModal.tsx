@@ -69,6 +69,8 @@ let lastRequestTime = 0;
 let consecutiveFailures = 0;
 const MIN_REQUEST_INTERVAL = 5000; // 5 seconds minimum between requests
 const MAX_RETRIES = 3;
+const OVERPASS_FALLBACK_COOLDOWN_MS = 60_000;
+let overpassFallbackUntil = 0;
 
 function bboxToQuery(bbox: [number, number, number, number]) {
   const [latMin, lngMin, latMax, lngMax] = bbox;
@@ -83,15 +85,24 @@ function bboxToQuery(bbox: [number, number, number, number]) {
 
 async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(new Error('Overpass request timed out')), timeoutMs);
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const fetchPromise = fetch(url, {
+    ...options,
+    signal: controller.signal,
+  });
+
+  const timeoutPromise = new Promise<Response>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new Error('Overpass request timed out'));
+    }, timeoutMs);
+  });
 
   try {
-    return await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
+    return await Promise.race([fetchPromise, timeoutPromise]);
   } finally {
-    clearTimeout(timeoutId);
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 
@@ -204,6 +215,38 @@ function getBaseColor(type: BaseBlock['type']): THREE.Color {
   return new THREE.Color('#d1d5db'); // ground
 }
 
+function getTerrainHeight(cell: GridCell | undefined): number {
+  const hazard = cell?.hazard ?? 0.2;
+  return Math.max(1, Math.min(5, Math.round(1 + hazard * 4)));
+}
+
+function buildRenderedVoxels(voxels: VoxelCoordinate[], cells: GridCell[]): VoxelCoordinate[] {
+  const rendered: VoxelCoordinate[] = [];
+  const terrainHeights = new Map<string, number>();
+
+  for (const voxel of voxels) {
+    const key = `${voxel.x},${voxel.z}`;
+    let terrainHeight = terrainHeights.get(key);
+
+    if (terrainHeight === undefined) {
+      const cell = findRiskForPosition(voxel.data.lat, voxel.data.lng, cells);
+      terrainHeight = getTerrainHeight(cell);
+      terrainHeights.set(key, terrainHeight);
+    }
+
+    if (voxel.data.type === 'ground') {
+      for (let y = 0; y < terrainHeight; y++) {
+        rendered.push({ ...voxel, y, data: voxel.data });
+      }
+      continue;
+    }
+
+    rendered.push({ ...voxel, y: voxel.y + terrainHeight, data: voxel.data });
+  }
+
+  return rendered;
+}
+
 // Store the in-progress promise for deduplication
 let pendingPromise: Promise<VoxelCoordinate[]> | null = null;
 
@@ -211,6 +254,11 @@ async function fetchOSMData(bbox: [number, number, number, number]): Promise<Vox
   // Deduplication: if a fetch is already in progress, return that promise
   if (pendingPromise) {
     return pendingPromise;
+  }
+
+  if (Date.now() < overpassFallbackUntil) {
+    console.warn('Skipping Overpass fetch during cooldown, using terrain fallback');
+    return buildTerrainFallback(bbox);
   }
 
   // Create and store the promise IMMEDIATELY (synchronously)
@@ -240,11 +288,7 @@ async function fetchOSMData(bbox: [number, number, number, number]): Promise<Vox
 
         if (res.status === 429 || res.status === 504) {
           consecutiveFailures++;
-          if (attempt < MAX_RETRIES) {
-            const delay = Math.pow(2, attempt) * 3000 + Math.random() * 1000;
-            await new Promise(resolve => setTimeout(resolve, delay));
-            continue;
-          }
+          overpassFallbackUntil = Date.now() + OVERPASS_FALLBACK_COOLDOWN_MS;
           console.warn('Overpass API unavailable after retries, using terrain fallback');
           return buildTerrainFallback(bbox);
         }
@@ -254,11 +298,13 @@ async function fetchOSMData(bbox: [number, number, number, number]): Promise<Vox
         }
 
         consecutiveFailures = 0;
+        overpassFallbackUntil = 0;
         const data = await res.json();
         return buildVoxelGridFromOSM(data, bbox);
       }
     } catch (err) {
       consecutiveFailures++;
+      overpassFallbackUntil = Date.now() + OVERPASS_FALLBACK_COOLDOWN_MS;
       console.warn('Failed to load OSM voxel data, using terrain fallback', err);
       return buildTerrainFallback(bbox);
     } finally {
@@ -432,6 +478,11 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
     return gridCells;
   }, [hourlyGrids, timeOffset, gridCells]);
 
+  const renderedBlocks = useMemo(() => {
+    if (!blocks) return null;
+    return buildRenderedVoxels(blocks, currentCells);
+  }, [blocks, currentCells]);
+
   const cacheKey = useMemo(() => `voxel_grid_${bbox.join(',')}`, [bbox]);
 
   const fetchBlocks = useCallback(async () => {
@@ -502,7 +553,7 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
 
   // hasRealData: blocks has been loaded (null = loading, [] or [..] = loaded)
   // We always get ground voxels from OSM so blocks.length > 0 is always true after a successful fetch
-  const hasRealData = blocks !== null && blocks.length > 0;
+  const hasRealData = renderedBlocks !== null && renderedBlocks.length > 0;
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent
@@ -555,7 +606,7 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
               style={{ width: '100%', height: '100%', background: canvasBg }}
             >
               <VoxelScene
-                voxels={blocks!}
+                voxels={renderedBlocks!}
                 cells={currentCells}
                 onHover={setHovered}
                 onHoverEnd={() => setHovered(null)}
@@ -564,7 +615,7 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
               />
             </Canvas>
           ) : hasRealData ? (
-            <VoxelFallbackCanvas voxels={blocks!} cells={currentCells} canvasBg={canvasBg} />
+            <VoxelFallbackCanvas voxels={renderedBlocks!} cells={currentCells} canvasBg={canvasBg} />
           ) : (
             <div 
               className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground text-sm px-8 text-center"
@@ -620,7 +671,7 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
 
         <div className="p-3 border-t border-border text-[10px] text-muted-foreground flex items-center justify-between shrink-0">
           <span>3D view inspired by <a href="https://github.com/louis-e/arnis" target="_blank" rel="noopener noreferrer" className="underline text-primary/70 hover:text-primary">Arnis</a> (github.com/louis-e/arnis)</span>
-          <span>Hour {timeOffset} • {currentCells.length} cells • {blocks?.length || 0} voxels</span>
+          <span>Hour {timeOffset} • {currentCells.length} cells • {renderedBlocks?.length || 0} voxels</span>
         </div>
       </DialogContent>
     </Dialog>

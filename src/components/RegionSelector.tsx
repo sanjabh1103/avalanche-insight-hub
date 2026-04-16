@@ -30,8 +30,8 @@ export default function RegionSelector({ value, onChange }: Props) {
       const region = REGIONS.find(r => r.name === name);
       if (region) onChange(region);
     }}>
-      <SelectTrigger className="h-9 w-48 text-xs glass-panel border-0 gap-1.5">
-        <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+      <SelectTrigger className="h-10 w-56 text-xs glass-panel border-0 gap-1.5 text-foreground">
+        <MapPin className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
         <SelectValue placeholder="Select Region" />
       </SelectTrigger>
       <SelectContent className="bg-card border-border">

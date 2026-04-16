@@ -188,20 +188,20 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="space-y-3 p-3">
+    <div className="space-y-2 p-2.5 md:p-3">
       {/* System Controls */}
-      <Card className="border-0 bg-secondary/50">
-        <CardHeader className="p-3 pb-1">
-          <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground">System Controls</CardTitle>
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl shadow-lg shadow-black/20">
+        <CardHeader className="p-2 pb-1">
+          <CardTitle className="text-xs uppercase tracking-[0.24em] text-muted-foreground">System Controls</CardTitle>
         </CardHeader>
-        <CardContent className="p-3 pt-1">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <CardContent className="p-2 pt-1.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             {JOB_BUTTONS.map((btn) => (
               <Button
                 key={btn.type}
                 variant="outline"
                 size="sm"
-                className="text-xs h-auto py-2 justify-start gap-2"
+                className="text-xs h-auto min-h-[2.25rem] py-1.5 justify-start gap-2 rounded-2xl border-border/70 bg-black/10 hover:bg-white/5"
                 disabled={running !== null}
                 onClick={() => triggerJob(btn.type)}
                 title={btn.description}
@@ -211,41 +211,41 @@ export default function AdminDashboard() {
               </Button>
             ))}
           </div>
-          <div className="text-[10px] text-muted-foreground mt-2">
+          <div className="text-[10px] text-muted-foreground mt-1">
             New: Snow Cover, Activity, Labeling, Evaluation for avalanche accuracy roadmap
           </div>
         </CardContent>
       </Card>
 
-      <Card className="border-0 bg-secondary/50">
-        <CardContent className="p-3 flex items-center justify-between">
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+        <CardContent className="p-2.5 flex items-center justify-between gap-2">
           <div>
-            <div className="text-xs text-muted-foreground uppercase tracking-wider">Active Jobs</div>
-            <div className="text-[10px] text-muted-foreground mt-1">Realtime count of running compute jobs</div>
+            <div className="text-xs text-muted-foreground uppercase tracking-[0.24em]">Active Jobs</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">Realtime count of running compute jobs</div>
           </div>
-          <Badge className="bg-amber-500/20 text-amber-300 border-0 font-mono text-xs">
+          <Badge className="bg-amber-500/15 text-amber-300 border-0 font-mono text-xs rounded-full">
             {activeJobs}
           </Badge>
         </CardContent>
       </Card>
 
       {/* Forecast Analytics */}
-      <Card className="border-0 bg-secondary/50">
-        <CardHeader className="p-3 pb-1">
-          <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+        <CardHeader className="p-2 pb-1">
+          <CardTitle className="text-xs uppercase tracking-[0.24em] text-muted-foreground flex items-center gap-1.5">
             <TrendingUp className="h-3 w-3" />
             Forecast Analytics
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-3 pt-1">
-          <div className="flex items-baseline gap-1 mb-2">
-            <span className="text-lg font-mono font-bold text-foreground">{analytics.total}</span>
+        <CardContent className="p-2 pt-1.5">
+          <div className="flex items-baseline gap-1 mb-1">
+            <span className="text-base font-mono font-bold text-foreground">{analytics.total}</span>
             <span className="text-xs text-muted-foreground">total runs</span>
           </div>
           {analytics.regions.length > 0 && (
-            <div className="space-y-1">
+            <div className="space-y-0.5 max-h-20 overflow-y-auto pr-1">
               {analytics.regions.map(r => (
-                <div key={r.region_name} className="flex items-center justify-between text-xs">
+                <div key={r.region_name} className="flex items-center justify-between gap-2 text-[11px] py-1 border-b border-border/40 last:border-0">
                   <span className="text-muted-foreground truncate">{r.region_name}</span>
                   <span className="font-mono text-foreground">{r.count}</span>
                 </div>
@@ -256,23 +256,23 @@ export default function AdminDashboard() {
       </Card>
 
       {/* Evaluation + Outcomes */}
-      <Card className="border-0 bg-secondary/50">
-        <CardHeader className="p-3 pb-1">
-          <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+        <CardHeader className="p-2 pb-1">
+          <CardTitle className="text-xs uppercase tracking-[0.24em] text-muted-foreground flex items-center gap-1.5">
             <BarChart3 className="h-3 w-3" />
             Evaluation Runs
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-3 pt-1 space-y-2">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Forecast Outcomes</div>
+        <CardContent className="p-2 pt-1 space-y-1.25">
+          <div className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Forecast Outcomes</div>
           <div className="flex items-baseline gap-1">
-            <span className="text-lg font-mono font-bold text-foreground">{forecastOutcomes.length}</span>
+            <span className="text-base font-mono font-bold text-foreground">{forecastOutcomes.length}</span>
             <span className="text-xs text-muted-foreground">recent labels</span>
           </div>
           {forecastOutcomes.length > 0 ? (
-            <div className="space-y-1.5 max-h-36 overflow-y-auto">
+            <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
               {forecastOutcomes.map((outcome) => (
-                <div key={outcome.id} className="flex items-center justify-between text-[10px] gap-2 border-b border-border/50 last:border-0 pb-1">
+                <div key={outcome.id} className="flex items-center justify-between text-[10px] gap-2 border-b border-border/50 last:border-0 pb-0.5">
                   <div className="min-w-0">
                     <div className="font-mono text-muted-foreground truncate">
                       h{outcome.forecast_hour} • r{outcome.cell_row} c{outcome.cell_col}
@@ -293,10 +293,10 @@ export default function AdminDashboard() {
           ) : (
             <div className="text-xs text-muted-foreground">No labeled outcomes yet</div>
           )}
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground pt-1">Latest Evaluation</div>
+          <div className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground pt-0.5">Latest Evaluation</div>
           {evaluationRuns.length > 0 ? (
-            <div className="space-y-1.5">
-              <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px]">
+            <div className="space-y-1">
+              <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
                 <div className="text-muted-foreground">Prec @ risk4</div>
                 <div className="font-mono text-foreground text-right">
                   {evaluationRuns[0].overall_precision_risk4?.toFixed(2) ?? 'n/a'}
@@ -325,9 +325,9 @@ export default function AdminDashboard() {
               <div className="text-[10px] text-muted-foreground">
                 Latest run: {evaluationRuns[0].run_name} • {evaluationRuns[0].model_version}
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1 max-h-20 overflow-y-auto pr-1">
                 {evaluationRuns.slice(1, 3).map((run) => (
-                  <div key={run.id} className="flex items-center justify-between text-[10px]">
+                  <div key={run.id} className="flex items-center justify-between text-[10px] gap-2 py-1 border-b border-border/40 last:border-0">
                     <span className="text-muted-foreground truncate">{run.run_name} • {run.model_version}</span>
                     <Badge className={`border-0 ${statusColor(run.status)}`}>{run.status}</Badge>
                   </div>
@@ -337,11 +337,11 @@ export default function AdminDashboard() {
           ) : (
             <div className="text-xs text-muted-foreground">No evaluation runs yet</div>
           )}
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground pt-1">Slice Metrics</div>
+          <div className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground pt-0.5">Slice Metrics</div>
           {evaluationMetrics.length > 0 ? (
-            <div className="space-y-1.5 max-h-36 overflow-y-auto">
+            <div className="space-y-1 max-h-28 overflow-y-auto">
               {evaluationMetrics.slice(0, 4).map((metric) => (
-                <div key={metric.id} className="flex items-center justify-between gap-2 text-[10px] border-b border-border/50 last:border-0 pb-1">
+                <div key={metric.id} className="flex items-center justify-between gap-2 text-[10px] border-b border-border/50 last:border-0 pb-0.5">
                   <div className="min-w-0">
                     <div className="font-mono text-muted-foreground truncate">
                       {metric.slice_type}: {metric.slice_value}
@@ -365,19 +365,19 @@ export default function AdminDashboard() {
       </Card>
 
       {/* Field Reports */}
-      <Card className="border-0 bg-secondary/50">
-        <CardHeader className="p-3 pb-1">
-          <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+        <CardHeader className="p-2 pb-1">
+          <CardTitle className="text-xs uppercase tracking-[0.24em] text-muted-foreground flex items-center gap-1.5">
             <FileCheck className="h-3 w-3" />
             Field Reports
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-3 pt-1 space-y-1.5">
+        <CardContent className="p-2 pt-1 space-y-1 max-h-56 overflow-y-auto pr-1">
           {fieldReports.length === 0 ? (
             <div className="text-xs text-muted-foreground">No recent field reports</div>
           ) : (
             fieldReports.map((report) => (
-              <div key={report.id} className="flex items-start justify-between gap-2 text-[10px] border-b border-border/50 last:border-0 pb-1">
+              <div key={report.id} className="flex items-start justify-between gap-2 text-[10px] border-b border-border/50 last:border-0 pb-0.5">
                 <div className="min-w-0">
                   <div className="font-mono text-muted-foreground truncate">{new Date(report.created_at).toLocaleString()}</div>
                   <div className="text-muted-foreground line-clamp-2">{report.description || 'No description'}</div>
@@ -396,11 +396,11 @@ export default function AdminDashboard() {
 
       {/* System Config */}
       {systemConfig && (
-        <Card className="border-0 bg-secondary/50">
-          <CardContent className="p-3">
-            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Gemini API Usage (Enrichment Only)</div>
+        <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+          <CardContent className="p-2.5">
+            <div className="text-xs text-muted-foreground uppercase tracking-[0.24em] mb-1.5">Gemini API Usage (Enrichment Only)</div>
             <div className="flex items-baseline gap-1">
-              <span className="text-lg font-mono font-bold text-foreground">{systemConfig.gemini_usage}</span>
+              <span className="text-base font-mono font-bold text-foreground">{systemConfig.gemini_usage}</span>
               <span className="text-xs text-muted-foreground">/ {systemConfig.gemini_spend_cap} calls</span>
             </div>
             <div className="text-[10px] text-muted-foreground mt-1">Forecasts use Open-Meteo (free). Gemini only counts during daily enrichment.</div>
@@ -416,12 +416,12 @@ export default function AdminDashboard() {
 
       {/* Model Status */}
       {modelStatus && (
-        <Card className="border-0 bg-secondary/50">
-          <CardContent className="p-3">
-            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Model Status</div>
-            <div className="flex items-center justify-between mb-2">
+        <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+          <CardContent className="p-2.5">
+            <div className="text-xs text-muted-foreground uppercase tracking-[0.24em] mb-1.5">Model Status</div>
+            <div className="flex items-center justify-between mb-1.5">
               <span className="font-mono text-sm text-foreground">{modelStatus.version}</span>
-              <Badge className="bg-green-500/20 text-green-400 border-0 font-mono text-xs">
+              <Badge className="bg-emerald-500/15 text-emerald-400 border-0 font-mono text-xs rounded-full">
                 F1: {modelStatus.f1_score.toFixed(3)}
               </Badge>
             </div>
@@ -445,17 +445,17 @@ export default function AdminDashboard() {
       )}
 
       {/* Job History */}
-      <Card className="border-0 bg-secondary/50">
-        <CardHeader className="p-3 pb-1">
-          <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground">Recent Jobs</CardTitle>
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+        <CardHeader className="p-2 pb-1">
+          <CardTitle className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Recent Jobs</CardTitle>
         </CardHeader>
-        <CardContent className="p-3 pt-1">
+        <CardContent className="p-2 pt-1">
           {jobs.length === 0 ? (
             <div className="text-xs text-muted-foreground text-center py-4">No jobs yet</div>
           ) : (
-            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+            <div className="space-y-0.5 max-h-36 overflow-y-auto pr-1">
               {jobs.map((job) => (
-                <div key={job.id} className="flex items-center justify-between text-xs py-1.5 border-b border-border/50 last:border-0">
+                <div key={job.id} className="flex items-center justify-between text-xs py-1 border-b border-border/50 last:border-0 gap-2">
                   <span className="font-mono text-muted-foreground">{job.type.replace(/_/g, ' ')}</span>
                   <Badge variant="outline" className={`text-[10px] border-0 ${statusColor(job.status)}`}>
                     {job.status}

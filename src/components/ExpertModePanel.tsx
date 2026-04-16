@@ -74,23 +74,23 @@ export default function ExpertModePanel({
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: 320, opacity: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="w-80 h-full flex flex-col border-l border-border bg-card z-30 shrink-0 absolute md:relative right-0 top-0 bottom-0 shadow-xl overflow-y-auto"
+          className="w-[23rem] h-full flex flex-col border-l border-border/80 bg-card/90 backdrop-blur-2xl z-30 shrink-0 absolute md:relative right-0 top-0 bottom-0 shadow-2xl shadow-black/30 overflow-y-auto"
         >
-          <div className="p-4 border-b border-border flex items-center justify-between">
+          <div className="p-4 border-b border-border/70 flex items-center justify-between bg-secondary/20">
             <div className="flex items-center gap-2">
-              <Layers className="h-4 w-4 text-primary" />
-              <span className="text-sm font-semibold text-foreground">Expert Mode</span>
+              <Layers className="h-4 w-4 text-emerald-400" />
+              <span className="text-sm font-semibold text-foreground uppercase tracking-[0.18em]">Expert Mode</span>
             </div>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground hover:bg-white/5" onClick={onClose}>
               <X className="h-4 w-4" />
             </Button>
           </div>
 
           <div className="p-4 space-y-4">
             {/* Impact Overlays */}
-            <Card className="border-0 bg-secondary/50">
+            <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
               <CardHeader className="p-3 pb-1">
-                <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <CardTitle className="text-xs uppercase tracking-[0.24em] text-muted-foreground flex items-center gap-1.5">
                   <MapIcon className="h-3 w-3" /> Impact Overlays
                 </CardTitle>
               </CardHeader>
@@ -106,7 +106,7 @@ export default function ExpertModePanel({
                     </TooltipTrigger>
                     <TooltipContent side="left" className="text-xs">Generate block-by-block Minecraft-style map of your exact area using real OSM data</TooltipContent>
                   </Tooltip>
-                  <Button variant="outline" size="sm" className="h-7 text-[10px] px-2" onClick={onToggle3D}>Open 3D</Button>
+                  <Button variant="outline" size="sm" className="h-7 text-[10px] px-2 rounded-full border-border/70 bg-black/10 hover:bg-white/5" onClick={onToggle3D}>Open 3D</Button>
                 </div>
               </CardContent>
             </Card>
@@ -115,12 +115,12 @@ export default function ExpertModePanel({
             <HydrographChart hourlyGrids={hourlyGrids} selectedCell={selectedCell} />
 
             {/* Alerts */}
-            <Card className="border-0 bg-secondary/50">
+            <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
               <CardContent className="p-3">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="w-full gap-2 text-xs"
+                  className="w-full gap-2 text-xs rounded-2xl border-border/70 bg-black/10 hover:bg-white/5"
                   onClick={() => setAlertsDialogOpen(true)}
                   aria-label="Subscribe to alerts for this region"
                 >
@@ -132,10 +132,10 @@ export default function ExpertModePanel({
           </div>
 
           <Dialog open={alertsDialogOpen} onOpenChange={setAlertsDialogOpen}>
-            <DialogContent className="bg-card border-border max-w-sm">
+            <DialogContent className="bg-card border-border max-w-sm shadow-2xl shadow-black/40">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-foreground">
-                  <Bell className="h-4 w-4 text-primary" />
+                  <Bell className="h-4 w-4 text-emerald-400" />
                   Subscribe to Alerts
                 </DialogTitle>
                 <DialogDescription>

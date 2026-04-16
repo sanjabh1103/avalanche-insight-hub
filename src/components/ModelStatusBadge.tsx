@@ -46,7 +46,7 @@ export default function ModelStatusBadge() {
 
   return (
     <div className="flex flex-col gap-1">
-      <Badge variant="outline" className="gap-1.5 border-green-500/30 text-green-400 text-xs font-mono w-fit">
+      <Badge variant="outline" className="gap-1.5 border-emerald-500/30 text-emerald-400 text-xs font-mono w-fit bg-emerald-500/5">
         <BrainCircuit className="h-3 w-3" />
         {status.version} • F1 {status.f1_score?.toFixed(2) ?? '—'}
       </Badge>

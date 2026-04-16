@@ -20,7 +20,10 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
   if (!cell) {
     return (
       <div className="p-4 text-center text-muted-foreground">
-        <p className="text-sm">Click a grid tile on the map to inspect risk details</p>
+        <div className="rounded-2xl border border-border/70 bg-black/20 px-4 py-6">
+          <p className="text-sm">Click a grid tile on the map to inspect risk details</p>
+          <p className="mt-2 text-[10px] uppercase tracking-[0.24em] text-muted-foreground/80">Telemetry standby</p>
+        </div>
       </div>
     );
   }
@@ -33,14 +36,14 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
   const maxShap = Math.max(...shapData.map(d => d.value), 0.01);
 
   return (
-    <div className="space-y-3 p-3">
+    <div className="space-y-3 p-4">
       {/* Risk Score */}
-      <Card className="border-0 bg-secondary/50">
+      <Card className="border border-border/70 bg-card/70 backdrop-blur-xl shadow-lg shadow-black/20">
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-muted-foreground uppercase tracking-wider">Risk Level</span>
+            <span className="text-xs text-muted-foreground uppercase tracking-[0.24em]">Risk Level</span>
             <Badge
-              className="text-xs font-mono"
+              className="text-xs font-mono rounded-full border-0"
               style={{ backgroundColor: getRiskColor(cell.riskScore), color: '#000' }}
             >
               {cell.riskScore} — {RISK_LABELS[cell.riskScore]}
@@ -59,12 +62,12 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
           { label: 'Exposure', value: cell.exposure },
           { label: 'Vulnerability', value: cell.vulnerability },
         ].map((g) => (
-          <Card key={g.label} className="border-0 bg-secondary/50">
+          <Card key={g.label} className="border border-border/70 bg-card/60 backdrop-blur-xl">
             <CardContent className="p-3 text-center">
               <div className="text-lg font-mono font-bold text-foreground">
                 {(g.value * 100).toFixed(0)}%
               </div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-[0.22em]">
                 {g.label}
               </div>
             </CardContent>
@@ -74,13 +77,13 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
 
       {/* Real Weather Values (Story #11 - Open-Meteo for all regions) */}
       {weatherSummary && (
-        <Card className="border-0 bg-secondary/50">
+        <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
           <CardHeader className="p-3 pb-1">
             <div className="flex items-center gap-2">
-              <CardTitle className="text-xs text-green-400 uppercase tracking-wider">
+              <CardTitle className="text-xs text-emerald-400 uppercase tracking-[0.24em]">
                 Live Weather (Open-Meteo)
               </CardTitle>
-              <Badge className="bg-green-500/20 text-green-400 border-0 text-[8px] px-1.5 py-0">
+              <Badge className="bg-emerald-500/15 text-emerald-400 border-0 text-[8px] px-1.5 py-0 rounded-full">
                 ● LIVE
               </Badge>
             </div>
@@ -113,9 +116,9 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
       )}
 
       {/* SHAP Values - CSS bar chart instead of recharts */}
-      <Card className="border-0 bg-secondary/50">
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
         <CardHeader className="p-3 pb-1">
-          <CardTitle className="text-xs text-muted-foreground uppercase tracking-wider">
+          <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.24em]">
             SHAP Feature Importance
           </CardTitle>
         </CardHeader>
@@ -125,12 +128,12 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
               <span className="text-[9px] text-secondary-foreground w-16 text-right truncate font-mono">
                 {d.name}
               </span>
-              <div className="flex-1 h-4 bg-muted rounded overflow-hidden">
+              <div className="flex-1 h-4 bg-black/20 rounded-full overflow-hidden">
                 <div
-                  className="h-full rounded transition-all duration-300"
+                  className="h-full rounded-full transition-all duration-300"
                   style={{
                     width: `${(d.value / maxShap) * 100}%`,
-                    backgroundColor: `hsl(199, ${70 + i * 4}%, ${55 - i * 5}%)`,
+                    backgroundColor: `hsl(156, ${72 + i * 3}%, ${50 - i * 4}%)`,
                   }}
                 />
               </div>

@@ -26,7 +26,7 @@ export default function HydrographChart({ hourlyGrids, selectedCell }: Props) {
 
   if (!data.length) {
     return (
-      <Card className="border-0 bg-secondary/50">
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
         <CardContent className="p-4 text-center text-muted-foreground text-xs">
           Run a forecast and select a cell to see the hydrograph
         </CardContent>
@@ -35,26 +35,26 @@ export default function HydrographChart({ hourlyGrids, selectedCell }: Props) {
   }
 
   return (
-    <Card className="border-0 bg-secondary/50">
+    <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
       <CardHeader className="p-3 pb-1">
-        <CardTitle className="text-xs text-muted-foreground uppercase tracking-wider">
+        <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.24em]">
           Risk Evolution — Cell [{selectedCell!.row},{selectedCell!.col}]
         </CardTitle>
       </CardHeader>
       <CardContent className="p-3 pt-1">
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={data} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 14% 20%)" />
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(224 16% 20%)" />
             <XAxis dataKey="hour" tick={{ fontSize: 9, fill: 'hsl(215 14% 55%)' }} interval={Math.floor(data.length / 8)} />
             <YAxis tick={{ fontSize: 9, fill: 'hsl(215 14% 55%)' }} domain={[0, 5]} />
             <Tooltip
-              contentStyle={{ background: 'hsl(220 18% 10%)', border: '1px solid hsl(220 14% 18%)', fontSize: 11 }}
+              contentStyle={{ background: 'hsl(224 24% 10%)', border: '1px solid hsl(224 16% 18%)', fontSize: 11, borderRadius: 14 }}
               labelStyle={{ color: 'hsl(210 20% 92%)' }}
             />
             <Legend wrapperStyle={{ fontSize: 10 }} />
-            <Line type="monotone" dataKey="risk" stroke="hsl(0 72% 51%)" strokeWidth={2} dot={false} name="Danger" />
-            <Line type="monotone" dataKey="hazard" stroke="hsl(199 89% 48%)" strokeWidth={1.5} dot={false} name="Hazard %" />
-            <Line type="monotone" dataKey="exposure" stroke="hsl(45 93% 47%)" strokeWidth={1} dot={false} name="Exposure %" />
+            <Line type="monotone" dataKey="risk" stroke="hsl(0 72% 58%)" strokeWidth={2} dot={false} name="Danger" />
+            <Line type="monotone" dataKey="hazard" stroke="hsl(156 74% 45%)" strokeWidth={1.5} dot={false} name="Hazard %" />
+            <Line type="monotone" dataKey="exposure" stroke="hsl(45 93% 55%)" strokeWidth={1} dot={false} name="Exposure %" />
           </LineChart>
         </ResponsiveContainer>
       </CardContent>

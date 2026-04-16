@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,44 +7,44 @@
 @layer base {
   /* Light mode (default) */
   :root {
-    --background: 210 20% 98%;
-    --foreground: 220 20% 10%;
+    --background: 224 28% 6%;
+    --foreground: 210 22% 94%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 220 20% 10%;
+    --card: 224 24% 10%;
+    --card-foreground: 210 22% 94%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 20% 10%;
+    --popover: 224 24% 10%;
+    --popover-foreground: 210 22% 94%;
 
-    --primary: 199 89% 48%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 156 74% 45%;
+    --primary-foreground: 224 28% 6%;
 
-    --secondary: 210 20% 96%;
-    --secondary-foreground: 220 20% 20%;
+    --secondary: 224 18% 14%;
+    --secondary-foreground: 210 22% 84%;
 
-    --muted: 210 20% 94%;
-    --muted-foreground: 215 14% 45%;
+    --muted: 224 18% 12%;
+    --muted-foreground: 220 12% 60%;
 
-    --accent: 199 89% 48%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 156 74% 45%;
+    --accent-foreground: 224 28% 6%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 14% 88%;
-    --input: 220 14% 88%;
-    --ring: 199 89% 48%;
+    --border: 224 16% 18%;
+    --input: 224 16% 18%;
+    --ring: 156 74% 45%;
 
-    --radius: 0.75rem;
+    --radius: 1rem;
 
-    --sidebar-background: 210 20% 96%;
-    --sidebar-foreground: 220 20% 20%;
-    --sidebar-primary: 199 89% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 20% 92%;
-    --sidebar-accent-foreground: 220 20% 20%;
-    --sidebar-border: 220 14% 88%;
-    --sidebar-ring: 199 89% 48%;
+    --sidebar-background: 224 24% 8%;
+    --sidebar-foreground: 210 22% 88%;
+    --sidebar-primary: 156 74% 45%;
+    --sidebar-primary-foreground: 224 28% 6%;
+    --sidebar-accent: 224 18% 14%;
+    --sidebar-accent-foreground: 210 22% 88%;
+    --sidebar-border: 224 16% 18%;
+    --sidebar-ring: 156 74% 45%;
 
     /* Risk colors (same for both modes for consistency) */
     --risk-1: 142 71% 45%;
@@ -54,52 +54,52 @@
     --risk-5: 0 72% 51%;
 
     /* Glass */
-    --glass-bg: 0 0% 100% / 0.8;
-    --glass-border: 220 14% 88% / 0.5;
+    --glass-bg: 224 24% 10% / 0.82;
+    --glass-border: 224 16% 22% / 0.62;
   }
 
   /* Dark mode */
   .dark {
-    --background: 220 20% 7%;
-    --foreground: 210 20% 92%;
+    --background: 224 28% 6%;
+    --foreground: 210 22% 94%;
 
-    --card: 220 18% 10%;
-    --card-foreground: 210 20% 92%;
+    --card: 224 24% 10%;
+    --card-foreground: 210 22% 94%;
 
-    --popover: 220 18% 10%;
-    --popover-foreground: 210 20% 92%;
+    --popover: 224 24% 10%;
+    --popover-foreground: 210 22% 94%;
 
-    --primary: 199 89% 48%;
-    --primary-foreground: 220 20% 7%;
+    --primary: 156 74% 45%;
+    --primary-foreground: 224 28% 6%;
 
-    --secondary: 220 16% 16%;
-    --secondary-foreground: 210 20% 82%;
+    --secondary: 224 18% 14%;
+    --secondary-foreground: 210 22% 84%;
 
-    --muted: 220 14% 14%;
-    --muted-foreground: 215 14% 55%;
+    --muted: 224 18% 12%;
+    --muted-foreground: 220 12% 60%;
 
-    --accent: 199 89% 48%;
-    --accent-foreground: 220 20% 7%;
+    --accent: 156 74% 45%;
+    --accent-foreground: 224 28% 6%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 210 20% 98%;
 
-    --border: 220 14% 18%;
-    --input: 220 14% 18%;
-    --ring: 199 89% 48%;
+    --border: 224 16% 18%;
+    --input: 224 16% 18%;
+    --ring: 156 74% 45%;
 
-    --sidebar-background: 220 18% 8%;
-    --sidebar-foreground: 210 20% 82%;
-    --sidebar-primary: 199 89% 48%;
-    --sidebar-primary-foreground: 220 20% 7%;
-    --sidebar-accent: 220 14% 14%;
-    --sidebar-accent-foreground: 210 20% 82%;
-    --sidebar-border: 220 14% 18%;
-    --sidebar-ring: 199 89% 48%;
+    --sidebar-background: 224 24% 8%;
+    --sidebar-foreground: 210 22% 88%;
+    --sidebar-primary: 156 74% 45%;
+    --sidebar-primary-foreground: 224 28% 6%;
+    --sidebar-accent: 224 18% 14%;
+    --sidebar-accent-foreground: 210 22% 88%;
+    --sidebar-border: 224 16% 18%;
+    --sidebar-ring: 156 74% 45%;
 
     /* Glass */
-    --glass-bg: 220 18% 10% / 0.8;
-    --glass-border: 220 14% 24% / 0.5;
+    --glass-bg: 224 24% 10% / 0.82;
+    --glass-border: 224 16% 22% / 0.62;
   }
 }
 
@@ -110,36 +110,42 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'Inter', sans-serif;
+    font-family: 'IBM Plex Sans', sans-serif;
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at top left, hsl(156 74% 45% / 0.12), transparent 28%),
+      radial-gradient(circle at 80% 10%, hsl(199 90% 60% / 0.08), transparent 24%),
+      linear-gradient(180deg, hsl(224 28% 8%), hsl(224 28% 5%));
   }
 
   .font-mono {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'IBM Plex Mono', monospace;
   }
 }
 
 /* Leaflet overrides for theme modes */
 .theme-aware-map {
-  background: hsl(var(--background)) !important;
+  background: linear-gradient(180deg, hsl(224 28% 8%), hsl(224 28% 5%)) !important;
 }
 
 .leaflet-control-zoom a {
-  background: hsl(var(--card)) !important;
+  background: hsl(var(--card) / 0.95) !important;
   color: hsl(var(--foreground)) !important;
   border-color: hsl(var(--border)) !important;
 }
 
 .leaflet-control-attribution {
-  background: hsl(var(--card) / 0.75) !important;
+  background: hsl(var(--card) / 0.78) !important;
   color: hsl(var(--muted-foreground)) !important;
   font-size: 10px !important;
 }
 
 /* Glass panel */
 .glass-panel {
-  background: hsl(var(--glass-bg));
-  backdrop-filter: blur(16px);
+  background: linear-gradient(180deg, hsl(var(--glass-bg)), hsl(224 24% 8% / 0.72));
+  backdrop-filter: blur(20px) saturate(140%);
   border: 1px solid hsl(var(--glass-border));
+  box-shadow: 0 18px 48px hsl(224 40% 2% / 0.35);
 }
 
 /* Risk grid tile animation */
@@ -152,9 +158,9 @@
   width: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: hsl(220 18% 8%);
+  background: hsl(224 28% 6%);
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(220 14% 24%);
+  background: hsl(224 16% 24%);
   border-radius: 3px;
 }

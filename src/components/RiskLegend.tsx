@@ -2,8 +2,8 @@ import { RISK_COLORS, RISK_LABELS } from '@/lib/constants';
 
 export default function RiskLegend() {
   return (
-    <div className="glass-panel rounded-lg p-3 space-y-1.5">
-      <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">
+    <div className="glass-panel rounded-2xl p-3 space-y-1.5">
+      <div className="text-[10px] text-muted-foreground uppercase tracking-[0.24em] mb-2">
         Avalanche Danger
       </div>
       {[1, 2, 3, 4, 5].map((level) => (

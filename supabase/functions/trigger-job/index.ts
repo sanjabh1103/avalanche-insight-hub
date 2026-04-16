@@ -15,6 +15,32 @@ async function reverseGeocode(lat: number, lng: number): Promise<string> {
   }
 }
 
+async function incrementGeminiUsage(supabase: ReturnType<typeof createClient>) {
+  const { data: config, error: readErr } = await supabase
+    .from('system_config')
+    .select('id, gemini_usage, gemini_spend_cap')
+    .limit(1)
+    .maybeSingle();
+
+  if (readErr) throw readErr;
+
+  if (config?.id) {
+    const { error: updateErr } = await supabase
+      .from('system_config')
+      .update({ gemini_usage: (config.gemini_usage || 0) + 1 })
+      .eq('id', config.id);
+
+    if (updateErr) throw updateErr;
+    return;
+  }
+
+  const { error: insertErr } = await supabase
+    .from('system_config')
+    .insert({ gemini_usage: 1, gemini_spend_cap: 1000 });
+
+  if (insertErr) throw insertErr;
+}
+
 async function invokeEdgeFunction(
   functionName: string,
   payload: Record<string, unknown>,
@@ -179,7 +205,14 @@ serve(async (req) => {
                     }),
                   },
                 );
-                const geminiData = await geminiRes.json();
+                await incrementGeminiUsage(supabase);
+
+                const geminiText = await geminiRes.text();
+                if (!geminiRes.ok) {
+                  throw new Error(`Gemini API request failed (${geminiRes.status}): ${geminiText}`);
+                }
+
+                const geminiData = JSON.parse(geminiText);
                 const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
                 const jsonMatch = text.match(/\{[\s\S]*\}/);
                 if (jsonMatch) {
@@ -201,11 +234,6 @@ serve(async (req) => {
                       features: { location_name: locName || article.title },
                     });
                   }
-                }
-                // Increment Gemini usage counter
-                const { data: cfg } = await supabase.from('system_config').select('gemini_usage').limit(1).single();
-                if (cfg) {
-                  await supabase.from('system_config').update({ gemini_usage: (cfg.gemini_usage || 0) + 1 }).not('id', 'is', null);
                 }
               } catch { /* skip */ }
             }

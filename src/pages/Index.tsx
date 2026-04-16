@@ -241,6 +241,8 @@ export default function Index() {
     return generateForecastGrid(region.bbox, timeOffset);
   }, [timeOffset, region.bbox, hourlyGrids]);
 
+  const controlInset = !isMobile && (expertPanelOpen || sidebarOpen) ? 'calc(23rem + 1rem)' : '1rem';
+
   const handleCellClick = useCallback((cell: GridCell) => {
     setSelectedCell(cell);
     if (isMobile) setSidebarOpen(true);
@@ -279,8 +281,10 @@ export default function Index() {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-background">
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-foreground">
       <DisclaimerBanner />
+
+      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top_left,_hsl(156_74%_45%_/_0.14),_transparent_30%),radial-gradient(circle_at_80%_0%,_hsl(199_90%_60%_/_0.09),_transparent_22%)]" />
 
       <div className="flex-1 flex overflow-hidden relative">
         {/* Mobile overlay */}
@@ -296,39 +300,43 @@ export default function Index() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: -320, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="w-80 h-full flex flex-col border-r border-border bg-card z-30 shrink-0 absolute md:relative left-0 top-0 bottom-0 shadow-xl"
+              className="w-[23rem] h-full flex flex-col border-r border-border/80 bg-card/90 backdrop-blur-2xl z-30 shrink-0 absolute md:relative left-0 top-0 bottom-0 shadow-2xl shadow-black/30"
             >
-              <div className="p-4 border-b border-border bg-card/70 backdrop-blur-sm">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Mountain className="h-6 w-6 text-primary" />
-                    <div>
-                      <h1 className="text-sm font-semibold text-foreground">Avalanche Hub</h1>
-                      <p className="text-[10px] text-muted-foreground">Risk Intelligence Platform</p>
+              <div className="p-5 border-b border-border/70 bg-secondary/20">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/10 border border-emerald-500/20 shadow-[0_0_24px_hsl(156_74%_45%_/_0.18)]">
+                      <Mountain className="h-5 w-5 text-emerald-400" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <h1 className="text-sm font-semibold tracking-[0.18em] uppercase text-foreground">Avalanche Hub</h1>
+                      </div>
+                      <p className="text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Noir control room</p>
                     </div>
                   </div>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 touch-manipulation" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar">
+                  <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl touch-manipulation text-muted-foreground hover:text-foreground hover:bg-white/5" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar">
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
-                <div className="mt-3">
+                <div className="mt-4 rounded-2xl border border-emerald-500/15 bg-black/20 px-3 py-2.5">
                   <ModelStatusBadge />
                 </div>
               </div>
 
               <Tabs defaultValue="dashboard" className="flex-1 flex flex-col min-h-0">
-                <TabsList className="mx-3 mt-3 bg-secondary">
-                  <TabsTrigger value="dashboard" className="flex items-center gap-1.5 text-xs">
+                <TabsList className="mx-4 mt-4 grid grid-cols-2 bg-secondary/60 border border-border/70 p-1 h-11 rounded-2xl">
+                  <TabsTrigger value="dashboard" className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] rounded-xl data-[state=active]:bg-emerald-500 data-[state=active]:text-black">
                     <BarChart3 className="h-3.5 w-3.5" /> Dashboard
                   </TabsTrigger>
-                  <TabsTrigger value="admin" className="flex items-center gap-1.5 text-xs">
+                  <TabsTrigger value="admin" className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] rounded-xl data-[state=active]:bg-emerald-500 data-[state=active]:text-black">
                     <Settings className="h-3.5 w-3.5" /> Admin
                   </TabsTrigger>
                 </TabsList>
-                <TabsContent value="dashboard" className="flex-1 overflow-y-auto mt-0">
+                <TabsContent value="dashboard" className="flex-1 overflow-y-auto mt-0 px-2 pb-3">
                   <RiskDashboard cell={selectedCell} weatherSummary={weatherSummary} />
                 </TabsContent>
-                <TabsContent value="admin" className="flex-1 overflow-y-auto mt-0">
+                <TabsContent value="admin" className="flex-1 overflow-y-auto mt-0 px-2 pb-3">
                   <AdminDashboard />
                 </TabsContent>
               </Tabs>
@@ -339,70 +347,80 @@ export default function Index() {
         {/* Main Map Area */}
         <div className="flex-1 relative flex flex-col min-h-0">
           {/* Top Controls */}
-          <div className="absolute top-3 left-3 z-50 flex flex-col gap-2 max-w-[calc(100vw-140px)]">
-            {!sidebarOpen && (
-              <Button variant="outline" size="icon" className="h-10 w-10 glass-panel border-0 touch-manipulation" onClick={() => setSidebarOpen(true)} aria-label="Open sidebar">
-                <Menu className="h-5 w-5" />
-              </Button>
-            )}
-            <div className="flex items-center gap-2 glass-panel rounded-xl px-2 py-2 shadow-sm relative z-50">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground pl-1 pr-1.5">Region</span>
-              <RegionSelector value={region.name} onChange={handleRegionChange} />
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-2 glass-panel rounded-xl px-2 py-2 shadow-sm">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground pl-1 pr-1.5">Display</span>
-                <ThemeToggle />
-              </div>
-              {/* Expert Mode Toggle */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-2 glass-panel rounded-xl px-3 py-2 shadow-sm">
-                    <Zap className={`h-3.5 w-3.5 ${expertMode ? 'text-amber-400' : 'text-muted-foreground'}`} />
-                    <Label className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground cursor-pointer" htmlFor="expert-toggle">Expert</Label>
-                    <Switch id="expert-toggle" checked={expertMode} onCheckedChange={setExpertMode} aria-label="Toggle Expert Mode" />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>Enable impact overlays, 72h forecast, hydrograph, and vector polygons</TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          {/* B3 fix: z-50 ensures buttons render above region combobox (also z-50) */}
           <div
-            className="absolute top-3 z-50 flex items-center gap-2 flex-wrap justify-end transition-all duration-300"
+            className="absolute top-4 left-4 right-4 z-50 pointer-events-none transition-all duration-300"
             style={{
-              right: (expertPanelOpen || (sidebarOpen && isMobile)) ? 'calc(20rem + 0.75rem)' : '0.75rem',
-              maxWidth: sidebarOpen && isMobile ? 'calc(100vw - 21rem)' : 'auto'
+              left: controlInset,
+              right: controlInset,
             }}
           >
-            <Button onClick={runForecast} disabled={forecasting} className="h-10 mr-1 text-xs font-semibold gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg touch-manipulation" aria-label="Run forecast">
-              {forecasting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mountain className="h-4 w-4" />}
-              {isMobile ? 'FORECAST' : expertMode ? 'RUN 72H FORECAST' : 'RUN 24H FORECAST'}
-            </Button>
-            <ShareForecast forecastId={forecastId} region={region} hour={timeOffset} selectedCell={selectedCell} expertMode={expertMode} show3D={show3DModal} />
-            <ExportForecast grid={grid} events={historicalEvents} regionName={region.name} hour={timeOffset} />
-            <HistoricalEventsToggle
-              visible={showEvents}
-              onToggle={() => {
-                setShowEvents((current) => {
-                  const next = !current;
-                  if (!next) { setRemoteEvents([]); setLocalEvents([]); }
-                  return next;
-                });
-              }}
-              onEventsLoaded={setRemoteEvents}
-              bbox={region.bbox}
-            />
-            <Button variant="outline" className="h-10 text-xs font-semibold gap-2 glass-panel border-0 text-destructive hover:text-destructive touch-manipulation" onClick={() => setReportOpen(true)} aria-label="Submit field report">
-              <AlertTriangle className="h-4 w-4" />
-              {isMobile ? '' : 'REPORT'}
-            </Button>
+            <div className="flex flex-col gap-3">
+              <div className="pointer-events-auto flex flex-col gap-3 rounded-[1.35rem] border border-border/70 bg-card/70 px-3 py-3 shadow-2xl shadow-black/20 backdrop-blur-2xl lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
+                  {!sidebarOpen && (
+                    <Button variant="outline" size="icon" className="h-11 w-11 glass-panel border-0 touch-manipulation rounded-2xl" onClick={() => setSidebarOpen(true)} aria-label="Open sidebar">
+                      <Menu className="h-5 w-5" />
+                    </Button>
+                  )}
+                  <div className="flex items-center gap-2 glass-panel rounded-2xl px-3 py-2.5 shadow-sm">
+                    <span className="text-[10px] font-mono uppercase tracking-[0.22em] text-muted-foreground pl-1 pr-1.5">Region</span>
+                    <RegionSelector value={region.name} onChange={handleRegionChange} />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                  <div className="flex items-center gap-2 glass-panel rounded-2xl px-3 py-2.5 shadow-sm">
+                    <span className="text-[10px] font-mono uppercase tracking-[0.22em] text-muted-foreground pl-1 pr-1.5">Display</span>
+                    <ThemeToggle />
+                  </div>
+                  {/* Expert Mode Toggle */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-2 glass-panel rounded-2xl px-3 py-2.5 shadow-sm">
+                        <Zap className={`h-3.5 w-3.5 ${expertMode ? 'text-amber-400' : 'text-muted-foreground'}`} />
+                        <Label className="text-[10px] font-mono uppercase tracking-[0.22em] text-muted-foreground cursor-pointer" htmlFor="expert-toggle">Expert</Label>
+                        <Switch id="expert-toggle" checked={expertMode} onCheckedChange={setExpertMode} aria-label="Toggle Expert Mode" />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Enable impact overlays, 72h forecast, hydrograph, and vector polygons</TooltipContent>
+                  </Tooltip>
+                </div>
+              </div>
+
+              <div
+                className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-[1.35rem] border border-border/70 bg-card/70 px-3 py-2.5 shadow-2xl shadow-black/20 backdrop-blur-2xl"
+                style={{
+                  maxWidth: sidebarOpen && isMobile ? 'calc(100vw - 2rem)' : '100%',
+                }}
+              >
+                <Button onClick={runForecast} disabled={forecasting} className="h-11 mr-1 text-[11px] uppercase tracking-[0.18em] font-semibold gap-2 bg-emerald-500 text-black hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 rounded-2xl touch-manipulation whitespace-nowrap px-4" aria-label="Run forecast">
+                  {forecasting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mountain className="h-4 w-4" />}
+                  {isMobile ? 'FORECAST' : expertMode ? 'RUN 72H' : 'RUN 24H'}
+                </Button>
+                <ShareForecast forecastId={forecastId} region={region} hour={timeOffset} selectedCell={selectedCell} expertMode={expertMode} show3D={show3DModal} />
+                <ExportForecast grid={grid} events={historicalEvents} regionName={region.name} hour={timeOffset} />
+                <HistoricalEventsToggle
+                  visible={showEvents}
+                  onToggle={() => {
+                    setShowEvents((current) => {
+                      const next = !current;
+                      if (!next) { setRemoteEvents([]); setLocalEvents([]); }
+                      return next;
+                    });
+                  }}
+                  onEventsLoaded={setRemoteEvents}
+                  bbox={region.bbox}
+                />
+                <Button variant="outline" className="h-11 text-[11px] uppercase tracking-[0.18em] font-semibold gap-2 glass-panel border-0 text-foreground hover:text-foreground touch-manipulation rounded-2xl" onClick={() => setReportOpen(true)} aria-label="Submit field report">
+                  <AlertTriangle className="h-4 w-4" />
+                  {isMobile ? '' : 'REPORT'}
+                </Button>
+              </div>
+            </div>
           </div>
 
           {/* Map */}
-          <div className="flex-1">
+          <div className="flex-1 pt-[12.5rem] md:pt-[11.25rem] lg:pt-[10.5rem]">
             <AvalancheMap
               cells={grid.cells}
               selectedCell={selectedCell}
@@ -419,21 +437,21 @@ export default function Index() {
           </div>
 
           {/* Legend */}
-          <div className="absolute bottom-20 right-3 z-10 hidden md:block">
+          <div className="absolute bottom-24 right-4 z-10 hidden md:block">
             <RiskLegend />
           </div>
 
           {/* Data source indicator */}
           {hourlyGrids && (
-            <div className="absolute top-16 right-3 z-10">
-              <span className="glass-panel rounded-full px-3 py-1 text-[10px] font-mono text-green-400">
+            <div className="absolute top-[11rem] right-4 z-10 md:top-[8.75rem] lg:top-[7.5rem]">
+              <span className="glass-panel rounded-full px-3 py-1 text-[10px] font-mono text-emerald-400">
                 ● LIVE DATA ({hourlyGrids.length}h)
               </span>
             </div>
           )}
 
           {/* Timeline Scrubber */}
-          <div className="absolute bottom-3 left-3 right-3 z-10">
+          <div className="absolute bottom-4 left-4 right-4 z-10">
             <TimeSlider value={timeOffset} onChange={setTimeOffset} max={maxHour} playing={playingTimeline} onPlayToggle={setPlayingTimeline} />
           </div>
         </div>
