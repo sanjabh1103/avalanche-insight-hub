@@ -30,9 +30,9 @@ import requests
 from backend.common.regions import Region, load_regions
 
 NEWSDATA_ENDPOINT = 'https://newsdata.io/api/1/latest'
+GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash-latest')
 GEMINI_ENDPOINT = (
-    'https://generativelanguage.googleapis.com/v1beta/models/'
-    'gemini-2.0-flash:generateContent'
+    f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent'
 )
 
 NEWSDATA_KEY = os.getenv('NEWSDATA_API_KEY')
@@ -197,7 +197,7 @@ def post_ingest_event(article: dict[str, Any], record: dict[str, Any], region: R
             'news_source': article.get('source_id'),
             'news_pub_date': article.get('pubDate'),
             'event_date_iso': record.get('event_date_iso'),
-            'extractor': 'gemini-2.0-flash',
+            'extractor': GEMINI_MODEL,
             'region_key': region.key,
         },
     }
