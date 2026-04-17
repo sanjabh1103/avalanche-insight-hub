@@ -1,0 +1,145 @@
+name: Avalanche Async ML Pipeline
+
+on:
+  schedule:
+    - cron: '0 4 * * 1'
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Pipeline mode'
+        required: true
+        default: 'train'
+        type: choice
+        options:
+          - train
+          - infer
+          - backfill
+      samples_per_region:
+        description: 'Training samples per region'
+        required: false
+        default: '500'
+      forecast_hours:
+        description: 'Forecast horizon hours'
+        required: false
+        default: '72'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: avalanche-ml-pipeline
+  cancel-in-progress: false
+
+jobs:
+  train:
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'train') || (github.event_name == 'schedule' && github.event.schedule == '0 4 * * 1')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install -r backend/requirements.txt
+
+      - name: Train model
+        env:
+          ARTIFACT_ROOT: backend/artifacts
+          SAMPLES_PER_REGION: ${{ github.event.inputs.samples_per_region || '500' }}
+          ML_SEED: '42'
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python backend/train_model.py
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: avalanche-train-artifacts
+          path: backend/artifacts
+
+  infer:
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'infer') || (github.event_name == 'schedule' && github.event.schedule == '0 2 * * *')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install -r backend/requirements.txt
+
+      - name: Download training artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: avalanche-train-artifacts
+          path: backend/artifacts
+        continue-on-error: true
+
+      - name: Run daily inference
+        env:
+          ARTIFACT_ROOT: backend/artifacts
+          FORECAST_HOURS: ${{ github.event.inputs.forecast_hours || '72' }}
+          GRID_SIZE: '20'
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python backend/daily_inference.py
+
+      - name: Upload inference artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: avalanche-inference-artifacts
+          path: backend/artifacts
+
+  backfill:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'backfill'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install -r backend/requirements.txt
+
+      - name: Run backfill training
+        env:
+          ARTIFACT_ROOT: backend/artifacts
+          SAMPLES_PER_REGION: ${{ github.event.inputs.samples_per_region || '500' }}
+          ML_SEED: '42'
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python backend/train_model.py
+
+      - name: Run backfill inference
+        env:
+          ARTIFACT_ROOT: backend/artifacts
+          FORECAST_HOURS: ${{ github.event.inputs.forecast_hours || '72' }}
+          GRID_SIZE: '20'
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python backend/daily_inference.py
+
+      - name: Upload backfill artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: avalanche-backfill-artifacts
+          path: backend/artifacts

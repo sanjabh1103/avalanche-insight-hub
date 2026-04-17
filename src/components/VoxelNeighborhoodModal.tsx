@@ -46,6 +46,8 @@ interface HoveredInfo {
   lng: number;
   color: string;
   problemType?: string;
+  probability?: number;
+  uncertaintyClass?: 'low' | 'medium' | 'high';
 }
 
 interface Props {
@@ -247,6 +249,10 @@ function buildRenderedVoxels(voxels: VoxelCoordinate[], cells: GridCell[]): Voxe
   return rendered;
 }
 
+function isHighUncertainty(cell: GridCell | undefined) {
+  return cell?.uncertaintyClass === 'high' || (cell?.uncertaintySpan ?? 0) > 0.3;
+}
+
 // Store the in-progress promise for deduplication
 let pendingPromise: Promise<VoxelCoordinate[]> | null = null;
 
@@ -359,9 +365,13 @@ function VoxelScene({
         const baseC = getBaseColor(v.data.type);
         const cell = findRiskForPosition(v.data.lat, v.data.lng, cells);
         if (cell) {
-          const riskC = new THREE.Color(RISK_COLORS[Math.max(1, Math.min(5, Math.round(cell.riskScore)))]);
-          // Tint the base color strongly with the risk color
-          baseC.lerp(riskC, 0.7);
+          if (isHighUncertainty(cell)) {
+            baseC.lerp(new THREE.Color('#9ca3af'), 0.72);
+          } else {
+            const riskC = new THREE.Color(RISK_COLORS[Math.max(1, Math.min(5, Math.round(cell.riskScore)))]);
+            // Tint the base color strongly with the risk color
+            baseC.lerp(riskC, 0.7);
+          }
         }
         meshRef.current!.setColorAt(i, baseC);
       });
@@ -385,8 +395,10 @@ function VoxelScene({
           riskScore: score,
           lat: v.data.lat,
           lng: v.data.lng,
-          color: RISK_COLORS[score] || '#333',
+          color: isHighUncertainty(cell) ? '#9ca3af' : (RISK_COLORS[score] || '#333'),
           problemType: cell?.problemType,
+          probability: cell?.probability,
+          uncertaintyClass: cell?.uncertaintyClass,
         });
       }
     }
@@ -448,7 +460,7 @@ function VoxelFallbackCanvas({
     for (const voxel of voxels.slice(0, 2500)) {
       const cell = findRiskForPosition(voxel.data.lat, voxel.data.lng, cells);
       const riskScore = Math.max(1, Math.min(5, Math.round(cell?.riskScore || 1)));
-      ctx.fillStyle = RISK_COLORS[riskScore] || '#334155';
+      ctx.fillStyle = isHighUncertainty(cell) ? '#9ca3af' : (RISK_COLORS[riskScore] || '#334155');
       const x = Math.round((voxel.x + WORLD_SIZE / 2) * scaleX);
       const y = Math.round((voxel.z + WORLD_SIZE / 2) * scaleY);
       const size = voxel.data.type === 'building' ? 3 : voxel.data.type === 'road' ? 2 : 1.5;
@@ -644,6 +656,8 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
               <div className="text-[10px] text-muted-foreground space-y-0.5 mt-2">
                 <div><strong>Type:</strong> {hovered.type}</div>
                 {hovered.problemType && <div><strong>Problem:</strong> {hovered.problemType}</div>}
+                {hovered.probability !== undefined && <div><strong>Prob:</strong> {hovered.probability.toFixed(2)}</div>}
+                {hovered.uncertaintyClass && <div><strong>Uncertainty:</strong> {hovered.uncertaintyClass}</div>}
                 <div><strong>Coords:</strong> {hovered.lat.toFixed(4)}°, {hovered.lng.toFixed(4)}°</div>
               </div>
             </div>

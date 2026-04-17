@@ -31,7 +31,7 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
   const shapData = Object.entries(cell.shapValues).map(([key, value]) => ({
     name: key.replace(/_/g, ' '),
     value: Number((value as number).toFixed(3)),
-  })).sort((a, b) => b.value - a.value);
+  })).sort((a, b) => b.value - a.value).slice(0, 5);
 
   const maxShap = Math.max(...shapData.map(d => d.value), 0.01);
 
@@ -75,16 +75,42 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
         ))}
       </div>
 
+      {/* Probability + uncertainty */}
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+        <CardContent className="p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground uppercase tracking-[0.24em]">Calibrated Probability</span>
+            <Badge className="rounded-full border-0 bg-emerald-500/15 text-emerald-400 text-xs">
+              {(cell.probability ?? cell.riskScore / 5).toFixed(2)}
+            </Badge>
+          </div>
+          <div className="text-[11px] text-muted-foreground flex items-center justify-between">
+            <span>Confidence interval</span>
+            <span className="font-mono text-foreground">
+              {cell.confidenceLower !== undefined && cell.confidenceUpper !== undefined
+                ? `${cell.confidenceLower.toFixed(2)} – ${cell.confidenceUpper.toFixed(2)}`
+                : 'n/a'}
+            </span>
+          </div>
+          <div className="text-[11px] text-muted-foreground flex items-center justify-between">
+            <span>Uncertainty</span>
+            <span className={cell.uncertaintyClass === 'high' ? 'text-gray-300 font-mono' : 'font-mono text-foreground'}>
+              {cell.uncertaintyClass || 'unknown'}
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Real Weather Values (Story #11 - Open-Meteo for all regions) */}
       {weatherSummary && (
         <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
           <CardHeader className="p-3 pb-1">
             <div className="flex items-center gap-2">
               <CardTitle className="text-xs text-emerald-400 uppercase tracking-[0.24em]">
-                Live Weather (Open-Meteo)
+                Weather Summary
               </CardTitle>
               <Badge className="bg-emerald-500/15 text-emerald-400 border-0 text-[8px] px-1.5 py-0 rounded-full">
-                ● LIVE
+                ● SUMMARY
               </Badge>
             </div>
           </CardHeader>

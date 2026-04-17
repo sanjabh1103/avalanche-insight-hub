@@ -14,6 +14,18 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ["Inter", "sans-serif"],
+        heading: ["Outfit", "sans-serif"],
+        mono: ["JetBrains Mono", "monospace"],
+      },
+      boxShadow: {
+        glow: "0 0 20px hsl(var(--primary)/0.4)",
+        "glass-inner": "inset 0 1px 0 rgba(255,255,255,0.08)",
+      },
+      transitionTimingFunction: {
+        bouncy: "cubic-bezier(0.25, 1, 0.5, 1)",
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -36,20 +36,34 @@ serve(async (req) => {
       .single();
     if (jobErr) throw jobErr;
 
-    const { error: eventErr } = await supabase.from('avalanche_events').insert({
-      source: 'field_report',
-      description: description || 'Field report submitted',
-      severity: 3,
-      event_type: 'unknown',
-      location: `SRID=4326;POINT(${lng} ${lat})`,
-      confidence: 0.6,
-      fusion_source: 'field_report_enrichment',
+    const ingestResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/ingest-event`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+      },
+      body: JSON.stringify({
+        fieldReportId,
+        lat,
+        lng,
+        description: description || 'Field report submitted',
+        source: 'field_report',
+        fusion_source: 'field_report_enrichment',
+        event_type: 'unknown',
+        severity: 3,
+        confidence: 0.6,
+        hazard_type: 'avalanche',
+      }),
     });
-    if (eventErr) throw eventErr;
+    if (!ingestResponse.ok) {
+      const text = await ingestResponse.text();
+      throw new Error(`ingest-event failed (${ingestResponse.status}): ${text}`);
+    }
+    const ingestResult = await ingestResponse.json();
 
     await supabase.from('compute_jobs').update({
       status: 'completed',
-      result: { fieldReportId, createdEvent: true },
+      result: { fieldReportId, createdEvent: true, ingestResult },
     }).eq('id', job.id);
 
     return new Response(JSON.stringify({ ok: true, jobId: job.id }), {

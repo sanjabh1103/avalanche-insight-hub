@@ -106,6 +106,7 @@ export default function AvalancheMap({
       {cells.map((cell) => {
         const bounds: LatLngBoundsExpression = [[cell.lat, cell.lng], [cell.latEnd, cell.lngEnd]];
         const isSelected = selectedCell?.row === cell.row && selectedCell?.col === cell.col;
+        const isHighUncertainty = cell.uncertaintyClass === 'high' || (cell.uncertaintySpan ?? 0) > 0.3;
         return (
           <Rectangle
             key={`${cell.row}-${cell.col}`}
@@ -113,8 +114,8 @@ export default function AvalancheMap({
             pathOptions={{
               color: isSelected ? '#ffffff' : 'transparent',
               weight: isSelected ? 2 : 0,
-              fillColor: getRiskColor(cell.riskScore),
-              fillOpacity: 0.45 + cell.riskScore * 0.06,
+              fillColor: isHighUncertainty ? '#9ca3af' : getRiskColor(cell.riskScore),
+              fillOpacity: isHighUncertainty ? 0.42 : 0.45 + cell.riskScore * 0.06,
             }}
             eventHandlers={{ click: () => onCellClick(cell) }}
           />

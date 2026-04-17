@@ -3,10 +3,29 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { MapPin, Send, Loader2 } from 'lucide-react';
+import { MapPin, Send, Loader2, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import type { AvalancheEvent } from '@/components/HistoricalEventsToggle';
+
+// Story 17: lightweight online/offline hook used to show users when their
+// submission will be queued by the Workbox BackgroundSync plugin.
+function useOnlineStatus(): boolean {
+  const [online, setOnline] = useState(() =>
+    typeof navigator !== 'undefined' ? navigator.onLine : true,
+  );
+  useEffect(() => {
+    const handleOnline = () => setOnline(true);
+    const handleOffline = () => setOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+  return online;
+}
 
 interface Props {
   open: boolean;
@@ -20,6 +39,7 @@ export default function FieldReportForm({ open, onClose, onSubmitted, regionCent
   const [lng, setLng] = useState('');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const online = useOnlineStatus();
 
   const setFallbackCoordinates = useCallback(() => {
     const fallbackLat = regionCenter?.[0] ?? 39.5;
@@ -55,9 +75,20 @@ export default function FieldReportForm({ open, onClose, onSubmitted, regionCent
       return;
     }
 
+    // BUG-02 fix: Prevent duplicate submissions while one is in flight
+    if (submitting) {
+      toast.info('Report already submitting...');
+      return;
+    }
+
     setSubmitting(true);
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    // BUG-02 fix: Stable client_report_id so duplicate submissions reuse the same idempotency key
+    const idSeed = `${user?.id || 'anon'}|${parsedLat.toFixed(6)}|${parsedLng.toFixed(6)}|${description.trim().toLowerCase()}`;
+    const clientReportId = `field-${btoa(unescape(encodeURIComponent(idSeed))).replace(/=+$/g, '').slice(0, 24)}`;
+    
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       const { data: report, error } = await supabase.from('field_reports').insert({
         user_id: user?.id,
         hazard_type: 'avalanche',
@@ -65,6 +96,7 @@ export default function FieldReportForm({ open, onClose, onSubmitted, regionCent
         training_eligible: false,
         description: description.trim(),
         location: `SRID=4326;POINT(${parsedLng} ${parsedLat})` as unknown,
+        client_report_id: clientReportId,
       }).select('id').single();
       if (error) throw error;
       if (!report?.id) {
@@ -125,6 +157,17 @@ export default function FieldReportForm({ open, onClose, onSubmitted, regionCent
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
+          {!online && (
+            <div
+              role="status"
+              className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs text-amber-200"
+            >
+              <WifiOff className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                You appear to be offline. Your report will be saved locally and synced automatically as soon as your connection returns.
+              </span>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Latitude</label>

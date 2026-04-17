@@ -12,6 +12,10 @@ interface ModelInfo {
   feature_version?: string | null;
   calibration_profile_version?: string | null;
   threshold_profile_version?: string | null;
+  capability_summary?: string | null;
+  inference_backend?: string | null;
+  snowpack_model_version?: string | null;
+  last_inference_iso?: string | null;
 }
 
 function timeAgo(dateStr: string | null): string {
@@ -31,7 +35,7 @@ export default function ModelStatusBadge() {
   const loadStatus = useCallback(async () => {
     const { data } = await supabase
       .from('model_status')
-      .select('version, f1_score, last_inference, data_freshness_hours, feature_version, calibration_profile_version, threshold_profile_version')
+      .select('version, f1_score, last_inference, data_freshness_hours, feature_version, calibration_profile_version, threshold_profile_version, capability_summary, inference_backend, snowpack_model_version')
       .limit(1)
       .single();
     if (data) setStatus(data as unknown as ModelInfo);
@@ -39,8 +43,27 @@ export default function ModelStatusBadge() {
 
   useEffect(() => { loadStatus(); }, [loadStatus]);
 
-  // Realtime sync with model_status table (BUG-11 fix)
-  useRealtimeSubscription('model_status', () => { loadStatus(); });
+  // BUG-04 fix: Realtime sync with model_status table + polling fallback
+  useRealtimeSubscription('model_status', () => { loadStatus(); }, { persistState: true, onReconnect: () => loadStatus() });
+
+  // BUG-04 fix: 30s polling fallback to ensure badge updates even if realtime drops
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadStatus();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [loadStatus]);
+
+  // BUG-04 fix: Refresh on window focus/visibility change
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadStatus();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [loadStatus]);
 
   if (!status) return null;
 
@@ -55,6 +78,12 @@ export default function ModelStatusBadge() {
       </span>
       <span className="text-[9px] text-muted-foreground font-mono pl-0.5 leading-tight">
         Last inference: {timeAgo(status.last_inference)} • Freshness: {status.data_freshness_hours < 999 ? `${status.data_freshness_hours.toFixed(0)}h` : 'sim'}
+      </span>
+      <span className="text-[9px] text-muted-foreground font-mono pl-0.5 leading-tight">
+        Mode: {status.capability_summary || 'Edge-only fallback'} • Backend: {status.inference_backend || 'edge_fallback'}
+      </span>
+      <span className="text-[9px] text-muted-foreground font-mono pl-0.5 leading-tight">
+        SAR + Snowpack Simulation + KMeansSMOTE + ABC • Snowpack: {status.snowpack_model_version || 'edge-proxy'}
       </span>
     </div>
   );

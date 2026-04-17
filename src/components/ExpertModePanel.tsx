@@ -74,9 +74,9 @@ export default function ExpertModePanel({
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: 320, opacity: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="w-[23rem] h-full flex flex-col border-l border-border/80 bg-card/90 backdrop-blur-2xl z-30 shrink-0 absolute md:relative right-0 top-0 bottom-0 shadow-2xl shadow-black/30 overflow-y-auto"
+          className="fixed right-0 top-0 bottom-0 z-40 flex h-full w-[min(23rem,calc(100vw-0.75rem))] flex-col overflow-y-auto border-l border-border/80 bg-card/95 shadow-2xl shadow-black/40 backdrop-blur-2xl md:absolute"
         >
-          <div className="p-4 border-b border-border/70 flex items-center justify-between bg-secondary/20">
+          <div className="sticky top-0 z-10 border-b border-border/70 bg-secondary/30 p-4 backdrop-blur-xl">
             <div className="flex items-center gap-2">
               <Layers className="h-4 w-4 text-emerald-400" />
               <span className="text-sm font-semibold text-foreground uppercase tracking-[0.18em]">Expert Mode</span>

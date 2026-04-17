@@ -6,8 +6,47 @@ import { Loader2, Zap, Satellite, BrainCircuit, Database, TrendingUp, CloudSnow,
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
+import { DEFAULT_BBOX } from '@/lib/constants';
 
-type JobType = 'daily_enrichment' | 'sentinel_refresh' | 'fine_tune' | 'static_precompute' | 'snow_cover_refresh' | 'recent_activity_refresh' | 'label_forecast_outcomes' | 'run_evaluation' | 'retrain_avalanche_model' | 'field_report_enrichment';
+type JobType = 'daily_enrichment' | 'sentinel_refresh' | 'fine_tune' | 'static_precompute' | 'snow_cover_refresh' | 'recent_activity_refresh' | 'label_forecast_outcomes' | 'run_evaluation' | 'retrain_avalanche_model' | 'field_report_enrichment' | 'model_optimization';
+
+// BUG-01 fix: Cache keys for state persistence
+const CACHE_KEYS = {
+  jobs: 'admin-jobs-cache',
+  modelStatus: 'admin-model-status-cache',
+  fieldReports: 'admin-field-reports-cache',
+};
+
+interface CapabilityMap {
+  mode?: string;
+  summary?: string;
+  sar_enabled?: boolean;
+  gpu_enabled?: boolean;
+}
+
+interface SnowpackMetrics {
+  ram_hardness?: number;
+  shear_strength?: number;
+  settlement_rate?: number;
+  confidence?: number;
+  source?: string;
+}
+
+interface OptimizationSummary {
+  optimization_version?: string;
+  selected_features?: string[];
+  class_balance_report?: Record<string, unknown>;
+  abc_enabled?: boolean;
+  runtime_mode?: string;
+}
+
+interface SatelliteDetectionStats {
+  last_refresh_at?: string;
+  scenes_found?: number;
+  detections_inserted?: number;
+  mode?: string;
+  fallback_used?: boolean;
+}
 
 interface JobRow {
   id: string;
@@ -71,6 +110,23 @@ interface FieldReportRow {
   training_eligible: boolean;
 }
 
+interface ModelStatusRow {
+  version: string;
+  f1_score: number;
+  feature_version?: string;
+  calibration_profile_version?: string;
+  threshold_profile_version?: string;
+  capability_summary?: string;
+  inference_backend?: string;
+  snowpack_model_version?: string;
+  optimization_version?: string;
+  next_optimization_run?: string | null;
+  capabilities?: CapabilityMap | null;
+  optimization_summary?: OptimizationSummary | null;
+  satellite_detection_stats?: SatelliteDetectionStats | null;
+  snowpack_metrics?: SnowpackMetrics | null;
+}
+
 const JOB_BUTTONS: { type: JobType; label: string; icon: React.ReactNode; description?: string }[] = [
   { type: 'daily_enrichment', label: 'Run Enrichment', icon: <Zap className="h-4 w-4" />, description: 'News + Gemini event extraction' },
   { type: 'sentinel_refresh', label: 'Refresh Sentinel-1', icon: <Satellite className="h-4 w-4" />, description: 'ASF metadata search' },
@@ -81,6 +137,7 @@ const JOB_BUTTONS: { type: JobType; label: string; icon: React.ReactNode; descri
   { type: 'field_report_enrichment', label: 'Normalize Reports', icon: <FileCheck className="h-4 w-4" />, description: 'Process field reports' },
   { type: 'retrain_avalanche_model', label: 'Retrain Model', icon: <RefreshCw className="h-4 w-4" />, description: 'External training trigger' },
   { type: 'fine_tune', label: 'Fine-Tune Model', icon: <BrainCircuit className="h-4 w-4" />, description: 'Simulated F1 improvement' },
+  { type: 'model_optimization', label: 'Optimize Model', icon: <BrainCircuit className="h-4 w-4" />, description: 'KMeansSMOTE + SVM-RFE + ABC' },
   { type: 'static_precompute', label: 'Static Pre-Compute', icon: <Database className="h-4 w-4" />, description: 'Region pre-computation' },
 ];
 
@@ -88,7 +145,7 @@ export default function AdminDashboard() {
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [running, setRunning] = useState<string | null>(null);
   const [systemConfig, setSystemConfig] = useState<{ gemini_usage: number; gemini_spend_cap: number } | null>(null);
-  const [modelStatus, setModelStatus] = useState<{ version: string; f1_score: number; feature_version?: string; calibration_profile_version?: string; threshold_profile_version?: string } | null>(null);
+  const [modelStatus, setModelStatus] = useState<ModelStatusRow | null>(null);
   const [analytics, setAnalytics] = useState<{ total: number; regions: AnalyticsRow[] }>({ total: 0, regions: [] });
   const [evaluationRuns, setEvaluationRuns] = useState<EvaluationRunRow[]>([]);
   const [evaluationMetrics, setEvaluationMetrics] = useState<EvaluationMetricRow[]>([]);
@@ -118,7 +175,7 @@ export default function AdminDashboard() {
     ]);
     if (jobsRes.data) setJobs(jobsRes.data as unknown as JobRow[]);
     if (configRes.data) setSystemConfig(configRes.data as unknown as { gemini_usage: number; gemini_spend_cap: number });
-    if (modelRes.data) setModelStatus(modelRes.data as unknown as { version: string; f1_score: number; feature_version?: string; calibration_profile_version?: string; threshold_profile_version?: string });
+    if (modelRes.data) setModelStatus(modelRes.data as unknown as ModelStatusRow);
     if (analyticsRes.data) {
       const rows = analyticsRes.data as unknown as { region_name: string }[];
       const regionMap = new Map<string, number>();
@@ -134,11 +191,14 @@ export default function AdminDashboard() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  useRealtimeSubscription('compute_jobs', () => { loadData(); });
-  useRealtimeSubscription('evaluation_runs', () => { loadData(); });
-  useRealtimeSubscription('evaluation_metrics', () => { loadData(); });
-  useRealtimeSubscription('forecast_outcomes', () => { loadData(); });
-  useRealtimeSubscription('field_reports', () => { loadData(); });
+  // BUG-01 fix: Use improved realtime subscriptions with state persistence and reconnect handling
+  useRealtimeSubscription('compute_jobs', () => { loadData(); }, { persistState: true, onReconnect: () => loadData() });
+  useRealtimeSubscription('evaluation_runs', () => { loadData(); }, { persistState: true, onReconnect: () => loadData() });
+  useRealtimeSubscription('evaluation_metrics', () => { loadData(); }, { persistState: true, onReconnect: () => loadData() });
+  useRealtimeSubscription('forecast_outcomes', () => { loadData(); }, { persistState: true, onReconnect: () => loadData() });
+  useRealtimeSubscription('forecasts', () => { loadData(); }, { persistState: true, onReconnect: () => loadData() });
+  useRealtimeSubscription('field_reports', () => { loadData(); }, { persistState: true, onReconnect: () => loadData() });
+  useRealtimeSubscription('model_status', () => { loadData(); }, { persistState: true, onReconnect: () => loadData() });
 
   const triggerJob = async (type: JobType) => {
     setRunning(type);
@@ -148,7 +208,7 @@ export default function AdminDashboard() {
 
       // Add bbox for jobs that need spatial context
       if (['sentinel_refresh', 'snow_cover_refresh'].includes(type)) {
-        payload.bbox = [38.5, -107.5, 40.5, -105.5]; // Colorado Rockies, [latMin, lngMin, latMax, lngMax]
+        payload.bbox = DEFAULT_BBOX;
       }
 
       const { data, error } = await supabase.functions.invoke('trigger-job', {
@@ -167,6 +227,7 @@ export default function AdminDashboard() {
         field_report_enrichment: 'Field report enrichment started - normalizing submissions',
         retrain_avalanche_model: 'Model retraining queued - external training pipeline triggered',
         fine_tune: 'Fine-tuning complete - model version incremented with improved F1 score',
+        model_optimization: 'Optimization started - dual-mode feature selection and weighting in progress',
         static_precompute: 'Static pre-computation started - caching regional forecasts',
       };
       toast.success(successMessages[type] || `${type.replace(/_/g, ' ')} completed successfully`);
@@ -186,6 +247,11 @@ export default function AdminDashboard() {
       default: return 'bg-muted text-muted-foreground';
     }
   };
+
+  const capabilityMode = modelStatus?.capability_summary || modelStatus?.capabilities?.summary || 'Edge-only fallback';
+  const optimizationSummary = modelStatus?.optimization_summary;
+  const snowpackMetrics = modelStatus?.snowpack_metrics;
+  const satelliteStats = modelStatus?.satellite_detection_stats;
 
   return (
     <div className="space-y-2 p-2.5 md:p-3">
@@ -212,7 +278,7 @@ export default function AdminDashboard() {
             ))}
           </div>
           <div className="text-[10px] text-muted-foreground mt-1">
-            New: Snow Cover, Activity, Labeling, Evaluation for avalanche accuracy roadmap
+            Mode-aware controls for Sentinel, snowpack, optimization, and evaluation
           </div>
         </CardContent>
       </Card>
@@ -226,6 +292,24 @@ export default function AdminDashboard() {
           <Badge className="bg-amber-500/15 text-amber-300 border-0 font-mono text-xs rounded-full">
             {activeJobs}
           </Badge>
+        </CardContent>
+      </Card>
+
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+        <CardContent className="p-2.5 space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-xs text-muted-foreground uppercase tracking-[0.24em]">Current Mode</div>
+              <div className="text-[10px] text-muted-foreground mt-0.5">Dual-mode runtime capability and fallback state</div>
+            </div>
+            <Badge className="bg-sky-500/15 text-sky-300 border-0 font-mono text-[10px] rounded-full">
+              {modelStatus?.inference_backend === 'gpu' ? 'GPU' : 'EDGE'}
+            </Badge>
+          </div>
+          <div className="text-sm font-mono text-foreground">{capabilityMode}</div>
+          <div className="text-[10px] text-muted-foreground">
+            SAR: {modelStatus?.capabilities?.sar_enabled ? 'on' : 'fallback'} • GPU: {modelStatus?.capabilities?.gpu_enabled ? 'on' : 'fallback'}
+          </div>
         </CardContent>
       </Card>
 
@@ -252,6 +336,72 @@ export default function AdminDashboard() {
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+        <CardHeader className="p-2 pb-1">
+          <CardTitle className="text-xs uppercase tracking-[0.24em] text-muted-foreground flex items-center gap-1.5">
+            <BrainCircuit className="h-3 w-3" />
+            Optimization Summary
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-2 pt-1.5 space-y-1">
+          <div className="text-[10px] text-muted-foreground">Version</div>
+          <div className="font-mono text-sm text-foreground">{modelStatus?.optimization_version || optimizationSummary?.optimization_version || 'n/a'}</div>
+          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
+            <div className="text-muted-foreground">Selected features</div>
+            <div className="font-mono text-right text-foreground">{optimizationSummary?.selected_features?.length ?? 0}</div>
+            <div className="text-muted-foreground">ABC enabled</div>
+            <div className="font-mono text-right text-foreground">{optimizationSummary?.abc_enabled ? 'yes' : 'no'}</div>
+            <div className="text-muted-foreground">Balance strategy</div>
+            <div className="font-mono text-right text-foreground">{String(optimizationSummary?.class_balance_report?.strategy || 'n/a')}</div>
+          </div>
+          <div className="text-[10px] text-muted-foreground">
+            Next optimization: {modelStatus?.next_optimization_run ? new Date(modelStatus.next_optimization_run).toLocaleString() : 'not scheduled'}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+        <CardHeader className="p-2 pb-1">
+          <CardTitle className="text-xs uppercase tracking-[0.24em] text-muted-foreground flex items-center gap-1.5">
+            <CloudSnow className="h-3 w-3" />
+            Snowpack Metrics
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-2 pt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
+          <div className="text-muted-foreground">RAM hardness</div>
+          <div className="font-mono text-right text-foreground">{snowpackMetrics?.ram_hardness?.toFixed(3) ?? 'n/a'}</div>
+          <div className="text-muted-foreground">Shear strength</div>
+          <div className="font-mono text-right text-foreground">{snowpackMetrics?.shear_strength?.toFixed(3) ?? 'n/a'}</div>
+          <div className="text-muted-foreground">Settlement</div>
+          <div className="font-mono text-right text-foreground">{snowpackMetrics?.settlement_rate?.toFixed(3) ?? 'n/a'}</div>
+          <div className="text-muted-foreground">Confidence</div>
+          <div className="font-mono text-right text-foreground">{snowpackMetrics?.confidence?.toFixed(2) ?? 'n/a'}</div>
+          <div className="text-muted-foreground">Source</div>
+          <div className="font-mono text-right text-foreground">{snowpackMetrics?.source || 'n/a'}</div>
+        </CardContent>
+      </Card>
+
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+        <CardHeader className="p-2 pb-1">
+          <CardTitle className="text-xs uppercase tracking-[0.24em] text-muted-foreground flex items-center gap-1.5">
+            <Satellite className="h-3 w-3" />
+            Satellite Detection Stats
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-2 pt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
+          <div className="text-muted-foreground">Scenes found</div>
+          <div className="font-mono text-right text-foreground">{satelliteStats?.scenes_found ?? 0}</div>
+          <div className="text-muted-foreground">Detections</div>
+          <div className="font-mono text-right text-foreground">{satelliteStats?.detections_inserted ?? 0}</div>
+          <div className="text-muted-foreground">Mode</div>
+          <div className="font-mono text-right text-foreground">{satelliteStats?.mode || modelStatus?.capabilities?.mode || 'edge_fallback'}</div>
+          <div className="text-muted-foreground">Fallback used</div>
+          <div className="font-mono text-right text-foreground">{satelliteStats?.fallback_used ? 'yes' : 'no'}</div>
+          <div className="text-muted-foreground">Last refresh</div>
+          <div className="font-mono text-right text-foreground">{satelliteStats?.last_refresh_at ? new Date(satelliteStats.last_refresh_at).toLocaleString() : 'never'}</div>
         </CardContent>
       </Card>
 
@@ -425,6 +575,9 @@ export default function AdminDashboard() {
                 F1: {modelStatus.f1_score.toFixed(3)}
               </Badge>
             </div>
+            <div className="text-[10px] text-muted-foreground">
+              Mode: {capabilityMode}
+            </div>
             {modelStatus.feature_version && (
               <div className="text-[10px] text-muted-foreground">
                 Feature: {modelStatus.feature_version}
@@ -438,6 +591,11 @@ export default function AdminDashboard() {
             {modelStatus.threshold_profile_version && (
               <div className="text-[10px] text-muted-foreground">
                 Thresholds: {modelStatus.threshold_profile_version}
+              </div>
+            )}
+            {modelStatus.snowpack_model_version && (
+              <div className="text-[10px] text-muted-foreground">
+                Snowpack: {modelStatus.snowpack_model_version}
               </div>
             )}
           </CardContent>

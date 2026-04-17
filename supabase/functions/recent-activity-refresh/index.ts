@@ -40,25 +40,54 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // BUG-03 fix: Wrap request parsing in try/catch for structured error response
+  let requestBody: Record<string, unknown>;
   try {
-    const { 
-      region_name: regionName,
-      window_days: windowDays = 7,
-      hazard_type: hazardType = 'avalanche',
-      materialize_cells: materializeCells = false,
-    } = await req.json();
+    requestBody = await req.json();
+  } catch (parseErr) {
+    return new Response(JSON.stringify({ 
+      error: 'Invalid JSON in request body',
+      details: (parseErr as Error).message,
+      code: 'INVALID_REQUEST'
+    }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
 
-    if (hazardType !== 'avalanche') {
-      return new Response(JSON.stringify({ error: 'Only avalanche supported' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+  const { 
+    region_name: regionName,
+    window_days: windowDays = 7,
+    hazard_type: hazardType = 'avalanche',
+    materialize_cells: materializeCells = false,
+  } = requestBody;
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-    );
+  if (hazardType !== 'avalanche') {
+    return new Response(JSON.stringify({ 
+      error: 'Only avalanche hazard type is currently supported',
+      code: 'UNSUPPORTED_HAZARD_TYPE'
+    }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // BUG-03 fix: Validate environment variables
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  
+  if (!supabaseUrl || !serviceRoleKey) {
+    return new Response(JSON.stringify({ 
+      error: 'Server configuration error: missing database credentials',
+      code: 'CONFIG_ERROR'
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  try {
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     // Create job
     const { data: job, error: jobErr } = await supabase

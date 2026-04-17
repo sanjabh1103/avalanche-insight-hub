@@ -24,8 +24,16 @@ export type Database = {
           fusion_source: string | null
           id: string
           location: unknown
+          aspect_deg: number | null
+          elevation_m: number | null
           severity: number | null
           source: string | null
+          slope_angle_deg: number | null
+          aspect_bucket: string | null
+          slope_band: string | null
+          topo_profile: Json | null
+          topo_resolution_m: number | null
+          topo_source: string | null
           timestamp: string
         }
         Insert: {
@@ -37,8 +45,16 @@ export type Database = {
           fusion_source?: string | null
           id?: string
           location?: unknown
+          aspect_deg?: number | null
+          elevation_m?: number | null
           severity?: number | null
           source?: string | null
+          slope_angle_deg?: number | null
+          aspect_bucket?: string | null
+          slope_band?: string | null
+          topo_profile?: Json | null
+          topo_resolution_m?: number | null
+          topo_source?: string | null
           timestamp?: string
         }
         Update: {
@@ -50,8 +66,16 @@ export type Database = {
           fusion_source?: string | null
           id?: string
           location?: unknown
+          aspect_deg?: number | null
+          elevation_m?: number | null
           severity?: number | null
           source?: string | null
+          slope_angle_deg?: number | null
+          aspect_bucket?: string | null
+          slope_band?: string | null
+          topo_profile?: Json | null
+          topo_resolution_m?: number | null
+          topo_source?: string | null
           timestamp?: string
         }
         Relationships: []
@@ -170,6 +194,60 @@ export type Database = {
           shap_values?: Json | null
           timestamp?: string
           vulnerability?: number | null
+        }
+        Relationships: []
+      }
+      forecast_grids: {
+        Row: {
+          bbox: number[]
+          created_at: string
+          forecast_date: string
+          grid_geojson: Json
+          hazard_type: Database["public"]["Enums"]["hazard_type"]
+          horizon_hours: number
+          id: string
+          model_metadata: Json
+          region_key: string
+          region_name: string
+          runout_polygons: Json
+          source_job_id: string | null
+          status: string
+          updated_at: string
+          weather_summary: Json
+        }
+        Insert: {
+          bbox: number[]
+          created_at?: string
+          forecast_date: string
+          grid_geojson?: Json
+          hazard_type?: Database["public"]["Enums"]["hazard_type"]
+          horizon_hours?: number
+          id?: string
+          model_metadata?: Json
+          region_key: string
+          region_name: string
+          runout_polygons?: Json
+          source_job_id?: string | null
+          status?: string
+          updated_at?: string
+          weather_summary?: Json
+        }
+        Update: {
+          bbox?: number[]
+          created_at?: string
+          forecast_date?: string
+          grid_geojson?: Json
+          hazard_type?: Database["public"]["Enums"]["hazard_type"]
+          horizon_hours?: number
+          id?: string
+          model_metadata?: Json
+          region_key?: string
+          region_name?: string
+          runout_polygons?: Json
+          source_job_id?: string | null
+          status?: string
+          updated_at?: string
+          weather_summary?: Json
         }
         Relationships: []
       }

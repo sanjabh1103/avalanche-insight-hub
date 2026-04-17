@@ -22,7 +22,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 import HistoricalEventsToggle, { type AvalancheEvent } from '@/components/HistoricalEventsToggle';
 import ExpertModePanel from '@/components/ExpertModePanel';
 import VoxelNeighborhoodModal from '@/components/VoxelNeighborhoodModal';
-import { generateForecastGrid, type GridCell } from '@/lib/gridUtils';
+import { forecastGridRowToHourlyGrids, generateForecastGrid, type ForecastGridRowRecord, type GridCell } from '@/lib/gridUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -52,6 +52,41 @@ export default function Index() {
   const [playingTimeline, setPlayingTimeline] = useState(false);
 
   const maxHour = hourlyGrids ? hourlyGrids.length - 1 : (expertMode ? 71 : 24);
+
+  const hydrateForecastGridRow = useCallback((row: ForecastGridRowRecord) => {
+    const grids = forecastGridRowToHourlyGrids(row);
+    setForecastId(row.id);
+    setHourlyGrids(grids);
+    const summary = row.weather_summary;
+    if (summary && typeof summary === 'object' && !Array.isArray(summary)) {
+      const maybeSummary = summary as Record<string, unknown>;
+      if (typeof maybeSummary.snowfall_24h === 'string') {
+        setWeatherSummary({
+          snowfall_24h: String(maybeSummary.snowfall_24h),
+          wind_speed: String(maybeSummary.wind_speed ?? '0'),
+          temperature: String(maybeSummary.temperature ?? '0'),
+          precipitation: String(maybeSummary.precipitation ?? '0'),
+          snow_depth: String(maybeSummary.snow_depth ?? '0'),
+        });
+      }
+    }
+    return grids;
+  }, []);
+
+  const loadLatestForecastGrid = useCallback(async (regionName: string) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data, error } = await supabase
+      .from('forecast_grids')
+      .select('id, region_name, region_key, forecast_date, horizon_hours, bbox, grid_geojson, runout_polygons, weather_summary, model_metadata, status, created_at')
+      .eq('hazard_type', 'avalanche')
+      .eq('region_name', regionName)
+      .eq('forecast_date', today)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return data as ForecastGridRowRecord | null;
+  }, []);
 
   const historicalEvents = useMemo(() => {
     const merged = [...localEvents, ...remoteEvents];
@@ -89,9 +124,9 @@ export default function Index() {
     return () => window.removeEventListener('keydown', handler);
   }, [forecasting, maxHour]);
 
-  // B7 fix: auto-load events from DB when heatmap overlay toggled ON in Expert Mode
+  // BUG-08 fix: Always load events from DB for export functionality, not just when heatmap is on
   useEffect(() => {
-    if (!showHeatmap) return;
+    // BUG-08: Load events regardless of heatmap toggle so export always has data
     supabase
       .from('avalanche_events')
       .select('id, location, severity, confidence, description, source, event_type, timestamp, features')
@@ -211,15 +246,36 @@ export default function Index() {
     const sharedForecast = params.get('forecast');
     const hourValue = hourParam ? parseInt(hourParam, 10) : 0;
     if (sharedForecast) {
-      supabase.from('forecasts').select('hourly_grids, bbox').eq('id', sharedForecast).single().then(({ data }) => {
-        if (data?.hourly_grids && Array.isArray(data.hourly_grids)) {
-          setHourlyGrids(data.hourly_grids as unknown as GridCell[][]);
+      (async () => {
+        const precomputed = await supabase.from('forecast_grids').select('id, region_name, region_key, forecast_date, horizon_hours, bbox, grid_geojson, runout_polygons, weather_summary, model_metadata, status, created_at').eq('id', sharedForecast).maybeSingle();
+        if (precomputed.data) {
+          const grids = hydrateForecastGridRow(precomputed.data as ForecastGridRowRecord);
+          const cellParam = params.get('cell');
+          if (cellParam) {
+            const [row, col] = cellParam.split(',').map(Number);
+            const safeHourIdx = Math.min(hourValue, grids.length - 1);
+            const gridAtHour = grids[safeHourIdx];
+            if (gridAtHour) {
+              const cell = gridAtHour.find(c => c.row === row && c.col === col);
+              if (cell) {
+                setSelectedCell(cell);
+                if (!isMobile) setSidebarOpen(true);
+              }
+            }
+          }
+          toast.success('Restored shared precomputed forecast view');
+          return;
+        }
+
+        const legacy = await supabase.from('forecasts').select('hourly_grids, bbox').eq('id', sharedForecast).single();
+        if (legacy.data?.hourly_grids && Array.isArray(legacy.data.hourly_grids)) {
+          setHourlyGrids(legacy.data.hourly_grids as unknown as GridCell[][]);
           setForecastId(sharedForecast);
           const cellParam = params.get('cell');
           if (cellParam) {
             const [row, col] = cellParam.split(',').map(Number);
-            const safeHourIdx = Math.min(hourValue, (data.hourly_grids as unknown as GridCell[][]).length - 1);
-            const grid = (data.hourly_grids as unknown as GridCell[][])[safeHourIdx];
+            const safeHourIdx = Math.min(hourValue, (legacy.data.hourly_grids as unknown as GridCell[][]).length - 1);
+            const grid = (legacy.data.hourly_grids as unknown as GridCell[][])[safeHourIdx];
             if (grid) {
               const cell = grid.find(c => c.row === row && c.col === col);
               if (cell) {
@@ -230,9 +286,9 @@ export default function Index() {
           }
           toast.success('Restored shared forecast view');
         }
-      });
+      })();
     }
-  }, []);
+  }, [hydrateForecastGridRow, isMobile]);
 
   const grid = useMemo(() => {
     if (hourlyGrids && hourlyGrids[timeOffset]) {
@@ -249,14 +305,36 @@ export default function Index() {
   }, [isMobile]);
 
   const handleRegionChange = useCallback((r: Region) => {
-    setRegion(r); setSelectedCell(null); setHourlyGrids(null); setForecastId(undefined); setTimeOffset(0);
+    setRegion(r); setSelectedCell(null); setHourlyGrids(null); setForecastId(undefined); setTimeOffset(0); setWeatherSummary(null);
   }, []);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const latest = await loadLatestForecastGrid(region.name);
+        if (alive && latest) {
+          hydrateForecastGridRow(latest);
+        }
+      } catch {
+        // Keep the existing simulated fallback when no precomputed grid exists.
+      }
+    })();
+    return () => { alive = false; };
+  }, [region.name, hydrateForecastGridRow, loadLatestForecastGrid]);
 
   const runForecast = async () => {
     setForecasting(true);
     const hours = expertMode ? 72 : 24;
-    toast.info(`Running ${hours}h forecast with real weather data...`);
     try {
+      toast.info(`Loading ${hours}h precomputed forecast...`);
+      const latest = await loadLatestForecastGrid(region.name);
+      if (latest) {
+        hydrateForecastGridRow(latest);
+        toast.success(`Loaded precomputed forecast for ${region.name}`);
+        return;
+      }
+      toast.info('No precomputed forecast available yet — using legacy generator as fallback');
       const { data, error } = await supabase.functions.invoke('run-forecast', {
         body: { bbox: region.bbox, timeOffset, regionName: region.name, hours },
       });
@@ -269,7 +347,7 @@ export default function Index() {
           setHourlyGrids(forecast.hourly_grids as unknown as GridCell[][]);
         }
       }
-      toast.success(`Forecast complete • Source: ${data?.weatherSource || 'simulation'} • ${data?.hours || hours + 1} hours`);
+      toast.success(`Forecast complete • Source: ${data?.weatherSource || 'simulation'} • Mode: ${data?.capability_summary || data?.mode || 'Edge-only fallback'} • ${data?.hours || hours + 1} hours`);
       if (data?.weatherSummary) {
         toast.info(`Real weather: ${data.weatherSummary.snowfall_24h}cm snow, ${data.weatherSummary.wind_speed}km/h wind`);
       }

@@ -10,20 +10,21 @@ interface Props {
   events?: AvalancheEvent[];
   regionName?: string;
   hour?: number;
+  canExport?: boolean;
 }
 
-export default function ExportForecast({ grid, events = [], regionName = 'Unknown', hour = 0 }: Props) {
+export default function ExportForecast({ grid, events = [], regionName = 'Unknown', hour = 0, canExport = false }: Props) {
   const [copied, setCopied] = useState<'csv' | 'json' | null>(null);
 
   const downloadCSV = () => {
-    if (!grid || grid.cells.length === 0) {
+    if (!canExport || !grid || grid.cells.length === 0) {
       toast.info('Run a forecast first to export data');
       return;
     }
 
     // CSV Header — guard against cells with missing shapValues (e.g. simulated grid)
     const firstShapKeys = Object.keys(grid.cells[0]?.shapValues ?? {});
-    const headers = ['row', 'col', 'lat', 'lng', 'riskScore', 'hazard', 'exposure', 'vulnerability', 'problemType', ...firstShapKeys];
+    const headers = ['row', 'col', 'lat', 'lng', 'riskScore', 'probability', 'confidenceLower', 'confidenceUpper', 'uncertaintySpan', 'uncertaintyClass', 'hazard', 'exposure', 'vulnerability', 'problemType', ...firstShapKeys];
     
     // CSV Rows
     const rows = grid.cells.map(cell => [
@@ -32,6 +33,11 @@ export default function ExportForecast({ grid, events = [], regionName = 'Unknow
       cell.lat.toFixed(6),
       cell.lng.toFixed(6),
       cell.riskScore,
+      (cell.probability ?? cell.riskScore / 5).toFixed(3),
+      (cell.confidenceLower ?? 0).toFixed(3),
+      (cell.confidenceUpper ?? 0).toFixed(3),
+      (cell.uncertaintySpan ?? 0).toFixed(3),
+      cell.uncertaintyClass ?? 'unknown',
       cell.hazard.toFixed(3),
       cell.exposure.toFixed(3),
       cell.vulnerability.toFixed(3),
@@ -55,7 +61,7 @@ export default function ExportForecast({ grid, events = [], regionName = 'Unknow
   };
 
   const downloadJSON = () => {
-    if (!grid || grid.cells.length === 0) {
+    if (!canExport || !grid || grid.cells.length === 0) {
       toast.info('Run a forecast first to export data');
       return;
     }
@@ -69,7 +75,18 @@ export default function ExportForecast({ grid, events = [], regionName = 'Unknow
         totalCells: grid.cells.length,
         exportedAt: new Date().toISOString()
       },
-      grid: grid.cells,
+      grid: grid.cells.map((cell) => ({
+        ...cell,
+        probability: cell.probability ?? cell.riskScore / 5,
+        confidenceLower: cell.confidenceLower ?? null,
+        confidenceUpper: cell.confidenceUpper ?? null,
+        uncertaintySpan: cell.uncertaintySpan ?? null,
+        uncertaintyClass: cell.uncertaintyClass ?? null,
+        runoutSeed: cell.runoutSeed ?? false,
+        inferenceBackend: cell.inferenceBackend ?? 'client_simulation',
+        modelVersion: cell.modelVersion ?? null,
+        calibrationProfile: cell.calibrationProfile ?? null,
+      })),
       events: events.map(e => ({
         id: e.id,
         lat: e.lat,
@@ -108,6 +125,7 @@ export default function ExportForecast({ grid, events = [], regionName = 'Unknow
       <Button
         variant="outline"
         className="h-9 text-xs font-semibold gap-2 glass-panel border-0"
+        disabled={!canExport}
         onClick={handleExport}
       >
         {copied === 'csv' ? <Check className="h-4 w-4 text-green-400" /> : <CsvIcon className="h-4 w-4" />}
@@ -116,6 +134,7 @@ export default function ExportForecast({ grid, events = [], regionName = 'Unknow
       <Button
         variant="outline"
         className="h-9 text-xs font-semibold gap-2 glass-panel border-0"
+        disabled={!canExport}
         onClick={() => {
           downloadJSON();
           setCopied('json');
