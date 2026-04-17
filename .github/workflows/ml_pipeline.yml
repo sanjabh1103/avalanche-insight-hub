@@ -223,6 +223,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           NEWS_LOOKBACK_HOURS: '48'
-          NEWS_MAX_ARTICLES: '50'
+          NEWS_MAX_ARTICLES: '10'
           NEWS_MIN_CONFIDENCE: '0.6'
         run: python -m backend.news_ingest

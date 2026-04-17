@@ -41,7 +41,7 @@ SUPABASE_URL = os.getenv('SUPABASE_URL', '').rstrip('/')
 SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
 
 NEWS_LOOKBACK_HOURS = int(os.getenv('NEWS_LOOKBACK_HOURS', '48'))
-NEWS_MAX_ARTICLES = int(os.getenv('NEWS_MAX_ARTICLES', '50'))
+NEWS_MAX_ARTICLES = int(os.getenv('NEWS_MAX_ARTICLES', '10'))  # free-tier cap
 NEWS_MIN_CONFIDENCE = float(os.getenv('NEWS_MIN_CONFIDENCE', '0.6'))
 NEWS_QUERY = os.getenv('NEWS_QUERY', 'avalanche')
 
@@ -66,10 +66,11 @@ def fetch_newsdata_articles() -> list[dict[str, Any]]:
         'apikey': NEWSDATA_KEY,
         'q': NEWS_QUERY,
         'language': 'en',
-        'category': 'environment,top,world',
-        'size': min(NEWS_MAX_ARTICLES, 50),
+        'size': min(NEWS_MAX_ARTICLES, 10),  # newsdata.io free tier cap
     }
     resp = requests.get(NEWSDATA_ENDPOINT, params=params, timeout=30)
+    if resp.status_code >= 400:
+        print(f'[news_ingest] newsdata {resp.status_code}: {resp.text[:300]}', file=sys.stderr)
     resp.raise_for_status()
     body = resp.json()
     results = body.get('results') or []
