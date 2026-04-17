@@ -30,7 +30,7 @@ import requests
 from backend.common.regions import Region, load_regions
 
 NEWSDATA_ENDPOINT = 'https://newsdata.io/api/1/latest'
-GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash-latest')
+GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-flash-latest')
 GEMINI_ENDPOINT = (
     f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent'
 )
