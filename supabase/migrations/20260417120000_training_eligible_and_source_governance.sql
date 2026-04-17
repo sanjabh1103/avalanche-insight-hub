@@ -45,7 +45,7 @@ ALTER TABLE public.avalanche_events
 -- Canonical (preferred for new code):
 --   manual, field_report, gemini_news, gee_sar, sentinel_refresh, historical_import, admin, synthetic
 -- Legacy (already in use by trigger-job and older ingest paths) kept for backward compatibility:
---   newsdata.io, Sentinel-1, rls-test
+--   newsdata.io, Sentinel-1, sentinel-1-sar, rls-test
 ALTER TABLE public.avalanche_events
   ADD CONSTRAINT avalanche_events_source_check
   CHECK (source IN (
@@ -59,6 +59,7 @@ ALTER TABLE public.avalanche_events
     'synthetic',
     'newsdata.io',
     'Sentinel-1',
+    'sentinel-1-sar',
     'rls-test'
   ));
 
