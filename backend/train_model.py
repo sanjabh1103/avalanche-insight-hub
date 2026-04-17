@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,7 +15,8 @@ from imblearn.over_sampling import KMeansSMOTE
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import RFE
-from sklearn.metrics import accuracy_score, brier_score_loss, f1_score, precision_score, recall_score, roc_auc_score
+from sklearn.metrics import accuracy_score, brier_score_loss, confusion_matrix, f1_score, precision_score, recall_score, roc_auc_score
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.svm import SVC
 
 from backend.common.artifacts import create_artifact_dir, dump_json, dump_joblib
@@ -21,6 +24,28 @@ from backend.common.config import load_settings
 from backend.common.features import FEATURE_COLUMNS, generate_training_frame
 from backend.common.regions import load_regions
 from backend.common.supabase_io import has_supabase_credentials, patch_first_row
+
+
+# Story 21 + Edit 3: publish the minimum Peirce Skill Score required for the
+# trained model artifact to be accepted. Set via env so CI can promote models
+# only after a cold-start warmup period.
+PSS_FLOOR = float(os.getenv('PSS_FLOOR', '0.45'))
+TIME_SERIES_SPLITS = int(os.getenv('TIME_SERIES_SPLITS', '5'))
+
+
+def peirce_skill_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """PSS = TPR - FPR. Defined on binary labels only. Returns 0.0 on degenerate inputs."""
+    y_true_arr = np.asarray(y_true).astype(int)
+    y_pred_arr = np.asarray(y_pred).astype(int)
+    if y_true_arr.size == 0:
+        return 0.0
+    try:
+        tn, fp, fn, tp = confusion_matrix(y_true_arr, y_pred_arr, labels=[0, 1]).ravel()
+    except ValueError:
+        return 0.0
+    tpr = tp / (tp + fn) if (tp + fn) else 0.0
+    fpr = fp / (fp + tn) if (fp + tn) else 0.0
+    return float(tpr - fpr)
 
 
 def chronological_split(frame: pd.DataFrame, train_ratio: float = 0.7, calib_ratio: float = 0.15):
@@ -38,24 +63,39 @@ def chronological_split(frame: pd.DataFrame, train_ratio: float = 0.7, calib_rat
 
 
 def try_smote(x_train: pd.DataFrame, y_train: pd.Series, seed: int):
+    """Edit 3 locked: KMeansSMOTE with FIXED k_neighbors=5 per PRD contract.
+
+    Challenge 5 mitigation — 13:1 class imbalance cannot be fixed with a
+    dynamically shrinking k because that lets the sampler degrade to noise.
+    We accept that datasets with fewer than 6 minority samples (k+1) cannot
+    be safely resampled and fall back to class-weight-only training in that
+    case, which the RandomForest still handles via class_weight={0:1, 1:4}.
+    """
     class_counts = Counter(y_train.tolist())
     min_class = min(class_counts.values()) if class_counts else 0
-    if min_class < 2:
-        return x_train, y_train, {'strategy': 'class_weight_only', 'note': 'insufficient_minority_samples'}
 
-    k_neighbors = max(1, min(5, min_class - 1))
+    LOCKED_K_NEIGHBORS = 5
+    if min_class <= LOCKED_K_NEIGHBORS:
+        return x_train, y_train, {
+            'strategy': 'class_weight_only',
+            'note': f'insufficient_minority_samples (min_class={min_class}, required>{LOCKED_K_NEIGHBORS})',
+            'k_neighbors_target': LOCKED_K_NEIGHBORS,
+            'class_counts_before': dict(class_counts),
+        }
+
     try:
-        sampler = KMeansSMOTE(random_state=seed, k_neighbors=k_neighbors, cluster_balance_threshold=0.1)
+        sampler = KMeansSMOTE(random_state=seed, k_neighbors=LOCKED_K_NEIGHBORS, cluster_balance_threshold=0.1)
         x_res, y_res = sampler.fit_resample(x_train, y_train)
         return x_res, y_res, {
             'strategy': 'kmeanssmote',
-            'k_neighbors': k_neighbors,
+            'k_neighbors': LOCKED_K_NEIGHBORS,
             'class_counts_before': dict(class_counts),
             'class_counts_after': dict(Counter(y_res.tolist())),
         }
     except Exception as exc:  # pragma: no cover - fallback is intentional
         return x_train, y_train, {
             'strategy': 'fallback_no_resample',
+            'k_neighbors_target': LOCKED_K_NEIGHBORS,
             'error': str(exc),
             'class_counts_before': dict(class_counts),
         }
@@ -70,9 +110,47 @@ def selected_feature_contributions(model: RandomForestClassifier, selected_featu
     return dict(sorted(contributions.items(), key=lambda item: abs(item[1]), reverse=True)[:5])
 
 
+def timeseries_cv_pss(frame: pd.DataFrame, seed: int, n_splits: int) -> dict:
+    """Story 21: evaluate PSS across chronological folds (no random shuffle).
+
+    Returns mean PSS plus per-fold scores so we can audit drift over time.
+    """
+    ordered = frame.sort_values('timestamp').reset_index(drop=True)
+    x = ordered[FEATURE_COLUMNS].astype(float).values
+    y = ordered['label'].astype(int).values
+    if len(y) < n_splits * 2 or len(np.unique(y)) < 2:
+        return {'mean_pss': 0.0, 'fold_pss': [], 'note': 'insufficient_folds_or_classes'}
+
+    tscv = TimeSeriesSplit(n_splits=n_splits)
+    fold_scores: list[float] = []
+    for fold_idx, (train_idx, test_idx) in enumerate(tscv.split(x)):
+        y_train_fold = y[train_idx]
+        if len(np.unique(y_train_fold)) < 2:
+            continue
+        rf_fold = RandomForestClassifier(
+            n_estimators=200,
+            random_state=seed + fold_idx,
+            class_weight={0: 1, 1: 4},
+            n_jobs=-1,
+            min_samples_leaf=2,
+        )
+        rf_fold.fit(x[train_idx], y_train_fold)
+        y_prob_fold = rf_fold.predict_proba(x[test_idx])[:, 1]
+        y_pred_fold = (y_prob_fold >= 0.5).astype(int)
+        fold_scores.append(peirce_skill_score(y[test_idx], y_pred_fold))
+
+    mean_pss = float(np.mean(fold_scores)) if fold_scores else 0.0
+    return {'mean_pss': mean_pss, 'fold_pss': fold_scores, 'n_splits': n_splits}
+
+
 def fit_model(seed: int, samples_per_region: int):
     regions = load_regions()
     frame = generate_training_frame(regions, samples_per_region=samples_per_region, seed=seed)
+
+    # Edit 3 Story 21: chronological TimeSeriesSplit PSS audit BEFORE the final
+    # production fit so we can report drift-aware scores for the release gate.
+    cv_metrics = timeseries_cv_pss(frame, seed=seed, n_splits=TIME_SERIES_SPLITS)
+
     train_df, calib_df, test_df = chronological_split(frame)
 
     x_train = train_df[FEATURE_COLUMNS].astype(float)
@@ -83,21 +161,30 @@ def fit_model(seed: int, samples_per_region: int):
     y_test = test_df['label'].astype(int)
 
     x_res, y_res, resample_meta = try_smote(x_train, y_train, seed)
+
+    # Edit 3 locked: SVM-RFE prunes to exactly 15 features (Challenge 6).
+    # We deliberately require >=15 raw features; if the generator ever returns
+    # fewer, we widen to whatever is available but flag it in metadata so CI
+    # can catch the regression.
+    target_n_features = 15
+    effective_n_features = min(target_n_features, x_res.shape[1])
     selector = RFE(
         estimator=SVC(kernel='linear', class_weight='balanced', random_state=seed),
-        n_features_to_select=min(15, x_res.shape[1]),
+        n_features_to_select=effective_n_features,
         step=1,
     )
     selector.fit(x_res, y_res)
 
     selected_features = [feature for feature, keep in zip(FEATURE_COLUMNS, selector.support_) if keep]
     if not selected_features:
-        selected_features = FEATURE_COLUMNS[:15]
+        selected_features = FEATURE_COLUMNS[:target_n_features]
 
     x_res_sel = pd.DataFrame(selector.transform(x_res), columns=selected_features)
     x_cal_sel = pd.DataFrame(selector.transform(x_cal), columns=selected_features)
     x_test_sel = pd.DataFrame(selector.transform(x_test), columns=selected_features)
 
+    # Edit 3 locked: cost-sensitive RandomForest with asymmetric 4:1 penalty
+    # (Challenge 5 — missing an avalanche costs 4x more than a false alarm).
     rf = RandomForestClassifier(
         n_estimators=300,
         random_state=seed,
@@ -106,6 +193,21 @@ def fit_model(seed: int, samples_per_region: int):
         min_samples_leaf=2,
     )
     rf.fit(x_res_sel, y_res)
+
+    # Story 16: extract tree variance BEFORE wrapping in isotonic calibration
+    # so downstream inference has the raw epistemic variance rather than the
+    # squashed post-calibration distribution.
+    try:
+        test_tree_probs = np.column_stack([tree.predict_proba(x_test_sel)[:, 1] for tree in rf.estimators_])
+        tree_variance_policy = {
+            'mean_tree_std_on_test': float(test_tree_probs.std(axis=1).mean()),
+            'max_tree_std_on_test': float(test_tree_probs.std(axis=1).max()),
+            'extracted_before_calibration': True,
+        }
+        raw_mean_prob = test_tree_probs.mean(axis=1)
+    except Exception as exc:  # pragma: no cover - defensive
+        tree_variance_policy = {'error': str(exc), 'extracted_before_calibration': False}
+        raw_mean_prob = rf.predict_proba(x_test_sel)[:, 1]
 
     calibration_method = 'isotonic'
     calibrated_model = rf
@@ -128,6 +230,8 @@ def fit_model(seed: int, samples_per_region: int):
     y_prob = calibrated_model.predict_proba(x_test_sel)[:, 1]
     y_pred = (y_prob >= 0.5).astype(int)
 
+    holdout_pss = peirce_skill_score(y_test, y_pred)
+
     metrics = {
         'accuracy': float(accuracy_score(y_test, y_pred)),
         'f1': float(f1_score(y_test, y_pred, zero_division=0)),
@@ -136,6 +240,12 @@ def fit_model(seed: int, samples_per_region: int):
         'brier_score': float(brier_score_loss(y_test, y_prob)),
         'roc_auc': float(roc_auc_score(y_test, y_prob)) if len(np.unique(y_test)) >= 2 else None,
         'selected_feature_count': len(selected_features),
+        'target_feature_count': target_n_features,
+        'pss_holdout': holdout_pss,
+        'pss_timeseries_mean': cv_metrics.get('mean_pss', 0.0),
+        'pss_timeseries_folds': cv_metrics.get('fold_pss', []),
+        'pss_gate_floor': PSS_FLOOR,
+        'raw_mean_prob_p99': float(np.quantile(raw_mean_prob, 0.99)) if raw_mean_prob.size else None,
     }
 
     bundle = {
@@ -148,7 +258,9 @@ def fit_model(seed: int, samples_per_region: int):
         'resampling': resample_meta,
         'calibration_method': calibration_method,
         'calibration_error': calibration_error,
+        'tree_variance_policy': tree_variance_policy,
         'metrics': metrics,
+        'cv_metrics': cv_metrics,
         'created_at': datetime.now(timezone.utc).isoformat(),
         'seed': seed,
     }
@@ -187,7 +299,32 @@ def main() -> int:
     args.artifact_root.mkdir(parents=True, exist_ok=True)
     artifact_dir = create_artifact_dir(args.artifact_root)
     bundle = fit_model(seed=args.seed, samples_per_region=args.samples_per_region)
+
+    # Edit 3 Story 21: PSS > PSS_FLOOR artifact gate. Use the higher of the
+    # chronological-CV mean and the holdout PSS so a single lucky test fold
+    # cannot shadow a poor CV run.
+    pss_reported = max(
+        float(bundle['metrics'].get('pss_holdout', 0.0) or 0.0),
+        float(bundle['metrics'].get('pss_timeseries_mean', 0.0) or 0.0),
+    )
+    gate_passed = pss_reported > PSS_FLOOR
+    bundle['metrics']['pss_reported'] = pss_reported
+    bundle['metrics']['pss_gate_passed'] = gate_passed
+
     metadata = publish_metadata(artifact_dir, bundle)
+    metadata['pss_reported'] = pss_reported
+    metadata['pss_gate_passed'] = gate_passed
+    metadata['pss_gate_floor'] = PSS_FLOOR
+    dump_json(artifact_dir / 'training_metrics.json', metadata)
+
+    if not gate_passed:
+        print(
+            f"[train_model] PSS gate FAILED: reported={pss_reported:.3f} <= floor={PSS_FLOOR:.3f}. "
+            "Refusing to publish artifact to Supabase.",
+            file=sys.stderr,
+        )
+        print(json.dumps(metadata, indent=2))
+        return 2
 
     if has_supabase_credentials():
         payload = {

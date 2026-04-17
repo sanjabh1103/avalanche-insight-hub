@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: '0 4 * * 1'
     - cron: '0 2 * * *'
+    - cron: '0 3 * * 1'  # weekly SAR extraction (only runs when GEE secrets present)
   workflow_dispatch:
     inputs:
       mode:
@@ -15,6 +16,7 @@ on:
           - train
           - infer
           - backfill
+          - gee
       samples_per_region:
         description: 'Training samples per region'
         required: false
@@ -23,6 +25,14 @@ on:
         description: 'Forecast horizon hours'
         required: false
         default: '72'
+      pss_floor:
+        description: 'PSS artifact gate floor (train + backfill). Defaults to 0.45; override to 0.0 for cold-start warmup.'
+        required: false
+        default: '0.45'
+      run_physics_runout:
+        description: 'Enable WhiteboxTools/rasterio Alpha-Beta runout physics (requires DEMs in backend/data/dem)'
+        required: false
+        default: 'false'
 
 permissions:
   contents: read
@@ -54,6 +64,7 @@ jobs:
           ARTIFACT_ROOT: backend/artifacts
           SAMPLES_PER_REGION: ${{ github.event.inputs.samples_per_region || '500' }}
           ML_SEED: '42'
+          PSS_FLOOR: ${{ github.event.inputs.pss_floor || '0.45' }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python backend/train_model.py
@@ -93,6 +104,7 @@ jobs:
           ARTIFACT_ROOT: backend/artifacts
           FORECAST_HOURS: ${{ github.event.inputs.forecast_hours || '72' }}
           GRID_SIZE: '20'
+          RUN_PHYSICS_RUNOUT: ${{ github.event.inputs.run_physics_runout || 'false' }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python backend/daily_inference.py
@@ -125,6 +137,7 @@ jobs:
           ARTIFACT_ROOT: backend/artifacts
           SAMPLES_PER_REGION: ${{ github.event.inputs.samples_per_region || '500' }}
           ML_SEED: '42'
+          PSS_FLOOR: ${{ github.event.inputs.pss_floor || '0.45' }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python backend/train_model.py
@@ -134,6 +147,7 @@ jobs:
           ARTIFACT_ROOT: backend/artifacts
           FORECAST_HOURS: ${{ github.event.inputs.forecast_hours || '72' }}
           GRID_SIZE: '20'
+          RUN_PHYSICS_RUNOUT: ${{ github.event.inputs.run_physics_runout || 'false' }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python backend/daily_inference.py
@@ -143,3 +157,33 @@ jobs:
         with:
           name: avalanche-backfill-artifacts
           path: backend/artifacts
+
+  gee:
+    # Story 21 SAR Shadow Fix + Edit 4: Sentinel-1 wet-snow extraction with
+    # mandatory SRTM layover/shadow mask BEFORE VV/VH thresholding.
+    # Runs only when GEE service-account secrets are configured; otherwise
+    # the Python script exits 0 cleanly so the job never fails.
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'gee') || (github.event_name == 'schedule' && github.event.schedule == '0 3 * * 1')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install -r backend/requirements.txt earthengine-api
+
+      - name: Run GEE Sentinel-1 extractor
+        env:
+          GEE_SERVICE_ACCOUNT_JSON: ${{ secrets.GEE_SERVICE_ACCOUNT_JSON }}
+          GEE_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GEE_SERVICE_ACCOUNT_EMAIL }}
+          GEE_LOOKBACK_DAYS: '7'
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m backend.gee_extractor

@@ -13,6 +13,8 @@ from backend.common.artifacts import create_artifact_dir, dump_json, latest_arti
 from backend.common.config import load_settings
 from backend.common.features import FEATURE_COLUMNS, SampleContext, build_feature_row, build_region_grid
 from backend.common.regions import load_regions
+from backend.common.runout import RUN_PHYSICS_RUNOUT, build_runout_polygons
+from backend.common.snowpack_proxy import compute_region_snowpack_proxy
 from backend.common.supabase_io import has_supabase_credentials, patch_first_row, rest_upsert
 from backend.train_model import fit_model
 
@@ -63,6 +65,11 @@ def build_cells(region, bundle, grid_size: int, forecast_date: pd.Timestamp):
     region_grid = build_region_grid(region, grid_size=grid_size)
     rng_seed = int(hashlib.sha256(f'{region.key}:{forecast_date.date().isoformat()}'.encode('utf-8')).hexdigest()[:8], 16)
     rng = np.random.default_rng(rng_seed)
+
+    # Story 20: compute a single regional HIM-STRAT snowpack proxy per run
+    # to keep Open-Meteo calls bounded, then attach to every cell.
+    region_center_lat = (region.bbox[0] + region.bbox[2]) / 2.0
+    region_center_lng = (region.bbox[1] + region.bbox[3]) / 2.0
     rows = []
 
     for cell in region_grid:
@@ -123,6 +130,31 @@ def build_cells(region, bundle, grid_size: int, forecast_date: pd.Timestamp):
             'model_version': bundle['created_at'],
             'calibration_profile': bundle['calibration_method'],
         })
+
+    # Attach HIM-STRAT snowpack proxy to every cell so Story 20 surfaces it in
+    # the Expert Mode UI. Single Open-Meteo call per region.
+    try:
+        proxy = compute_region_snowpack_proxy(
+            center_lat=region_center_lat,
+            center_lng=region_center_lng,
+            as_of=forecast_date.to_pydatetime() if isinstance(forecast_date, pd.Timestamp) else forecast_date,
+            cells=rows,
+        )
+        proxy_payload = {
+            'estimated_shear_strength': proxy.estimated_shear_strength,
+            'snow_settlement_index': proxy.snow_settlement_index,
+            'season_start': proxy.season_start,
+            'method': proxy.method,
+        }
+        for row in rows:
+            row['snowpack_proxy'] = proxy_payload
+    except Exception as exc:  # pragma: no cover - best effort
+        for row in rows:
+            row['snowpack_proxy'] = {
+                'error': str(exc),
+                'method': 'proxy_unavailable',
+            }
+
     return rows
 
 
@@ -134,22 +166,10 @@ def upsert_forecast_grid(region, bundle, forecast_date: pd.Timestamp, rows: list
     temp_gradient_avg = float(np.mean([item.get('temp_gradient', 0) for item in weather_inputs])) if weather_inputs else 0.0
     precipitation_avg = float(np.mean([item.get('snowfall_24h', 0) for item in weather_inputs])) if weather_inputs else 0.0
     snow_depth_proxy = float(np.mean([item.get('elevation', 0) for item in terrain_inputs]) * 1000) if terrain_inputs else 0.0
-    runout_polygons = []
-    for row in rows:
-        if not row.get('runout_seed'):
-            continue
-        runout_polygons.append({
-            'row': row['row'],
-            'col': row['col'],
-            'risk_score': row['risk_score'],
-            'polygon': [
-                [row['lng'], row['lat']],
-                [row['lng_end'], row['lat']],
-                [row['lng_end'], row['lat_end']],
-                [row['lng'], row['lat_end']],
-                [row['lng'], row['lat']],
-            ],
-        })
+    # Story 18: physics-aware Alpha-Beta runout polygons with OOM-guarded DEM
+    # crop. Behind RUN_PHYSICS_RUNOUT flag; falls back to analytical Alpha-Beta
+    # then to rectangular polygons when DEM / whitebox / rasterio missing.
+    runout_polygons = build_runout_polygons(region.key, rows)
     payload = {
         'hazard_type': 'avalanche',
         'region_key': region.key,
@@ -175,7 +195,12 @@ def upsert_forecast_grid(region, bundle, forecast_date: pd.Timestamp, rows: list
             'feature_columns': bundle['feature_columns'],
             'calibration_profile': bundle['calibration_method'],
             'resampling': bundle['resampling'],
+            'tree_variance_policy': bundle.get('tree_variance_policy'),
+            'pss_metrics': bundle.get('metrics', {}),
+            'cv_metrics': bundle.get('cv_metrics'),
             'threshold_profile': 'heuristic-risk-bands-v1',
+            'run_physics_runout': RUN_PHYSICS_RUNOUT,
+            'runout_method_sample': next((rp.get('method') for rp in runout_polygons if rp.get('method') and rp.get('method') != 'deferred_oom_guard'), None),
         },
         'status': 'ready',
     }
