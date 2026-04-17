@@ -25,6 +25,30 @@ export interface GridCell {
   terrainInputs?: Record<string, number>;
   modelVersion?: string;
   calibrationProfile?: string;
+  snowpackProxy?: {
+    estimated_shear_strength?: number;
+    snow_settlement_index?: number;
+    season_start?: string;
+    method?: string;
+  };
+}
+
+// Story 16: strict PRD rule — grey voxels when the raw confidence interval
+// span exceeds 0.30, OVERRIDING the EAWS palette regardless of risk score.
+export const HIGH_UNCERTAINTY_SPAN_THRESHOLD = 0.3;
+
+export function isHighUncertaintyCell(cell: Pick<GridCell, 'confidenceLower' | 'confidenceUpper' | 'uncertaintySpan' | 'uncertaintyClass'> | null | undefined): boolean {
+  if (!cell) return false;
+  const { confidenceLower, confidenceUpper, uncertaintySpan, uncertaintyClass } = cell;
+  if (typeof confidenceLower === 'number' && typeof confidenceUpper === 'number'
+    && Number.isFinite(confidenceLower) && Number.isFinite(confidenceUpper)) {
+    return (confidenceUpper - confidenceLower) > HIGH_UNCERTAINTY_SPAN_THRESHOLD;
+  }
+  if (typeof uncertaintySpan === 'number' && Number.isFinite(uncertaintySpan)) {
+    return uncertaintySpan > HIGH_UNCERTAINTY_SPAN_THRESHOLD;
+  }
+  // Fallback for legacy cells that only shipped a class label.
+  return uncertaintyClass === 'high';
 }
 
 export interface ForecastGrid {
@@ -100,7 +124,23 @@ function normalizeCell(cell: Partial<GridCell> & Record<string, unknown>): GridC
     terrainInputs: (cell.terrainInputs as Record<string, number>) || (cell.terrain_inputs as Record<string, number>) || undefined,
     modelVersion: typeof cell.modelVersion === 'string' ? cell.modelVersion : (typeof cell.model_version === 'string' ? String(cell.model_version) : undefined),
     calibrationProfile: typeof cell.calibrationProfile === 'string' ? cell.calibrationProfile : (typeof cell.calibration_profile === 'string' ? String(cell.calibration_profile) : undefined),
+    snowpackProxy: normalizeSnowpackProxy(cell.snowpackProxy ?? cell.snowpack_proxy),
   };
+}
+
+function normalizeSnowpackProxy(value: unknown): GridCell['snowpackProxy'] {
+  if (!value || typeof value !== 'object') return undefined;
+  const v = value as Record<string, unknown>;
+  const shear = v.estimated_shear_strength ?? v.estimatedShearStrength;
+  const settle = v.snow_settlement_index ?? v.snowSettlementIndex;
+  const seasonStart = v.season_start ?? v.seasonStart;
+  const method = v.method;
+  const payload: GridCell['snowpackProxy'] = {};
+  if (typeof shear === 'number' && Number.isFinite(shear)) payload.estimated_shear_strength = shear;
+  if (typeof settle === 'number' && Number.isFinite(settle)) payload.snow_settlement_index = settle;
+  if (typeof seasonStart === 'string' && seasonStart) payload.season_start = seasonStart;
+  if (typeof method === 'string' && method) payload.method = method;
+  return Object.keys(payload).length > 0 ? payload : undefined;
 }
 
 export function forecastGridRowToCells(row: ForecastGridRowRecord): GridCell[] {

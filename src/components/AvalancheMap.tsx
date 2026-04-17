@@ -2,7 +2,7 @@ import { useEffect, useRef, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Rectangle, CircleMarker, Popup, Polygon, useMap } from 'react-leaflet';
 import type { LatLngBoundsExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { getRiskColor, type GridCell } from '@/lib/gridUtils';
+import { getRiskColor, isHighUncertaintyCell, type GridCell } from '@/lib/gridUtils';
 import type { AvalancheEvent } from '@/components/HistoricalEventsToggle';
 import { useTheme } from 'next-themes';
 import ActivityHeatmap from '@/components/ActivityHeatmap';
@@ -106,7 +106,7 @@ export default function AvalancheMap({
       {cells.map((cell) => {
         const bounds: LatLngBoundsExpression = [[cell.lat, cell.lng], [cell.latEnd, cell.lngEnd]];
         const isSelected = selectedCell?.row === cell.row && selectedCell?.col === cell.col;
-        const isHighUncertainty = cell.uncertaintyClass === 'high' || (cell.uncertaintySpan ?? 0) > 0.3;
+        const isHighUncertainty = isHighUncertaintyCell(cell);
         return (
           <Rectangle
             key={`${cell.row}-${cell.col}`}

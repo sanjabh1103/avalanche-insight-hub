@@ -28,10 +28,11 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
     );
   }
 
+  // Story 19: Top 5 by ABSOLUTE contribution (negative drivers matter too).
   const shapData = Object.entries(cell.shapValues).map(([key, value]) => ({
     name: key.replace(/_/g, ' '),
     value: Number((value as number).toFixed(3)),
-  })).sort((a, b) => b.value - a.value).slice(0, 5);
+  })).sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, 5);
 
   const maxShap = Math.max(...shapData.map(d => d.value), 0.01);
 

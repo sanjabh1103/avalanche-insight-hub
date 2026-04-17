@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import HydrographChart from '@/components/HydrographChart';
+import SnowpackProxyCard from '@/components/SnowpackProxyCard';
 import { supabase } from '@/integrations/supabase/client';
 import type { GridCell } from '@/lib/gridUtils';
 
@@ -110,6 +111,9 @@ export default function ExpertModePanel({
                 </div>
               </CardContent>
             </Card>
+
+            {/* Story 20: Class-II snowpack proxy visibility */}
+            <SnowpackProxyCard selectedCell={selectedCell} />
 
             {/* Hydrograph */}
             <HydrographChart hourlyGrids={hourlyGrids} selectedCell={selectedCell} />

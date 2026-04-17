@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, RefreshCw, Loader2, Info } from 'lucide-react';
 import { RISK_COLORS, RISK_LABELS, GRID_SIZE } from '@/lib/constants';
-import type { GridCell } from '@/lib/gridUtils';
+import { isHighUncertaintyCell, type GridCell } from '@/lib/gridUtils';
 import { Canvas, ThreeEvent, useFrame } from '@react-three/fiber';
 import { OrbitControls, Instances, Instance } from '@react-three/drei';
 import { useTheme } from 'next-themes';
@@ -249,8 +249,9 @@ function buildRenderedVoxels(voxels: VoxelCoordinate[], cells: GridCell[]): Voxe
   return rendered;
 }
 
+// Story 16: strict PRD rule delegated to canonical helper (span > 0.30 overrides EAWS).
 function isHighUncertainty(cell: GridCell | undefined) {
-  return cell?.uncertaintyClass === 'high' || (cell?.uncertaintySpan ?? 0) > 0.3;
+  return isHighUncertaintyCell(cell);
 }
 
 // Store the in-progress promise for deduplication
