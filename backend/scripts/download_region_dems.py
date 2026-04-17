@@ -30,9 +30,11 @@ import requests
 from backend.common.regions import load_regions, repo_root
 
 OT_ENDPOINT = 'https://portal.opentopography.org/API/globaldem'
-OT_DATASET = 'SRTMGL1'  # 30 m global
+# SRTMGL3 (90 m) keeps the LFS budget small and is sufficient for 5 km runout
+# windows. Override with OT_DEM_DATASET=SRTMGL1 for full 30 m when needed.
+OT_DATASET = os.getenv('OT_DEM_DATASET', 'SRTMGL3')
 DEM_DIR = repo_root() / 'backend' / 'data' / 'dem'
-MIN_BYTES = 1_000_000  # 1 MB sanity floor
+MIN_BYTES = 200_000  # 200 KB sanity floor (90 m tiles can be small)
 
 
 def fetch_srtm(bbox: tuple[float, float, float, float], dest: Path, api_key: str) -> None:

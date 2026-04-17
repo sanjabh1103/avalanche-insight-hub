@@ -34,3 +34,14 @@ backend/artifacts/
 
 # vite-plugin-pwa generated artifacts under dist/
 dev-dist/
+
+# Secrets — NEVER commit service-account keys or credential blobs
+docs/key.json
+docs/*key*.json
+docs/*credentials*.json
+docs/*service-account*.json
+*.pem
+gee-service-account*.json
+
+# Local DEM staging (raw pre-compression copies, if any)
+backend/data/dem/raw/
