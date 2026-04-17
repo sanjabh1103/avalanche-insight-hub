@@ -15,7 +15,7 @@ from imblearn.over_sampling import KMeansSMOTE
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import RFE
-from sklearn.metrics import accuracy_score, brier_score_loss, confusion_matrix, f1_score, precision_score, recall_score, roc_auc_score
+from sklearn.metrics import accuracy_score, brier_score_loss, confusion_matrix, f1_score, precision_score, recall_score, roc_auc_score, roc_curve
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.svm import SVC
 
@@ -38,6 +38,27 @@ TIME_SERIES_SPLITS = int(os.getenv('TIME_SERIES_SPLITS', '5'))
 # accumulated. Override via env during local dev.
 MIN_EVENTS_FOR_TRAINING = int(os.getenv('MIN_EVENTS_FOR_TRAINING', '30'))
 SKIP_EVENT_PRECHECK = os.getenv('SKIP_EVENT_PRECHECK', 'false').lower() in ('1', 'true', 'yes')
+
+
+def peirce_skill_score_max(y_true: np.ndarray, y_prob: np.ndarray) -> tuple[float, float]:
+    """Threshold-free PSS = max(TPR - FPR) over all probability thresholds.
+
+    This is the Hansen-Kuipers / Youden's J statistic — the standard
+    meteorology reporting convention for imbalanced, well-calibrated models
+    where a fixed 0.5 threshold would degenerately drive all predictions to
+    the majority class. Returns (max_pss, optimal_threshold).
+    """
+    y_true_arr = np.asarray(y_true).astype(int)
+    y_prob_arr = np.asarray(y_prob).astype(float)
+    if y_true_arr.size == 0 or len(np.unique(y_true_arr)) < 2:
+        return 0.0, 0.5
+    try:
+        fpr, tpr, thresholds = roc_curve(y_true_arr, y_prob_arr)
+    except Exception:
+        return 0.0, 0.5
+    j_scores = tpr - fpr
+    idx = int(np.argmax(j_scores))
+    return float(j_scores[idx]), float(thresholds[idx])
 
 
 def peirce_skill_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -143,8 +164,11 @@ def timeseries_cv_pss(frame: pd.DataFrame, seed: int, n_splits: int) -> dict:
         )
         rf_fold.fit(x[train_idx], y_train_fold)
         y_prob_fold = rf_fold.predict_proba(x[test_idx])[:, 1]
-        y_pred_fold = (y_prob_fold >= 0.5).astype(int)
-        fold_scores.append(peirce_skill_score(y[test_idx], y_pred_fold))
+        # Threshold-free PSS (Youden's J): standard meteorology convention.
+        # Fixed-0.5 PSS degenerates to 0 on imbalanced, well-calibrated models
+        # even when ROC-AUC shows strong discrimination.
+        fold_pss, _ = peirce_skill_score_max(y[test_idx], y_prob_fold)
+        fold_scores.append(fold_pss)
 
     mean_pss = float(np.mean(fold_scores)) if fold_scores else 0.0
     return {'mean_pss': mean_pss, 'fold_pss': fold_scores, 'n_splits': n_splits}
@@ -246,9 +270,12 @@ def fit_model(seed: int, samples_per_region: int):
         calibrated_model = rf
 
     y_prob = calibrated_model.predict_proba(x_test_sel)[:, 1]
+    # Threshold-free PSS (Youden's J) + its optimal operating point. The fixed
+    # 0.5 threshold is kept only for accuracy / F1 / confusion-matrix reporting
+    # because those metrics lose their conventional meaning otherwise.
+    holdout_pss, optimal_threshold = peirce_skill_score_max(y_test, y_prob)
     y_pred = (y_prob >= 0.5).astype(int)
-
-    holdout_pss = peirce_skill_score(y_test, y_pred)
+    y_pred_optimal = (y_prob >= optimal_threshold).astype(int)
 
     metrics = {
         'accuracy': float(accuracy_score(y_test, y_pred)),
@@ -260,6 +287,11 @@ def fit_model(seed: int, samples_per_region: int):
         'selected_feature_count': len(selected_features),
         'target_feature_count': target_n_features,
         'pss_holdout': holdout_pss,
+        'pss_optimal_threshold': optimal_threshold,
+        'pss_holdout_at_threshold_0p5': peirce_skill_score(y_test, y_pred),
+        'f1_at_optimal_threshold': float(f1_score(y_test, y_pred_optimal, zero_division=0)),
+        'precision_at_optimal_threshold': float(precision_score(y_test, y_pred_optimal, zero_division=0)),
+        'recall_at_optimal_threshold': float(recall_score(y_test, y_pred_optimal, zero_division=0)),
         'pss_timeseries_mean': cv_metrics.get('mean_pss', 0.0),
         'pss_timeseries_folds': cv_metrics.get('fold_pss', []),
         'pss_gate_floor': PSS_FLOOR,
