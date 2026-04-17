@@ -32,6 +32,12 @@ GEE_LOOKBACK_DAYS = int(os.getenv('GEE_LOOKBACK_DAYS', '7'))
 GEE_VV_THRESHOLD_DB = float(os.getenv('GEE_VV_THRESHOLD_DB', '-18'))
 GEE_VH_THRESHOLD_DB = float(os.getenv('GEE_VH_THRESHOLD_DB', '-22'))
 GEE_MAX_CENTROIDS_PER_REGION = int(os.getenv('GEE_MAX_CENTROIDS_PER_REGION', '50'))
+# Vectorization knobs — coarser scale + geometry simplification keep the
+# polygon edge count well below Earth Engine's 2M-edges cap for large,
+# wet-snow-rich regions (Himalayas, Cascades, Andes).
+GEE_VECTORIZE_SCALE_M = int(os.getenv('GEE_VECTORIZE_SCALE_M', '90'))
+GEE_SIMPLIFY_MAX_ERROR_M = float(os.getenv('GEE_SIMPLIFY_MAX_ERROR_M', '200'))
+GEE_MAX_PIXELS = int(float(os.getenv('GEE_MAX_PIXELS', '1e10')))
 
 
 def _has_credentials() -> bool:
@@ -56,14 +62,20 @@ def _initialize_ee():
     return ee
 
 
-def _process_region(ee, region) -> list[dict]:
-    """Edit 4: strict ordered pipeline — terrain mask BEFORE VV/VH threshold."""
+def _process_region(ee, region, start_date: datetime | None = None, end_date: datetime | None = None) -> list[dict]:
+    """Edit 4: strict ordered pipeline — terrain mask BEFORE VV/VH threshold.
+
+    ``start_date`` / ``end_date`` override the default N-day lookback, enabling
+    the historical backfill script to reuse this exact pipeline.
+    """
     lat_min, lng_min, lat_max, lng_max = region.bbox
     region_geom = ee.Geometry.Rectangle([lng_min, lat_min, lng_max, lat_max])
 
-    # 1. Sentinel-1 GRD IW over last N days, descending orbit only.
-    end_date = datetime.now(timezone.utc)
-    start_date = end_date - timedelta(days=GEE_LOOKBACK_DAYS)
+    # 1. Sentinel-1 GRD IW over the requested window, descending orbit only.
+    if end_date is None:
+        end_date = datetime.now(timezone.utc)
+    if start_date is None:
+        start_date = end_date - timedelta(days=GEE_LOOKBACK_DAYS)
     s1 = (
         ee.ImageCollection('COPERNICUS/S1_GRD')
         .filterBounds(region_geom)
@@ -119,16 +131,46 @@ def _process_region(ee, region) -> list[dict]:
     combined = masked_collection.max()
 
     # 5. Vectorize to centroids (capped) and pull to client.
+    # Fix for 'Geometry has too many edges' on large regions: vectorize at a
+    # coarser scale and simplify each feature geometry before pulling it to
+    # the client. EE's per-geometry edge cap is 2_000_000; at scale=90 with
+    # 200 m simplification, our 2°x2° bboxes stay well under that.
     vectors = combined.reduceToVectors(
         geometry=region_geom,
-        scale=30,
-        maxPixels=int(1e9),
+        scale=GEE_VECTORIZE_SCALE_M,
+        maxPixels=GEE_MAX_PIXELS,
         geometryType='polygon',
         eightConnected=True,
         reducer=ee.Reducer.countEvery(),
+        bestEffort=True,
     ).limit(GEE_MAX_CENTROIDS_PER_REGION)
 
-    features = vectors.getInfo().get('features', []) if vectors else []
+    def _simplify(feature):
+        return feature.simplify(GEE_SIMPLIFY_MAX_ERROR_M)
+
+    vectors = vectors.map(_simplify)
+
+    try:
+        features = vectors.getInfo().get('features', []) if vectors else []
+    except Exception as exc:
+        # Belt-and-braces: if vectorization still blows up on a pathological
+        # region, retry once at an even coarser scale with heavier simplify.
+        msg = str(exc)
+        if 'too many edges' not in msg and 'Geometry' not in msg:
+            raise
+        print(f'[gee_extractor] {region.key}: vectorize retry after edge-cap: {msg}', file=sys.stderr)
+        vectors = combined.reduceToVectors(
+            geometry=region_geom,
+            scale=GEE_VECTORIZE_SCALE_M * 3,
+            maxPixels=GEE_MAX_PIXELS,
+            geometryType='polygon',
+            eightConnected=True,
+            reducer=ee.Reducer.countEvery(),
+            bestEffort=True,
+        ).limit(GEE_MAX_CENTROIDS_PER_REGION).map(
+            lambda f: f.simplify(GEE_SIMPLIFY_MAX_ERROR_M * 3)
+        )
+        features = vectors.getInfo().get('features', []) if vectors else []
     events: list[dict] = []
     for feat in features:
         geom = feat.get('geometry') or {}

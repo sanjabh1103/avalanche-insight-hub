@@ -32,6 +32,13 @@ from backend.common.supabase_io import has_supabase_credentials, patch_first_row
 PSS_FLOOR = float(os.getenv('PSS_FLOOR', '0.45'))
 TIME_SERIES_SPLITS = int(os.getenv('TIME_SERIES_SPLITS', '5'))
 
+# Precheck: refuse to attempt training when the ground-truth corpus is too
+# small for KMeansSMOTE(k=5) to be meaningful. Exits 0 (success) so the weekly
+# scheduled auto-train does not generate CI noise before the event corpus has
+# accumulated. Override via env during local dev.
+MIN_EVENTS_FOR_TRAINING = int(os.getenv('MIN_EVENTS_FOR_TRAINING', '30'))
+SKIP_EVENT_PRECHECK = os.getenv('SKIP_EVENT_PRECHECK', 'false').lower() in ('1', 'true', 'yes')
+
 
 def peirce_skill_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """PSS = TPR - FPR. Defined on binary labels only. Returns 0.0 on degenerate inputs."""
@@ -300,12 +307,52 @@ def publish_metadata(artifact_dir: Path, bundle: dict[str, object]):
     return metadata
 
 
+def _count_eligible_events() -> int | None:
+    """Return the count of training-eligible severe events, or None if we
+    cannot query Supabase (e.g. running locally without creds)."""
+    if not has_supabase_credentials():
+        return None
+    from backend.common.config import load_settings as _ls
+    settings = _ls()
+    try:
+        import requests
+        resp = requests.get(
+            f"{settings.supabase_url.rstrip('/')}/rest/v1/avalanche_events",
+            params={'select': 'id', 'training_eligible': 'eq.true', 'severity': 'gte.3'},
+            headers={
+                'apikey': settings.supabase_service_role_key,
+                'Authorization': f'Bearer {settings.supabase_service_role_key}',
+                'Prefer': 'count=exact',
+                'Range': '0-0',
+            },
+            timeout=20,
+        )
+        resp.raise_for_status()
+        content_range = resp.headers.get('content-range', '0-0/0')
+        return int(content_range.split('/')[-1])
+    except Exception as exc:  # pragma: no cover - network path
+        print(f'[train_model] could not count eligible events ({exc}); skipping precheck', file=sys.stderr)
+        return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description='Train the Avalanche Insight Hub async ML model')
     parser.add_argument('--samples-per-region', type=int, default=load_settings().samples_per_region)
     parser.add_argument('--seed', type=int, default=load_settings().seed)
     parser.add_argument('--artifact-root', type=Path, default=load_settings().artifact_root)
     args = parser.parse_args()
+
+    # Event-count precheck — silence scheduled runs until the corpus is big
+    # enough for KMeansSMOTE(k=5) to generate meaningful synthetic neighbors.
+    if not SKIP_EVENT_PRECHECK:
+        eligible = _count_eligible_events()
+        if eligible is not None and eligible < MIN_EVENTS_FOR_TRAINING:
+            print(
+                f'[train_model] precheck: only {eligible} eligible severe events '
+                f'(need >= {MIN_EVENTS_FOR_TRAINING}). '
+                'Insufficient events for KMeansSMOTE. Waiting for more data.'
+            )
+            return 0
 
     args.artifact_root.mkdir(parents=True, exist_ok=True)
     artifact_dir = create_artifact_dir(args.artifact_root)
