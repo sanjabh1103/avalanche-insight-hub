@@ -43,19 +43,54 @@ def haversine_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> fl
     return radius * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-def parse_point_wkt(value: Any) -> tuple[float, float] | None:
-    if not isinstance(value, str) or 'POINT(' not in value:
-        return None
-    inner = value[value.index('POINT(') + 6:].rstrip(')')
-    parts = inner.split()
-    if len(parts) != 2:
-        return None
+def _parse_ewkb_hex(value: str) -> tuple[float, float] | None:
+    """Parse PostGIS EWKB hex format (e.g., '0101000020E6100000...')."""
     try:
-        lng = float(parts[0])
-        lat = float(parts[1])
-    except ValueError:
+        import struct
+        # Hex decode
+        data = bytes.fromhex(value)
+        # Minimum size: 1 byte order + 4 bytes type + 4 bytes SRID + 16 bytes coords = 25
+        if len(data) < 25:
+            return None
+        # Byte order: 01 = little endian, 00 = big endian
+        little_endian = data[0] == 1
+        endian = '<' if little_endian else '>'
+        # Geometry type at offset 1 (4 bytes)
+        geom_type = struct.unpack(endian + 'I', data[1:5])[0]
+        if geom_type != 1:  # 1 = Point
+            return None
+        # SRID flag check (0x20000000 bit indicates SRID present)
+        has_srid = (geom_type & 0x20000000) != 0
+        offset = 5
+        if has_srid:
+            offset += 4  # Skip SRID
+        # Coordinates: 2 doubles (16 bytes)
+        if len(data) < offset + 16:
+            return None
+        lng, lat = struct.unpack(endian + 'dd', data[offset:offset + 16])
+        return float(lat), float(lng)
+    except Exception:
         return None
-    return lat, lng
+
+
+def parse_point_wkt(value: Any) -> tuple[float, float] | None:
+    if not isinstance(value, str):
+        return None
+    # Try WKT format first
+    if 'POINT(' in value:
+        inner = value[value.index('POINT(') + 6:].rstrip(')')
+        parts = inner.split()
+        if len(parts) == 2:
+            try:
+                lng = float(parts[0])
+                lat = float(parts[1])
+                return lat, lng
+            except ValueError:
+                pass
+    # Try EWKB hex format (starts with '01' and is long hex string)
+    if len(value) >= 50 and all(c in '0123456789abcdefABCDEF' for c in value[:10]):
+        return _parse_ewkb_hex(value)
+    return None
 
 
 def match_region(lat: float, lng: float, regions: list[Region]) -> Region | None:
