@@ -54,13 +54,14 @@ concurrency:
 
 jobs:
   train:
-    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'train') || (github.event_name == 'schedule' && github.event.schedule == '0 4 * * 1')
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'train') || (github.event_name == 'schedule' && github.event.schedule == '0 4 * * *')
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout repository (with LFS DEMs)
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+          lfs: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -91,10 +92,11 @@ jobs:
     if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'infer') || (github.event_name == 'schedule' && github.event.schedule == '0 2 * * *')
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout repository (with LFS DEMs)
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+          lfs: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
