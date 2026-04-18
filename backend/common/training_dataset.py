@@ -160,6 +160,7 @@ def build_real_training_frame(
     grid_size: int,
     hazard_type: str = 'avalanche',
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
+    import sys
     rows = fetch_training_events(hazard_type=hazard_type)
     regions = load_regions()
     rng = np.random.default_rng(seed)
@@ -168,28 +169,49 @@ def build_real_training_frame(
     dataset_rows: list[dict[str, Any]] = []
     event_source_counts: Counter[str] = Counter()
 
+    # Debug diagnostics
+    debug_stats = {
+        'raw_rows': len(rows),
+        'no_point': 0,
+        'no_timestamp': 0,
+        'no_region': 0,
+        'no_dem': 0,
+        'terrain_failed': 0,
+        'weather_failed': 0,
+        'assembled_ok': 0,
+    }
+    print(f'[training_dataset] Starting with {len(rows)} raw events', file=sys.stderr)
+
     for row in rows:
         point = parse_point_wkt(row.get('location'))
         if point is None:
+            debug_stats['no_point'] += 1
             continue
         lat, lng = point
         timestamp_raw = row.get('timestamp')
         if not timestamp_raw:
+            debug_stats['no_timestamp'] += 1
             continue
         timestamp = datetime.fromisoformat(str(timestamp_raw).replace('Z', '+00:00'))
         region = match_region(lat, lng, regions)
         if region is None:
+            debug_stats['no_region'] += 1
             continue
 
         dem_path = _dem_path(region.key)
         if not dem_path.exists():
+            debug_stats['no_dem'] += 1
             continue
         try:
             terrain = extract_cell_terrain(str(dem_path), lat=lat, lng=lng)
-        except Exception:
+        except Exception as e:
+            debug_stats['terrain_failed'] += 1
             continue
         weather_profile = _cached_historical_weather_profile(round(lat, 3), round(lng, 3), timestamp.isoformat())
         weather_sample = select_hourly_weather_sample(weather_profile, timestamp)
+        if not weather_sample:
+            debug_stats['weather_failed'] += 1
+            continue
         assembled = build_real_feature_row(
             weather_sample=weather_sample,
             terrain=terrain,
@@ -197,6 +219,7 @@ def build_real_training_frame(
             lat=lat,
             lng=lng,
         )
+        debug_stats['assembled_ok'] += 1
         positives.append({'lat': lat, 'lng': lng, 'timestamp': timestamp, 'region_key': region.key, 'id': row['id']})
         event_source_counts[str(row.get('source') or 'unknown')] += 1
         dataset_rows.append({
@@ -263,6 +286,11 @@ def build_real_training_frame(
 
     positives_count = int((frame['label'] == 1).sum()) if not frame.empty else 0
     negatives_count = int((frame['label'] == 0).sum()) if not frame.empty else 0
+    debug_stats['final_positives'] = positives_count
+    debug_stats['final_negatives'] = negatives_count
+    debug_stats['final_total'] = len(frame)
+    print(f'[training_dataset] Debug stats: {debug_stats}', file=sys.stderr)
+
     manifest = {
         'training_dataset_version': 'real_event_join_v1',
         'positive_count': positives_count,
