@@ -16,6 +16,44 @@ interface Props {
   weatherSummary?: WeatherSummary | null;
 }
 
+// F.1: Generate natural language explanation from SHAP values
+function generateRiskExplanation(cell: GridCell): string {
+  const shapEntries = Object.entries(cell.shapValues)
+    .map(([key, value]) => ({ name: key.replace(/_/g, ' '), value: Number(value) }))
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+
+  const topPositive = shapEntries.find(e => e.value > 0);
+  const topNegative = shapEntries.find(e => e.value < 0);
+  const riskLevel = RISK_LABELS[cell.riskScore];
+
+  // Generate contextual explanation based on risk level
+  if (cell.riskScore <= 2) {
+    const reason = topNegative
+      ? `${topNegative.name} (${topNegative.value.toFixed(3)}) stabilizes conditions`
+      : 'favorable terrain and weather patterns';
+    const caution = topPositive
+      ? `Watch for ${topPositive.name} (+${topPositive.value.toFixed(3)}) as a minor risk factor`
+      : 'Overall conditions are stable';
+    return `Low risk (${riskLevel}) due to ${reason}. ${caution}.`;
+  } else if (cell.riskScore >= 4) {
+    const driver = topPositive
+      ? `${topPositive.name} (+${topPositive.value.toFixed(3)}) significantly increases risk`
+      : 'multiple adverse conditions';
+    const mitigation = topNegative
+      ? `Partially offset by ${topNegative.name} (${topNegative.value.toFixed(3)})`
+      : 'No significant stabilizing factors present';
+    return `High risk (${riskLevel}) driven by ${driver}. ${mitigation}.`;
+  } else {
+    const driver = topPositive
+      ? `${topPositive.name} (+${topPositive.value.toFixed(3)}) drives moderate risk`
+      : 'uncertain conditions';
+    const offset = topNegative
+      ? `tempered by ${topNegative.name} (${topNegative.value.toFixed(3)})`
+      : '';
+    return `Moderate risk (${riskLevel}). ${driver} ${offset}.`.trim();
+  }
+}
+
 export default function RiskDashboard({ cell, weatherSummary }: Props) {
   if (!cell) {
     return (
@@ -172,18 +210,17 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
         </CardContent>
       </Card>
 
-      {cell.explanationSummary && (
-        <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
-          <CardHeader className="p-3 pb-1">
-            <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.24em]">
-              Risk Explanation
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 pt-1">
-            <p className="text-sm leading-6 text-foreground/90">{cell.explanationSummary}</p>
-          </CardContent>
-        </Card>
-      )}
+      {/* F.1: Risk Explanation - Client-side natural language from SHAP values */}
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+        <CardHeader className="p-3 pb-1">
+          <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.24em]">
+            Risk Explanation
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-3 pt-1">
+          <p className="text-sm leading-6 text-foreground/90">{generateRiskExplanation(cell)}</p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
