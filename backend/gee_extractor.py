@@ -218,6 +218,28 @@ def _process_region(ee, region, start_date: datetime | None = None, end_date: da
     return events
 
 
+def build_region_sar_summary(
+    *,
+    region_key: str,
+    ascending_count: int,
+    descending_count: int,
+    coverage_state: str,
+    events: list[dict],
+) -> dict[str, object]:
+    low_coverage_rejects = sum(1 for event in events if event.get('training_eligible_reason') == 'sar_low_coverage')
+    eligible_events = sum(1 for event in events if bool(event.get('training_eligible')))
+    return {
+        'region': region_key,
+        'ascending_scene_count': ascending_count,
+        'descending_scene_count': descending_count,
+        'fused_detections': len(events),
+        'low_coverage_rejects': low_coverage_rejects,
+        'eligible_detections': eligible_events,
+        'sar_coverage_state': coverage_state,
+        'fusion_method': 'quality_mosaic_latest_pixel_v1',
+    }
+
+
 def _insert_events(events: Iterable[dict]) -> int:
     batch = list(events)
     if not batch:
@@ -247,7 +269,20 @@ def main() -> int:
         try:
             events = _process_region(ee, region)
             inserted = _insert_events(events)
-            per_region_counts.append({'region': region.key, 'inserted': inserted})
+            first_features = next((event.get('features') for event in events if isinstance(event.get('features'), dict)), {})
+            ascending_count = int(first_features.get('ascending_scene_count', 0) or 0)
+            descending_count = int(first_features.get('descending_scene_count', 0) or 0)
+            coverage_state = str(first_features.get('sar_coverage_state') or 'low_coverage')
+            per_region_counts.append({
+                'inserted': inserted,
+                **build_region_sar_summary(
+                    region_key=region.key,
+                    ascending_count=ascending_count,
+                    descending_count=descending_count,
+                    coverage_state=coverage_state,
+                    events=events,
+                ),
+            })
             total += inserted
         except Exception as exc:  # pragma: no cover - GEE network path
             print(f'[gee_extractor] Region {region.key} failed: {exc}', file=sys.stderr)

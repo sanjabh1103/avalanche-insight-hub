@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import sys
 import traceback
@@ -38,6 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.common.regions import Region, load_regions, repo_root
+from backend.common.real_features import extract_cell_terrain
 from backend.common.supabase_io import has_supabase_credentials, rest_insert
 
 import backend.gee_extractor as gee
@@ -56,70 +56,22 @@ BATCH_SIZE = int(os.getenv('BACKFILL_BATCH_SIZE', '200'))
 # --- DEM -------------------------------------------------------------------
 DEM_DIR = repo_root() / 'backend' / 'data' / 'dem'
 
-# Per-region DEM cache: region_key -> (array, transform, px_size_x_m, px_size_y_m)
-_dem_cache: dict[str, tuple[Any, Any, float, float]] = {}
-
-
-def _load_dem(region_key: str):
-    """Lazy-load DEM for a region. Returns (array, inverse_transform, px_x_m, px_y_m)."""
-    if region_key in _dem_cache:
-        return _dem_cache[region_key]
-    import rasterio  # local import so modules without rasterio can still import this file
-
-    dem_path = DEM_DIR / f'{region_key}.tif'
-    if not dem_path.exists():
-        raise FileNotFoundError(f'DEM not found: {dem_path}')
-    with rasterio.open(dem_path) as ds:
-        arr = ds.read(1)
-        transform = ds.transform
-        # SRTM is EPSG:4326 (degrees). Convert px size → meters at DEM center.
-        _, cy = ds.xy(ds.height // 2, ds.width // 2)
-        px_deg_x = abs(transform.a)
-        px_deg_y = abs(transform.e)
-        px_size_x_m = px_deg_x * 111_320.0 * math.cos(math.radians(cy))
-        px_size_y_m = px_deg_y * 110_540.0
-    _dem_cache[region_key] = (arr, transform, px_size_x_m, px_size_y_m)
-    return _dem_cache[region_key]
-
-
 def extract_topo(region_key: str, lat: float, lon: float) -> dict | None:
-    """Horn's 3x3 slope/aspect from local DEM. Returns None if DEM missing or
-    centroid falls outside the DEM bounds."""
+    """Horn's 3x3 slope/aspect from local DEM using the shared robust extractor."""
     try:
-        arr, transform, px_x_m, px_y_m = _load_dem(region_key)
+        dem_path = DEM_DIR / f'{region_key}.tif'
+        if not dem_path.exists():
+            raise FileNotFoundError(f'DEM not found: {dem_path}')
+        terrain = extract_cell_terrain(str(dem_path), lat=lat, lng=lon)
     except FileNotFoundError as exc:
         print(f'[topo] {exc}', file=sys.stderr)
         return None
-
-    # Inverse transform: world(lon, lat) -> (col, row)
-    col_f, row_f = (~transform) * (lon, lat)
-    col, row = int(round(col_f)), int(round(row_f))
-    h, w = arr.shape
-    if row < 1 or row >= h - 1 or col < 1 or col >= w - 1:
-        return None
-
-    # 3x3 window around the centroid pixel.
-    win = arr[row - 1:row + 2, col - 1:col + 2].astype('float64')
-    # Reject no-data holes.
-    if (win <= -32768).any() or (win != win).any():
-        return None
-
-    # Horn's method (ArcGIS-style slope + aspect).
-    dzdx = ((win[0, 2] + 2 * win[1, 2] + win[2, 2])
-            - (win[0, 0] + 2 * win[1, 0] + win[2, 0])) / (8.0 * px_x_m)
-    dzdy = ((win[2, 0] + 2 * win[2, 1] + win[2, 2])
-            - (win[0, 0] + 2 * win[0, 1] + win[0, 2])) / (8.0 * px_y_m)
-    rise_run = math.hypot(dzdx, dzdy)
-    slope_deg = math.degrees(math.atan(rise_run))
-
-    aspect_deg = math.degrees(math.atan2(dzdy, -dzdx))
-    if aspect_deg < 0:
-        aspect_deg += 360.0
-
     return {
-        'elevation_m': int(round(float(win[1, 1]))),
-        'slope_angle_deg': round(float(slope_deg), 3),
-        'aspect_deg': round(float(aspect_deg), 3),
+        'elevation_m': int(round(float(terrain['elevation_m']))),
+        'slope_angle_deg': round(float(terrain['slope_angle_deg']), 3),
+        'aspect_deg': round(float(terrain['aspect_deg']), 3),
+        'terrain_roughness': float(terrain.get('terrain_roughness', 0.0)),
+        'clamped_to_bounds': bool(terrain.get('clamped_to_bounds', 0.0)),
     }
 
 

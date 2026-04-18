@@ -214,6 +214,7 @@ def build_real_training_frame(
         'no_region': 0,
         'no_dem': 0,
         'terrain_failed': 0,
+        'terrain_clamped': 0,
         'weather_failed': 0,
         'assembled_ok': 0,
     }
@@ -244,6 +245,8 @@ def build_real_training_frame(
         except Exception as e:
             debug_stats['terrain_failed'] += 1
             continue
+        if float(terrain.get('clamped_to_bounds', 0.0) or 0.0) > 0:
+            debug_stats['terrain_clamped'] += 1
         weather_profile = _cached_historical_weather_profile(round(lat, 3), round(lng, 3), timestamp.isoformat())
         weather_sample = select_hourly_weather_sample(weather_profile, timestamp)
         if not weather_sample:
@@ -345,6 +348,7 @@ def build_real_training_frame(
         'oldest_timestamp': frame['timestamp'].min().isoformat() if not frame.empty else None,
         'newest_timestamp': frame['timestamp'].max().isoformat() if not frame.empty else None,
         'event_source_counts': dict(event_source_counts),
+        'debug_stats': debug_stats,
     }
     return frame, manifest
 

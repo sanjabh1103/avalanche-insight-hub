@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from backend.common.real_features import compute_dynamic_lapse_profile, extract_cell_terrain
+from backend.common.real_features import _find_valid_window, compute_dynamic_lapse_profile, extract_cell_terrain
 
 
 class DynamicLapseProfileTests(unittest.TestCase):
@@ -58,6 +58,33 @@ class DynamicLapseProfileTests(unittest.TestCase):
 
 
 class ExtractCellTerrainTests(unittest.TestCase):
+    def test_find_valid_window_clamps_out_of_bounds_indices(self) -> None:
+        array = np.arange(25, dtype=np.float32).reshape(5, 5)
+
+        row, col, window, radius, adjusted = _find_valid_window(
+            array,
+            row=0,
+            col=0,
+            nodata=None,
+        )
+
+        self.assertEqual((row, col), (1, 1))
+        self.assertEqual(radius, 0)
+        self.assertTrue(adjusted)
+        self.assertEqual(window.shape, (3, 3))
+        self.assertEqual(window[1, 1], 6.0)
+
+    def test_find_valid_window_rejects_points_too_far_outside(self) -> None:
+        array = np.arange(25, dtype=np.float32).reshape(5, 5)
+
+        with self.assertRaises(ValueError):
+            _find_valid_window(
+                array,
+                row=100,
+                col=100,
+                nodata=None,
+            )
+
     @unittest.skipIf(importlib.util.find_spec('rasterio') is None, 'rasterio is not installed in the active test environment')
     def test_extracts_elevation_slope_aspect_and_roughness(self) -> None:
         import rasterio
@@ -96,6 +123,46 @@ class ExtractCellTerrainTests(unittest.TestCase):
         self.assertLessEqual(terrain['aspect_deg'], 360.0)
         self.assertIn('terrain_roughness', terrain)
         self.assertIn('curvature_proxy', terrain)
+
+    @unittest.skipIf(importlib.util.find_spec('rasterio') is None, 'rasterio is not installed in the active test environment')
+    def test_clamps_edge_points_to_nearest_valid_interior_window(self) -> None:
+        import rasterio
+        from rasterio.transform import from_origin
+
+        data = np.array(
+            [
+                [80, 90, 100, 110, 120],
+                [85, 95, 105, 115, 125],
+                [90, 100, 110, 120, 130],
+                [95, 105, 115, 125, 135],
+                [100, 110, 120, 130, 140],
+            ],
+            dtype=np.float32,
+        )
+        transform = from_origin(-122.0, 47.0, 0.0001, 0.0001)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            dem_path = Path(tmp_dir) / 'fixture_edge.tif'
+            with rasterio.open(
+                dem_path,
+                'w',
+                driver='GTiff',
+                height=5,
+                width=5,
+                count=1,
+                dtype='float32',
+                crs='EPSG:4326',
+                transform=transform,
+            ) as dataset:
+                dataset.write(data, 1)
+
+            terrain = extract_cell_terrain(str(dem_path), lat=47.00005, lng=-122.00005)
+
+        self.assertEqual(terrain['sample_row'], 1.0)
+        self.assertEqual(terrain['sample_col'], 1.0)
+        self.assertEqual(terrain['clamped_to_bounds'], 1.0)
+        self.assertEqual(terrain['elevation_m'], 95.0)
+        self.assertGreaterEqual(terrain['slope_angle_deg'], 0.0)
 
 
 if __name__ == '__main__':

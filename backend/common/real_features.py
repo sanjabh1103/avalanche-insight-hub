@@ -239,6 +239,44 @@ def _dem_cache(dem_path: str) -> dict[str, Any]:
         }
 
 
+def _window_is_valid(window: np.ndarray, nodata: float | None) -> bool:
+    if nodata is not None and np.any(np.isclose(window, nodata)):
+        return False
+    return not np.isnan(window).any()
+
+
+def _find_valid_window(
+    array: np.ndarray,
+    *,
+    row: int,
+    col: int,
+    nodata: float | None,
+    max_radius: int = 4,
+    boundary_buffer: int = 2,
+) -> tuple[int, int, np.ndarray, int, bool]:
+    height, width = array.shape
+    if row < -boundary_buffer or row > height - 1 + boundary_buffer or col < -boundary_buffer or col > width - 1 + boundary_buffer:
+        raise ValueError('Point lies too far outside the DEM coverage to clamp safely')
+    clamped_row = max(1, min(height - 2, row))
+    clamped_col = max(1, min(width - 2, col))
+    adjusted = clamped_row != row or clamped_col != col
+
+    for radius in range(0, max_radius + 1):
+        for d_row in range(-radius, radius + 1):
+            for d_col in range(-radius, radius + 1):
+                if max(abs(d_row), abs(d_col)) != radius:
+                    continue
+                sample_row = clamped_row + d_row
+                sample_col = clamped_col + d_col
+                if sample_row < 1 or sample_row >= height - 1 or sample_col < 1 or sample_col >= width - 1:
+                    continue
+                window = array[sample_row - 1:sample_row + 2, sample_col - 1:sample_col + 2]
+                if _window_is_valid(window, nodata):
+                    return sample_row, sample_col, window, radius, adjusted
+
+    raise ValueError('Unable to locate a valid 3x3 DEM window near the requested point')
+
+
 @lru_cache(maxsize=512)
 def _cached_snowpack_proxy(
     lat_round: float,
@@ -270,16 +308,13 @@ def extract_cell_terrain(dem_path: str, lat: float, lng: float) -> dict[str, flo
     px_size_y_m = cache['px_size_y_m']
 
     col_f, row_f = (~transform) * (lng, lat)
-    col, row = int(round(col_f)), int(round(row_f))
-    if row < 1 or row >= cache['height'] - 1 or col < 1 or col >= cache['width'] - 1:
-        raise ValueError(f'Point ({lat}, {lng}) is outside DEM bounds for {dem_path}')
-
-    win = array[row - 1:row + 2, col - 1:col + 2]
+    row, col, win, search_radius, adjusted = _find_valid_window(
+        array,
+        row=int(round(row_f)),
+        col=int(round(col_f)),
+        nodata=cache['nodata'],
+    )
     nodata = cache['nodata']
-    if nodata is not None and np.any(np.isclose(win, nodata)):
-        raise ValueError(f'Point ({lat}, {lng}) falls inside DEM nodata for {dem_path}')
-    if np.isnan(win).any():
-        raise ValueError(f'Point ({lat}, {lng}) falls inside DEM NaN window for {dem_path}')
 
     dzdx = ((win[0, 2] + 2 * win[1, 2] + win[2, 2]) - (win[0, 0] + 2 * win[1, 0] + win[2, 0])) / (8.0 * px_size_x_m)
     dzdy = ((win[2, 0] + 2 * win[2, 1] + win[2, 2]) - (win[0, 0] + 2 * win[0, 1] + win[0, 2])) / (8.0 * px_size_y_m)
@@ -301,6 +336,11 @@ def extract_cell_terrain(dem_path: str, lat: float, lng: float) -> dict[str, flo
         'curvature_proxy': curvature_proxy,
         'northness': (1 + math.cos(math.radians(aspect_deg))) / 2,
         'eastness': (1 + math.sin(math.radians(aspect_deg))) / 2,
+        'sample_row': float(row),
+        'sample_col': float(col),
+        'clamped_to_bounds': float(1 if adjusted else 0),
+        'window_search_needed': float(1 if search_radius > 0 else 0),
+        'search_radius_px': float(search_radius),
     }
 
 

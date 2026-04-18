@@ -178,6 +178,8 @@ def build_cells(region, bundle, grid_size: int, forecast_date: pd.Timestamp):
                 'elevation_m': terrain['elevation_m'],
                 'slope_angle_deg': terrain['slope_angle_deg'],
                 'aspect_deg': terrain['aspect_deg'],
+                'clamped_to_bounds': bool(terrain.get('clamped_to_bounds', 0.0)),
+                'window_search_needed': bool(terrain.get('window_search_needed', 0.0)),
             },
             'dominant_driver_feature': dominant_driver,
             'runout_seed': risk >= 4,

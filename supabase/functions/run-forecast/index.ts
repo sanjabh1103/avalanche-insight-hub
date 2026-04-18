@@ -57,6 +57,9 @@ interface ForecastMetadata {
   snowpackModelVersion: string;
   optimizationVersion: string;
   dataSources: string[];
+  generationMode: 'legacy_fallback' | 'gpu_remote' | 'edge_remote';
+  fallbackUsed: boolean;
+  fallbackReason: string | null;
 }
 
 interface RuntimeCapabilities {
@@ -412,6 +415,8 @@ function buildForecastMetadata(
   snowpackSource: string,
   optimizationVersion: string,
   snowpackModelVersion: string,
+  fallbackUsed: boolean,
+  fallbackReason: string | null,
 ): ForecastMetadata {
   const uncertaintyReasons: string[] = [];
   let inputCompletenessScore = 1;
@@ -451,7 +456,12 @@ function buildForecastMetadata(
   const normalizedCompleteness = Math.max(0.1, Math.min(1, Number(inputCompletenessScore.toFixed(3))));
   const uncertaintyScore = Number((1 - normalizedCompleteness).toFixed(3));
   const featureVersion = capabilities.gpuEnabled ? 'dual-mode-himstrat-v1' : 'edge-weather-terrain-v2';
-  const dataSources = [weather ? 'open-meteo' : 'simulation', snowpackSource, inferenceBackend === 'gpu' ? 'modal' : 'edge'];
+  const dataSources = [
+    weather ? 'open-meteo' : 'simulation',
+    snowpackSource,
+    inferenceBackend === 'gpu' ? 'modal' : 'edge',
+    fallbackUsed ? 'legacy_hourly_grids' : 'async_batch',
+  ];
 
   return {
     uncertaintyScore,
@@ -477,6 +487,9 @@ function buildForecastMetadata(
     snowpackModelVersion,
     optimizationVersion,
     dataSources,
+    generationMode: fallbackUsed ? 'legacy_fallback' : (inferenceBackend === 'gpu' ? 'gpu_remote' : 'edge_remote'),
+    fallbackUsed,
+    fallbackReason,
   };
 }
 
@@ -538,6 +551,9 @@ serve(async (req: Request) => {
           requested_hours: hours,
           runtime_mode: capabilities.mode,
           capability_summary: capabilities.summary,
+          fallback_used: true,
+          fallback_reason: 'legacy_hourly_grid_generator',
+          generation_mode: 'legacy_fallback',
         },
       })
       .select('id')
@@ -579,6 +595,8 @@ serve(async (req: Request) => {
     );
     let hourlyGrids = localForecast.hourlyGrids;
     let inferenceBackend = 'edge_fallback';
+    let fallbackUsed = true;
+    let fallbackReason: string | null = 'legacy_hourly_grid_generator';
     let snowpackMetrics = {
       ...localForecast.snowpackMetrics,
       source: remoteSnowpackSummary?.source || localForecast.snowpackMetrics.source,
@@ -606,6 +624,8 @@ serve(async (req: Request) => {
     if (Array.isArray(remoteHourlyGrids) && remoteHourlyGrids.every((hourGrid) => Array.isArray(hourGrid))) {
       hourlyGrids = remoteHourlyGrids as GridCell[][];
       inferenceBackend = 'gpu';
+      fallbackUsed = false;
+      fallbackReason = null;
       modelVersion = typeof remoteInference?.model_version === 'string' && remoteInference.model_version
         ? remoteInference.model_version
         : modelVersion;
@@ -638,6 +658,8 @@ serve(async (req: Request) => {
       snowpackMetrics.source,
       optimizationVersion,
       snowpackModelVersion,
+      fallbackUsed,
+      fallbackReason,
     );
 
     // Store forecast with hourly grids
@@ -749,6 +771,9 @@ serve(async (req: Request) => {
           avgRisk,
           cellCount: currentCells.length,
           weatherSource,
+          fallbackUsed,
+          fallbackReason,
+          generationMode: metadata.generationMode,
           uncertaintyScore: metadata.uncertaintyScore,
           modelVersion: metadata.modelVersion,
           calibrationProfile: metadata.calibrationProfile,
@@ -785,6 +810,9 @@ serve(async (req: Request) => {
       model_version: metadata.modelVersion,
       uncertainty_score: metadata.uncertaintyScore,
       data_sources: metadata.dataSources,
+      fallback_used: fallbackUsed,
+      fallback_reason: fallbackReason,
+      generation_mode: metadata.generationMode,
       calibration_profile: metadata.calibrationProfile,
       mode: metadata.runtimeMode,
       capability_summary: metadata.capabilitySummary,
