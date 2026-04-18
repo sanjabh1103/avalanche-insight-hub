@@ -150,7 +150,6 @@ def _scenes_mean_timestamp(ee, region: Region, start: datetime, end: datetime) -
         .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV'))
         .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VH'))
         .filter(ee.Filter.eq('instrumentMode', 'IW'))
-        .filter(ee.Filter.eq('orbitProperties_pass', 'DESCENDING'))
     )
     n = int(s1.size().getInfo() or 0)
     if n == 0:
@@ -175,16 +174,21 @@ def _enrich_and_gate(region: Region, events: list[dict], scene_ts: datetime) -> 
         if topo is None:
             continue
         slope = topo['slope_angle_deg']
-        training_eligible = SLOPE_MIN_DEG <= slope <= SLOPE_MAX_DEG
+        source_training_eligible = bool(ev.get('training_eligible', True))
+        physics_training_eligible = SLOPE_MIN_DEG <= slope <= SLOPE_MAX_DEG
+        training_eligible = source_training_eligible and physics_training_eligible
         ev['elevation_m'] = topo['elevation_m']
         ev['slope_angle_deg'] = topo['slope_angle_deg']
         ev['aspect_deg'] = topo['aspect_deg']
         ev['topo_source'] = 'srtm_local_rasterio'
         ev['topo_resolution_m'] = 30.0
         ev['training_eligible'] = training_eligible
-        ev['training_eligible_reason'] = (
-            None if training_eligible else f'physics_gate_slope_{slope:.1f}deg_out_of_25_65'
-        )
+        if not source_training_eligible:
+            ev['training_eligible_reason'] = ev.get('training_eligible_reason') or 'sar_low_coverage'
+        elif not physics_training_eligible:
+            ev['training_eligible_reason'] = f'physics_gate_slope_{slope:.1f}deg_out_of_25_65'
+        else:
+            ev['training_eligible_reason'] = None
         ev['timestamp'] = scene_ts.isoformat()
         features = ev.setdefault('features', {})
         features['sar_mean_sensing_time'] = scene_ts.isoformat()
@@ -246,6 +250,8 @@ def run_backfill(start: datetime, end: datetime) -> dict:
                     continue
 
                 raw = gee._process_region(ee, region, start_date=cursor, end_date=w_end)
+                if raw and raw[0].get('features', {}).get('sar_scene_time'):
+                    scene_ts = datetime.fromisoformat(raw[0]['features']['sar_scene_time'].replace('Z', '+00:00'))
                 enriched = _enrich_and_gate(region, raw, scene_ts)
                 eligible_count = sum(1 for e in enriched if e.get('training_eligible'))
                 rejected_count = len(enriched) - eligible_count

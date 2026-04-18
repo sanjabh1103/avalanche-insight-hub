@@ -14,6 +14,14 @@ interface LabelPolicy {
   min_event_verification: string;
 }
 
+interface ForecastSourceRecord {
+  source_type: 'forecast' | 'forecast_grid';
+  id: string;
+  created_at: string;
+  bbox: number[];
+  hourly_grids: any[][];
+}
+
 async function getActiveLabelPolicy(supabase: any): Promise<LabelPolicy> {
   const { data: policy } = await supabase
     .from('label_matching_policies')
@@ -79,6 +87,78 @@ function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
   return R * c;
 }
 
+function normalizeAsyncGridCells(gridGeojson: unknown): any[][] {
+  if (!Array.isArray(gridGeojson)) return [];
+  const baseGrid = gridGeojson.filter((cell) => cell && typeof cell === 'object');
+  return [baseGrid];
+}
+
+function getCellElevation(cell: any): number {
+  const terrainInputs = cell?.terrainInputs ?? cell?.terrain_inputs ?? null;
+  const terrainElevation = terrainInputs?.elevation_m ?? terrainInputs?.elevationM;
+  if (typeof terrainElevation === 'number' && Number.isFinite(terrainElevation)) {
+    return terrainElevation;
+  }
+  const fallbackElevation = cell?.elevation_m ?? cell?.elevation ?? null;
+  if (typeof fallbackElevation === 'number' && Number.isFinite(fallbackElevation)) {
+    return fallbackElevation;
+  }
+  return estimateElevation(Number(cell?.row ?? 0), 20, 1000, 4500);
+}
+
+async function fetchForecastSources(supabase: any, hazardType: string, forecastId: string | undefined, daysBack: number): Promise<ForecastSourceRecord[]> {
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+  const cutoffIso = cutoffDate.toISOString();
+
+  let legacyQuery = supabase
+    .from('forecasts')
+    .select('id, created_at, hourly_grids, bbox, hazard_type')
+    .eq('hazard_type', hazardType)
+    .order('created_at', { ascending: false });
+
+  let asyncQuery = supabase
+    .from('forecast_grids')
+    .select('id, created_at, grid_geojson, bbox, hazard_type')
+    .eq('hazard_type', hazardType)
+    .eq('status', 'ready')
+    .order('created_at', { ascending: false });
+
+  if (forecastId) {
+    legacyQuery = legacyQuery.eq('id', forecastId);
+    asyncQuery = asyncQuery.eq('id', forecastId);
+  } else {
+    legacyQuery = legacyQuery.gte('created_at', cutoffIso);
+    asyncQuery = asyncQuery.gte('created_at', cutoffIso);
+  }
+
+  const [
+    { data: legacyForecasts, error: legacyErr },
+    { data: asyncForecasts, error: asyncErr },
+  ] = await Promise.all([legacyQuery, asyncQuery]);
+
+  if (legacyErr) throw legacyErr;
+  if (asyncErr) throw asyncErr;
+
+  const normalizedLegacy = (legacyForecasts || []).map((forecast: any) => ({
+    source_type: 'forecast' as const,
+    id: forecast.id,
+    created_at: forecast.created_at,
+    bbox: Array.isArray(forecast.bbox) ? forecast.bbox : [0, 0, 0, 0],
+    hourly_grids: Array.isArray(forecast.hourly_grids) ? forecast.hourly_grids : [],
+  }));
+
+  const normalizedAsync = (asyncForecasts || []).map((forecast: any) => ({
+    source_type: 'forecast_grid' as const,
+    id: forecast.id,
+    created_at: forecast.created_at,
+    bbox: Array.isArray(forecast.bbox) ? forecast.bbox : [0, 0, 0, 0],
+    hourly_grids: normalizeAsyncGridCells(forecast.grid_geojson),
+  }));
+
+  return [...normalizedAsync, ...normalizedLegacy].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -120,24 +200,7 @@ serve(async (req) => {
     const policy = await getActiveLabelPolicy(supabase);
     const minVerificationRank = getVerificationRank(policy.min_event_verification);
 
-    // Fetch forecasts to label
-    let forecastQuery = supabase
-      .from('forecasts')
-      .select('id, created_at, hourly_grids, bbox, hazard_type')
-      .eq('hazard_type', hazardType)
-      .order('created_at', { ascending: false });
-    
-    if (forecastId) {
-      forecastQuery = forecastQuery.eq('id', forecastId);
-    } else {
-      // Label forecasts from last N days that don't have outcomes yet
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - daysBack);
-      forecastQuery = forecastQuery.gte('created_at', cutoffDate.toISOString());
-    }
-
-    const { data: forecasts, error: forecastErr } = await forecastQuery;
-    if (forecastErr) throw forecastErr;
+    const forecasts = await fetchForecastSources(supabase, hazardType, forecastId, daysBack);
 
     let totalLabeled = 0;
     let totalSkipped = 0;
@@ -164,11 +227,16 @@ serve(async (req) => {
     const labelingWork = async () => {
       for (const forecast of forecasts) {
         // Check if already labeled
-        const { data: existing } = await supabase
+        let existingQuery = supabase
           .from('forecast_outcomes')
           .select('id')
-          .eq('forecast_id', forecast.id)
           .limit(1);
+
+        existingQuery = forecast.source_type === 'forecast_grid'
+          ? existingQuery.eq('forecast_grid_id', forecast.id)
+          : existingQuery.eq('forecast_id', forecast.id);
+
+        const { data: existing } = await existingQuery;
         
         if (existing && existing.length > 0) {
           totalSkipped++;
@@ -186,9 +254,6 @@ serve(async (req) => {
 
         // Fetch candidate events in bbox + time window
         // Expand bbox by tolerance
-        const latBuffer = policy.spatial_tolerance_m / 111000;
-        const lngBuffer = policy.spatial_tolerance_m / (111000 * Math.cos(bbox[0] * Math.PI / 180));
-        
         const { data: events } = await supabase
           .from('avalanche_events')
           .select('id, location, timestamp, severity, verification_status, elevation_m, label_role')
@@ -217,7 +282,7 @@ serve(async (req) => {
           for (const cell of grid) {
             if (!cell || typeof cell.row !== 'number') continue;
 
-            const cellElevation = estimateElevation(cell.row, 20, 1000, 4500);
+            const cellElevation = getCellElevation(cell);
             
             // Find nearest matching event
             let nearestEvent: any = null;
@@ -264,12 +329,13 @@ serve(async (req) => {
             }
 
             outcomes.push({
-              forecast_id: forecast.id,
+              forecast_grid_id: forecast.source_type === 'forecast_grid' ? forecast.id : null,
+              forecast_id: forecast.source_type === 'forecast' ? forecast.id : null,
               hazard_type: hazardType,
               cell_row: cell.row,
               cell_col: cell.col,
               forecast_hour: hour,
-              predicted_risk_score: Math.round(cell.riskScore || 1),
+              predicted_risk_score: Math.round(cell.riskScore || cell.risk_score || 1),
               predicted_hazard: cell.hazard || 0,
               outcome_window_start: windowStart.toISOString(),
               outcome_window_end: windowEnd.toISOString(),

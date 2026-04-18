@@ -468,7 +468,8 @@ export type Database = {
           event_observed: boolean
           excluded_from_training: boolean
           forecast_hour: number
-          forecast_id: string
+          forecast_grid_id: string | null
+          forecast_id: string | null
           hazard_type: string
           id: string
           label_confidence: number
@@ -493,7 +494,8 @@ export type Database = {
           event_observed?: boolean
           excluded_from_training?: boolean
           forecast_hour: number
-          forecast_id: string
+          forecast_grid_id?: string | null
+          forecast_id?: string | null
           hazard_type?: string
           id?: string
           label_confidence?: number
@@ -518,7 +520,8 @@ export type Database = {
           event_observed?: boolean
           excluded_from_training?: boolean
           forecast_hour?: number
-          forecast_id?: string
+          forecast_grid_id?: string | null
+          forecast_id?: string | null
           hazard_type?: string
           id?: string
           label_confidence?: number
@@ -537,6 +540,13 @@ export type Database = {
           exclusion_reason?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "forecast_outcomes_forecast_grid_id_fkey"
+            columns: ["forecast_grid_id"]
+            isOneToOne: false
+            referencedRelation: "forecast_grids"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "forecast_outcomes_forecast_id_fkey"
             columns: ["forecast_id"]

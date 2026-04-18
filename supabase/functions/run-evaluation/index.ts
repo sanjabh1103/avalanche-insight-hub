@@ -137,6 +137,7 @@ serve(async (req: Request) => {
     threshold_profile_version: thresholdVersion,
     hazard_type: hazardType = 'avalanche',
     regions,
+    forecast_source: forecastSource = 'async',
   } = requestBody;
 
   if (hazardType !== 'avalanche') {
@@ -220,6 +221,12 @@ serve(async (req: Request) => {
       .eq('hazard_type', hazardType)
       .gte('created_at', evalStartDate.toISOString())
       .lte('created_at', evalEndDate.toISOString());
+
+    if (forecastSource === 'async') {
+      outcomesQuery = outcomesQuery.not('forecast_grid_id', 'is', null);
+    } else if (forecastSource === 'legacy') {
+      outcomesQuery = outcomesQuery.not('forecast_id', 'is', null).is('forecast_grid_id', null);
+    }
 
     if (regions && regions.length > 0) {
       // Note: This requires joining with forecasts to get region

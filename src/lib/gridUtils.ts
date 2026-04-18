@@ -25,6 +25,21 @@ export interface GridCell {
   terrainInputs?: Record<string, number>;
   modelVersion?: string;
   calibrationProfile?: string;
+  featureValues?: Record<string, number>;
+  shapContext?: {
+    topFeatures: Array<{
+      feature: string;
+      shap_value: number;
+      feature_value: number;
+      rank: number;
+    }>;
+  };
+  explanationSummary?: string | null;
+  coverageFlags?: {
+    sar_coverage_state?: string;
+    residual_shadow?: boolean;
+    data_gaps?: string[];
+  };
   snowpackProxy?: {
     estimated_shear_strength?: number;
     snow_settlement_index?: number;
@@ -124,7 +139,42 @@ function normalizeCell(cell: Partial<GridCell> & Record<string, unknown>): GridC
     terrainInputs: (cell.terrainInputs as Record<string, number>) || (cell.terrain_inputs as Record<string, number>) || undefined,
     modelVersion: typeof cell.modelVersion === 'string' ? cell.modelVersion : (typeof cell.model_version === 'string' ? String(cell.model_version) : undefined),
     calibrationProfile: typeof cell.calibrationProfile === 'string' ? cell.calibrationProfile : (typeof cell.calibration_profile === 'string' ? String(cell.calibration_profile) : undefined),
+    featureValues: (cell.featureValues as Record<string, number>) || (cell.feature_values as Record<string, number>) || undefined,
+    shapContext: normalizeShapContext(cell.shapContext ?? cell.shap_context),
+    explanationSummary: typeof cell.explanationSummary === 'string'
+      ? cell.explanationSummary
+      : (typeof cell.explanation_summary === 'string' ? String(cell.explanation_summary) : null),
+    coverageFlags: normalizeCoverageFlags(cell.coverageFlags ?? cell.coverage_flags),
     snowpackProxy: normalizeSnowpackProxy(cell.snowpackProxy ?? cell.snowpack_proxy),
+  };
+}
+
+function normalizeShapContext(value: unknown): GridCell['shapContext'] {
+  if (!value || typeof value !== 'object') return undefined;
+  const topFeatures = (value as Record<string, unknown>).topFeatures ?? (value as Record<string, unknown>).top_features;
+  if (!Array.isArray(topFeatures)) return undefined;
+  return {
+    topFeatures: topFeatures
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => {
+        const row = item as Record<string, unknown>;
+        return {
+          feature: String(row.feature ?? ''),
+          shap_value: Number(row.shap_value ?? 0),
+          feature_value: Number(row.feature_value ?? 0),
+          rank: Number(row.rank ?? 0),
+        };
+      }),
+  };
+}
+
+function normalizeCoverageFlags(value: unknown): GridCell['coverageFlags'] {
+  if (!value || typeof value !== 'object') return undefined;
+  const row = value as Record<string, unknown>;
+  return {
+    sar_coverage_state: typeof row.sar_coverage_state === 'string' ? row.sar_coverage_state : undefined,
+    residual_shadow: typeof row.residual_shadow === 'boolean' ? row.residual_shadow : undefined,
+    data_gaps: Array.isArray(row.data_gaps) ? row.data_gaps.map(String) : undefined,
   };
 }
 

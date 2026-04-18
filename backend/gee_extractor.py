@@ -71,7 +71,7 @@ def _process_region(ee, region, start_date: datetime | None = None, end_date: da
     lat_min, lng_min, lat_max, lng_max = region.bbox
     region_geom = ee.Geometry.Rectangle([lng_min, lat_min, lng_max, lat_max])
 
-    # 1. Sentinel-1 GRD IW over the requested window, descending orbit only.
+    # 1. Sentinel-1 GRD IW over the requested window, both passes.
     if end_date is None:
         end_date = datetime.now(timezone.utc)
     if start_date is None:
@@ -83,11 +83,16 @@ def _process_region(ee, region, start_date: datetime | None = None, end_date: da
         .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV'))
         .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VH'))
         .filter(ee.Filter.eq('instrumentMode', 'IW'))
-        .filter(ee.Filter.eq('orbitProperties_pass', 'DESCENDING'))
     )
     scene_count = int(s1.size().getInfo() or 0)
     if scene_count == 0:
         return []
+    ascending_count = int(s1.filter(ee.Filter.eq('orbitProperties_pass', 'ASCENDING')).size().getInfo() or 0)
+    descending_count = int(s1.filter(ee.Filter.eq('orbitProperties_pass', 'DESCENDING')).size().getInfo() or 0)
+    scene_ids = s1.aggregate_array('system:index').getInfo() or []
+    mean_time_ms = s1.aggregate_mean('system:time_start').getInfo()
+    mean_scene_time = datetime.fromtimestamp(mean_time_ms / 1000.0, tz=timezone.utc).isoformat() if mean_time_ms else None
+    coverage_state = 'full_coverage' if ascending_count > 0 and descending_count > 0 else 'low_coverage'
 
     # 2. SRTM terrain products MUST be computed first (Edit 4).
     srtm = ee.Image('USGS/SRTMGL1_003').clip(region_geom)
@@ -99,11 +104,10 @@ def _process_region(ee, region, start_date: datetime | None = None, end_date: da
         # 3. Build Layover + Shadow mask from local incidence geometry.
         heading_raw = ee.Number(scene.get('platform_heading'))
         heading = ee.Algorithms.If(heading_raw, heading_raw, ee.Number(-12.0))
-        look_angle_raw = ee.Number(scene.get('incidence_angle'))
-        look_angle = ee.Algorithms.If(look_angle_raw, look_angle_raw, ee.Number(39.0))
+        look_angle = scene.select('angle')
 
         heading_rad = ee.Number(heading).multiply(3.14159265 / 180.0)
-        look_rad = ee.Number(look_angle).multiply(3.14159265 / 180.0)
+        look_rad = look_angle.multiply(3.14159265 / 180.0)
         slope_rad = slope.multiply(3.14159265 / 180.0)
         aspect_rad = aspect.multiply(3.14159265 / 180.0)
 
@@ -125,10 +129,11 @@ def _process_region(ee, region, start_date: datetime | None = None, end_date: da
         vv = scene.select('VV')
         vh = scene.select('VH')
         wet_snow = vv.lt(GEE_VV_THRESHOLD_DB).And(vh.lt(GEE_VH_THRESHOLD_DB))
-        return wet_snow.updateMask(valid_pixels).rename('wet_snow')
+        millis = ee.Image(scene.getNumber('system:time_start')).rename('millis').toFloat()
+        return wet_snow.updateMask(valid_pixels).rename('wet_snow').addBands(millis)
 
     masked_collection = s1.map(_mask_and_threshold)
-    combined = masked_collection.max()
+    combined = masked_collection.qualityMosaic('millis').select('wet_snow')
 
     # 5. Vectorize to centroids (capped) and pull to client.
     # Fix for 'Geometry has too many edges' on large regions: vectorize at a
@@ -191,14 +196,23 @@ def _process_region(ee, region, start_date: datetime | None = None, end_date: da
             'description': f'Sentinel-1 wet-snow candidate over {region.name}',
             'severity': 3,
             'confidence': 0.55,
-            'training_eligible': True,
+            'training_eligible': coverage_state == 'full_coverage',
+            'training_eligible_reason': None if coverage_state == 'full_coverage' else 'sar_low_coverage',
             'location': f'SRID=4326;POINT({avg_lng} {avg_lat})',
             'features': {
                 'vv_threshold_db': GEE_VV_THRESHOLD_DB,
                 'vh_threshold_db': GEE_VH_THRESHOLD_DB,
                 'scene_count': scene_count,
+                'ascending_scene_count': ascending_count,
+                'descending_scene_count': descending_count,
                 'region_key': region.key,
                 'mask': 'layover_shadow_terrain_products',
+                'sar_pass': 'fused',
+                'sar_scene_time': mean_scene_time,
+                'sar_scene_ids': scene_ids,
+                'sar_coverage_state': coverage_state,
+                'shadow_mask_applied': True,
+                'fusion_method': 'quality_mosaic_latest_pixel_v1',
             },
         })
     return events
@@ -247,6 +261,7 @@ def main() -> int:
         'vv_threshold_db': GEE_VV_THRESHOLD_DB,
         'vh_threshold_db': GEE_VH_THRESHOLD_DB,
         'mask_strategy': 'srtm_layover_shadow_then_vv_vh',
+        'fusion_method': 'quality_mosaic_latest_pixel_v1',
     }
     print(json.dumps(summary, indent=2))
     return 0

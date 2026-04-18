@@ -5,13 +5,14 @@ import json
 import os
 import sys
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import joblib
 import numpy as np
 import pandas as pd
 from imblearn.over_sampling import KMeansSMOTE
+from scipy.stats import wasserstein_distance
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import RFE
@@ -19,11 +20,11 @@ from sklearn.metrics import accuracy_score, brier_score_loss, confusion_matrix, 
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.svm import SVC
 
-from backend.common.artifacts import create_artifact_dir, dump_json, dump_joblib
+from backend.common.artifacts import create_artifact_dir, dump_json, dump_joblib, latest_artifact_dir, load_json
 from backend.common.config import load_settings
-from backend.common.features import FEATURE_COLUMNS, generate_training_frame
-from backend.common.regions import load_regions
+from backend.common.features import FEATURE_COLUMNS
 from backend.common.supabase_io import has_supabase_credentials, patch_first_row
+from backend.common.training_dataset import load_training_frame
 
 
 # Story 21 + Edit 3: publish the minimum Peirce Skill Score required for the
@@ -38,6 +39,13 @@ TIME_SERIES_SPLITS = int(os.getenv('TIME_SERIES_SPLITS', '5'))
 # accumulated. Override via env during local dev.
 MIN_EVENTS_FOR_TRAINING = int(os.getenv('MIN_EVENTS_FOR_TRAINING', '30'))
 SKIP_EVENT_PRECHECK = os.getenv('SKIP_EVENT_PRECHECK', 'false').lower() in ('1', 'true', 'yes')
+ALLOW_SYNTHETIC_BOOTSTRAP = os.getenv('ALLOW_SYNTHETIC_BOOTSTRAP', 'false').lower() in ('1', 'true', 'yes')
+ALLOW_DRIFT_SKIP = os.getenv('ALLOW_DRIFT_SKIP', 'false').lower() in ('1', 'true', 'yes')
+DRIFT_WINDOW_DAYS = int(os.getenv('DRIFT_WINDOW_DAYS', '7'))
+DRIFT_BASELINE_DAYS = int(os.getenv('DRIFT_BASELINE_DAYS', '30'))
+DRIFT_REGION_MEAN_THRESHOLD = float(os.getenv('DRIFT_REGION_MEAN_THRESHOLD', '0.12'))
+DRIFT_FEATURE_MAX_THRESHOLD = float(os.getenv('DRIFT_FEATURE_MAX_THRESHOLD', '0.18'))
+DRIFT_NEW_POSITIVE_THRESHOLD = int(os.getenv('DRIFT_NEW_POSITIVE_THRESHOLD', '10'))
 
 
 def peirce_skill_score_max(y_true: np.ndarray, y_prob: np.ndarray) -> tuple[float, float]:
@@ -174,10 +182,7 @@ def timeseries_cv_pss(frame: pd.DataFrame, seed: int, n_splits: int) -> dict:
     return {'mean_pss': mean_pss, 'fold_pss': fold_scores, 'n_splits': n_splits}
 
 
-def fit_model(seed: int, samples_per_region: int):
-    regions = load_regions()
-    frame = generate_training_frame(regions, samples_per_region=samples_per_region, seed=seed)
-
+def fit_model(seed: int, frame: pd.DataFrame, dataset_manifest: dict[str, object]):
     # Edit 3 Story 21: chronological TimeSeriesSplit PSS audit BEFORE the final
     # production fit so we can report drift-aware scores for the release gate.
     cv_metrics = timeseries_cv_pss(frame, seed=seed, n_splits=TIME_SERIES_SPLITS)
@@ -311,6 +316,8 @@ def fit_model(seed: int, samples_per_region: int):
         'tree_variance_policy': tree_variance_policy,
         'metrics': metrics,
         'cv_metrics': cv_metrics,
+        'dataset_manifest': dataset_manifest,
+        'training_dataset_version': dataset_manifest.get('training_dataset_version', 'unknown'),
         'created_at': datetime.now(timezone.utc).isoformat(),
         'seed': seed,
     }
@@ -326,6 +333,8 @@ def publish_metadata(artifact_dir: Path, bundle: dict[str, object]):
         'calibration_method': bundle['calibration_method'],
         'calibration_error': bundle['calibration_error'],
         'metrics': bundle['metrics'],
+        'dataset_manifest': bundle.get('dataset_manifest'),
+        'training_dataset_version': bundle.get('training_dataset_version'),
         'artifact_dir': str(artifact_dir),
         'published_at': datetime.now(timezone.utc).isoformat(),
     }
@@ -350,7 +359,7 @@ def _count_eligible_events() -> int | None:
         import requests
         resp = requests.get(
             f"{settings.supabase_url.rstrip('/')}/rest/v1/avalanche_events",
-            params={'select': 'id', 'training_eligible': 'eq.true', 'severity': 'gte.3'},
+            params={'select': 'id', 'training_eligible': 'eq.true'},
             headers={
                 'apikey': settings.supabase_service_role_key,
                 'Authorization': f'Bearer {settings.supabase_service_role_key}',
@@ -365,6 +374,74 @@ def _count_eligible_events() -> int | None:
     except Exception as exc:  # pragma: no cover - network path
         print(f'[train_model] could not count eligible events ({exc}); skipping precheck', file=sys.stderr)
         return None
+
+
+def compute_drift_stats(frame: pd.DataFrame) -> dict[str, object]:
+    if frame.empty or 'timestamp' not in frame.columns:
+        return {'skip_retrain': False, 'reason': 'empty_frame'}
+
+    ordered = frame.sort_values('timestamp').reset_index(drop=True)
+    latest_ts = pd.Timestamp(ordered['timestamp'].max())
+    recent_start = latest_ts - pd.Timedelta(days=DRIFT_WINDOW_DAYS)
+    baseline_start = recent_start - pd.Timedelta(days=DRIFT_BASELINE_DAYS)
+    recent = ordered[ordered['timestamp'] > recent_start]
+    baseline = ordered[(ordered['timestamp'] > baseline_start) & (ordered['timestamp'] <= recent_start)]
+    if recent.empty or baseline.empty:
+        return {'skip_retrain': False, 'reason': 'insufficient_windows'}
+
+    feature_extractors = {
+        'snowfall_24h': lambda df: (df['snowfall_24h'].astype(float) * 40.0).to_numpy(),
+        'temperature_2m': lambda df: df['temperature_2m'].astype(float).to_numpy(),
+        'windspeed_10m': lambda df: df['windspeed_10m'].astype(float).to_numpy(),
+    }
+    region_stats: dict[str, object] = {}
+    max_feature_distance = 0.0
+    regions = sorted(set(ordered['region_key'].astype(str).tolist()))
+    for region in regions:
+        region_recent = recent[recent['region_key'] == region]
+        region_baseline = baseline[baseline['region_key'] == region]
+        if region_recent.empty or region_baseline.empty:
+            continue
+        feature_distances: dict[str, float] = {}
+        for name, extractor in feature_extractors.items():
+            distance = float(wasserstein_distance(extractor(region_recent), extractor(region_baseline)))
+            feature_distances[name] = distance
+            max_feature_distance = max(max_feature_distance, distance)
+        region_mean = float(np.mean(list(feature_distances.values()))) if feature_distances else 0.0
+        region_stats[region] = {
+            'feature_distances': feature_distances,
+            'mean_distance': region_mean,
+            'exceeds_region_mean_threshold': region_mean >= DRIFT_REGION_MEAN_THRESHOLD,
+        }
+
+    return {
+        'recent_window_days': DRIFT_WINDOW_DAYS,
+        'baseline_window_days': DRIFT_BASELINE_DAYS,
+        'region_mean_threshold': DRIFT_REGION_MEAN_THRESHOLD,
+        'feature_max_threshold': DRIFT_FEATURE_MAX_THRESHOLD,
+        'regions': region_stats,
+        'max_feature_distance': max_feature_distance,
+    }
+
+
+def load_previous_dataset_manifest(artifact_root: Path) -> dict[str, object] | None:
+    try:
+        previous_dir = latest_artifact_dir(artifact_root)
+        metrics = load_json(previous_dir / 'training_metrics.json')
+        return metrics.get('dataset_manifest') if isinstance(metrics, dict) else None
+    except Exception:
+        return None
+
+
+def count_new_positive_events(frame: pd.DataFrame, previous_manifest: dict[str, object] | None) -> int:
+    if frame.empty or previous_manifest is None:
+        return int((frame['label'] == 1).sum()) if 'label' in frame.columns else 0
+    newest = previous_manifest.get('newest_timestamp')
+    if not isinstance(newest, str):
+        return int((frame['label'] == 1).sum()) if 'label' in frame.columns else 0
+    newest_ts = pd.Timestamp(newest)
+    positives = frame[(frame['label'] == 1) & (frame['timestamp'] > newest_ts)]
+    return int(len(positives))
 
 
 def main() -> int:
@@ -386,9 +463,41 @@ def main() -> int:
             )
             return 0
 
+    settings = load_settings()
+    frame, dataset_manifest = load_training_frame(
+        seed=args.seed,
+        samples_per_region=args.samples_per_region,
+        grid_size=settings.grid_size,
+        allow_synthetic_bootstrap=ALLOW_SYNTHETIC_BOOTSTRAP,
+    )
+    is_bootstrap = dataset_manifest.get('training_dataset_version') == 'synthetic_bootstrap_v1'
+    previous_manifest = load_previous_dataset_manifest(args.artifact_root)
+    new_positive_events = count_new_positive_events(frame, previous_manifest)
+    drift_stats = compute_drift_stats(frame)
+    drift_stats['new_positive_events'] = new_positive_events
+    drift_stats['previous_manifest_found'] = previous_manifest is not None
+    drift_stats['skip_allowed'] = ALLOW_DRIFT_SKIP and not is_bootstrap
+
+    if ALLOW_DRIFT_SKIP and not is_bootstrap and isinstance(drift_stats.get('regions'), dict):
+        region_exceeded = any(
+            region_info.get('mean_distance', 0.0) >= DRIFT_REGION_MEAN_THRESHOLD
+            for region_info in drift_stats['regions'].values()
+            if isinstance(region_info, dict)
+        )
+        max_feature_exceeded = float(drift_stats.get('max_feature_distance', 0.0) or 0.0) >= DRIFT_FEATURE_MAX_THRESHOLD
+        if not region_exceeded and not max_feature_exceeded and new_positive_events < DRIFT_NEW_POSITIVE_THRESHOLD:
+            print(json.dumps({
+                'skipped': True,
+                'reason': 'drift_below_thresholds',
+                'drift_stats': drift_stats,
+                'dataset_manifest': dataset_manifest,
+            }, indent=2))
+            return 0
+
     args.artifact_root.mkdir(parents=True, exist_ok=True)
     artifact_dir = create_artifact_dir(args.artifact_root)
-    bundle = fit_model(seed=args.seed, samples_per_region=args.samples_per_region)
+    bundle = fit_model(seed=args.seed, frame=frame, dataset_manifest=dataset_manifest)
+    bundle['drift_stats'] = drift_stats
 
     # Edit 3 Story 21: PSS > PSS_FLOOR artifact gate. Use the higher of the
     # chronological-CV mean and the holdout PSS so a single lucky test fold
@@ -411,6 +520,7 @@ def main() -> int:
     metadata['pss_reported'] = pss_reported
     metadata['pss_gate_passed'] = gate_passed
     metadata['pss_gate_floor'] = PSS_FLOOR
+    metadata['drift_stats'] = drift_stats
     dump_json(artifact_dir / 'training_metrics.json', metadata)
 
     if not gate_passed:

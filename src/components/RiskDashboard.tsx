@@ -171,6 +171,19 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
           ))}
         </CardContent>
       </Card>
+
+      {cell.explanationSummary && (
+        <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+          <CardHeader className="p-3 pb-1">
+            <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.24em]">
+              Risk Explanation
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-3 pt-1">
+            <p className="text-sm leading-6 text-foreground/90">{cell.explanationSummary}</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -323,6 +323,39 @@ export default function Index() {
     return () => { alive = false; };
   }, [region.name, hydrateForecastGridRow, loadLatestForecastGrid]);
 
+  useEffect(() => {
+    let active = true;
+    if (!selectedCell || selectedCell.explanationSummary || !selectedCell.shapContext?.topFeatures?.length) {
+      return () => { active = false; };
+    }
+
+    (async () => {
+      const { data, error } = await supabase.functions.invoke('shap-explainer', {
+        body: {
+          hazard_type: 'avalanche',
+          risk_score: selectedCell.riskScore,
+          problem_type: selectedCell.problemType,
+          shap_context: { top_features: selectedCell.shapContext?.topFeatures ?? [] },
+          region_key: region.name,
+          forecast_date: new Date().toISOString().slice(0, 10),
+          cell: {
+            row: selectedCell.row,
+            col: selectedCell.col,
+            lat: selectedCell.lat,
+            lng: selectedCell.lng,
+          },
+        },
+      });
+      if (!active || error || !data?.summary) return;
+      setSelectedCell((current) => {
+        if (!current || current.row !== selectedCell.row || current.col !== selectedCell.col) return current;
+        return { ...current, explanationSummary: String(data.summary) };
+      });
+    })();
+
+    return () => { active = false; };
+  }, [region.name, selectedCell]);
+
   const runForecast = async () => {
     setForecasting(true);
     const hours = expertMode ? 72 : 24;
