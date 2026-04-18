@@ -34,6 +34,7 @@ export interface GridCell {
       rank: number;
     }>;
   };
+  dominantDriverFeature?: string | null;
   explanationSummary?: string | null;
   coverageFlags?: {
     sar_coverage_state?: string;

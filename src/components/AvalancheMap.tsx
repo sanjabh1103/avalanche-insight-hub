@@ -1,5 +1,5 @@
 import { useEffect, useRef, useMemo, useState } from 'react';
-import { MapContainer, TileLayer, Rectangle, CircleMarker, Popup, Polygon, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Rectangle, CircleMarker, Popup, Polygon, Tooltip, useMap } from 'react-leaflet';
 import type { LatLngBoundsExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getRiskColor, isHighUncertaintyCell, type GridCell } from '@/lib/gridUtils';
@@ -118,7 +118,25 @@ export default function AvalancheMap({
               fillOpacity: isHighUncertainty ? 0.42 : 0.45 + cell.riskScore * 0.06,
             }}
             eventHandlers={{ click: () => onCellClick(cell) }}
-          />
+          >
+            <Tooltip direction="top" opacity={0.9} className="bg-card border-border">
+              <div className="text-xs space-y-1 p-1">
+                <div className="font-semibold">Risk: {cell.riskScore}/5</div>
+                <div className="text-muted-foreground">
+                  Elev: {cell.terrainInputs?.elevation_m?.toFixed(0) ?? 'N/A'}m
+                </div>
+                <div className="text-muted-foreground">
+                  Slope: {cell.terrainInputs?.slope_angle_deg?.toFixed(1) ?? 'N/A'}°
+                </div>
+                <div className="text-muted-foreground">
+                  Prob: {(cell.probability * 100).toFixed(1)}%
+                </div>
+                {cell.dominantDriverFeature && (
+                  <div className="text-emerald-400">Driver: {cell.dominantDriverFeature}</div>
+                )}
+              </div>
+            </Tooltip>
+          </Rectangle>
         );
       })}
 
