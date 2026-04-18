@@ -95,7 +95,8 @@ def fetch_training_events(hazard_type: str = 'avalanche') -> list[dict[str, Any]
         },
     )
     # Post-filter: include if verification_status is missing/null OR in allowed list
-    allowed_status = {'weak', 'verified', 'expert_verified', None}
+    # Note: 'unverified' covers backfilled SAR events; 'weak'/'verified'/'expert_verified' cover human-verified events
+    allowed_status = {'unverified', 'weak', 'verified', 'expert_verified', None}
     filtered = [
         r for r in rows
         if r.get('verification_status') in allowed_status
