@@ -116,6 +116,18 @@ def _cached_historical_weather_profile(lat_round: float, lng_round: float, times
     )
 
 
+@lru_cache(maxsize=2048)
+def _cached_region_day_weather_profile(
+    region_key: str,
+    region_center_lat: float,
+    region_center_lng: float,
+    day_iso: str,
+) -> dict[str, Any]:
+    day = datetime.fromisoformat(day_iso).replace(tzinfo=timezone.utc)
+    midday = day.replace(hour=12, minute=0, second=0, microsecond=0)
+    return _cached_historical_weather_profile(region_center_lat, region_center_lng, midday.isoformat())
+
+
 def fetch_training_events(hazard_type: str = 'avalanche') -> list[dict[str, Any]]:
     if not has_supabase_credentials():
         return []
@@ -247,8 +259,17 @@ def build_real_training_frame(
             continue
         if float(terrain.get('clamped_to_bounds', 0.0) or 0.0) > 0:
             debug_stats['terrain_clamped'] += 1
-        weather_profile = _cached_historical_weather_profile(round(lat, 3), round(lng, 3), timestamp.isoformat())
-        weather_sample = select_hourly_weather_sample(weather_profile, timestamp)
+        try:
+            weather_profile = _cached_region_day_weather_profile(
+                region.key,
+                float(region.center[0]),
+                float(region.center[1]),
+                timestamp.date().isoformat(),
+            )
+            weather_sample = select_hourly_weather_sample(weather_profile, timestamp)
+        except Exception as e:
+            debug_stats['weather_failed'] += 1
+            continue
         if not weather_sample:
             debug_stats['weather_failed'] += 1
             continue
@@ -292,10 +313,11 @@ def build_real_training_frame(
             grid_size=grid_size,
         )
         for negative in negatives:
-            weather_profile = _cached_historical_weather_profile(
-                round(negative['lat'], 3),
-                round(negative['lng'], 3),
-                negative['timestamp'].isoformat(),
+            weather_profile = _cached_region_day_weather_profile(
+                region.key,
+                float(region.center[0]),
+                float(region.center[1]),
+                negative['timestamp'].date().isoformat(),
             )
             weather_sample = select_hourly_weather_sample(weather_profile, negative['timestamp'])
             assembled = build_real_feature_row(

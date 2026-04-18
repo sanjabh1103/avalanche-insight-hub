@@ -69,14 +69,34 @@ def _normalize(value: float, scale: float, lower: float = 0.0, upper: float = 1.
     return _clamp(value / scale, lower, upper)
 
 
-def _fetch_open_meteo(url: str, *, params: dict[str, Any]) -> dict[str, Any]:
-    response = requests.get(
-        url,
-        params=params,
-        timeout=OPEN_METEO_TIMEOUT,
-    )
-    response.raise_for_status()
-    return response.json()
+def _fetch_open_meteo(url: str, *, params: dict[str, Any], retries: int = 3) -> dict[str, Any]:
+    import time
+    last_error: Exception | None = None
+    for attempt in range(retries):
+        try:
+            response = requests.get(
+                url,
+                params=params,
+                timeout=OPEN_METEO_TIMEOUT,
+            )
+            response.raise_for_status()
+            return response.json()
+        except (requests.Timeout, requests.ConnectionError) as e:
+            last_error = e
+            if attempt < retries - 1:
+                sleep_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                time.sleep(sleep_time)
+            continue
+        except requests.HTTPError as e:
+            # Don't retry on 4xx errors (client errors)
+            if e.response.status_code >= 400 and e.response.status_code < 500:
+                raise
+            last_error = e
+            if attempt < retries - 1:
+                time.sleep(2 ** attempt)
+            continue
+    # All retries exhausted
+    raise last_error or RuntimeError(f"Failed to fetch from {url} after {retries} attempts")
 
 
 def _hourly_payload_to_samples(payload: dict[str, Any]) -> list[HourlyWeatherSample]:
