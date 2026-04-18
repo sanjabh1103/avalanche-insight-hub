@@ -248,8 +248,9 @@ def build_real_training_frame(
                 **assembled['feature_row'],
             })
 
-    frame = pd.DataFrame(dataset_rows).sort_values('timestamp').reset_index(drop=True)
+    frame = pd.DataFrame(dataset_rows)
     if not frame.empty:
+        frame = frame.sort_values('timestamp').reset_index(drop=True)
         frame = frame[['timestamp', 'region_key', 'region_name', 'lat', 'lng', 'label', 'severity', 'temperature_2m', 'windspeed_10m', *FEATURE_COLUMNS]]
 
     positives_count = int((frame['label'] == 1).sum()) if not frame.empty else 0
