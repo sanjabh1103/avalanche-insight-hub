@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -152,53 +152,88 @@ export default function AdminDashboard() {
   const [forecastOutcomes, setForecastOutcomes] = useState<ForecastOutcomeRow[]>([]);
   const [fieldReports, setFieldReports] = useState<FieldReportRow[]>([]);
   const activeJobs = jobs.filter((job) => job.status === 'running').length;
+  
+  // CRASH-FIX: Prevent concurrent data loading that causes ERR_INSUFFICIENT_RESOURCES
+  const isLoadingRef = useRef(false);
+  const loadDataTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // CRASH-FIX: Debounced loadData with concurrency protection
   const loadData = useCallback(async () => {
-    const [
-      jobsRes,
-      configRes,
-      modelRes,
-      analyticsRes,
-      evaluationRunsRes,
-      evaluationMetricsRes,
-      outcomesRes,
-      reportsRes,
-    ] = await Promise.all([
-      supabase.from('compute_jobs').select('*').order('created_at', { ascending: false }).limit(10),
-      supabase.from('system_config').select('*').limit(1).single(),
-      supabase.from('model_status').select('*').limit(1).single(),
-      supabase.from('forecast_analytics').select('*').order('created_at', { ascending: false }).limit(100),
-      supabase.from('evaluation_runs').select('*').order('created_at', { ascending: false }).limit(5),
-      supabase.from('evaluation_metrics').select('*').order('created_at', { ascending: false }).limit(10),
-      supabase.from('forecast_outcomes').select('*').order('created_at', { ascending: false }).limit(5),
-      supabase.from('field_reports').select('id, created_at, description, review_status, training_eligible').order('created_at', { ascending: false }).limit(5),
-    ]);
-    if (jobsRes.data) setJobs(jobsRes.data as unknown as JobRow[]);
-    if (configRes.data) setSystemConfig(configRes.data as unknown as { gemini_usage: number; gemini_spend_cap: number });
-    if (modelRes.data) setModelStatus(modelRes.data as unknown as ModelStatusRow);
-    if (analyticsRes.data) {
-      const rows = analyticsRes.data as unknown as { region_name: string }[];
-      const regionMap = new Map<string, number>();
-      rows.forEach(r => regionMap.set(r.region_name || 'Unknown', (regionMap.get(r.region_name || 'Unknown') || 0) + 1));
-      const regions = Array.from(regionMap.entries()).map(([region_name, count]) => ({ region_name, count })).sort((a, b) => b.count - a.count);
-      setAnalytics({ total: rows.length, regions: regions.slice(0, 5) });
+    // Prevent concurrent calls that cause ERR_INSUFFICIENT_RESOURCES
+    if (isLoadingRef.current) {
+      return;
     }
-    if (evaluationRunsRes.data) setEvaluationRuns(evaluationRunsRes.data as unknown as EvaluationRunRow[]);
-    if (evaluationMetricsRes.data) setEvaluationMetrics(evaluationMetricsRes.data as unknown as EvaluationMetricRow[]);
-    if (outcomesRes.data) setForecastOutcomes(outcomesRes.data as unknown as ForecastOutcomeRow[]);
-    if (reportsRes.data) setFieldReports(reportsRes.data as unknown as FieldReportRow[]);
+    
+    isLoadingRef.current = true;
+    
+    try {
+      const [
+        jobsRes,
+        configRes,
+        modelRes,
+        analyticsRes,
+        evaluationRunsRes,
+        evaluationMetricsRes,
+        outcomesRes,
+        reportsRes,
+      ] = await Promise.all([
+        supabase.from('compute_jobs').select('*').order('created_at', { ascending: false }).limit(10),
+        supabase.from('system_config').select('*').limit(1).single(),
+        supabase.from('model_status').select('*').limit(1).single(),
+        supabase.from('forecast_analytics').select('*').order('created_at', { ascending: false }).limit(100),
+        supabase.from('evaluation_runs').select('*').order('created_at', { ascending: false }).limit(5),
+        supabase.from('evaluation_metrics').select('*').order('created_at', { ascending: false }).limit(10),
+        supabase.from('forecast_outcomes').select('*').order('created_at', { ascending: false }).limit(5),
+        supabase.from('field_reports').select('id, created_at, description, review_status, training_eligible').order('created_at', { ascending: false }).limit(5),
+      ]);
+      if (jobsRes.data) setJobs(jobsRes.data as unknown as JobRow[]);
+      if (configRes.data) setSystemConfig(configRes.data as unknown as { gemini_usage: number; gemini_spend_cap: number });
+      if (modelRes.data) setModelStatus(modelRes.data as unknown as ModelStatusRow);
+      if (analyticsRes.data) {
+        const rows = analyticsRes.data as unknown as { region_name: string }[];
+        const regionMap = new Map<string, number>();
+        rows.forEach(r => regionMap.set(r.region_name || 'Unknown', (regionMap.get(r.region_name || 'Unknown') || 0) + 1));
+        const regions = Array.from(regionMap.entries()).map(([region_name, count]) => ({ region_name, count })).sort((a, b) => b.count - a.count);
+        setAnalytics({ total: rows.length, regions: regions.slice(0, 5) });
+      }
+      if (evaluationRunsRes.data) setEvaluationRuns(evaluationRunsRes.data as unknown as EvaluationRunRow[]);
+      if (evaluationMetricsRes.data) setEvaluationMetrics(evaluationMetricsRes.data as unknown as EvaluationMetricRow[]);
+      if (outcomesRes.data) setForecastOutcomes(outcomesRes.data as unknown as ForecastOutcomeRow[]);
+      if (reportsRes.data) setFieldReports(reportsRes.data as unknown as FieldReportRow[]);
+    } finally {
+      isLoadingRef.current = false;
+    }
   }, []);
+  
+  // CRASH-FIX: Debounced wrapper for realtime callbacks
+  const debouncedLoadData = useCallback(() => {
+    if (loadDataTimeoutRef.current) {
+      clearTimeout(loadDataTimeoutRef.current);
+    }
+    loadDataTimeoutRef.current = setTimeout(() => {
+      loadData();
+    }, 500); // 500ms debounce
+  }, [loadData]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { 
+    loadData();
+    
+    // Cleanup timeout on unmount
+    return () => {
+      if (loadDataTimeoutRef.current) {
+        clearTimeout(loadDataTimeoutRef.current);
+      }
+    };
+  }, [loadData]);
 
-  // BUG-01 fix: Use improved realtime subscriptions with state persistence and reconnect handling
-  useRealtimeSubscription('compute_jobs', () => { loadData(); }, { persistState: true, onReconnect: () => loadData() });
-  useRealtimeSubscription('evaluation_runs', () => { loadData(); }, { persistState: true, onReconnect: () => loadData() });
-  useRealtimeSubscription('evaluation_metrics', () => { loadData(); }, { persistState: true, onReconnect: () => loadData() });
-  useRealtimeSubscription('forecast_outcomes', () => { loadData(); }, { persistState: true, onReconnect: () => loadData() });
-  useRealtimeSubscription('forecasts', () => { loadData(); }, { persistState: true, onReconnect: () => loadData() });
-  useRealtimeSubscription('field_reports', () => { loadData(); }, { persistState: true, onReconnect: () => loadData() });
-  useRealtimeSubscription('model_status', () => { loadData(); }, { persistState: true, onReconnect: () => loadData() });
+  // CRASH-FIX: Use debounced loadData for realtime subscriptions to prevent request storms
+  useRealtimeSubscription('compute_jobs', () => { debouncedLoadData(); }, { persistState: true, onReconnect: () => debouncedLoadData() });
+  useRealtimeSubscription('evaluation_runs', () => { debouncedLoadData(); }, { persistState: true, onReconnect: () => debouncedLoadData() });
+  useRealtimeSubscription('evaluation_metrics', () => { debouncedLoadData(); }, { persistState: true, onReconnect: () => debouncedLoadData() });
+  useRealtimeSubscription('forecast_outcomes', () => { debouncedLoadData(); }, { persistState: true, onReconnect: () => debouncedLoadData() });
+  useRealtimeSubscription('forecasts', () => { debouncedLoadData(); }, { persistState: true, onReconnect: () => debouncedLoadData() });
+  useRealtimeSubscription('field_reports', () => { debouncedLoadData(); }, { persistState: true, onReconnect: () => debouncedLoadData() });
+  useRealtimeSubscription('model_status', () => { debouncedLoadData(); }, { persistState: true, onReconnect: () => debouncedLoadData() });
 
   const triggerJob = async (type: JobType) => {
     setRunning(type);
@@ -211,8 +246,17 @@ export default function AdminDashboard() {
         payload.bbox = DEFAULT_BBOX;
       }
 
+      // CRASH-FIX: Get current session to ensure proper auth headers are sent
+      const { data: { session } } = await supabase.auth.getSession();
+      
       const { data, error } = await supabase.functions.invoke('trigger-job', {
         body: payload,
+        headers: {
+          // Explicitly set authorization header with user token if available
+          Authorization: session?.access_token 
+            ? `Bearer ${session.access_token}` 
+            : `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
       });
       if (error) throw error;
 

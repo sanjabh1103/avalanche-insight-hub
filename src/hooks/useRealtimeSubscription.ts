@@ -19,6 +19,8 @@ export function useRealtimeSubscription<T extends Record<string, unknown>>(
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isActiveRef = useRef(true);
+  // CRASH-FIX: Track subscription state to prevent duplicate subscriptions
+  const isSubscribedRef = useRef(false);
 
   // Persist state helper
   const persistState = useCallback((payload: RealtimePostgresChangesPayload<T>) => {
@@ -37,11 +39,17 @@ export function useRealtimeSubscription<T extends Record<string, unknown>>(
   // Subscribe function with exponential backoff
   const subscribe = useCallback(() => {
     if (!isActiveRef.current) return;
+    
+    // CRASH-FIX: Prevent duplicate subscriptions
+    if (isSubscribedRef.current && channelRef.current) {
+      return;
+    }
 
     // Clean up existing channel
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
+      isSubscribedRef.current = false;
     }
 
     const channel = supabase
@@ -56,9 +64,11 @@ export function useRealtimeSubscription<T extends Record<string, unknown>>(
       )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
+          isSubscribedRef.current = true;
           reconnectAttemptsRef.current = 0;
           options?.onReconnect?.();
         } else if (status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+          isSubscribedRef.current = false;
           // Exponential backoff retry
           if (isActiveRef.current) {
             const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
@@ -74,17 +84,17 @@ export function useRealtimeSubscription<T extends Record<string, unknown>>(
   useEffect(() => {
     isActiveRef.current = true;
 
-    // BUG-01 fix: Handle visibility change to reconnect when tab becomes visible
+    // CRASH-FIX: Handle visibility change - only reconnect if not already subscribed
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && channelRef.current) {
-        // Reconnect when tab becomes visible
+      if (document.visibilityState === 'visible' && !isSubscribedRef.current) {
+        // Reconnect when tab becomes visible (but only if not already subscribed)
         subscribe();
       }
     };
 
-    // BUG-01 fix: Handle window focus for reconnection
+    // CRASH-FIX: Handle window focus - only reconnect if not already subscribed
     const handleFocus = () => {
-      if (channelRef.current) {
+      if (!isSubscribedRef.current) {
         subscribe();
       }
     };
@@ -104,6 +114,8 @@ export function useRealtimeSubscription<T extends Record<string, unknown>>(
       }
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+        isSubscribedRef.current = false;
       }
     };
   }, [subscribe]);
