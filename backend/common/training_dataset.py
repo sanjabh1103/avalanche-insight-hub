@@ -247,7 +247,11 @@ def build_real_training_frame(
             continue
         if float(terrain.get('clamped_to_bounds', 0.0) or 0.0) > 0:
             debug_stats['terrain_clamped'] += 1
-        weather_profile = _cached_historical_weather_profile(round(lat, 3), round(lng, 3), timestamp.isoformat())
+        try:
+            weather_profile = _cached_historical_weather_profile(round(lat, 3), round(lng, 3), timestamp.isoformat())
+        except Exception as e:
+            debug_stats['weather_failed'] += 1
+            continue
         weather_sample = select_hourly_weather_sample(weather_profile, timestamp)
         if not weather_sample:
             debug_stats['weather_failed'] += 1
