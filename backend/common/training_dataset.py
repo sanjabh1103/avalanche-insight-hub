@@ -57,10 +57,12 @@ def _parse_ewkb_hex(value: str) -> tuple[float, float] | None:
         endian = '<' if little_endian else '>'
         # Geometry type at offset 1 (4 bytes)
         geom_type = struct.unpack(endian + 'I', data[1:5])[0]
-        if geom_type != 1:  # 1 = Point
-            return None
         # SRID flag check (0x20000000 bit indicates SRID present)
         has_srid = (geom_type & 0x20000000) != 0
+        # Mask out flags (Z, M, SRID) to get base geometry type
+        base_type = geom_type & 0xFFFFFF
+        if base_type != 1:  # 1 = Point
+            return None
         offset = 5
         if has_srid:
             offset += 4  # Skip SRID
