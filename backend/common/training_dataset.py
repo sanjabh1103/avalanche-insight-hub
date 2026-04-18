@@ -83,18 +83,25 @@ def fetch_training_events(hazard_type: str = 'avalanche') -> list[dict[str, Any]
     if not has_supabase_credentials():
         return []
 
+    # Query relaxed: backfilled events may lack verification_status/label_role.
+    # Post-query filtering handles exclusion logic for rows that have these fields.
     rows = rest_get(
         'avalanche_events',
         params={
             'select': 'id,location,timestamp,severity,source,training_eligible,label_role,verification_status,elevation_m,topo_profile,features',
             'hazard_type': f'eq.{hazard_type}',
             'training_eligible': 'eq.true',
-            'verification_status': 'in.(weak,verified,expert_verified)',
-            'label_role': 'not.eq.excluded',
             'order': 'timestamp.asc',
         },
     )
-    return rows
+    # Post-filter: include if verification_status is missing/null OR in allowed list
+    allowed_status = {'weak', 'verified', 'expert_verified', None}
+    filtered = [
+        r for r in rows
+        if r.get('verification_status') in allowed_status
+        and r.get('label_role') != 'excluded'
+    ]
+    return filtered
 
 
 def _sample_negatives_for_event(
