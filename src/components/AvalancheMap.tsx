@@ -129,7 +129,13 @@ export default function AvalancheMap({
                   Slope: {cell.terrainInputs?.slope_angle_deg?.toFixed(1) ?? 'N/A'}°
                 </div>
                 <div className="text-muted-foreground">
-                  Prob: {(cell.probability * 100).toFixed(1)}%
+                  Prob: {
+                    typeof cell.probability === 'number' && Number.isFinite(cell.probability)
+                      ? (cell.probability * 100).toFixed(1)
+                      : Number.isFinite(cell.riskScore)
+                        ? ((cell.riskScore / 5) * 100).toFixed(1)
+                        : 'N/A'
+                  }%
                 </div>
                 {cell.dominantDriverFeature && (
                   <div className="text-emerald-400">Driver: {cell.dominantDriverFeature}</div>
