@@ -338,10 +338,21 @@ export default function Index() {
         return;
       }
       toast.info('No precomputed forecast available yet — using legacy generator as fallback');
-      const { data, error } = await supabase.functions.invoke('run-forecast', {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const invokeOptions = {
         body: { bbox: region.bbox, timeOffset, regionName: region.name, hours },
-      });
-      if (error) throw error;
+        ...(sessionData.session?.access_token
+          ? { headers: { Authorization: `Bearer ${sessionData.session.access_token}` } }
+          : {}),
+      };
+
+      const { data, error } = await supabase.functions.invoke('run-forecast', invokeOptions);
+      if (error) {
+        if (String(error.message || error).includes('401')) {
+          throw new Error('run-forecast requires a signed-in session in this environment.');
+        }
+        throw error;
+      }
       if (data?.forecastId) {
         setForecastId(data.forecastId);
         setWeatherSummary(data?.weatherSummary || null);

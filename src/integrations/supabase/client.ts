@@ -22,12 +22,6 @@ const SUPABASE_API_KEY = requireEnv('VITE_SUPABASE_ANON_KEY or VITE_SUPABASE_PUB
 // import { supabase } from "@/integrations/supabase/client";
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_API_KEY, {
-  global: {
-    headers: {
-      Authorization: `Bearer ${SUPABASE_API_KEY}`,
-      apikey: SUPABASE_API_KEY,
-    },
-  },
   auth: {
     storage: localStorage,
     persistSession: true,
