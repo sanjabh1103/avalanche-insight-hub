@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Zap, Satellite, BrainCircuit, Database, TrendingUp, CloudSnow, Activity, Tag, BarChart3, FileCheck, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, SUPABASE_ANON_KEY } from '@/integrations/supabase/client';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { DEFAULT_BBOX } from '@/lib/constants';
 
@@ -248,6 +248,9 @@ export default function AdminDashboard() {
 
       const { data, error } = await supabase.functions.invoke('trigger-job', {
         body: payload,
+        headers: {
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        },
       });
       if (error) throw error;
 

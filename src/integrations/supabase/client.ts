@@ -18,6 +18,8 @@ const SUPABASE_ANON_KEY =
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const SUPABASE_API_KEY = requireEnv('VITE_SUPABASE_ANON_KEY or VITE_SUPABASE_PUBLISHABLE_KEY', SUPABASE_ANON_KEY);
 
+export { SUPABASE_API_KEY as SUPABASE_ANON_KEY };
+
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
