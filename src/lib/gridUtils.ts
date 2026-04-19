@@ -249,6 +249,9 @@ export function generateForecastGrid(
       const hazard = 0.2 + rawRisk * 0.7;
       const exposure = 0.3 + elevFactor * 0.5;
       const vulnerability = 0.1 + aspectFactor * 0.6;
+      const elevationMeters = 1200 + elevFactor * 2800;
+      const slopeAngleDeg = 10 + rawRisk * 35;
+      const aspectDeg = (c / GRID_SIZE) * 360;
 
       const problemIdx = Math.floor(rawRisk * (PROBLEM_TYPES.length - 1));
 
@@ -271,6 +274,12 @@ export function generateForecastGrid(
           elevation: elevFactor * 0.2,
           slope_angle: 0.12 + rawRisk * 0.1,
           aspect: aspectFactor * 0.08,
+        },
+        terrainInputs: {
+          elevation_m: elevationMeters,
+          slope_angle_deg: slopeAngleDeg,
+          aspect_deg: aspectDeg,
+          terrain_roughness: 12 + elevFactor * 18,
         },
       });
     }
