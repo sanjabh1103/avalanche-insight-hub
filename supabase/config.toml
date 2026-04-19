@@ -1,1 +1,7 @@
 project_id = "fzheroisjhxnairglelv"
+
+[functions.trigger-job]
+verify_jwt = false
+
+[functions.run-forecast]
+verify_jwt = false

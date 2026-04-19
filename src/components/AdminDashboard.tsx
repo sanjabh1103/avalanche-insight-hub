@@ -246,17 +246,8 @@ export default function AdminDashboard() {
         payload.bbox = DEFAULT_BBOX;
       }
 
-      // CRASH-FIX: Get current session to ensure proper auth headers are sent
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error('Admin control requires an active signed-in session. Please sign in again and retry.');
-      }
-      
       const { data, error } = await supabase.functions.invoke('trigger-job', {
         body: payload,
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
       });
       if (error) throw error;
 

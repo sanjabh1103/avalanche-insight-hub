@@ -21,6 +21,17 @@ export function useRealtimeSubscription<T extends Record<string, unknown>>(
   const isActiveRef = useRef(true);
   // CRASH-FIX: Track subscription state to prevent duplicate subscriptions
   const isSubscribedRef = useRef(false);
+  const onReconnectRef = useRef(options?.onReconnect);
+  const subscriptionIdRef = useRef(
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  );
+  const subscriptionVersionRef = useRef(0);
+
+  useEffect(() => {
+    onReconnectRef.current = options?.onReconnect;
+  }, [options?.onReconnect]);
 
   // Persist state helper
   const persistState = useCallback((payload: RealtimePostgresChangesPayload<T>) => {
@@ -52,8 +63,9 @@ export function useRealtimeSubscription<T extends Record<string, unknown>>(
       isSubscribedRef.current = false;
     }
 
+    const channelName = `realtime-${table}-${subscriptionIdRef.current}-${subscriptionVersionRef.current++}`;
     const channel = supabase
-      .channel(`realtime-${table}-${Date.now()}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table },
@@ -66,7 +78,7 @@ export function useRealtimeSubscription<T extends Record<string, unknown>>(
         if (status === 'SUBSCRIBED') {
           isSubscribedRef.current = true;
           reconnectAttemptsRef.current = 0;
-          options?.onReconnect?.();
+          onReconnectRef.current?.();
         } else if (status === 'CHANNEL_ERROR' || status === 'CLOSED') {
           isSubscribedRef.current = false;
           // Exponential backoff retry
@@ -79,7 +91,7 @@ export function useRealtimeSubscription<T extends Record<string, unknown>>(
       });
 
     channelRef.current = channel;
-  }, [table, persistState, options?.onReconnect]);
+  }, [table, persistState]);
 
   useEffect(() => {
     isActiveRef.current = true;
