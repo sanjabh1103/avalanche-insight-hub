@@ -111,19 +111,6 @@ export default function Index() {
     }
   }, [expertMode]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === 'r' || e.key === 'R') { e.preventDefault(); if (!forecasting) runForecast(); }
-      if (e.key === ' ') { e.preventDefault(); setPlayingTimeline(p => !p); }
-      if (e.key === 'ArrowRight') { e.preventDefault(); setTimeOffset(t => Math.min(t + 1, maxHour)); }
-      if (e.key === 'ArrowLeft') { e.preventDefault(); setTimeOffset(t => Math.max(t - 1, 0)); }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [forecasting, maxHour]);
-
   // BUG-08 fix: Always load events from DB for export functionality, not just when heatmap is on
   useEffect(() => {
     // BUG-08: Load events regardless of heatmap toggle so export always has data
@@ -326,7 +313,7 @@ export default function Index() {
   // F.1: Removed shap-explainer edge function call - now using client-side generation in RiskDashboard.tsx
   // This eliminates the silent error from the missing edge function and provides instant explanations
 
-  const runForecast = async () => {
+  const runForecast = useCallback(async () => {
     setForecasting(true);
     const hours = expertMode ? 72 : 24;
     try {
@@ -362,7 +349,20 @@ export default function Index() {
     } finally {
       setForecasting(false);
     }
-  };
+  }, [expertMode, hydrateForecastGridRow, loadLatestForecastGrid, region.bbox, region.name, timeOffset]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'r' || e.key === 'R') { e.preventDefault(); if (!forecasting) runForecast(); }
+      if (e.key === ' ') { e.preventDefault(); setPlayingTimeline(p => !p); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); setTimeOffset(t => Math.min(t + 1, maxHour)); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); setTimeOffset(t => Math.max(t - 1, 0)); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [forecasting, maxHour, runForecast]);
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-foreground">

@@ -252,15 +252,18 @@ serve(async (req) => {
         const windowEnd = new Date(forecastTime);
         windowEnd.setHours(windowEnd.getHours() + policy.temporal_tolerance_hours);
 
-        // Fetch candidate events in bbox + time window
-        // Expand bbox by tolerance
+        // Fetch candidate events in bbox + time window.
+        // Hard cap at 500 events per forecast so a pathological region
+        // cannot blow the Postgres statement timeout.
         const { data: events } = await supabase
           .from('avalanche_events')
           .select('id, location, timestamp, severity, verification_status, elevation_m, label_role')
           .eq('hazard_type', hazardType)
           .gte('timestamp', windowStart.toISOString())
           .lte('timestamp', windowEnd.toISOString())
-          .not('label_role', 'eq', 'excluded');
+          .not('label_role', 'eq', 'excluded')
+          .order('timestamp', { ascending: false })
+          .limit(500);
 
         // Filter events by verification threshold
         const eligibleEvents = (events || []).filter((e: any) => 
@@ -354,14 +357,18 @@ serve(async (req) => {
           }
         }
 
-        // Batch insert outcomes for this forecast only
+        // Chunked insert so a large forecast grid cannot exceed the
+        // Postgres statement timeout on a single INSERT.
         if (outcomes.length > 0) {
-          const { error: insertErr } = await supabase
-            .from('forecast_outcomes')
-            .insert(outcomes);
-          
-          if (!insertErr) {
-            totalLabeled += outcomes.length;
+          const CHUNK = 500;
+          for (let i = 0; i < outcomes.length; i += CHUNK) {
+            const slice = outcomes.slice(i, i + CHUNK);
+            const { error: insertErr } = await supabase
+              .from('forecast_outcomes')
+              .insert(slice);
+            if (!insertErr) {
+              totalLabeled += slice.length;
+            }
           }
         }
       }
