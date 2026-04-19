@@ -44,6 +44,20 @@ def uncertainty_class(span: float) -> str:
     return 'low'
 
 
+def chebyshev_ideal_hazard_distance(cell_probability: float | np.ndarray, cell_slope_deg: float | np.ndarray, *, w_prob: float = 1.0, w_slope: float = 1.0) -> np.ndarray:
+    probability_distance = w_prob * (1.0 - np.asarray(cell_probability, dtype=float))
+    slope_distance = w_slope * np.abs(38.0 - np.asarray(cell_slope_deg, dtype=float))
+    return np.maximum(probability_distance, slope_distance)
+
+
+def terrain_adjusted_risk_level(calibrated_probability: float, slope_angle_deg: float) -> tuple[int, float, float]:
+    probability_risk = risk_level(calibrated_probability)
+    distance = float(chebyshev_ideal_hazard_distance(calibrated_probability, slope_angle_deg))
+    slope_risk = risk_level(float(np.clip(slope_angle_deg / 38.0, 0.0, 1.0)))
+    terrain_adjusted_risk = max(probability_risk, slope_risk)
+    return terrain_adjusted_risk, float(slope_risk), distance
+
+
 def cell_probabilities(base_model, x_sel: pd.DataFrame) -> np.ndarray:
     trees = getattr(base_model, 'estimators_', [])
     if not trees:
@@ -128,7 +142,11 @@ def build_cells(region, bundle, grid_size: int, forecast_date: pd.Timestamp):
         confidence_lower = float(max(0.0, mean_probability - 1.96 * np.sqrt(variance)))
         confidence_upper = float(min(1.0, mean_probability + 1.96 * np.sqrt(variance)))
         span = confidence_upper - confidence_lower
-        risk = risk_level(calibrated_probability)
+        risk, terrain_risk_score, chebyshev_distance = terrain_adjusted_risk_level(
+            calibrated_probability,
+            float(terrain['slope_angle_deg']),
+        )
+        probability_risk = risk_level(calibrated_probability)
         shap_values, shap_context = compute_tree_shap(explainer, selected_frame, selected_features)
         dominant_driver = shap_context[0]['feature'] if shap_context else None
         rows.append({
@@ -139,7 +157,10 @@ def build_cells(region, bundle, grid_size: int, forecast_date: pd.Timestamp):
             'lat_end': float(cell['lat_end']),
             'lng_end': float(cell['lng_end']),
             'risk_score': risk,
+            'probability_risk_score': probability_risk,
             'probability': calibrated_probability,
+            'terrain_risk_score': terrain_risk_score,
+            'chebyshev_hazard_distance': chebyshev_distance,
             'confidence_lower': confidence_lower,
             'confidence_upper': confidence_upper,
             'uncertainty_span': span,
@@ -247,7 +268,69 @@ def upsert_forecast_grid(region, bundle, forecast_date: pd.Timestamp, rows: list
     }
     if has_supabase_credentials():
         rest_upsert('forecast_grids', [payload], on_conflict='hazard_type,region_key,forecast_date,horizon_hours')
+        _upsert_shap_cache(region, bundle, forecast_date, rows)
     return payload
+
+
+def _upsert_shap_cache(region, bundle, forecast_date: pd.Timestamp, rows: list[dict[str, object]]) -> None:
+    """Persist per-cell TreeSHAP results to forecast_shap_cache.
+
+    The point lookup is keyed by (forecast_grid_id, cell_row, cell_col,
+    forecast_hour, model_version). forecast_grid_id is not known at
+    this moment because forecast_grids is upserted via ON CONFLICT, so
+    we key via the stable (hazard_type, region_key, forecast_date,
+    horizon_hours) tuple and let the UI join back through forecast_grids.
+    """
+    try:
+        from backend.common.supabase_io import rest_get
+    except ImportError:
+        return
+    try:
+        rows_for_key = rest_get(
+            'forecast_grids',
+            params={
+                'hazard_type': 'eq.avalanche',
+                'region_key': f'eq.{region.key}',
+                'forecast_date': f'eq.{forecast_date.date().isoformat()}',
+                'select': 'id',
+                'order': 'created_at.desc',
+                'limit': '1',
+            },
+        ) or []
+    except Exception:
+        rows_for_key = []
+    forecast_grid_id = rows_for_key[0].get('id') if rows_for_key else None
+    if not forecast_grid_id:
+        return
+    model_version = str(bundle.get('created_at') or 'unknown')
+    payload: list[dict[str, object]] = []
+    for cell in rows:
+        shap_context = cell.get('shap_context') or {}
+        top_features = shap_context.get('top_features') if isinstance(shap_context, dict) else None
+        if not top_features:
+            continue
+        payload.append({
+            'forecast_grid_id': forecast_grid_id,
+            'cell_row': int(cell.get('row', 0)),
+            'cell_col': int(cell.get('col', 0)),
+            'forecast_hour': 0,
+            'model_version': model_version,
+            'top_features': top_features,
+            'shap_values': cell.get('shap_values') or {},
+            'base_value': None,
+            'dominant_driver': cell.get('dominant_driver_feature'),
+        })
+    if not payload:
+        return
+    try:
+        rest_upsert(
+            'forecast_shap_cache',
+            payload,
+            on_conflict='forecast_grid_id,cell_row,cell_col,forecast_hour,model_version',
+        )
+    except Exception:
+        # Cache is best-effort; failure must not break the inference run.
+        return
 
 
 def main() -> int:

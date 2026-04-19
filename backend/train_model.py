@@ -98,6 +98,45 @@ def chronological_split(frame: pd.DataFrame, train_ratio: float = 0.7, calib_rat
     return train_df, calib_df, test_df
 
 
+def _event_sample_weights(frame: pd.DataFrame, *, decay_floor: float = 0.3, drift_multiplier: float = 1.0) -> np.ndarray:
+    if frame.empty:
+        return np.array([], dtype=float)
+    if 'confidence_decayed' in frame.columns:
+        weights = frame['confidence_decayed'].astype(float).to_numpy()
+    elif 'confidence' in frame.columns:
+        weights = frame['confidence'].astype(float).to_numpy()
+    else:
+        weights = np.ones(len(frame), dtype=float)
+    if weights.size == 0:
+        return np.array([], dtype=float)
+    weights = np.clip(weights, 0.0, 1.0)
+    if 'label' in frame.columns:
+        label_mask = frame['label'].astype(int).to_numpy() == 1
+        positive_weights = np.where(label_mask, np.maximum(weights, decay_floor), 1.0)
+        weights = positive_weights
+    if drift_multiplier != 1.0:
+        cutoff = pd.Timestamp.now(tz=timezone.utc) - pd.Timedelta(days=730)
+        timestamps = pd.to_datetime(frame['timestamp'], utc=True, errors='coerce')
+        old_mask = (timestamps < cutoff).fillna(False).to_numpy()
+        weights = np.where(old_mask, weights * drift_multiplier, weights)
+    return weights
+
+
+def _resampled_sample_weights(original_frame: pd.DataFrame, resampled_y: np.ndarray, base_weights: np.ndarray) -> np.ndarray:
+    if base_weights.size == 0:
+        return np.ones(len(resampled_y), dtype=float)
+    if len(base_weights) >= len(resampled_y):
+        return base_weights[:len(resampled_y)]
+    synthetic_count = len(resampled_y) - len(base_weights)
+    if 'label' in original_frame.columns:
+        minority_weights = base_weights[original_frame['label'].astype(int).to_numpy() == 1]
+        synthetic_weight = float(np.mean(minority_weights)) if minority_weights.size else 1.0
+    else:
+        synthetic_weight = float(np.mean(base_weights)) if base_weights.size else 1.0
+    synthetic_weight = float(np.clip(synthetic_weight, 0.3, 1.0))
+    return np.concatenate([base_weights, np.full(synthetic_count, synthetic_weight, dtype=float)])
+
+
 def try_smote(x_train: pd.DataFrame, y_train: pd.Series, seed: int):
     """Edit 3 locked: KMeansSMOTE with FIXED k_neighbors=5 per PRD contract.
 
@@ -197,6 +236,10 @@ def fit_model(seed: int, frame: pd.DataFrame, dataset_manifest: dict[str, object
     y_test = test_df['label'].astype(int)
 
     x_res, y_res, resample_meta = try_smote(x_train, y_train, seed)
+    base_weights = _event_sample_weights(train_df, decay_floor=0.3)
+    drift_multiplier = 0.5 if bool(frame.attrs.get('concept_drift_detected')) else 1.0
+    base_weights = _event_sample_weights(train_df, decay_floor=0.3, drift_multiplier=drift_multiplier)
+    resampled_weights = _resampled_sample_weights(train_df, y_res, base_weights)
 
     # Edit 3 locked: SVM-RFE prunes to exactly 15 features (Challenge 6).
     # We deliberately require >=15 raw features; if the generator ever returns
@@ -228,7 +271,7 @@ def fit_model(seed: int, frame: pd.DataFrame, dataset_manifest: dict[str, object
         n_jobs=-1,
         min_samples_leaf=2,
     )
-    rf.fit(x_res_sel, y_res)
+    rf.fit(x_res_sel, y_res, sample_weight=resampled_weights)
 
     # Story 16: extract tree variance BEFORE wrapping in isotonic calibration
     # so downstream inference has the raw epistemic variance rather than the
@@ -421,6 +464,10 @@ def compute_drift_stats(frame: pd.DataFrame) -> dict[str, object]:
         'feature_max_threshold': DRIFT_FEATURE_MAX_THRESHOLD,
         'regions': region_stats,
         'max_feature_distance': max_feature_distance,
+        'concept_drift_detected': bool(max_feature_distance >= DRIFT_FEATURE_MAX_THRESHOLD or any(
+            isinstance(region_info, dict) and region_info.get('mean_distance', 0.0) >= DRIFT_REGION_MEAN_THRESHOLD
+            for region_info in region_stats.values()
+        )),
     }
 
 
@@ -477,6 +524,19 @@ def main() -> int:
     drift_stats['new_positive_events'] = new_positive_events
     drift_stats['previous_manifest_found'] = previous_manifest is not None
     drift_stats['skip_allowed'] = ALLOW_DRIFT_SKIP and not is_bootstrap
+    if drift_stats.get('concept_drift_detected'):
+        drift_stats['remediation'] = 'accelerated_decay'
+        drift_stats['old_row_weight_multiplier'] = 0.5
+        frame.attrs['concept_drift_detected'] = True
+        if has_supabase_credentials():
+            try:
+                patch_first_row('model_status', {
+                    'feature_version': 'drift-accelerated-decay',
+                    'calibration_profile_version': 'drift-accelerated-decay',
+                    'threshold_profile_version': 'drift-accelerated-decay',
+                })
+            except Exception:
+                pass
 
     if ALLOW_DRIFT_SKIP and not is_bootstrap and isinstance(drift_stats.get('regions'), dict):
         region_exceeded = any(

@@ -135,9 +135,9 @@ def fetch_training_events(hazard_type: str = 'avalanche') -> list[dict[str, Any]
     # Query relaxed: backfilled events may lack verification_status/label_role.
     # Post-query filtering handles exclusion logic for rows that have these fields.
     rows = rest_get(
-        'avalanche_events',
+        'avalanche_events_decayed',
         params={
-            'select': 'id,location,timestamp,severity,source,training_eligible,label_role,verification_status,elevation_m,topo_profile,features',
+            'select': 'id,location,timestamp,severity,source,training_eligible,label_role,verification_status,elevation_m,topo_profile,features,confidence,confidence_decayed',
             'hazard_type': f'eq.{hazard_type}',
             'training_eligible': 'eq.true',
             'order': 'timestamp.asc',
@@ -292,6 +292,8 @@ def build_real_training_frame(
             'lng': lng,
             'label': 1,
             'severity': row.get('severity'),
+            'confidence': float(row.get('confidence') or 0.0),
+            'confidence_decayed': float(row.get('confidence_decayed') or row.get('confidence') or 0.0),
             'temperature_2m': assembled['raw_inputs']['temperature_2m'],
             'windspeed_10m': assembled['raw_inputs']['windspeed_10m'],
             **assembled['feature_row'],
@@ -336,6 +338,8 @@ def build_real_training_frame(
                 'lng': negative['lng'],
                 'label': 0,
                 'severity': None,
+                'confidence': 0.0,
+                'confidence_decayed': 0.0,
                 'temperature_2m': assembled['raw_inputs']['temperature_2m'],
                 'windspeed_10m': assembled['raw_inputs']['windspeed_10m'],
                 **assembled['feature_row'],
@@ -344,7 +348,7 @@ def build_real_training_frame(
     frame = pd.DataFrame(dataset_rows)
     if not frame.empty:
         frame = frame.sort_values('timestamp').reset_index(drop=True)
-        frame = frame[['timestamp', 'region_key', 'region_name', 'lat', 'lng', 'label', 'severity', 'temperature_2m', 'windspeed_10m', *FEATURE_COLUMNS]]
+        frame = frame[['timestamp', 'region_key', 'region_name', 'lat', 'lng', 'label', 'severity', 'confidence', 'confidence_decayed', 'temperature_2m', 'windspeed_10m', *FEATURE_COLUMNS]]
 
     positives_count = int((frame['label'] == 1).sum()) if not frame.empty else 0
     negatives_count = int((frame['label'] == 0).sum()) if not frame.empty else 0
