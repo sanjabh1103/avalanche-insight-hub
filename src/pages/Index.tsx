@@ -23,6 +23,7 @@ import HistoricalEventsToggle, { type AvalancheEvent } from '@/components/Histor
 import ExpertModePanel from '@/components/ExpertModePanel';
 import VoxelNeighborhoodModal from '@/components/VoxelNeighborhoodModal';
 import { forecastGridRowToHourlyGrids, generateForecastGrid, type ForecastGridRowRecord, type GridCell } from '@/lib/gridUtils';
+import { loadShapForCell, type ShapResult } from '@/lib/shapLoader';
 import { supabase } from '@/integrations/supabase/client';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -36,6 +37,7 @@ export default function Index() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [forecastId, setForecastId] = useState<string | undefined>();
   const [hourlyGrids, setHourlyGrids] = useState<GridCell[][] | null>(null);
+  const [shapResult, setShapResult] = useState<ShapResult | null>(null);
   const [showEvents, setShowEvents] = useState(false);
   const [remoteEvents, setRemoteEvents] = useState<AvalancheEvent[]>([]);
   const [localEvents, setLocalEvents] = useState<AvalancheEvent[]>([]);
@@ -310,8 +312,23 @@ export default function Index() {
     return () => { alive = false; };
   }, [region.name, hydrateForecastGridRow, loadLatestForecastGrid]);
 
-  // F.1: Removed shap-explainer edge function call - now using client-side generation in RiskDashboard.tsx
-  // This eliminates the silent error from the missing edge function and provides instant explanations
+  // P1.2: Load real TreeSHAP from forecast_shap_cache whenever the user
+  // selects a different cell or a new grid is hydrated. The loader has its
+  // own 30s in-memory cache so fast hover-click sequences don't hammer the
+  // RPC, and returns null when the cache is cold — RiskDashboard then falls
+  // back to the inline heuristic (honestly labeled).
+  useEffect(() => {
+    let alive = true;
+    if (!selectedCell || !forecastId) {
+      setShapResult(null);
+      return () => { alive = false; };
+    }
+    loadShapForCell(forecastId, selectedCell.row, selectedCell.col, timeOffset).then((result) => {
+      if (!alive) return;
+      setShapResult(result);
+    });
+    return () => { alive = false; };
+  }, [forecastId, selectedCell, timeOffset]);
 
   const runForecast = useCallback(async () => {
     setForecasting(true);
@@ -418,7 +435,7 @@ export default function Index() {
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value="dashboard" className="flex-1 overflow-y-auto mt-0 px-2 pb-3">
-                  <RiskDashboard cell={selectedCell} weatherSummary={weatherSummary} />
+                  <RiskDashboard cell={selectedCell} weatherSummary={weatherSummary} shapResult={shapResult} />
                 </TabsContent>
                 <TabsContent value="admin" className="flex-1 overflow-y-auto mt-0 px-2 pb-3">
                   <AdminDashboard />

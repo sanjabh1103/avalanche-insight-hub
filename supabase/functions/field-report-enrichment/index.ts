@@ -61,12 +61,53 @@ serve(async (req: Request) => {
     }
     const ingestResult = await ingestResponse.json();
 
+    // P1.3: Auto-promote the newly-created event to verification_status='weak'
+    // when a SAR or news event corroborates it within 48h and 5km. This is
+    // how the training corpus gets populated with higher-quality rows than
+    // the default 'unverified' citizen reports.
+    let promotion: Record<string, unknown> | null = null;
+    const newEventId: string | undefined = (ingestResult as Record<string, unknown>)?.event_id as string | undefined
+      || (ingestResult as Record<string, unknown>)?.id as string | undefined
+      || (ingestResult as Record<string, unknown>)?.avalanche_event_id as string | undefined;
+
+    if (newEventId) {
+      try {
+        const { data: match } = await (supabase as any).rpc('match_corroborating_event', {
+          p_event_id: newEventId,
+          p_lat: lat,
+          p_lng: lng,
+          p_timestamp: new Date().toISOString(),
+          p_radius_m: 5000,
+          p_window_hours: 48,
+        });
+        if (Array.isArray(match) && match.length > 0) {
+          const hit = match[0] as Record<string, unknown>;
+          const { data: promoted } = await (supabase as any).rpc('promote_event_verification', {
+            p_event_id: newEventId,
+            p_new_status: 'weak',
+            p_promoter: 'auto:field_report_enrichment',
+            p_reason: `corroborated by ${hit.source} at ${Math.round(Number(hit.distance_m ?? 0))}m / ${Number(hit.hours_delta ?? 0).toFixed(1)}h`,
+          });
+          promotion = {
+            matched_event_id: hit.matched_event_id,
+            matched_source: hit.source,
+            distance_m: hit.distance_m,
+            hours_delta: hit.hours_delta,
+            promoted: Array.isArray(promoted) && promoted.length > 0 ? promoted[0] : null,
+          };
+        }
+      } catch (promoteErr) {
+        // Best-effort only; a promotion failure must not fail the whole ingest.
+        console.warn('auto-promotion skipped:', (promoteErr as Error).message);
+      }
+    }
+
     await supabase.from('compute_jobs').update({
       status: 'completed',
-      result: { fieldReportId, createdEvent: true, ingestResult },
+      result: { fieldReportId, createdEvent: true, ingestResult, promotion },
     }).eq('id', job.id);
 
-    return new Response(JSON.stringify({ ok: true, jobId: job.id }), {
+    return new Response(JSON.stringify({ ok: true, jobId: job.id, promotion }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {

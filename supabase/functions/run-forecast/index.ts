@@ -493,6 +493,95 @@ function buildForecastMetadata(
   };
 }
 
+interface HydratedAsyncGrid {
+  hourlyGrids: GridCell[][];
+  snowpackMetrics: SnowpackSummary;
+  modelVersion: string;
+  snowpackModelVersion: string;
+  forecastGridId: string;
+  createdAt: string;
+}
+
+function bboxOverlaps(a: number[], b: number[]): boolean {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== 4 || b.length !== 4) return false;
+  const [aLatMin, aLngMin, aLatMax, aLngMax] = a;
+  const [bLatMin, bLngMin, bLatMax, bLngMax] = b;
+  return aLatMin <= bLatMax && aLatMax >= bLatMin && aLngMin <= bLngMax && aLngMax >= bLngMin;
+}
+
+async function tryHydrateForecastGrid(
+  supabase: any,
+  params: { hazardType: string; regionName: string | null; bbox: number[]; maxAgeHours: number },
+): Promise<HydratedAsyncGrid | null> {
+  try {
+    const cutoffIso = new Date(Date.now() - params.maxAgeHours * 3600 * 1000).toISOString();
+    let query = supabase
+      .from('forecast_grids')
+      .select('id, region_name, bbox, grid_geojson, model_metadata, weather_summary, created_at')
+      .eq('hazard_type', params.hazardType)
+      .eq('status', 'ready')
+      .gte('created_at', cutoffIso)
+      .order('created_at', { ascending: false })
+      .limit(5);
+    if (params.regionName) {
+      query = query.eq('region_name', params.regionName);
+    }
+    const { data, error } = await query;
+    if (error || !Array.isArray(data) || data.length === 0) return null;
+
+    const matched = data.find((row: any) => bboxOverlaps(row.bbox, params.bbox)) || data[0];
+    const cells = Array.isArray(matched.grid_geojson) ? matched.grid_geojson : [];
+    if (cells.length === 0) return null;
+
+    const horizonRaw = matched.model_metadata && matched.model_metadata.horizon_hours;
+    const horizonHours = Math.max(1, Math.min(Number(horizonRaw) || 24, 72));
+    const hourlyGrids: GridCell[][] = Array.from({ length: horizonHours }, () =>
+      cells.map((raw: any) => ({
+        row: Number(raw.row ?? 0),
+        col: Number(raw.col ?? 0),
+        lat: Number(raw.lat ?? 0),
+        lng: Number(raw.lng ?? 0),
+        latEnd: Number(raw.lat_end ?? raw.latEnd ?? 0),
+        lngEnd: Number(raw.lng_end ?? raw.lngEnd ?? 0),
+        riskScore: Number(raw.risk_score ?? raw.riskScore ?? 1),
+        hazard: Number(raw.hazard ?? raw.probability ?? 0),
+        exposure: Number(raw.exposure ?? 0),
+        vulnerability: Number(raw.vulnerability ?? 0),
+        problemType: String(raw.problem_type ?? raw.problemType ?? 'Storm Slab'),
+        rawScore: Number(raw.probability ?? raw.hazard ?? 0),
+        shapValues: (raw.shap_values as Record<string, number>) || (raw.shapValues as Record<string, number>) || {},
+        snowpackMetrics: raw.snowpack_proxy || raw.snowpackProxy || undefined,
+        inferenceBackend: 'async_batch',
+      })),
+    );
+
+    const meta = matched.model_metadata || {};
+    const modelVersion = String(meta.model_version || 'forecast_grid');
+    const snowpackModelVersion = String(meta.snowpack_model_version || 'edge-him-strat-lite-v1');
+    const snowpackSource = matched.weather_summary?.source || 'forecast_grids';
+    const snowpackSample = cells[0]?.snowpack_proxy || cells[0]?.snowpackProxy || {};
+    const snowpackMetrics: SnowpackSummary = {
+      ram_hardness: toNumber(snowpackSample.ram_hardness ?? snowpackSample.estimated_shear_strength, 0.4),
+      shear_strength: toNumber(snowpackSample.shear_strength ?? snowpackSample.estimated_shear_strength, 0.4),
+      settlement_rate: toNumber(snowpackSample.settlement_rate ?? snowpackSample.snow_settlement_index, 0.3),
+      confidence: toNumber(snowpackSample.confidence, 0.7),
+      source: String(snowpackSource),
+    };
+
+    return {
+      hourlyGrids,
+      snowpackMetrics,
+      modelVersion,
+      snowpackModelVersion,
+      forecastGridId: String(matched.id),
+      createdAt: String(matched.created_at),
+    };
+  } catch (error) {
+    console.warn('tryHydrateForecastGrid failed:', (error as Error).message);
+    return null;
+  }
+}
+
 async function invokeEdgeFunction(functionName: string, body: Record<string, unknown>) {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -537,7 +626,9 @@ serve(async (req: Request) => {
       .limit(1)
       .single();
 
-    // Create job
+    // P0.3: Don't hardcode fallback. Compute it honestly after we know whether
+    // (a) a fresh async forecast_grids row existed, (b) Modal succeeded, or
+    // (c) we really did fall back to the edge heuristic.
     const { data: job, error: jobErr } = await supabase
       .from('compute_jobs')
       .insert({
@@ -551,9 +642,6 @@ serve(async (req: Request) => {
           requested_hours: hours,
           runtime_mode: capabilities.mode,
           capability_summary: capabilities.summary,
-          fallback_used: true,
-          fallback_reason: 'legacy_hourly_grid_generator',
-          generation_mode: 'legacy_fallback',
         },
       })
       .select('id')
@@ -566,6 +654,17 @@ serve(async (req: Request) => {
     const centerLng = (bbox[1] + bbox[3]) / 2;
     const weather = await fetchWeather(centerLat, centerLng);
     const weatherSource = weather ? 'open-meteo' : 'simulation';
+
+    // P0.3: Try to hydrate from a recent forecast_grids row before running the
+    // edge heuristic. This is the hot path — GitHub Actions writes real
+    // TreeSHAP, ABC-weighted, calibrated cells to forecast_grids once per day
+    // and we should serve them directly instead of synthesizing on the edge.
+    const asyncGrid = await tryHydrateForecastGrid(supabase, {
+      hazardType,
+      regionName: regionName || null,
+      bbox,
+      maxAgeHours: 26,
+    });
     const optimizationVersion = typeof modelStatus?.optimization_version === 'string' && modelStatus.optimization_version
       ? modelStatus.optimization_version
       : capabilities.gpuEnabled
@@ -593,22 +692,31 @@ serve(async (req: Request) => {
       remoteSnowpackSummary,
       'edge_fallback',
     );
-    let hourlyGrids = localForecast.hourlyGrids;
-    let inferenceBackend = 'edge_fallback';
-    let fallbackUsed = true;
-    let fallbackReason: string | null = 'legacy_hourly_grid_generator';
-    let snowpackMetrics = {
+    // P0.3: Honest fallback accounting. Precedence is:
+    //   async_batch (forecast_grids hydrated) > gpu_remote (Modal infer) >
+    //   edge_remote (edge heuristic w/ real weather) > legacy_fallback (no weather)
+    let hourlyGrids = asyncGrid?.hourlyGrids || localForecast.hourlyGrids;
+    let inferenceBackend = asyncGrid ? 'async_batch' : 'edge_fallback';
+    let fallbackUsed = !asyncGrid && weather === null;
+    let fallbackReason: string | null = asyncGrid
+      ? null
+      : (weather === null ? 'no_weather_and_no_async_grid' : null);
+    let snowpackMetrics = asyncGrid?.snowpackMetrics || {
       ...localForecast.snowpackMetrics,
       source: remoteSnowpackSummary?.source || localForecast.snowpackMetrics.source,
     };
-    let modelVersion = modelStatus?.version || 'v1.0.0-sim';
-    let snowpackModelVersion = typeof remoteSnowpack?.model_version === 'string' && remoteSnowpack.model_version
-      ? remoteSnowpack.model_version
-      : capabilities.gpuEnabled
-        ? 'him-strat-proxy-v1'
-        : 'edge-him-strat-lite-v1';
+    let modelVersion = asyncGrid?.modelVersion
+      || modelStatus?.version
+      || 'v1.0.0-sim';
+    let snowpackModelVersion = asyncGrid?.snowpackModelVersion
+      || (typeof remoteSnowpack?.model_version === 'string' && remoteSnowpack.model_version
+        ? remoteSnowpack.model_version
+        : capabilities.gpuEnabled
+          ? 'him-strat-proxy-v1'
+          : 'edge-him-strat-lite-v1');
 
-    const remoteInference = await invokeModalWorker(capabilities, 'infer', {
+    // P0.3: Skip Modal roundtrip if we already hydrated from forecast_grids.
+    const remoteInference = asyncGrid ? null : await invokeModalWorker(capabilities, 'infer', {
       hazard_type: hazardType,
       bbox,
       hours,

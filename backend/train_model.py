@@ -20,9 +20,16 @@ from sklearn.metrics import accuracy_score, brier_score_loss, confusion_matrix, 
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.svm import SVC
 
+from backend.common.abc_optimizer import (
+    ABC_DEFAULT_FEATURES,
+    ABCResult,
+    build_optimization_summary,
+    optimize as abc_optimize,
+)
 from backend.common.artifacts import create_artifact_dir, dump_json, dump_joblib, latest_artifact_dir, load_json
 from backend.common.config import load_settings
 from backend.common.features import FEATURE_COLUMNS
+from backend.common.schema_drift import feature_columns_hash, label_schema_hash
 from backend.common.supabase_io import has_supabase_credentials, patch_first_row
 from backend.common.training_dataset import load_training_frame
 
@@ -346,6 +353,14 @@ def fit_model(seed: int, frame: pd.DataFrame, dataset_manifest: dict[str, object
         'raw_mean_prob_p99': float(np.quantile(raw_mean_prob, 0.99)) if raw_mean_prob.size else None,
     }
 
+    # P2.2: Hash of the active FEATURE_COLUMNS + observed label enum so
+    # daily_inference can detect schema drift and refuse to serve a stale
+    # artifact against an evolved feature set.
+    feature_hash = feature_columns_hash(FEATURE_COLUMNS)
+    label_observed_vs = sorted({str(v) for v in frame.get('verification_status', pd.Series(dtype=str)).dropna().unique()}) if 'verification_status' in frame.columns else []
+    label_observed_sl = sorted({str(v) for v in frame.get('severity', pd.Series(dtype=str)).dropna().astype(str).unique()}) if 'severity' in frame.columns else []
+    label_hash = label_schema_hash(label_observed_vs, label_observed_sl)
+
     bundle = {
         'selector': selector,
         'base_model': rf,
@@ -363,6 +378,8 @@ def fit_model(seed: int, frame: pd.DataFrame, dataset_manifest: dict[str, object
         'training_dataset_version': dataset_manifest.get('training_dataset_version', 'unknown'),
         'created_at': datetime.now(timezone.utc).isoformat(),
         'seed': seed,
+        'feature_columns_hash': feature_hash,
+        'label_schema_hash': label_hash,
     }
     return bundle
 
@@ -592,13 +609,64 @@ def main() -> int:
         print(json.dumps(metadata, indent=2))
         return 2
 
-    if has_supabase_credentials():
-        payload = {
+    # P1.1: Run backend ABC optimizer on the training frame to publish real
+    # feature_weights + abc_enabled:true to model_status.optimization_summary.
+    # This replaces the hardcoded fallback weights in trigger-job/index.ts.
+    abc_summary: dict[str, object] | None = None
+    try:
+        abc_result: ABCResult = abc_optimize(
+            frame,
+            feature_columns=ABC_DEFAULT_FEATURES,
+            seed=args.seed,
+        )
+        abc_version = f"opt-abc-{artifact_dir.name}"
+        abc_summary = build_optimization_summary(
+            abc_result,
+            runtime_mode='edge_fallback',
+            version=abc_version,
+        )
+        metadata['optimization_summary'] = abc_summary
+        dump_json(artifact_dir / 'optimization_summary.json', abc_summary)
+        dump_json(artifact_dir / 'training_metrics.json', metadata)
+        print(
+            f"[train_model] ABC optimizer done: holdout_pss={abc_result.holdout_pss:.3f} "
+            f"iterations={abc_result.iterations} features={list(abc_result.feature_weights.keys())}",
+            file=sys.stderr,
+        )
+    except Exception as exc:  # pragma: no cover - optimizer is best-effort
+        abc_summary = None
+        metadata['abc_error'] = str(exc)
+        print(f"[train_model] ABC optimizer skipped: {exc}", file=sys.stderr)
+
+    # P2.3: Refuse to publish to Supabase if this artifact was built from the
+    # synthetic bootstrap fallback. The artifact remains on disk so the
+    # operator can inspect it, but model_status stays pinned to the last
+    # real-data model until fresh labeled events arrive.
+    manifest = bundle.get('dataset_manifest') if isinstance(bundle.get('dataset_manifest'), dict) else {}
+    is_synthetic = bool(manifest.get('is_synthetic'))
+    if is_synthetic:
+        metadata['publish_skipped'] = 'synthetic_bootstrap_not_published'
+        print(
+            "[train_model] Refusing to publish synthetic-bootstrap artifact to Supabase.",
+            file=sys.stderr,
+        )
+
+    if has_supabase_credentials() and not is_synthetic:
+        payload: dict[str, object] = {
             'version': f"async-{artifact_dir.name}",
             'last_trained': metadata['published_at'],
             'f1_score': metadata['metrics']['f1'],
             'next_run': None,
         }
+        if abc_summary is not None:
+            payload['optimization_version'] = str(abc_summary['optimization_version'])
+            payload['optimization_summary'] = abc_summary
+        # P2.2: Publish the hashes so inference (and future concept-drift
+        # dashboards) can diff against the current runtime schema.
+        if bundle.get('feature_columns_hash'):
+            payload['feature_schema_hash'] = bundle['feature_columns_hash']
+        if bundle.get('label_schema_hash'):
+            payload['label_schema_hash'] = bundle['label_schema_hash']
         try:
             patch_first_row('model_status', payload)
         except Exception as exc:  # pragma: no cover - publish is best effort

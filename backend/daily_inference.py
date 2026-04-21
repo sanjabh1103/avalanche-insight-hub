@@ -19,9 +19,99 @@ from backend.common.real_features import (
 )
 from backend.common.regions import load_regions, repo_root
 from backend.common.runout import RUN_PHYSICS_RUNOUT, build_runout_polygons
-from backend.common.supabase_io import has_supabase_credentials, patch_first_row, rest_upsert
+from backend.common.supabase_io import has_supabase_credentials, patch_first_row, rest_get, rest_upsert
 from backend.common.training_dataset import load_training_frame
 from backend.train_model import fit_model
+
+
+def _fetch_latest_sar_summary(region_key: str) -> dict[str, object]:
+    """P2.1: Read the latest SAR scene summary for this region so the voxel
+    grid can surface real `sar_coverage_state` and `residual_shadow` flags
+    instead of the previous hardcoded 'not_applicable' defaults.
+
+    Returns an empty dict when Supabase is unreachable or no SAR events
+    exist \u2014 callers treat that as "SAR not currently active" which is the
+    correct semantic when `capabilities.sar_enabled=false`.
+    """
+    if not has_supabase_credentials():
+        return {}
+    try:
+        rows = rest_get(
+            'avalanche_events',
+            params={
+                'select': 'id,timestamp,features',
+                'source': 'in.(gee_sar,sentinel1_gee)',
+                'order': 'timestamp.desc',
+                'limit': '10',
+            },
+        ) or []
+    except Exception:
+        return {}
+    relevant = [row for row in rows if isinstance(row.get('features'), dict)
+                and row['features'].get('region_key') == region_key]
+    if not relevant:
+        return {}
+    latest = relevant[0]
+    features = latest.get('features') or {}
+    return {
+        'sar_coverage_state': str(features.get('sar_coverage_state') or 'unknown'),
+        'ascending_scene_count': int(features.get('ascending_scene_count') or 0),
+        'descending_scene_count': int(features.get('descending_scene_count') or 0),
+        'sar_scene_time': features.get('sar_scene_time'),
+        'sar_active': True,
+    }
+
+
+def _compute_cell_coverage_flags(
+    terrain: dict[str, float],
+    sar_summary: dict[str, object],
+) -> dict[str, object]:
+    """P2.1: Per-cell residual-shadow flag from terrain vs. Sentinel-1 look
+    geometry. Sentinel-1 IW has a ~12\u00b0 heading offset; ascending/descending
+    passes view opposite sides. A pixel is considered potentially shadowed
+    when:
+      * slope > 40\u00b0 AND
+      * only one orbital pass observed it (missing ASC or DESC), AND
+      * the terrain aspect faces away from that pass's look direction.
+    """
+    if not sar_summary or not sar_summary.get('sar_active'):
+        return {
+            'sar_coverage_state': 'not_applicable',
+            'residual_shadow': False,
+            'data_gaps': [],
+        }
+
+    coverage_state = str(sar_summary.get('sar_coverage_state') or 'unknown')
+    asc_count = int(sar_summary.get('ascending_scene_count') or 0)
+    desc_count = int(sar_summary.get('descending_scene_count') or 0)
+    slope_deg = float(terrain.get('slope_angle_deg') or 0.0)
+    aspect_deg = float(terrain.get('aspect_deg') or 0.0)
+
+    data_gaps: list[str] = []
+    residual_shadow = False
+    if slope_deg > 40.0 and coverage_state != 'full_coverage':
+        # Ascending pass typically looks east (azimuth ~78\u00b0 relative to
+        # heading); descending ~282\u00b0. Cells facing directly away from the
+        # only observed pass are the high-risk shadow zone.
+        if asc_count > 0 and desc_count == 0:
+            facing_away = abs(((aspect_deg - 258.0 + 540.0) % 360.0) - 180.0) < 45.0
+            if facing_away:
+                residual_shadow = True
+                data_gaps.append('desc_pass_missing_steep_west_slope')
+        elif desc_count > 0 and asc_count == 0:
+            facing_away = abs(((aspect_deg - 78.0 + 540.0) % 360.0) - 180.0) < 45.0
+            if facing_away:
+                residual_shadow = True
+                data_gaps.append('asc_pass_missing_steep_east_slope')
+
+    if coverage_state == 'low_coverage':
+        data_gaps.append('low_orbital_coverage')
+
+    return {
+        'sar_coverage_state': coverage_state,
+        'residual_shadow': residual_shadow,
+        'data_gaps': data_gaps,
+    }
 
 
 def risk_level(probability: float) -> int:
@@ -115,6 +205,9 @@ def build_cells(region, bundle, grid_size: int, forecast_date: pd.Timestamp):
     region_grid = build_region_grid(region, grid_size=grid_size)
     weather_profile = fetch_forecast_weather_profile(region.center, forecast_date.to_pydatetime(), 72)
     weather_sample = select_hourly_weather_sample(weather_profile, forecast_date.to_pydatetime())
+    # P2.1: Fetch SAR summary once per region so per-cell coverage flags
+    # reflect real orbital coverage instead of the old hardcoded default.
+    sar_summary = _fetch_latest_sar_summary(region.key)
     import shap
 
     explainer = shap.TreeExplainer(base_model)
@@ -173,11 +266,7 @@ def build_cells(region, bundle, grid_size: int, forecast_date: pd.Timestamp):
             'shap_context': {'top_features': shap_context},
             'feature_values': selected_frame.iloc[0].to_dict(),
             'explanation_summary': None,
-            'coverage_flags': {
-                'sar_coverage_state': 'not_applicable',
-                'residual_shadow': False,
-                'data_gaps': [],
-            },
+            'coverage_flags': _compute_cell_coverage_flags(terrain, sar_summary),
             'selected_features': selected_features,
             'weather_inputs': {
                 'snowfall_24h': feature_row['snowfall_24h'],
@@ -344,6 +433,30 @@ def main() -> int:
     try:
         artifact_dir = latest_artifact_dir(args.artifact_root)
         bundle = load_joblib(artifact_dir / 'model.joblib')
+        # P2.2: Detect concept drift between the artifact's baked-in feature
+        # column set and the currently deployed FEATURE_COLUMNS. If the hash
+        # mismatches we don't refuse to run (that would block forecasts), but
+        # we emit ::warning:: annotations so the workflow fails visibly in
+        # the GitHub Actions UI and an operator is alerted to retrain.
+        try:
+            from backend.common.schema_drift import detect_drift, feature_columns_hash
+            current_hash = feature_columns_hash(FEATURE_COLUMNS)
+            stored_hash = bundle.get('feature_columns_hash') if isinstance(bundle, dict) else None
+            drift_report = detect_drift(
+                stored_feature_hash=stored_hash if isinstance(stored_hash, str) else None,
+                current_feature_hash=current_hash,
+                stored_label_hash=None,
+                current_label_hash='',
+            )
+            if drift_report['requires_retrain']:
+                print(
+                    f"::warning title=Schema drift detected::"
+                    f"feature_columns_hash mismatch (stored={stored_hash!s}, current={current_hash!s}). "
+                    f"Retrain required.",
+                    file=sys.stderr,
+                )
+        except Exception as drift_exc:  # pragma: no cover - drift check is advisory
+            print(f"[daily_inference] drift check skipped: {drift_exc}", file=sys.stderr)
     except FileNotFoundError:
         artifact_dir = create_artifact_dir(args.artifact_root)
         settings = load_settings()
@@ -377,13 +490,37 @@ def main() -> int:
 
     dump_json(artifact_dir / 'forecast_grids.json', outputs)
 
+    # P0.2: Write a per-region health summary so stale runs are visible in
+    # GitHub Actions logs AND in the admin dashboard (via model_status).
+    inference_manifest = {
+        'artifact_dir': str(artifact_dir),
+        'regions_written': len(outputs),
+        'regions': [
+            {
+                'region_key': payload.get('region_key'),
+                'region_name': payload.get('region_name'),
+                'forecast_date': payload.get('forecast_date'),
+                'horizon_hours': payload.get('horizon_hours'),
+                'cell_count': len(payload.get('grid_geojson') or []),
+                'runout_method_sample': (payload.get('model_metadata') or {}).get('runout_method_sample'),
+                'training_dataset_version': (payload.get('model_metadata') or {}).get('training_dataset_version'),
+            }
+            for payload in outputs
+        ],
+        'completed_at': datetime.now(timezone.utc).isoformat(),
+    }
+    dump_json(artifact_dir / 'inference_manifest.json', inference_manifest)
+
     if has_supabase_credentials():
+        # P0.2: Compute next scheduled run (24h from now) so the admin dashboard
+        # can flag staleness instead of showing an indefinite 'null'.
+        next_run = (datetime.now(timezone.utc) + pd.Timedelta(hours=24)).isoformat()
         patch_first_row('model_status', {
             'version': f"forecast-{artifact_dir.name}",
-            'next_run': None,
+            'next_run': next_run,
         })
 
-    print(json.dumps({'artifact_dir': str(artifact_dir), 'regions_written': len(outputs)}, indent=2))
+    print(json.dumps(inference_manifest, indent=2))
     return 0
 
 

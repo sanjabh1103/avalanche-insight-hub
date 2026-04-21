@@ -393,12 +393,25 @@ def load_training_frame(
     if not allow_synthetic_bootstrap:
         raise RuntimeError('Real training dataset is empty or class-degenerate and synthetic bootstrap is disabled.')
 
+    # P2.3: Loudly annotate any synthetic bootstrap run so it shows up as a
+    # warning in GitHub Actions and the resulting artifact is tagged
+    # is_synthetic=True. train_model.py refuses to publish to Supabase when
+    # this flag is set, so a cold-start synthetic run can build a local
+    # artifact but will never overwrite the live model_status.
+    import sys as _sys
+    print(
+        "::warning title=Synthetic training bootstrap::"
+        "Real training frame is empty or class-degenerate; falling back to "
+        "generate_training_frame. This artifact will NOT be published to Supabase.",
+        file=_sys.stderr,
+    )
     synthetic = generate_training_frame(load_regions(), samples_per_region=samples_per_region, seed=seed)
     synthetic['severity'] = None
     synthetic['temperature_2m'] = synthetic['temp_gradient'] * 20 - 10
     synthetic['windspeed_10m'] = synthetic['wind_loading'] * 55
     return synthetic, {
         'training_dataset_version': 'synthetic_bootstrap_v1',
+        'is_synthetic': True,
         'positive_count': int((synthetic['label'] == 1).sum()),
         'negative_count': int((synthetic['label'] == 0).sum()),
         'filters': {'allow_synthetic_bootstrap': True},

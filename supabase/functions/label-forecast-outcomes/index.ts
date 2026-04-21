@@ -244,31 +244,60 @@ serve(async (req) => {
         }
 
         const hourlyGrids = forecast.hourly_grids || [];
-        const bbox = forecast.bbox || [0, 0, 0, 0];
+        const bbox = Array.isArray(forecast.bbox) && forecast.bbox.length === 4 ? forecast.bbox : [0, 0, 0, 0];
         const forecastTime = new Date(forecast.created_at);
-        
+
         // Define outcome window (when events would verify this forecast)
         const windowStart = new Date(forecastTime);
         const windowEnd = new Date(forecastTime);
         windowEnd.setHours(windowEnd.getHours() + policy.temporal_tolerance_hours);
 
-        // Fetch candidate events in bbox + time window.
-        // Hard cap at 500 events per forecast so a pathological region
-        // cannot blow the Postgres statement timeout.
-        const { data: events } = await supabase
-          .from('avalanche_events')
-          .select('id, location, timestamp, severity, verification_status, elevation_m, label_role')
-          .eq('hazard_type', hazardType)
-          .gte('timestamp', windowStart.toISOString())
-          .lte('timestamp', windowEnd.toISOString())
-          .not('label_role', 'eq', 'excluded')
-          .order('timestamp', { ascending: false })
-          .limit(500);
-
-        // Filter events by verification threshold
-        const eligibleEvents = (events || []).filter((e: any) => 
-          getVerificationRank(e.verification_status) >= minVerificationRank
-        );
+        // P0.1: Bbox-narrowed RPC pre-filters in Postgres using the GIST index
+        // on location, dropping the payload to O(matching events) instead of
+        // O(all events in window). Falls back to the legacy REST query only
+        // when the RPC is unavailable (e.g. during migration rollout).
+        const [latMin, lngMin, latMax, lngMax] = bbox;
+        let eligibleEvents: any[] = [];
+        let rpcError: unknown = null;
+        if (latMin !== 0 || lngMin !== 0 || latMax !== 0 || lngMax !== 0) {
+          const { data: rpcEvents, error: rpcErr } = await supabase.rpc('fetch_labeler_events', {
+            p_hazard_type: hazardType,
+            p_window_start: windowStart.toISOString(),
+            p_window_end: windowEnd.toISOString(),
+            p_bbox_min_lng: lngMin,
+            p_bbox_min_lat: latMin,
+            p_bbox_max_lng: lngMax,
+            p_bbox_max_lat: latMax,
+            p_min_verification_rank: minVerificationRank,
+            p_limit: 200,
+          });
+          rpcError = rpcErr;
+          if (!rpcErr && Array.isArray(rpcEvents)) {
+            eligibleEvents = rpcEvents.map((e: any) => ({
+              id: e.id,
+              timestamp: e.timestamp,
+              severity: e.severity,
+              verification_status: e.verification_status,
+              elevation_m: e.elevation_m,
+              label_role: e.label_role,
+              location: `POINT(${e.lng} ${e.lat})`,
+            }));
+          }
+        }
+        if (rpcError || eligibleEvents.length === 0) {
+          const { data: events } = await supabase
+            .from('avalanche_events')
+            .select('id, location, timestamp, severity, verification_status, elevation_m, label_role')
+            .eq('hazard_type', hazardType)
+            .gte('timestamp', windowStart.toISOString())
+            .lte('timestamp', windowEnd.toISOString())
+            .not('label_role', 'eq', 'excluded')
+            .order('timestamp', { ascending: false })
+            .limit(200);
+          eligibleEvents = (events || []).filter((e: any) =>
+            getVerificationRank(e.verification_status) >= minVerificationRank
+          );
+        }
 
         // Process each hour and cell for this forecast only
         const outcomes = [];
@@ -278,7 +307,12 @@ serve(async (req) => {
           continue;
         }
 
+        // P0.1: Inner per-forecast budget. A pathological region cannot stall
+        // the whole batch; on overshoot we save whatever labels we've built.
+        const forecastDeadline = Date.now() + 15000;
+
         for (let hour = 0; hour < hourlyGrids.length; hour++) {
+          if (Date.now() > forecastDeadline) break;
           const grid = hourlyGrids[hour];
           if (!Array.isArray(grid)) continue;
 
@@ -374,9 +408,11 @@ serve(async (req) => {
       }
     };
 
-    // Race labeling against a hard timeout so jobs don't remain stuck running
+    // P0.1: Outer timeout lifted to 60s. Inner per-forecast budget keeps any
+    // single region from hogging the whole window; partial results are still
+    // saved on timeout.
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Labeling timed out after 30s — partial results saved')), 30000)
+      setTimeout(() => reject(new Error('Labeling timed out after 60s — partial results saved')), 60000)
     );
 
     try {

@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { RISK_LABELS } from '@/lib/constants';
 import { getRiskColor, type GridCell } from '@/lib/gridUtils';
+import type { ShapResult } from '@/lib/shapLoader';
 
 interface WeatherSummary {
   snowfall_24h: string;
@@ -14,6 +15,7 @@ interface WeatherSummary {
 interface Props {
   cell: GridCell | null;
   weatherSummary?: WeatherSummary | null;
+  shapResult?: ShapResult | null;
 }
 
 // F.1: Generate natural language explanation from SHAP values
@@ -54,7 +56,7 @@ function generateRiskExplanation(cell: GridCell): string {
   }
 }
 
-export default function RiskDashboard({ cell, weatherSummary }: Props) {
+export default function RiskDashboard({ cell, weatherSummary, shapResult }: Props) {
   if (!cell) {
     return (
       <div className="p-4 text-center text-muted-foreground">
@@ -66,13 +68,27 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
     );
   }
 
-  // Story 19: Top 5 by ABSOLUTE contribution (negative drivers matter too).
-  const shapData = Object.entries(cell.shapValues).map(([key, value]) => ({
-    name: key.replace(/_/g, ' '),
-    value: Number((value as number).toFixed(3)),
-  })).sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, 5);
+  // P1.2: Prefer real TreeSHAP from forecast_shap_cache when loaded; fall
+  // back to the inline heuristic from cell.shapValues and clearly label the
+  // origin so users never see heuristic values framed as TreeSHAP.
+  const realShap = shapResult?.origin === 'forecast_shap_cache' ? shapResult.topFeatures : null;
+  const shapSource: 'treeshap' | 'heuristic' = realShap && realShap.length > 0 ? 'treeshap' : 'heuristic';
+  const shapData = realShap && realShap.length > 0
+    ? realShap.slice(0, 5).map((item) => ({
+        name: item.feature.replace(/_/g, ' '),
+        value: Number(item.shap_value.toFixed(3)),
+        featureValue: Number(item.feature_value.toFixed(3)),
+      }))
+    : Object.entries(cell.shapValues)
+        .map(([key, value]) => ({
+          name: key.replace(/_/g, ' '),
+          value: Number((value as number).toFixed(3)),
+          featureValue: undefined as number | undefined,
+        }))
+        .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+        .slice(0, 5);
 
-  const maxShap = Math.max(...shapData.map(d => d.value), 0.01);
+  const maxShap = Math.max(...shapData.map((d) => Math.abs(d.value)), 0.01);
 
   return (
     <div className="space-y-3 p-4">
@@ -137,6 +153,17 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
               {cell.uncertaintyClass || 'unknown'}
             </span>
           </div>
+          {cell.coverageFlags?.residual_shadow && (
+            <div className="text-[11px] flex items-center justify-between rounded-md bg-amber-500/10 border border-amber-500/30 px-2 py-1 mt-1">
+              <span className="uppercase tracking-wider text-amber-300 font-mono">Radar shadow</span>
+              <span className="font-mono text-amber-200">
+                {(cell.coverageFlags.data_gaps && cell.coverageFlags.data_gaps[0]) || 'orbital_gap'}
+              </span>
+            </div>
+          )}
+          {cell.coverageFlags?.sar_coverage_state === 'low_coverage' && !cell.coverageFlags?.residual_shadow && (
+            <div className="text-[10px] font-mono text-amber-300/80 mt-1">SAR coverage: low</div>
+          )}
         </CardContent>
       </Card>
 
@@ -180,33 +207,56 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
         </Card>
       )}
 
-      {/* SHAP Values - CSS bar chart instead of recharts */}
+      {/* P1.2: SHAP bars w/ honest origin label. Real TreeSHAP uses a
+          diverging scale (red = risk-increasing, green = risk-decreasing);
+          heuristic fallback uses the original green monochrome palette. */}
       <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
         <CardHeader className="p-3 pb-1">
-          <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.24em]">
-            SHAP Feature Importance
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.24em]">
+              {shapSource === 'treeshap' ? 'TreeSHAP Contributions' : 'Feature Contributions'}
+            </CardTitle>
+            <Badge
+              className={`text-[8px] rounded-full border-0 px-1.5 py-0 ${
+                shapSource === 'treeshap'
+                  ? 'bg-emerald-500/15 text-emerald-400'
+                  : 'bg-amber-500/15 text-amber-400'
+              }`}
+            >
+              {shapSource === 'treeshap' ? '● TREESHAP' : '● HEURISTIC'}
+            </Badge>
+          </div>
         </CardHeader>
         <CardContent className="p-3 pt-1 space-y-1.5">
-          {shapData.map((d, i) => (
-            <div key={d.name} className="flex items-center gap-2">
-              <span className="text-[9px] text-secondary-foreground w-16 text-right truncate font-mono">
-                {d.name}
-              </span>
-              <div className="flex-1 h-4 bg-black/20 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-300"
-                  style={{
-                    width: `${(d.value / maxShap) * 100}%`,
-                    backgroundColor: `hsl(156, ${72 + i * 3}%, ${50 - i * 4}%)`,
-                  }}
-                />
+          {shapData.map((d) => {
+            const magnitude = Math.abs(d.value);
+            const width = `${(magnitude / maxShap) * 100}%`;
+            const positiveRisk = d.value >= 0;
+            const barColor = shapSource === 'treeshap'
+              ? (positiveRisk ? 'hsl(8, 85%, 55%)' : 'hsl(156, 70%, 45%)')
+              : 'hsl(156, 72%, 50%)';
+            return (
+              <div key={d.name} className="flex items-center gap-2">
+                <span className="text-[9px] text-secondary-foreground w-16 text-right truncate font-mono">
+                  {d.name}
+                </span>
+                <div className="flex-1 h-4 bg-black/20 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-300"
+                    style={{ width, backgroundColor: barColor }}
+                  />
+                </div>
+                <span className="text-[9px] font-mono text-muted-foreground w-10 text-right">
+                  {d.value >= 0 ? '+' : ''}{d.value.toFixed(3)}
+                </span>
               </div>
-              <span className="text-[9px] font-mono text-muted-foreground w-10 text-right">
-                {d.value.toFixed(3)}
-              </span>
-            </div>
-          ))}
+            );
+          })}
+          <div className="pt-1 text-[9px] text-muted-foreground/70 font-mono">
+            {shapSource === 'treeshap'
+              ? `origin: forecast_shap_cache${shapResult?.modelVersion ? ` · ${shapResult.modelVersion.slice(0, 10)}` : ''}`
+              : 'origin: inline_cell_context (heuristic weighted features)'}
+          </div>
         </CardContent>
       </Card>
 
