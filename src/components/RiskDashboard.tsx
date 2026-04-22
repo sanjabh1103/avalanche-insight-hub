@@ -93,6 +93,7 @@ export default function RiskDashboard({ cell, weatherSummary, shapResult }: Prop
   const hasResidualShadow = Boolean(cell.coverageFlags?.residual_shadow);
   const isCoverageGood = coverageState === 'good' || coverageState === 'full_coverage';
   const isCoverageLow = coverageState === 'low' || coverageState === 'low_coverage';
+  const hasCoverageState = isCoverageGood || isCoverageLow || hasResidualShadow;
 
   return (
     <div className="space-y-3 p-4">
@@ -134,6 +135,14 @@ export default function RiskDashboard({ cell, weatherSummary, shapResult }: Prop
                 <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
               </span>
               <span className="text-[10px] font-mono text-red-300 uppercase tracking-wider">RESIDUAL SHADOW</span>
+            </div>
+          )}
+          {!hasCoverageState && (
+            <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-slate-500/15 border border-slate-500/30 px-2 py-0.5">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-slate-400"></span>
+              </span>
+              <span className="text-[10px] font-mono text-slate-300 uppercase tracking-wider">SAR COVERAGE: UNAVAILABLE</span>
             </div>
           )}
         </CardContent>

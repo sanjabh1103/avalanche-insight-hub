@@ -1,0 +1,28 @@
+=== 1. Netlify Frontend ===
+HTTP 200
+
+=== 2. run-forecast ===
+{"jobId":"cf06bef1-dc01-4b64-a2e5-0528aeda0492","forecastId":"e16f6c06-edae-408e-9289-3401552c8793","avgRisk":2.1,"weatherSource":"open-meteo","hours":2,"weatherSummary":{"snowfall_24h":"0.0","wind_speed":"6.0","temperature":"-0.0","precipitation":"0.0","snow_depth":"1.5"},"region":{"lat":45.9,"lng":6.9},"hazard_type":"avalanche","model_version":"v1.0.2","uncertainty_score":0.1,"data_sources":["open-meteo","edge_proxy","edge","async_batch"],"fallback_used":false,"fallback_reason":null,"generatio
+
+=== 3. trigger-job ===
+{"jobId":"d80bdc3d-bf59-44ad-860f-b02401748ae0","result":{"simulated":true,"articlesProcessed":3}}
+
+=== 4. field-report-enrichment (fixed auth) ===
+{"ok":true,"jobId":"bf37c0b4-f0bf-41a7-ab45-63f40d50ec65","promotion":null}
+
+=== 5. ingest-event ===
+{"ok":true,"jobId":"617718ad-d019-4ef9-a9d2-1fb72bb4bb95","event":{"id":"9262c6c5-1fe1-4c56-a7e8-8e9effdb789a","timestamp":"2026-04-22T07:35:24.499648+00:00","source":"field_report","description":"Smoke test","severity":3,"event_type":"unknown","confidence":0.6,"location":"0101000020E61000009A99999999991B403333333333F34640"},"topo":{"source":"open-elevation","elevation_m":1873,"slope_angle_deg":0.19,"aspect_deg":142.7,"slope_band":"low","aspect_bucket":"SE","topo_resolution_m":236},"governance":
+
+=== 6. run-evaluation ===
+{"evaluation_run_id":"112a8952-13a2-4147-9ed9-83d18c749fb5","model_version":"v1.0.2","threshold_profile_version":"heuristic-risk-bands-v1","days_evaluated":30,"total_outcomes":0,"overall_metrics":{"precisionRisk3":0,"recallRisk3":0,"f1Risk3":0,"precisionRisk4":0,"recallRisk4":0,"f1Risk4":0,"falseAlarmRate":0,"ece":0,"totalPredictions":0,"totalEvents":0,"riskDistribution":{"1":0,"2":0,"3":0,"4":0,"5":0}},"slices_evaluated":0}
+
+=== 7. label-forecast-outcomes ===
+{"forecasts_processed":0,"total_outcomes_labeled":0,"forecasts_skipped":0,"labeling_policy":{"spatial_tolerance_m":5000,"temporal_tolerance_hours":24,"elevation_band_width_m":500,"elevation_flexibility_m":300,"min_event_verification":"weak"},"note":"No matching forecasts found in window. Completed with 0 labels."}
+
+=== 8. ingest-snow-cover ===
+{"snapshot_id":"454fe0f3-6872-470e-82a0-cd294c70b911","source":"gibs","coverage_ratio":0.38,"quality_score":0.75,"region":"Chamonix","bbox":[45.8,6.8,46,7]}
+
+=== 9. recent-activity-refresh ===
+{"feature_id":"4480ea8b-24cd-4a69-b016-b99e8b209991","region":"Chamonix","window_days":7,"window_start":"2026-04-15T07:35:31.584Z","window_end":"2026-04-22T07:35:31.584Z","total_events":0,"verified_events":0,"weighted_severity":0,"max_severity":0,"sources":{},"cell_summaries_materialized":0}
+
+=== Done ===

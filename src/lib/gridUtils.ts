@@ -306,6 +306,11 @@ export function generateForecastGrid(
           aspect_deg: aspectDeg,
           terrain_roughness: 12 + elevFactor * 18,
         },
+        coverageFlags: {
+          sar_coverage_state: 'not_applicable',
+          residual_shadow: false,
+          data_gaps: ['client_generated_fallback'],
+        },
       });
     }
   }

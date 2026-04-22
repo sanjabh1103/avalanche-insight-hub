@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mountain, AlertTriangle, Settings, BarChart3, Loader2, Menu, X, Zap } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -31,6 +32,9 @@ type ForecastSource = 'precomputed' | 'forecast_api' | 'generated' | null;
 
 export default function Index() {
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'admin'>(location.pathname.startsWith('/admin') ? 'admin' : 'dashboard');
   const [region, setRegion] = useState<Region>(REGIONS[0]);
   const [timeOffset, setTimeOffset] = useState(0);
   const [selectedCell, setSelectedCell] = useState<GridCell | null>(null);
@@ -57,6 +61,11 @@ export default function Index() {
   const [playingTimeline, setPlayingTimeline] = useState(false);
 
   const maxHour = hourlyGrids ? hourlyGrids.length - 1 : (expertMode ? 71 : 24);
+
+  useEffect(() => {
+    const nextTab: 'dashboard' | 'admin' = location.pathname.startsWith('/admin') ? 'admin' : 'dashboard';
+    setActiveTab((current) => (current === nextTab ? current : nextTab));
+  }, [location.pathname]);
 
   const hydrateForecastGridRow = useCallback((row: ForecastGridRowRecord) => {
     const grids = forecastGridRowToHourlyGrids(row);
@@ -362,6 +371,10 @@ export default function Index() {
         const { data: forecast } = await supabase.from('forecasts').select('hourly_grids').eq('id', data.forecastId).maybeSingle();
         if (forecast?.hourly_grids && Array.isArray(forecast.hourly_grids)) {
           setHourlyGrids(forecast.hourly_grids as unknown as GridCell[][]);
+        } else {
+          setForecastId(undefined);
+          setForecastSource('generated');
+          setHourlyGrids(Array.from({ length: hours }, (_, hour) => generateForecastGrid(region.bbox, hour).cells));
         }
       }
       const fallbackInfo = data?.fallback_used ? ' • Fallback: yes' : '';
@@ -370,6 +383,8 @@ export default function Index() {
         toast.info(`Real weather: ${data.weatherSummary.snowfall_24h}cm snow, ${data.weatherSummary.wind_speed}km/h wind`);
       }
     } catch {
+      setForecastId(undefined);
+      setHourlyGrids(Array.from({ length: hours }, (_, hour) => generateForecastGrid(region.bbox, hour).cells));
       setForecastSource('generated');
       toast.success('Forecast generated (client simulation)');
     } finally {
@@ -434,7 +449,15 @@ export default function Index() {
                 </div>
               </div>
 
-              <Tabs defaultValue="dashboard" className="flex-1 flex flex-col min-h-0">
+              <Tabs
+                value={activeTab}
+                onValueChange={(value) => {
+                  const nextTab = value === 'admin' ? 'admin' : 'dashboard';
+                  setActiveTab(nextTab);
+                  navigate(nextTab === 'admin' ? '/admin' : '/');
+                }}
+                className="flex-1 flex flex-col min-h-0"
+              >
                 <TabsList className="mx-4 mt-4 grid grid-cols-2 bg-secondary/60 border border-border/70 p-1 h-11 rounded-2xl">
                   <TabsTrigger value="dashboard" className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] rounded-xl data-[state=active]:bg-emerald-500 data-[state=active]:text-black">
                     <BarChart3 className="h-3.5 w-3.5" /> Dashboard

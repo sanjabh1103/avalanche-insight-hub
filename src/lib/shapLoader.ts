@@ -75,7 +75,7 @@ export async function loadShapForCell(
   }
 
   try {
-    const { data, error } = await (supabase as any).rpc('get_shap_for_cell', {
+    const { data, error } = await supabase.rpc('get_shap_for_cell', {
       p_forecast_grid_id: forecastGridId,
       p_cell_row: row,
       p_cell_col: col,

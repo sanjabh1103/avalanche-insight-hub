@@ -56,6 +56,7 @@ interface JobRow {
   status: string;
   created_at: string;
   error: string | null;
+  result: Record<string, unknown> | null;
 }
 
 interface AnalyticsRow {
@@ -155,6 +156,9 @@ export default function AdminDashboard() {
   const [forecastOutcomes, setForecastOutcomes] = useState<ForecastOutcomeRow[]>([]);
   const [fieldReports, setFieldReports] = useState<FieldReportRow[]>([]);
   const activeJobs = jobs.filter((job) => job.status === 'running').length;
+  const latestFineTuneJob = jobs.find((job) => job.type === 'fine_tune');
+  const latestFineTuneResult = latestFineTuneJob?.result as { publish_skipped?: string } | null | undefined;
+  const syntheticBootstrapSkipped = latestFineTuneResult?.publish_skipped === 'synthetic_bootstrap';
   
   // CRASH-FIX: Prevent concurrent data loading that causes ERR_INSUFFICIENT_RESOURCES
   const isLoadingRef = useRef(false);
@@ -448,7 +452,13 @@ export default function AdminDashboard() {
           <div className="text-muted-foreground">Mode</div>
           <div className="font-mono text-right text-foreground">{satelliteStats?.mode || modelStatus?.capabilities?.mode || 'edge_fallback'}</div>
           <div className="text-muted-foreground">Fallback used</div>
-          <div className="font-mono text-right text-foreground">{satelliteStats?.fallback_used ? 'yes' : 'no'}</div>
+          <div className="font-mono text-right text-foreground">
+            {satelliteStats?.fallback_used ? (
+              <Badge className="bg-amber-500/15 text-amber-300 border-0 font-mono text-[9px] rounded-full px-1.5 py-0.5">yes</Badge>
+            ) : (
+              'no'
+            )}
+          </div>
           <div className="text-muted-foreground">Last refresh</div>
           <div className="font-mono text-right text-foreground">{satelliteStats?.last_refresh_at ? new Date(satelliteStats.last_refresh_at).toLocaleString() : 'never'}</div>
         </CardContent>
@@ -647,10 +657,14 @@ export default function AdminDashboard() {
                 Snowpack: {modelStatus.snowpack_model_version}
               </div>
             )}
-            {(!modelStatus.last_trained || modelStatus.version?.includes('-sim') || optimizationSummary?.origin === 'hardcoded_fallback') && (
+            {(!modelStatus.last_trained || modelStatus.version?.includes('-sim') || syntheticBootstrapSkipped || !optimizationSummary || optimizationSummary?.origin === 'hardcoded_fallback') && (
               <div className="mt-1.5 rounded-md bg-amber-500/10 border border-amber-500/30 px-2 py-1">
                 <span className="text-[10px] font-mono text-amber-300 uppercase tracking-wider">SYNTHETIC BOOTSTRAP</span>
-                <div className="text-[10px] text-amber-200/70 mt-0.5">Model was never trained. Run Model Optimization to replace with real weights.</div>
+                <div className="text-[10px] text-amber-200/70 mt-0.5">
+                  {syntheticBootstrapSkipped
+                    ? 'Latest fine-tune was skipped, so the bootstrap model remains active.'
+                    : 'Model was never trained. Run Model Optimization to replace with real weights.'}
+                </div>
               </div>
             )}
           </CardContent>

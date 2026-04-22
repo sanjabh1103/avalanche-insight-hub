@@ -89,7 +89,7 @@ export default function FieldReportForm({ open, onClose, onSubmitted, regionCent
     const clientReportId = `field-${btoa(unescape(encodeURIComponent(idSeed))).replace(/=+$/g, '').slice(0, 24)}`;
     
     try {
-      const { data: report, error } = await supabase.from('field_reports').insert({
+      const { data: report, error } = await supabase.from('field_reports').upsert({
         user_id: user?.id,
         hazard_type: 'avalanche',
         review_status: 'pending',
@@ -97,6 +97,8 @@ export default function FieldReportForm({ open, onClose, onSubmitted, regionCent
         description: description.trim(),
         location: `SRID=4326;POINT(${parsedLng} ${parsedLat})` as unknown,
         client_report_id: clientReportId,
+      }, {
+        onConflict: 'client_report_id',
       }).select('id').maybeSingle();
       if (error) throw error;
       if (!report?.id) {
