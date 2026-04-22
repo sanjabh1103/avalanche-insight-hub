@@ -24,30 +24,25 @@ PUBLIC_FUNCTIONS=(
 # Back-office / delegated functions that keep JWT verification.
 PRIVATE_FUNCTIONS=(
   "field-report-enrichment"
+  "ingest-event"
   "ingest-snow-cover"
   "label-forecast-outcomes"
   "run-evaluation"
   "recent-activity-refresh"
 )
 
-for func in "${PUBLIC_FUNCTIONS[@]}"; do
-  echo "Deploying $func (public, --no-verify-jwt)..."
-  supabase functions deploy "$func" --project-ref "$PROJECT_REF" --no-verify-jwt
-  if [ $? -eq 0 ]; then
-    echo "✓ $func deployed successfully"
-  else
-    echo "✗ $func deployment failed"
-  fi
-  echo ""
-done
+echo "Deploying PUBLIC functions..."
+supabase functions deploy run-forecast --project-ref "$PROJECT_REF" --no-verify-jwt
+supabase functions deploy trigger-job --project-ref "$PROJECT_REF" --no-verify-jwt
 
-for func in "${PRIVATE_FUNCTIONS[@]}"; do
-  echo "Deploying $func..."
-  supabase functions deploy "$func" --project-ref "$PROJECT_REF"
+echo "Deploying PRIVATE (authenticated) functions..."
+for fn in "${PRIVATE_FUNCTIONS[@]}"; do
+  echo "Deploying $fn..."
+  supabase functions deploy "$fn" --project-ref "$PROJECT_REF"
   if [ $? -eq 0 ]; then
-    echo "✓ $func deployed successfully"
+    echo "✓ $fn deployed successfully"
   else
-    echo "✗ $func deployment failed"
+    echo "✗ $fn deployment failed"
   fi
   echo ""
 done

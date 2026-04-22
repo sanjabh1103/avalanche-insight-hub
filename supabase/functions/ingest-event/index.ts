@@ -273,8 +273,9 @@ serve(async (req: Request) => {
         },
       })
       .select('id')
-      .single();
+      .maybeSingle();
     if (jobErr) throw jobErr;
+    if (!job?.id) throw new Error('Failed to create compute_job row');
     jobId = job.id;
 
     let elevationSamples: Record<string, number>;
@@ -343,8 +344,9 @@ serve(async (req: Request) => {
         },
       })
       .select('id, timestamp, source, description, severity, event_type, confidence, location')
-      .single();
+      .maybeSingle();
     if (eventErr) throw eventErr;
+    if (!event?.id) throw new Error('Failed to create avalanche_event row');
 
     await supabase
       .from('compute_jobs')

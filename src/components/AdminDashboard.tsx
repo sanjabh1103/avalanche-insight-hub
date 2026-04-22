@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Zap, Satellite, BrainCircuit, Database, TrendingUp, CloudSnow, Activity, Tag, BarChart3, FileCheck, RefreshCw } from 'lucide-react';
+import { Loader2, Zap, Satellite, BrainCircuit, Database, TrendingUp, CloudSnow, Activity, Tag, BarChart3, FileCheck, RefreshCw, Check, Minus } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase, SUPABASE_ANON_KEY } from '@/integrations/supabase/client';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
@@ -34,10 +34,12 @@ interface SnowpackMetrics {
 
 interface OptimizationSummary {
   optimization_version?: string;
+  feature_weights?: Record<string, number>;
   selected_features?: string[];
   class_balance_report?: Record<string, unknown>;
   abc_enabled?: boolean;
   runtime_mode?: string;
+  origin?: string;
 }
 
 interface SatelliteDetectionStats {
@@ -125,6 +127,7 @@ interface ModelStatusRow {
   optimization_summary?: OptimizationSummary | null;
   satellite_detection_stats?: SatelliteDetectionStats | null;
   snowpack_metrics?: SnowpackMetrics | null;
+  last_trained?: string | null;
 }
 
 const JOB_BUTTONS: { type: JobType; label: string; icon: React.ReactNode; description?: string }[] = [
@@ -178,8 +181,8 @@ export default function AdminDashboard() {
         reportsRes,
       ] = await Promise.all([
         supabase.from('compute_jobs').select('*').order('created_at', { ascending: false }).limit(10),
-        supabase.from('system_config').select('*').limit(1).single(),
-        supabase.from('model_status').select('*').limit(1).single(),
+        supabase.from('system_config').select('*').limit(1).maybeSingle(),
+        supabase.from('model_status').select('*').limit(1).maybeSingle(),
         supabase.from('forecast_analytics').select('*').order('created_at', { ascending: false }).limit(100),
         supabase.from('evaluation_runs').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.from('evaluation_metrics').select('*').order('created_at', { ascending: false }).limit(10),
@@ -268,7 +271,11 @@ export default function AdminDashboard() {
         model_optimization: 'Optimization started - dual-mode feature selection and weighting in progress',
         static_precompute: 'Static pre-computation started - caching regional forecasts',
       };
-      toast.success(successMessages[type] || `${type.replace(/_/g, ' ')} completed successfully`);
+      if (type === 'fine_tune' && data?.result?.publish_skipped === 'synthetic_bootstrap') {
+        toast.warning('Fine-tune skipped: synthetic bootstrap model was not overwritten');
+      } else {
+        toast.success(successMessages[type] || `${type.replace(/_/g, ' ')} completed successfully`);
+      }
       loadData();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Job trigger failed');
@@ -288,6 +295,7 @@ export default function AdminDashboard() {
 
   const capabilityMode = modelStatus?.capability_summary || modelStatus?.capabilities?.summary || 'Edge-only fallback';
   const optimizationSummary = modelStatus?.optimization_summary;
+  const abcEnabled = optimizationSummary?.abc_enabled;
   const snowpackMetrics = modelStatus?.snowpack_metrics;
   const satelliteStats = modelStatus?.satellite_detection_stats;
 
@@ -390,8 +398,11 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
             <div className="text-muted-foreground">Selected features</div>
             <div className="font-mono text-right text-foreground">{optimizationSummary?.selected_features?.length ?? 0}</div>
-            <div className="text-muted-foreground">ABC enabled</div>
-            <div className="font-mono text-right text-foreground">{optimizationSummary?.abc_enabled ? 'yes' : 'no'}</div>
+            <div className="text-muted-foreground">ABC:</div>
+            <div className={`flex items-center justify-end gap-1 font-mono text-right ${abcEnabled === true ? 'text-emerald-400' : 'text-muted-foreground'}`}>
+              {abcEnabled === true ? <Check className="h-3 w-3 shrink-0" /> : <Minus className="h-3 w-3 shrink-0" />}
+              <span>{abcEnabled === true ? 'enabled' : abcEnabled === false ? 'disabled' : '—'}</span>
+            </div>
             <div className="text-muted-foreground">Balance strategy</div>
             <div className="font-mono text-right text-foreground">{String(optimizationSummary?.class_balance_report?.strategy || 'n/a')}</div>
           </div>
@@ -634,6 +645,12 @@ export default function AdminDashboard() {
             {modelStatus.snowpack_model_version && (
               <div className="text-[10px] text-muted-foreground">
                 Snowpack: {modelStatus.snowpack_model_version}
+              </div>
+            )}
+            {(!modelStatus.last_trained || modelStatus.version?.includes('-sim') || optimizationSummary?.origin === 'hardcoded_fallback') && (
+              <div className="mt-1.5 rounded-md bg-amber-500/10 border border-amber-500/30 px-2 py-1">
+                <span className="text-[10px] font-mono text-amber-300 uppercase tracking-wider">SYNTHETIC BOOTSTRAP</span>
+                <div className="text-[10px] text-amber-200/70 mt-0.5">Model was never trained. Run Model Optimization to replace with real weights.</div>
               </div>
             )}
           </CardContent>

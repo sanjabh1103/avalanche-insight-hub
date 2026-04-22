@@ -20,9 +20,14 @@ serve(async (req: Request) => {
       });
     }
 
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!serviceRoleKey) {
+      throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY');
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      serviceRoleKey,
     );
 
     const { data: job, error: jobErr } = await supabase
@@ -33,14 +38,22 @@ serve(async (req: Request) => {
         payload: { fieldReportId, lat, lng },
       })
       .select('id')
-      .single();
+      .maybeSingle();
     if (jobErr) throw jobErr;
+    if (!job?.id) throw new Error('Failed to create compute_job row');
+
+    const callerAuthorization = req.headers.get('authorization');
+    const callerApiKey = req.headers.get('apikey');
+    const fallbackApiKey = Deno.env.get('SUPABASE_ANON_KEY') ?? serviceRoleKey;
 
     const ingestResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/ingest-event`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+        // Forward the caller's validated auth when available so the downstream
+        // private function sees the same JWT that already authenticated this hop.
+        Authorization: callerAuthorization ?? `Bearer ${serviceRoleKey}`,
+        apikey: callerApiKey ?? fallbackApiKey,
       },
       body: JSON.stringify({
         fieldReportId,
@@ -105,9 +118,9 @@ serve(async (req: Request) => {
     await supabase.from('compute_jobs').update({
       status: 'completed',
       result: { fieldReportId, createdEvent: true, ingestResult, promotion },
-    }).eq('id', job.id);
+    }).eq('id', job!.id);
 
-    return new Response(JSON.stringify({ ok: true, jobId: job.id, promotion }), {
+    return new Response(JSON.stringify({ ok: true, jobId: job!.id, promotion }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {

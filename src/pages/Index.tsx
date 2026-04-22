@@ -27,6 +27,8 @@ import { loadShapForCell, type ShapResult } from '@/lib/shapLoader';
 import { supabase } from '@/integrations/supabase/client';
 import { useIsMobile } from '@/hooks/use-mobile';
 
+type ForecastSource = 'precomputed' | 'forecast_api' | 'generated' | null;
+
 export default function Index() {
   const isMobile = useIsMobile();
   const [region, setRegion] = useState<Region>(REGIONS[0]);
@@ -37,6 +39,7 @@ export default function Index() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [forecastId, setForecastId] = useState<string | undefined>();
   const [hourlyGrids, setHourlyGrids] = useState<GridCell[][] | null>(null);
+  const [forecastSource, setForecastSource] = useState<ForecastSource>(null);
   const [shapResult, setShapResult] = useState<ShapResult | null>(null);
   const [showEvents, setShowEvents] = useState(false);
   const [remoteEvents, setRemoteEvents] = useState<AvalancheEvent[]>([]);
@@ -58,6 +61,7 @@ export default function Index() {
   const hydrateForecastGridRow = useCallback((row: ForecastGridRowRecord) => {
     const grids = forecastGridRowToHourlyGrids(row);
     setForecastId(row.id);
+    setForecastSource('precomputed');
     setHourlyGrids(grids);
     const summary = row.weather_summary;
     if (summary && typeof summary === 'object' && !Array.isArray(summary)) {
@@ -256,7 +260,7 @@ export default function Index() {
           return;
         }
 
-        const legacy = await supabase.from('forecasts').select('hourly_grids, bbox').eq('id', sharedForecast).single();
+        const legacy = await supabase.from('forecasts').select('hourly_grids, bbox').eq('id', sharedForecast).maybeSingle();
         if (legacy.data?.hourly_grids && Array.isArray(legacy.data.hourly_grids)) {
           setHourlyGrids(legacy.data.hourly_grids as unknown as GridCell[][]);
           setForecastId(sharedForecast);
@@ -274,6 +278,7 @@ export default function Index() {
             }
           }
           toast.success('Restored shared forecast view');
+          setForecastSource('forecast_api');
         }
       })();
     }
@@ -294,7 +299,7 @@ export default function Index() {
   }, [isMobile]);
 
   const handleRegionChange = useCallback((r: Region) => {
-    setRegion(r); setSelectedCell(null); setHourlyGrids(null); setForecastId(undefined); setTimeOffset(0); setWeatherSummary(null);
+    setRegion(r); setSelectedCell(null); setHourlyGrids(null); setForecastId(undefined); setForecastSource(null); setTimeOffset(0); setWeatherSummary(null);
   }, []);
 
   useEffect(() => {
@@ -332,6 +337,7 @@ export default function Index() {
 
   const runForecast = useCallback(async () => {
     setForecasting(true);
+    setForecastSource(null);
     const hours = expertMode ? 72 : 24;
     try {
       toast.info(`Loading ${hours}h precomputed forecast...`);
@@ -351,17 +357,20 @@ export default function Index() {
       if (error) throw error;
       if (data?.forecastId) {
         setForecastId(data.forecastId);
+        setForecastSource('forecast_api');
         setWeatherSummary(data?.weatherSummary || null);
-        const { data: forecast } = await supabase.from('forecasts').select('hourly_grids').eq('id', data.forecastId).single();
+        const { data: forecast } = await supabase.from('forecasts').select('hourly_grids').eq('id', data.forecastId).maybeSingle();
         if (forecast?.hourly_grids && Array.isArray(forecast.hourly_grids)) {
           setHourlyGrids(forecast.hourly_grids as unknown as GridCell[][]);
         }
       }
-      toast.success(`Forecast complete • Source: ${data?.weatherSource || 'simulation'} • Mode: ${data?.capability_summary || data?.mode || 'Edge-only fallback'} • ${data?.hours || hours + 1} hours`);
+      const fallbackInfo = data?.fallback_used ? ' • Fallback: yes' : '';
+      toast.success(`Forecast complete • Source: ${data?.weatherSource || 'simulation'} • Mode: ${data?.capability_summary || data?.mode || 'Edge-only fallback'}${fallbackInfo} • ${data?.hours || hours + 1} hours`);
       if (data?.weatherSummary) {
         toast.info(`Real weather: ${data.weatherSummary.snowfall_24h}cm snow, ${data.weatherSummary.wind_speed}km/h wind`);
       }
     } catch {
+      setForecastSource('generated');
       toast.success('Forecast generated (client simulation)');
     } finally {
       setForecasting(false);
@@ -499,7 +508,7 @@ export default function Index() {
                   {isMobile ? 'FORECAST' : expertMode ? 'RUN 72H' : 'RUN 24H'}
                 </Button>
                 <ShareForecast forecastId={forecastId} region={region} hour={timeOffset} selectedCell={selectedCell} expertMode={expertMode} show3D={show3DModal} />
-                <ExportForecast grid={grid} events={historicalEvents} regionName={region.name} hour={timeOffset} />
+                <ExportForecast grid={grid} events={historicalEvents} regionName={region.name} hour={timeOffset} canExport={Boolean(forecastId)} />
                 <HistoricalEventsToggle
                   visible={showEvents}
                   onToggle={() => {
@@ -546,7 +555,13 @@ export default function Index() {
           {hourlyGrids && (
             <div className="absolute top-[11rem] right-4 z-10 md:top-[8.75rem] lg:top-[7.5rem]">
               <span className="glass-panel rounded-full px-3 py-1 text-[10px] font-mono text-emerald-400">
-                ● LIVE DATA ({hourlyGrids.length}h)
+                ● {forecastSource === 'precomputed'
+                  ? 'PRECOMPUTED GRID'
+                  : forecastSource === 'forecast_api'
+                    ? 'FORECAST RUN'
+                    : forecastSource === 'generated'
+                      ? 'SIMULATED GRID'
+                      : 'FORECAST DATA'} ({hourlyGrids.length}h)
               </span>
             </div>
           )}

@@ -99,8 +99,9 @@ serve(async (req) => {
         payload: { region_name: regionName, window_days: windowDays, materialize_cells: materializeCells }
       })
       .select('id')
-      .single();
+      .maybeSingle();
     if (jobErr) throw jobErr;
+    if (!job?.id) throw new Error('Failed to create compute_job row');
 
     // Calculate time window
     const windowEnd = new Date();
@@ -203,7 +204,7 @@ serve(async (req) => {
           onConflict: 'region_name,cell_row,cell_col,window_start,window_end'
         })
         .select('id')
-        .single();
+        .maybeSingle();
 
       if (featureErr) throw featureErr;
 

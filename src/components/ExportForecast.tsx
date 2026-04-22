@@ -16,10 +16,10 @@ interface Props {
 export default function ExportForecast({ grid, events = [], regionName = 'Unknown', hour = 0, canExport = false }: Props) {
   const [copied, setCopied] = useState<'csv' | 'json' | null>(null);
 
-  const downloadCSV = () => {
+  const downloadCSV = (): boolean => {
     if (!canExport || !grid || grid.cells.length === 0) {
       toast.info('Run a forecast first to export data');
-      return;
+      return false;
     }
 
     // CSV Header — guard against cells with missing shapValues (e.g. simulated grid)
@@ -58,12 +58,13 @@ export default function ExportForecast({ grid, events = [], regionName = 'Unknow
     URL.revokeObjectURL(url);
 
     toast.success(`Exported ${grid.cells.length} grid cells to CSV`);
+    return true;
   };
 
-  const downloadJSON = () => {
+  const downloadJSON = (): boolean => {
     if (!canExport || !grid || grid.cells.length === 0) {
       toast.info('Run a forecast first to export data');
-      return;
+      return false;
     }
 
     const data = {
@@ -112,12 +113,14 @@ export default function ExportForecast({ grid, events = [], regionName = 'Unknow
     URL.revokeObjectURL(url);
 
     toast.success(`Exported forecast + ${events.length} events to JSON`);
+    return true;
   };
 
   const handleExport = () => {
-    downloadCSV();
-    setCopied('csv');
-    setTimeout(() => setCopied(null), 2000);
+    if (downloadCSV()) {
+      setCopied('csv');
+      setTimeout(() => setCopied(null), 2000);
+    }
   };
 
   return (
@@ -136,9 +139,10 @@ export default function ExportForecast({ grid, events = [], regionName = 'Unknow
         className="h-9 text-xs font-semibold gap-2 glass-panel border-0"
         disabled={!canExport}
         onClick={() => {
-          downloadJSON();
-          setCopied('json');
-          setTimeout(() => setCopied(null), 2000);
+          if (downloadJSON()) {
+            setCopied('json');
+            setTimeout(() => setCopied(null), 2000);
+          }
         }}
       >
         {copied === 'json' ? <Check className="h-4 w-4 text-green-400" /> : <FileJson className="h-4 w-4" />}

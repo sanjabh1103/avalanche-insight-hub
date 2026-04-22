@@ -175,7 +175,7 @@ serve(async (req: Request) => {
         .select('version')
         .eq('hazard_type', hazardType)
         .limit(1)
-        .single();
+        .maybeSingle();
       targetModelVersion = modelStatus?.version || 'unknown';
     }
 
@@ -188,7 +188,7 @@ serve(async (req: Request) => {
         .eq('hazard_type', hazardType)
         .eq('status', 'active')
         .limit(1)
-        .single();
+        .maybeSingle();
       targetThresholdVersion = threshold?.profile_version || 'unknown';
     }
 
@@ -211,8 +211,9 @@ serve(async (req: Request) => {
         status: 'running',
       })
       .select('id')
-      .single();
+      .maybeSingle();
     if (evalErr) throw evalErr;
+    if (!evalRun?.id) throw new Error('Failed to create evaluation run');
 
     // Fetch outcomes for evaluation period
     let outcomesQuery = supabase

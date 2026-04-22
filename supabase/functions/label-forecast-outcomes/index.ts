@@ -23,13 +23,14 @@ interface ForecastSourceRecord {
 }
 
 async function getActiveLabelPolicy(supabase: any): Promise<LabelPolicy> {
-  const { data: policy } = await supabase
+  const { data: policy, error: policyErr } = await supabase
     .from('label_matching_policies')
     .select('*')
     .eq('hazard_type', 'avalanche')
     .order('created_at', { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
+  if (policyErr) console.warn('label policy fetch error:', policyErr.message);
   
   if (!policy) {
     return {
@@ -193,8 +194,9 @@ serve(async (req) => {
         payload: { forecast_id: forecastId, days_back: daysBack }
       })
       .select('id')
-      .single();
+      .maybeSingle();
     if (jobErr) throw jobErr;
+    if (!job?.id) throw new Error('Failed to create compute_job row');
 
     // Get labeling policy
     const policy = await getActiveLabelPolicy(supabase);

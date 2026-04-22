@@ -172,8 +172,13 @@ function normalizeShapContext(value: unknown): GridCell['shapContext'] {
 function normalizeCoverageFlags(value: unknown): GridCell['coverageFlags'] {
   if (!value || typeof value !== 'object') return undefined;
   const row = value as Record<string, unknown>;
+  const rawState = typeof row.sar_coverage_state === 'string' ? row.sar_coverage_state : undefined;
+  const normalizedState =
+    rawState === 'full_coverage' ? 'good'
+      : rawState === 'low_coverage' ? 'low'
+        : rawState;
   return {
-    sar_coverage_state: typeof row.sar_coverage_state === 'string' ? row.sar_coverage_state : undefined,
+    sar_coverage_state: normalizedState,
     residual_shadow: typeof row.residual_shadow === 'boolean' ? row.residual_shadow : undefined,
     data_gaps: Array.isArray(row.data_gaps) ? row.data_gaps.map(String) : undefined,
   };
@@ -191,6 +196,26 @@ function normalizeSnowpackProxy(value: unknown): GridCell['snowpackProxy'] {
   if (typeof settle === 'number' && Number.isFinite(settle)) payload.snow_settlement_index = settle;
   if (typeof seasonStart === 'string' && seasonStart) payload.season_start = seasonStart;
   if (typeof method === 'string' && method) payload.method = method;
+
+  if (Object.keys(payload).length === 0) {
+    const metrics = v.snowpackMetrics ?? v.snowpack_metrics;
+    if (metrics && typeof metrics === 'object' && !Array.isArray(metrics)) {
+      const record = metrics as Record<string, unknown>;
+      const metricShear = record.estimated_shear_strength ?? record.shear_strength ?? record.ram_hardness;
+      const metricSettle = record.snow_settlement_index ?? record.settlement_rate;
+      const metricMethod = record.method ?? record.source;
+      if (typeof metricShear === 'number' && Number.isFinite(metricShear)) {
+        payload.estimated_shear_strength = metricShear <= 1.5 ? metricShear * 10 : metricShear;
+      }
+      if (typeof metricSettle === 'number' && Number.isFinite(metricSettle)) {
+        payload.snow_settlement_index = metricSettle;
+      }
+      if (typeof metricMethod === 'string' && metricMethod) {
+        payload.method = metricMethod;
+      }
+    }
+  }
+
   return Object.keys(payload).length > 0 ? payload : undefined;
 }
 

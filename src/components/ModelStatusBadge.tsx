@@ -37,7 +37,7 @@ export default function ModelStatusBadge() {
       .from('model_status')
       .select('version, f1_score, last_inference, data_freshness_hours, feature_version, calibration_profile_version, threshold_profile_version, capability_summary, inference_backend, snowpack_model_version')
       .limit(1)
-      .single();
+      .maybeSingle();
     if (data) setStatus(data as unknown as ModelInfo);
   }, []);
 

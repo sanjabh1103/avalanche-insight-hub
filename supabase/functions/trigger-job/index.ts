@@ -63,7 +63,13 @@ async function invokeEdgeFunction(
     throw new Error(`${functionName} failed (${response.status}): ${text}`);
   }
 
-  return text ? JSON.parse(text) as Record<string, unknown> : {};
+  if (!text) return {};
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    console.warn(`${functionName} returned non-JSON 200 response:`, text.slice(0, 200));
+    return {};
+  }
 }
 
  type RuntimeMode = 'full' | 'gpu_only' | 'sar_only' | 'edge_fallback';
@@ -210,20 +216,27 @@ async function invokeEdgeFunction(
   hazardType: string,
   patch: Record<string, unknown>,
 ) {
-  const { data: modelStatus } = await supabase
+  const { data: modelStatus, error: findErr } = await supabase
     .from('model_status')
     .select('id')
     .eq('hazard_type', hazardType)
     .limit(1)
-    .single();
+    .maybeSingle();
+
+  if (findErr) {
+    console.error('updateModelStatus find failed:', findErr);
+    throw new Error(`Failed to find model_status: ${findErr.message}`);
+  }
 
   if (modelStatus?.id) {
     const { error } = await supabase.from('model_status').update(patch).eq('id', modelStatus.id);
     if (error) {
-      console.error('updateModelStatus failed:', error);
+      console.error('updateModelStatus update failed:', error);
       throw new Error(`Failed to update model_status: ${error.message}`);
     }
     await new Promise(resolve => setTimeout(resolve, 100));
+  } else {
+    console.warn(`updateModelStatus: no model_status row for hazard_type=${hazardType}; skipping update`);
   }
 }
 
@@ -347,8 +360,9 @@ serve(async (req: Request) => {
         },
       })
       .select('id')
-      .single();
+      .maybeSingle();
     if (jobErr) throw jobErr;
+    if (!job?.id) throw new Error('Failed to create compute_job row');
     jobId = job.id;
 
     let result: Record<string, unknown> = {};
@@ -524,49 +538,68 @@ serve(async (req: Request) => {
     } else if (type === 'fine_tune') {
       const { data: currentModel } = await supabase
         .from('model_status')
-        .select('id, version, f1_score, optimization_summary')
+        .select('id, version, f1_score, last_trained, optimization_summary')
         .eq('hazard_type', hazardType)
         .limit(1)
-        .single();
+        .maybeSingle();
       const modelId = currentModel?.id;
       const currentVersion = currentModel?.version || 'v1.0.0';
-      const newVersion = incrementSemver(currentVersion);
       const currentF1 = currentModel?.f1_score || 0.84;
-      const edgeImprovement = 0.002 + Math.random() * 0.004;
-      const modalResult = await invokeModalWorker(capabilities, 'train', {
-        job_id: job.id,
-        hazard_type: hazardType,
-        current_version: currentVersion,
-        optimization_summary: currentModel?.optimization_summary || {},
-      }, 20000);
-      const improvement = capabilities.gpuEnabled
-        ? Math.max(0.003, toNumber(modalResult?.f1_improvement, 0.008))
-        : edgeImprovement;
-      const newF1 = Math.min(0.95, currentF1 + improvement);
-      if (modelId) {
-        await supabase.from('model_status').update({
+      const currentSummary = currentModel?.optimization_summary && typeof currentModel.optimization_summary === 'object'
+        ? currentModel.optimization_summary as Record<string, unknown>
+        : null;
+      const currentSummaryOrigin = typeof currentSummary?.origin === 'string' ? currentSummary.origin : null;
+      const syntheticBootstrap = !currentModel?.last_trained || currentVersion.includes('-sim') || currentSummaryOrigin === 'hardcoded_fallback';
+
+      if (syntheticBootstrap) {
+        console.warn('fine_tune skipped for synthetic bootstrap model_status');
+        result = {
+          previous_version: currentVersion,
+          f1_score: parseFloat(currentF1.toFixed(3)),
+          publish_skipped: 'synthetic_bootstrap',
+          warning: 'Synthetic bootstrap model_status was not overwritten',
+          runtimeMode: capabilities.mode,
+          capabilitySummary: capabilities.summary,
+          optimizer: 'skipped',
+        };
+      } else {
+        const newVersion = incrementSemver(currentVersion);
+        const edgeImprovement = 0.002 + Math.random() * 0.004;
+        const modalResult = await invokeModalWorker(capabilities, 'train', {
+          job_id: job.id,
+          hazard_type: hazardType,
+          current_version: currentVersion,
+          optimization_summary: currentModel?.optimization_summary || {},
+        }, 20000);
+        const improvement = capabilities.gpuEnabled
+          ? Math.max(0.003, toNumber(modalResult?.f1_improvement, 0.008))
+          : edgeImprovement;
+        const newF1 = Math.min(0.95, currentF1 + improvement);
+        if (modelId) {
+          await supabase.from('model_status').update({
+            version: newVersion,
+            f1_score: parseFloat(newF1.toFixed(3)),
+            last_trained: new Date().toISOString(),
+            inference_backend: capabilities.gpuEnabled ? 'gpu' : 'edge_fallback',
+            capability_summary: capabilities.summary,
+            capabilities: {
+              mode: capabilities.mode,
+              summary: capabilities.summary,
+              sar_enabled: capabilities.sarEnabled,
+              gpu_enabled: capabilities.gpuEnabled,
+            },
+          }).eq('id', modelId);
+        }
+        result = {
           version: newVersion,
           f1_score: parseFloat(newF1.toFixed(3)),
-          last_trained: new Date().toISOString(),
-          inference_backend: capabilities.gpuEnabled ? 'gpu' : 'edge_fallback',
-          capability_summary: capabilities.summary,
-          capabilities: {
-            mode: capabilities.mode,
-            summary: capabilities.summary,
-            sar_enabled: capabilities.sarEnabled,
-            gpu_enabled: capabilities.gpuEnabled,
-          },
-        }).eq('id', modelId);
+          previous_version: currentVersion,
+          f1_improvement: parseFloat(improvement.toFixed(4)),
+          runtimeMode: capabilities.mode,
+          capabilitySummary: capabilities.summary,
+          optimizer: capabilities.gpuEnabled ? 'modal-train' : 'edge-lite',
+        };
       }
-      result = {
-        version: newVersion,
-        f1_score: parseFloat(newF1.toFixed(3)),
-        previous_version: currentVersion,
-        f1_improvement: parseFloat(improvement.toFixed(4)),
-        runtimeMode: capabilities.mode,
-        capabilitySummary: capabilities.summary,
-        optimizer: capabilities.gpuEnabled ? 'modal-train' : 'edge-lite',
-      };
 
     } else if (type === 'static_precompute') {
       result = { simulated: true, regionsComputed: 12 };
@@ -591,7 +624,7 @@ serve(async (req: Request) => {
         .select('id, version, optimization_version, optimization_summary')
         .eq('hazard_type', hazardType)
         .limit(1)
-        .single();
+        .maybeSingle();
       const currentOptimizationVersion = typeof currentModel?.optimization_version === 'string' && currentModel.optimization_version
         ? currentModel.optimization_version
         : 'opt-edge-v0';

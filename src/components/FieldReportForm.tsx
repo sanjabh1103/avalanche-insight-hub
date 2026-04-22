@@ -97,7 +97,7 @@ export default function FieldReportForm({ open, onClose, onSubmitted, regionCent
         description: description.trim(),
         location: `SRID=4326;POINT(${parsedLng} ${parsedLat})` as unknown,
         client_report_id: clientReportId,
-      }).select('id').single();
+      }).select('id').maybeSingle();
       if (error) throw error;
       if (!report?.id) {
         throw new Error('Failed to create field report');

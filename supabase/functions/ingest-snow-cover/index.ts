@@ -175,8 +175,9 @@ serve(async (req) => {
         payload: { region_name: regionName, bbox, date }
       })
       .select('id')
-      .single();
+      .maybeSingle();
     if (jobErr) throw jobErr;
+    if (!job?.id) throw new Error('Failed to create compute_job row');
 
     const targetDate = date || new Date().toISOString().split('T')[0];
     const targetBbox: [number, number, number, number] = bbox || [-180, -90, 180, 90];
@@ -207,9 +208,10 @@ serve(async (req) => {
         ingestion_job_id: job.id,
       })
       .select('id')
-      .single();
+      .maybeSingle();
 
     if (snapErr) throw snapErr;
+    if (!snapshot?.id) throw new Error('Failed to create snow_cover_snapshot');
 
     const result = {
       snapshot_id: snapshot?.id,

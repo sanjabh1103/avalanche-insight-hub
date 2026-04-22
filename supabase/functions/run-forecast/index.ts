@@ -37,6 +37,18 @@ interface GridCell {
   rawScore: number;
   shapValues: Record<string, number>;
   snowpackMetrics?: Record<string, number | string>;
+  snowpackProxy?: {
+    estimated_shear_strength?: number;
+    snow_settlement_index?: number;
+    season_start?: string;
+    method?: string;
+  };
+  terrainInputs?: Record<string, number | boolean>;
+  coverageFlags?: {
+    sar_coverage_state?: string;
+    residual_shadow?: boolean;
+    data_gaps?: string[];
+  };
   inferenceBackend?: string;
 }
 
@@ -79,6 +91,13 @@ interface SnowpackSummary {
   settlement_rate: number;
   confidence: number;
   source: string;
+}
+
+interface SarSummary {
+  sar_coverage_state: string;
+  ascending_scene_count: number;
+  descending_scene_count: number;
+  sar_active: boolean;
 }
 
 function flagEnabled(name: string, defaultValue = true) {
@@ -239,6 +258,136 @@ function normalizeHourly(values: unknown, fallback = 0): number[] {
     const numeric = typeof value === 'number' ? value : Number(value);
     return Number.isFinite(numeric) ? numeric : fallback;
   });
+}
+
+function regionKeyFromName(regionName: string): string {
+  return regionName
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[()]/g, '')
+    .replace(/\//g, '_');
+}
+
+function normalizeSarCoverageState(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value) return undefined;
+  if (value === 'full_coverage') return 'good';
+  if (value === 'low_coverage') return 'low';
+  return value;
+}
+
+function normalizeCoverageFlags(value: unknown): GridCell['coverageFlags'] {
+  if (!value || typeof value !== 'object') return undefined;
+  const row = value as Record<string, unknown>;
+  if (Object.keys(row).length === 0) return undefined;
+  return {
+    sar_coverage_state: normalizeSarCoverageState(row.sar_coverage_state),
+    residual_shadow: typeof row.residual_shadow === 'boolean' ? row.residual_shadow : undefined,
+    data_gaps: Array.isArray(row.data_gaps) ? row.data_gaps.map(String) : undefined,
+  };
+}
+
+async function fetchLatestSarSummary(supabase: ReturnType<typeof createClient>, regionName: string | null): Promise<SarSummary | null> {
+  if (!regionName) return null;
+  try {
+    const { data, error } = await supabase
+      .from('avalanche_events')
+      .select('id, timestamp, features, source')
+      .in('source', ['gee_sar', 'sentinel1_gee'])
+      .order('timestamp', { ascending: false })
+      .limit(10);
+    if (error || !Array.isArray(data) || data.length === 0) return null;
+
+    const regionKey = regionKeyFromName(regionName);
+    const relevant = data.filter((row) => {
+      const features = row?.features;
+      return features && typeof features === 'object' && !Array.isArray(features)
+        && String((features as Record<string, unknown>).region_key || '') === regionKey;
+    });
+    if (relevant.length === 0) return null;
+
+    const latest = relevant[0];
+    const features = latest.features as Record<string, unknown>;
+    return {
+      sar_coverage_state: String(features.sar_coverage_state || 'unknown'),
+      ascending_scene_count: Number(features.ascending_scene_count || 0),
+      descending_scene_count: Number(features.descending_scene_count || 0),
+      sar_active: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function deriveTerrainForCell(row: number, col: number): { slopeDeg: number; aspectDeg: number } {
+  return {
+    slopeDeg: 20 + (row / GRID_SIZE) * 25 + Math.cos(col * 0.3) * 10,
+    aspectDeg: (col / GRID_SIZE) * 360,
+  };
+}
+
+function resolveCoverageTerrain(cell: GridCell): { slopeDeg: number; aspectDeg: number } {
+  const fallback = deriveTerrainForCell(cell.row, cell.col);
+  const terrainInputs = cell.terrainInputs && typeof cell.terrainInputs === 'object' ? cell.terrainInputs : null;
+  if (!terrainInputs) return fallback;
+  const slopeCandidate = terrainInputs.slope_angle_deg ?? terrainInputs.slope;
+  const aspectCandidate = terrainInputs.aspect_deg ?? terrainInputs.aspect;
+  const slopeDeg = typeof slopeCandidate === 'number' && Number.isFinite(slopeCandidate)
+    ? slopeCandidate
+    : fallback.slopeDeg;
+  const aspectDeg = typeof aspectCandidate === 'number' && Number.isFinite(aspectCandidate)
+    ? aspectCandidate
+    : fallback.aspectDeg;
+  return { slopeDeg, aspectDeg };
+}
+
+function computeCellCoverageFlags(cell: GridCell, sarSummary: SarSummary | null): GridCell['coverageFlags'] {
+  if (!sarSummary || !sarSummary.sar_active) {
+    return {
+      sar_coverage_state: 'not_applicable',
+      residual_shadow: false,
+      data_gaps: [],
+    };
+  }
+
+  const coverageState = normalizeSarCoverageState(sarSummary.sar_coverage_state) || 'unknown';
+  const { slopeDeg, aspectDeg } = resolveCoverageTerrain(cell);
+  const ascCount = Math.max(0, sarSummary.ascending_scene_count || 0);
+  const descCount = Math.max(0, sarSummary.descending_scene_count || 0);
+
+  const dataGaps: string[] = [];
+  let residualShadow = false;
+  if (slopeDeg > 40 && coverageState !== 'good') {
+    if (ascCount > 0 && descCount === 0) {
+      const facingAway = Math.abs(((aspectDeg - 258.0 + 540.0) % 360.0) - 180.0) < 45.0;
+      if (facingAway) {
+        residualShadow = true;
+        dataGaps.push('desc_pass_missing_steep_west_slope');
+      }
+    } else if (descCount > 0 && ascCount === 0) {
+      const facingAway = Math.abs(((aspectDeg - 78.0 + 540.0) % 360.0) - 180.0) < 45.0;
+      if (facingAway) {
+        residualShadow = true;
+        dataGaps.push('asc_pass_missing_steep_east_slope');
+      }
+    }
+  }
+
+  if (coverageState === 'low') {
+    dataGaps.push('low_orbital_coverage');
+  }
+
+  return {
+    sar_coverage_state: coverageState,
+    residual_shadow: residualShadow,
+    data_gaps: dataGaps,
+  };
+}
+
+function attachCoverageFlags(hourlyGrids: GridCell[][], sarSummary: SarSummary | null): GridCell[][] {
+  return hourlyGrids.map((hourGrid) => hourGrid.map((cell) => ({
+    ...cell,
+    coverageFlags: normalizeCoverageFlags(cell.coverageFlags) || computeCellCoverageFlags(cell, sarSummary),
+  })));
 }
 
 async function fetchWeather(lat: number, lng: number): Promise<WeatherData | null> {
@@ -551,6 +700,9 @@ async function tryHydrateForecastGrid(
         rawScore: Number(raw.probability ?? raw.hazard ?? 0),
         shapValues: (raw.shap_values as Record<string, number>) || (raw.shapValues as Record<string, number>) || {},
         snowpackMetrics: raw.snowpack_proxy || raw.snowpackProxy || undefined,
+        snowpackProxy: raw.snowpack_proxy || raw.snowpackProxy || undefined,
+        terrainInputs: raw.terrain_inputs || raw.terrainInputs || undefined,
+        coverageFlags: normalizeCoverageFlags(raw.coverage_flags || raw.coverageFlags),
         inferenceBackend: 'async_batch',
       })),
     );
@@ -600,7 +752,13 @@ async function invokeEdgeFunction(functionName: string, body: Record<string, unk
     throw new Error(`${functionName} failed (${response.status}): ${text}`);
   }
 
-  return text ? JSON.parse(text) as Record<string, unknown> : {};
+  if (!text) return {};
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    console.warn(`${functionName} returned non-JSON 200 response:`, text.slice(0, 200));
+    return {};
+  }
 }
 
 serve(async (req: Request) => {
@@ -624,7 +782,7 @@ serve(async (req: Request) => {
       .select('id, version, optimization_version, optimization_summary, threshold_profile_version, calibration_profile_version')
       .eq('hazard_type', hazardType)
       .limit(1)
-      .single();
+      .maybeSingle();
 
     // P0.3: Don't hardcode fallback. Compute it honestly after we know whether
     // (a) a fresh async forecast_grids row existed, (b) Modal succeeded, or
@@ -645,8 +803,9 @@ serve(async (req: Request) => {
         },
       })
       .select('id')
-      .single();
+      .maybeSingle();
     if (jobErr) throw jobErr;
+    if (!job?.id) throw new Error('Failed to create compute_job row');
     jobId = job.id;
 
     // Fetch real weather for bbox center
@@ -654,6 +813,7 @@ serve(async (req: Request) => {
     const centerLng = (bbox[1] + bbox[3]) / 2;
     const weather = await fetchWeather(centerLat, centerLng);
     const weatherSource = weather ? 'open-meteo' : 'simulation';
+    const sarSummary = await fetchLatestSarSummary(supabase, regionName || null);
 
     // P0.3: Try to hydrate from a recent forecast_grids row before running the
     // edge heuristic. This is the hot path — GitHub Actions writes real
@@ -755,6 +915,17 @@ serve(async (req: Request) => {
       }
     }
 
+    hourlyGrids = attachCoverageFlags(hourlyGrids, sarSummary);
+    const sharedSnowpackProxy = {
+      estimated_shear_strength: Number((snowpackMetrics.shear_strength * 10).toFixed(2)),
+      snow_settlement_index: Number(snowpackMetrics.settlement_rate.toFixed(2)),
+      method: snowpackMetrics.source,
+    };
+    hourlyGrids = hourlyGrids.map((hourGrid) => hourGrid.map((cell) => ({
+      ...cell,
+      snowpackProxy: cell.snowpackProxy || sharedSnowpackProxy,
+    })));
+
     const currentCells = hourlyGrids[Math.min(timeOffset, hourlyGrids.length - 1)];
     const avgRisk = currentCells.reduce((s: number, c: GridCell) => s + c.riskScore, 0) / currentCells.length;
     const metadata = buildForecastMetadata(
@@ -799,7 +970,7 @@ serve(async (req: Request) => {
         optimization_version: optimizationVersion,
         feature_weights: featureWeights,
       },
-    }).select('id').single();
+    }).select('id').maybeSingle();
 
     // Update model status with last inference and data freshness
     const { data: ms } = await supabase
@@ -807,7 +978,7 @@ serve(async (req: Request) => {
       .select('id')
       .eq('hazard_type', hazardType)
       .limit(1)
-      .single();
+      .maybeSingle();
     if (ms?.id) {
       await supabase.from('model_status').update({
         last_inference: new Date().toISOString(),
