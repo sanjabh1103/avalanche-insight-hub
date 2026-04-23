@@ -11,6 +11,12 @@ const OPEN_METEO_BASE = 'https://api.open-meteo.com/v1/forecast';
 
 const PROBLEM_TYPES = ['Storm Slab', 'Wind Slab', 'Persistent Slab', 'Deep Persistent Slab', 'Wet Loose', 'Wet Slab', 'Cornice Fall', 'Glide Avalanche'];
 
+// LSTM / PINN gating constants (edge function advertises config even though PyTorch model runs on Modal / GitHub Actions)
+const TRAIN_LSTM_HEAD = Deno.env.get('TRAIN_LSTM_HEAD')?.toLowerCase() === 'true';
+const USE_LSTM_HEAD = Deno.env.get('USE_LSTM_HEAD')?.toLowerCase() === 'true';
+const LSTM_BLEND_WEIGHT = parseFloat(Deno.env.get('LSTM_BLEND_WEIGHT') || '0.0');
+const PINN_LAMBDA = parseFloat(Deno.env.get('PINN_LAMBDA') || '0.0');
+
 type RuntimeMode = 'full' | 'gpu_only' | 'sar_only' | 'edge_fallback';
 
 interface WeatherData {
@@ -50,6 +56,11 @@ interface GridCell {
     data_gaps?: string[];
   };
   inferenceBackend?: string;
+  fusionMethod?: string;
+  limitingFactor?: string | null;
+  chebyshevIpaScore?: number;
+  hazardVector?: Record<string, number>;
+  rfProbability?: number;
 }
 
 interface ForecastMetadata {
@@ -410,6 +421,74 @@ async function fetchWeather(lat: number, lng: number): Promise<WeatherData | nul
   }
 }
 
+// ── Chebyshev IPA helpers ─────────────────────────────────────────────────────
+interface HazardVector {
+  probability: number;
+  slope_deviation_from_38deg: number;
+  aspect_risk: number;
+  snowpack_weakness: number;
+  exposure: number;
+  [key: string]: number;
+}
+
+interface ChebyshevIPAResult {
+  score: number;
+  dominantCriterion: string;
+}
+
+function buildHazardVector(
+  probability: number,
+  slopeDeg: number,
+  aspectRisk: number,
+  snowpackWeakness: number,
+  exposure: number,
+): HazardVector {
+  const slopeDeviation = Math.max(0, 1 - Math.abs(slopeDeg - 38) / 27); // 11–65° maps to 0–1
+  return {
+    probability: Math.max(0, Math.min(1, probability)),
+    slope_deviation_from_38deg: Math.max(0, Math.min(1, slopeDeviation)),
+    aspect_risk: Math.max(0, Math.min(1, aspectRisk)),
+    snowpack_weakness: Math.max(0, Math.min(1, snowpackWeakness)),
+    exposure: Math.max(0, Math.min(1, exposure)),
+  };
+}
+
+function chebyshevIPA(vector: HazardVector, weights: Record<string, number>): ChebyshevIPAResult {
+  const keys = ['probability', 'slope_deviation_from_38deg', 'aspect_risk', 'snowpack_weakness', 'exposure'] as const;
+  const w: Record<string, number> = {
+    probability: weights.probability ?? 0.3,
+    slope_deviation_from_38deg: weights.slope_deviation_from_38deg ?? weights.slope ?? 0.25,
+    aspect_risk: weights.aspect_risk ?? weights.aspect_loading ?? 0.15,
+    snowpack_weakness: weights.snowpack_weakness ?? weights.snowpack ?? 0.2,
+    exposure: weights.exposure ?? weights.elevation ?? 0.1,
+  };
+
+  let maxDist = 0;
+  let dominant: string = keys[0];
+
+  for (const k of keys) {
+    const dist = (w[k] ?? 0) * (1 - vector[k]);
+    if (dist > maxDist) {
+      maxDist = dist;
+      dominant = k;
+    }
+  }
+
+  // Convert distance to a "score" (higher = more hazardous)
+  const score = Math.max(0, Math.min(1, 1 - maxDist));
+  return { score, dominantCriterion: dominant };
+}
+
+function legacyMaxRiskLevel(probability: number, slopeDeg: number): number {
+  const slopeRisk = Math.max(0, Math.min(1, slopeDeg / 55));
+  return Math.max(probability, slopeRisk);
+}
+
+function ipaRiskLevel(ipaScore: number, legacy: number): number {
+  // IPA should never reduce risk below the legacy max of the two strongest individual criteria
+  return Math.max(ipaScore, legacy);
+}
+
 function computeRisk(
   weather: WeatherData | null,
   hour: number,
@@ -460,22 +539,42 @@ function computeRisk(
     shapValues[key] = Number(val.toFixed(4));
   }
 
-  rawScore = Math.max(0, Math.min(1, rawScore * (conservativeMode ? 1.45 : 1.75)));
-  const riskScore = Math.max(1, Math.min(5, Math.round(rawScore * 5)));
-  
-  const hazard = 0.2 + rawScore * 0.7;
+  // ── Calibrated RF probability (legacy weighted sum) ────────────────────────
+  const rfProbability = Math.max(0, Math.min(1, rawScore * (conservativeMode ? 1.45 : 1.75)));
+
+  // ── Build hazard vector for Chebyshev IPA ──────────────────────────────────
+  const hazardVector = buildHazardVector(
+    rfProbability,
+    terrainSlope,
+    features.aspect_loading,
+    1 - features.shear_strength, // weakness = inverse shear strength
+    features.elevation,
+  );
+
+  const ipaResult = chebyshevIPA(hazardVector, weights);
+  const legacyMax = legacyMaxRiskLevel(rfProbability, terrainSlope);
+  const ipaScore = ipaRiskLevel(ipaResult.score, legacyMax);
+
+  const riskScore = Math.max(1, Math.min(5, Math.round(ipaScore * 5)));
+
+  const hazard = 0.2 + ipaScore * 0.7;
   const exposure = 0.3 + features.elevation * 0.5;
   const vulnerability = 0.1 + features.aspect_loading * 0.6;
-  const problemIdx = Math.min(PROBLEM_TYPES.length - 1, Math.floor(rawScore * PROBLEM_TYPES.length));
+  const problemIdx = Math.min(PROBLEM_TYPES.length - 1, Math.floor(ipaScore * PROBLEM_TYPES.length));
 
   return {
     riskScore,
     hazard,
     exposure,
     vulnerability,
-    rawScore,
+    rawScore: ipaScore,
+    rfProbability,
     shapValues,
     problemType: PROBLEM_TYPES[problemIdx],
+    fusionMethod: 'chebyshev_ipa_v2',
+    limitingFactor: ipaResult.dominantCriterion,
+    chebyshevIpaScore: Number(ipaResult.score.toFixed(4)),
+    hazardVector,
     snowpackMetrics: {
       ram_hardness: snowpackSummary.ram_hardness,
       shear_strength: snowpackSummary.shear_strength,
@@ -704,6 +803,11 @@ async function tryHydrateForecastGrid(
         terrainInputs: raw.terrain_inputs || raw.terrainInputs || undefined,
         coverageFlags: normalizeCoverageFlags(raw.coverage_flags || raw.coverageFlags),
         inferenceBackend: 'async_batch',
+        fusionMethod: raw.fusion_method || raw.fusionMethod || 'chebyshev_ipa_v2',
+        limitingFactor: raw.limiting_factor || raw.limitingFactor || null,
+        chebyshevIpaScore: Number(raw.chebyshev_ipa_score ?? raw.chebyshevIpaScore ?? 0),
+        hazardVector: (raw.hazard_vector as Record<string, number>) || (raw.hazardVector as Record<string, number>) || undefined,
+        rfProbability: Number(raw.rf_probability ?? raw.rfProbability ?? 0),
       })),
     );
 
