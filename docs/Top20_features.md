@@ -1,48 +1,57 @@
-"Avalanche Insight Hub is the world's first open-source, self-improving AI avalanche early-warning system. It combines LLM-powered Groundsource event mining, real 24h/72h ensemble forecasts with SHAP explainability, a 3D voxel neighborhood view synced to risk timeline, realtime field reports, and expert impact overlays — all in one beautiful, shareable web app that works globally, even in regions with zero traditional monitoring."
+"Avalanche Insight Hub is an open-source, self-improving AI avalanche early-warning system. It combines LLM-powered Groundsource event mining, 24h/72h ensemble forecasts with SHAP explainability and Chebyshev multi-criteria risk fusion, a physics-informed 3D voxel neighborhood view, real-time field reports with PWA offline sync, and an evaluation harness — all in one shareable web app that degrades gracefully even in regions with sparse traditional monitoring."
 
-**Top 20 Features to Highlight for Avalanche Insight Hub (Avalanche Compass)**
+**Top 20 Features — Avalanche Insight Hub**
 
-This list is synthesized from the full conversation history, PRD v1.1, all QA reports, and the latest implementation state. It positions the app as **the world's first truly self-improving, open-source, Groundsource-style avalanche early-warning platform** — a direct analogue to Google Flood Hub but specialized for avalanches, with unique elements no existing tool (Swiss SLF, Colorado Avalanche Center, OpenSnow PEAKS Avy, or Open Avalanche Project) offers in a single, accessible web app.
+This list reflects the actual implementation state after the LSTM/PINN + Chebyshev IPA integration milestone. It positions the app as an open-source, Groundsource-style avalanche early-warning platform with unique ML methodology depth.
 
-### Unique Differentiators (What Makes This Implementation Stand Out)
-No other public avalanche prediction tool combines **all** of these in one open-source, global, self-improving system:
-- LLM-powered Groundsource event mining + field reports + daily pg_cron automation.
-- Real-time, explainable ensemble forecasts with SHAP for every cell.
-- 3D voxel (Minecraft-style) neighborhood view synced to risk timeline.
-- Full-state shareable links + export + realtime collaboration.
-- Evaluation harness with labeling, metrics, and lineage tracking.
-- Multi-hazard foundation already wired (avalanche as default, ready for volcano/flood/thunderstorm).
+### Unique Differentiators
+No other public avalanche prediction tool combines **all** of these in one open-source system:
+- **Physics-informed ML pipeline** — LSTM/PINN sibling model, Chebyshev Ideal Point Analysis for non-compensatory risk fusion, Wasserstein drift detection.
+- **LLM-powered Groundsource mining** — Gemini-extracted events from news + citizen field reports → daily enrichment.
+- **Explainable ensemble forecasts** — SHAP per cell, TreeSHAP precomputed cache, dominant driver narratives.
+- **3D voxel neighborhood visualization** — OSM-based extruded geometry with terrain-fallback when data is sparse.
+- **Async CI/CD ML backend** — GitHub Actions orchestrates training, inference, Sentinel-1 SAR extraction, and news ingestion into precomputed forecast grids.
 
-### Top 20 Features to Project (Ranked by Impact & Uniqueness)
+### Top 20 Features (Ranked by Impact & Uniqueness)
 
-| Rank | Feature | Why It Is Unique / Highlight | Customer Value |
-|------|---------|------------------------------|----------------|
-| 1 | **Self-Improving Groundsource Loop** | Gemini extracts events from global news + user field reports → pg_cron daily enrichment → realtime Events layer → ensemble fine-tune. No other tool has automated, continuous dataset growth from both news and citizen reports. | The app gets smarter every day without manual effort — truly "self-improving" for sparse regions. |
-| 2 | **24h/72h Dynamic Risk Grid with Real Open-Meteo Ensemble** | 20×20 grid colored by EAWS 1–5 scale, powered by real weather + terrain + snowpack proxies for every region (not just monitored Alps/US). | Accurate forecasts even in data-sparse Himalayas, Andes, or remote areas where no official bulletins exist. |
-| 3 | **3D Neighborhood Voxel View (Arnis-inspired OSM block map)** | Generates Minecraft-style 3D block map of your exact area (buildings tall, roads flat, risk-colored voxels). Timeline-synced colors. First avalanche tool with playable, immersive 3D risk visualization. | Users literally "see" risk on their neighborhood/slope in 3D — far more intuitive than 2D grids. |
-| 4 | **SHAP Explainability per Cell** | Every grid cell shows why it is risky (real snowfall, wind, slope, recent activity, etc.). | Builds trust: users understand the "why" behind the risk level, not just a color. |
-| 5 | **Realtime Field Reports → Events Layer** | Submit a report → AI classifies → marker appears on map within seconds for everyone. | Citizen science loop: every report improves the dataset instantly for all users. |
-| 6 | **Full-State Shareable Links** | One link restores exact region, hour, selected cell, Expert Mode, and 3D view. | Perfect for guides, rescue teams, or sharing with friends ("this is the exact risk right now"). |
-| 7 | **Export CSV/JSON** | Full forecast grid + events + weather + SHAP data downloadable. | Guides, researchers, and agencies can analyze or archive data offline. |
-| 8 | **Expert Mode with Impact Overlays** | Toggle roads, villages, ski lifts, population heatmaps, historical activity, vector polygons. | Professional users see real-world consequences (roads/villages in runout zones). |
-| 9 | **Evaluation Harness & Model Lineage** | Forecast outcomes, labeling, F1/ECE metrics, calibration profiles, version tracking all visible in Admin. | Transparency and continuous improvement — rare in public avalanche tools. |
-| 10 | **Multi-Hazard Foundation (Ready for Expansion)** | `hazard_type` infrastructure already wired; easy to add volcano, flood, thunderstorm modules. | One app becomes a unified natural-hazards platform (future-proof). |
-| 11 | **Daily Automated Enrichment (pg_cron)** | Midnight UTC job pulls news via NewsData.io + Gemini → new events added automatically. | No manual maintenance needed — dataset grows 24/7. |
-| 12 | **Permanent Safety Disclaimer** | Red banner on every screen, non-dismissible. | Strong ethical stance — users always know it's experimental. |
-| 13 | **Mobile-Responsive + PWA** | Full functionality on phone, installable as app. | Backcountry users can check risk on the mountain. |
-| 14 | **Admin Panel with Job Triggers & Analytics** | One-click enrichment, fine-tune, snow-cover, evaluation, realtime job status, Gemini usage counter. | Maintainers can monitor and control the system easily. |
-| 15 | **Historical Activity Heatmap** | Past events rendered as heatmap with recency weighting. | Shows avalanche-prone zones at a glance. |
-| 16 | **Keyboard Shortcuts** | R=Run Forecast, Space=Play/Pause, arrows=scrub. | Power users get faster interaction. |
-| 17 | **Dark/Light Theme Toggle with Proper Map Tiles** | Seamless switching with matching basemap. | Better usability in different lighting conditions. |
-| 18 | **Real-Time Job & Model Status Badge** | Live updates for jobs, version, F1, freshness. | Users always know how current the model is. |
-| 19 | **Field Report Quality Fields** | `review_status`, `training_eligible` automatically populated. | Enables active learning and quality control. |
-| 20 | **Open-Source & Self-Hostable** | Full GitHub repo with Supabase + Edge Functions. | Anyone can run their own instance or contribute improvements. |
+| Rank | Feature | Why It Is Unique / Technical Detail | Customer Value |
+|------|---------|-----------------------------------|----------------|
+| 1 | **Chebyshev IPA Risk Fusion** | Multi-criteria compromise programming using weighted Chebyshev distance over 5 hazard criteria (probability, slope deviation from 38°, aspect risk, snowpack weakness, exposure). Identifies the *limiting factor* — the single criterion that drives risk. Implemented in both Python backend (`backend/common/risk_math.py`) and the live TypeScript edge fallback (`supabase/functions/run-forecast/index.ts`). | Users see *why* a cell is dangerous: "limiting factor = slope_deviation_from_38deg" tells them slope angle is the blocker, not snowpack. |
+| 2 | **LSTM / Physics-Informed Neural Network (PINN) Sibling Model** | Optional LSTM head with physics monotonicity penalty (`PINN_LAMBDA`) trained on two timescales (daily pre-train + hourly fine-tune). Blends with Random Forest via `LSTM_BLEND_WEIGHT`. Gated by env vars (`USE_LSTM_HEAD`, `TRAIN_LSTM_HEAD`). Promoted only if PSS + Brier score beats RF. | Captures temporal dynamics (snowpack evolution over days) that RF misses, while physics constraints prevent unrealistic predictions. |
+| 3 | **Self-Improving Groundsource Loop** | Gemini 1.5 Flash parses global news + local field reports → extracted events upserted to `avalanche_events`. GitHub Actions `news` job runs daily. `trigger-job` edge function coordinates enrichment. Events feed training dataset (`backend/common/training_dataset.py`). | Dataset grows automatically from both institutional news and citizen reports, enabling active learning in data-sparse regions. |
+| 4 | **24h/72h Dynamic Risk Grid with Open-Meteo Ensemble + Physics Fallback** | 20×20 grid per forecast. Real Open-Meteo weather with deterministic fallback simulation when API is unavailable. HIM-STRAT Class-II snowpack proxies (`estimated_shear_strength`, `snow_settlement_index`) derived from cumulative winter weather. Edge function (`run-forecast`) hydrates from precomputed `forecast_grids` (async batch) before falling back to live heuristic. | Works globally including Himalayas, Andes, remote areas — no dependency on local snowpack stations. |
+| 5 | **Wasserstein Concept-Drift Detection + Adaptive Decay** | `wasserstein_distance` compares recent feature distributions vs. training window. If drift exceeds threshold, `drift_multiplier = 0.5` down-weights old rows. Drift stats persisted to `model_status`. | Model adapts to climate shift (e.g., warmer winters changing snowpack patterns) rather than becoming stale. |
+| 6 | **3D Voxel Neighborhood View with Terrain Extrusion Fallback** | Overpass API fetches buildings, lifts, roads → extruded into 3D blocks with risk-colored voxels. When OSM data is sparse, ground cells extrude into low terrain columns so the view never collapses to a flat plane. Timeline-synced coloring. | Users "see" risk on their actual neighborhood geometry — intuitive for guides and local residents. |
+| 7 | **TreeSHAP Explainability per Cell with Precomputed Cache** | Python backend (`daily_inference.py`) computes TreeSHAP per cell and upserts to `forecast_shap_cache`. UI renders dominant driver narratives client-side. Edge function (`shap-explainer`) is an auxiliary Gemini fallback. | Trust through transparency: users understand exactly which weather/terrain feature drove the score. |
+| 8 | **Sentinel-1 SAR Wet-Snow Detection + Coverage Tracking** | Google Earth Engine (`backend/gee_extractor.py`) performs VV/VH wet-snow thresholding on Sentinel-1 with terrain masking (layover, shadow, >65° slope). Tracks ascending/descending scene counts. Historical backfill supported via `historical_sar_backfill.py`. Coverage flags (`sar_coverage_state`) exposed in UI. | Satellite-derived snowpack state where ground stations don't exist. Honest coverage badges show data quality. |
+| 9 | **PWA Offline Sync for Field Reports** | Field reports submitted via `FieldReportForm` queue in `localStorage` when offline. Background Sync (via service worker) replays once connectivity returns. `client_report_id` ensures idempotent upserts. | Backcountry users with no cell signal can still file reports that sync automatically later. |
+| 10 | **Evaluation Harness with PSS Thresholding & Model Lineage** | Youden's J (Peirce Skill Score) selects optimal classification threshold. Calibration profiles, F1, ECE metrics tracked in `evaluation_results`. `model_status` table stores version, drift stats, threshold profile. Admin dashboard shows synthetic bootstrap warnings when `publish_skipped = true`. | Professional-grade model governance — rare in public avalanche tools. |
+| 11 | **Async CI/CD ML Pipeline (GitHub Actions)** | Scheduled jobs: `train` (weekly), `infer` (daily), `gee` (weekly SAR), `news` (daily). `workflow_dispatch` enables manual triggers + `sar_backfill`. All write precomputed `forecast_grids` and SHAP cache. Supabase Edge Functions serve them live. | Zero-cost serverless training/inference — no persistent GPU server needed. |
+| 12 | **Full-State Shareable Links** | One URL serializes region, hour, selected cell, expert mode, 3D view state. Anyone opening the link sees exactly what the sharer saw. | Rescue teams, guides, and friends can share precise risk snapshots without screenshots. |
+| 13 | **Expert Mode with Impact Overlays** | Toggle roads, villages, ski lifts, population heatmaps, historical activity heatmap (recency-weighted), vector polygons. | Professionals assess real-world consequences — which roads or villages sit in runout zones. |
+| 14 | **KMeansSMOTE + Cost-Sensitive Learning + SVM-RFE** | Training pipeline addresses class imbalance via KMeansSMOTE oversampling. SVM-RFE feature selection prevents overfitting. Class weights penalize false negatives more than false positives. | Safer predictions in the natural class imbalance of avalanche events (rare positives). |
+| 15 | **Admin Panel with Job Triggers, Analytics & Honest Fallback Badges** | One-click retrain, enrichment, snow-cover refresh, evaluation. Realtime job status from `compute_jobs`. Synthetic bootstrap warning when training used bootstrapped data. Satellite fallback badge when SAR is unavailable. | Maintainers have full observability and honest visibility into data quality limitations. |
+| 16 | **Multi-Hazard Foundation** | `hazard_type` column wired throughout DB (`avalanche_events`, `forecasts`, `forecast_grids`, `model_status`). Default is `avalanche`; schema supports volcano, flood, thunderstorm expansion without migration. | Future-proof: the same pipeline can serve multiple natural hazards. |
+| 17 | **Mobile-Responsive with Dark/Light Theme + Keyboard Shortcuts** | Full functionality on phone. R=Run Forecast, Space=Play/Pause, arrows=scrub timeline. Seamless basemap switching. | Power users interact fast; backcountry users check conditions on-device. |
+| 18 | **Real-Time Job & Model Status Badges** | Live `compute_jobs` status, model version, F1 score, data freshness hours, inference backend (`async_batch` / `gpu` / `edge_fallback`). | Users always know how current and how trustworthy the forecast is. |
+| 19 | **Export CSV/JSON** | Full forecast grid + hourly grids + events + weather summary + SHAP values + hazard vector downloadable. | Guides, researchers, agencies can archive or analyze offline. |
+| 20 | **Open-Source & Self-Hostable** | Full repo with Supabase (PostgreSQL + Edge Functions), GitHub Actions CI/CD, React+Vite frontend. Dual-mode: Edge-only works without GPU/SAR credentials; GPU/SAR paths activate when credentials present. | Anyone can fork, self-host, or contribute. No vendor lock-in. |
 
-These 20 points make Avalanche Insight Hub **stand out globally**:
-- No competitor combines **LLM Groundsource automation + real-time field reports + 3D voxel visualization + evaluation harness + full-state sharing** in one open-source web app.
-- It is the first tool that truly scales to **sparse, data-poor regions** while remaining transparent and explainable.
+These 20 features make Avalanche Insight Hub a **research-grade, transparent avalanche forecasting system** that scales from zero-infrastructure edge fallback to GPU-enhanced inference while maintaining scientific honesty about data quality and model limitations.
 
- 
+---
 
+### Top Shortcomings at This Moment
 
- 
+| # | Shortcoming | Impact | Mitigation / Future Work |
+|---|-------------|--------|--------------------------|
+| 1 | **Sentinel-1 SAR is search-only without download credentials** | ASF Search API works without auth, but downloading actual SAR scenes requires NASA Earthdata login. Pixel-level change detection is not practical inside a lightweight Edge Function without an external raster backend. | Use GEE for wet-snow vectorization (already implemented); heavier raster processing would need Modal GPU worker or preprocessed assets. |
+| 2 | **LSTM/PINN is config-gated, not always active** | The LSTM head only runs when `USE_LSTM_HEAD=true` and a trained model exists on Modal. Most edge fallbacks use RF only. | Promote via PSS/Brier gating; train head on sufficient historical data. |
+| 3 | **Real-time inference is heuristic; true ensemble is precomputed daily** | The live `run-forecast` edge function uses a physics-informed heuristic when no fresh `forecast_grids` row exists. Full RF+LSTM ensemble runs once per day via GitHub Actions. | Precomputed grids have 26h TTL; heuristic is calibrated to match ensemble bounds. |
+| 4 | **3D voxel Overpass dependency can be sparse in remote regions** | Overpass API returns few buildings/roads in unmapped areas. Terrain extrusion fallback prevents flat-plane collapse but lacks semantic detail. | Cache OSM tiles; add DEM-based terrain features as fallback geometry. |
+| 5 | **Gemini usage counter undercounts malformed responses** | Counter increments only after successful parse. Empty/malformed Gemini responses are not counted, skewing cost estimates. | Move increment to immediately after `fetch()` returns, update by row ID. |
+| 6 | **Drift detection reports but does not autonomously remediate** | `wasserstein_distance` flags drift and applies a multiplier, but there is no automatic retraining or model rollback pipeline. | Wire drift flag → auto-trigger `train` workflow when drift exceeds critical threshold. |
+| 7 | **Edge fallback coverage flags are generic** | When no SAR is available, `sar_coverage_state` is `not_applicable`. The UI shows an honest UNAVAILABLE badge, but there is no probabilistic gap-filling. | Implement spatial interpolation from nearest SAR pass, or add Sentinel-2 snow cover as secondary proxy. |
+| 8 | **Multi-hazard is wired but only avalanche is implemented** | DB schema and `hazard_type` plumbing exist, but no actual volcano/flood/thunderstorm models, datasets, or UI modules are built. | Add hazard-specific feature extractors and training pipelines behind the same `hazard_type` gate. |
+| 9 | **No real-time collaborative editing** | Field reports appear as read-only markers. No simultaneous multi-user annotation or comment threads. | Add Supabase Realtime channel for live report comments and moderation queue. |
+| 10 | **Snowpack proxies are weather-derived, not measurement-based** | HIM-STRAT Class-II proxies use cumulative temperature/precipitation, not actual ram hardness or shear frame tests. | Integrate manual snowpit data upload + IoT sensor ingestion for ground-truthed proxies. |
