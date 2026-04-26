@@ -55,6 +55,10 @@ class GitHubRolloutPolicyTests(unittest.TestCase):
         self.assertIn('group: bootstrap-pinned-gate', bootstrap_gate)
         self.assertIn('DATASET_URL:', bootstrap_gate)
         self.assertIn('SAR_RASTER_URL:', bootstrap_gate)
+        self.assertIn('BOOTSTRAP_MODE:', bootstrap_gate)
+        self.assertIn("default: 'authoritative'", bootstrap_gate)
+        self.assertIn("- authoritative", bootstrap_gate)
+        self.assertIn("- canary", bootstrap_gate)
         self.assertIn('Direct truth/vector held-out archive URL on an allowlisted academic or trusted cloud mirror host', bootstrap_gate)
         self.assertIn(
             'Direct Sentinel-1 VV/VH GeoTIFF archive URL on an allowlisted cloud or EO host; must contain one co-registered VV/VH pair for every truth year discovered',
@@ -80,8 +84,13 @@ class GitHubRolloutPolicyTests(unittest.TestCase):
         self.assertIn('backend.scripts.seed_snowslide_truth', bootstrap_gate)
         self.assertIn('--validate-only', bootstrap_gate)
         self.assertIn('--source-dir assembled_seed_dir', bootstrap_gate)
+        self.assertIn('--non-authoritative', bootstrap_gate)
         self.assertIn('Preflight assembled Sentinel-1 SAR dataset', bootstrap_gate)
         self.assertIn('backend.scripts.materialize_release_baseline_masks', bootstrap_gate)
+        self.assertIn('--no-activate', bootstrap_gate)
+        self.assertIn('canary mode must not target the production reference set key snowslide-heldout-v1', bootstrap_gate)
+        self.assertIn("expected_status = 'active' if mode == 'authoritative' else 'draft'", bootstrap_gate)
+        self.assertIn("expected_authoritative = mode == 'authoritative'", bootstrap_gate)
 
     def test_trigger_job_admin_path_requires_supabase_auth_and_allowlists(self) -> None:
         trigger_job = (REPO_ROOT / 'supabase' / 'functions' / 'trigger-job' / 'index.ts').read_text(encoding='utf-8')

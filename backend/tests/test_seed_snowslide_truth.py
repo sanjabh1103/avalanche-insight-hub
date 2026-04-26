@@ -231,6 +231,7 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
             bucket='sar-masks',
             hazard_type='avalanche',
             notes='seed run',
+            non_authoritative=False,
             validate_only=False,
         )
 
@@ -276,6 +277,40 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
         set_update = rest_upsert_mock.call_args_list[2].args[1][0]
         self.assertEqual(set_insert['split_name'], 'validation')
         self.assertEqual(set_update['split_name'], 'validation')
+        self.assertTrue(set_insert['authoritative'])
+        self.assertTrue(set_update['authoritative'])
+        self.assertTrue(result['authoritative'])
+
+    @patch('backend.scripts.seed_snowslide_truth.storage_upsert_json', return_value='sar-masks/heldout/snowslide/2026-04-25/reference_sets/snowslide-canary/registry.json')
+    @patch('backend.scripts.seed_snowslide_truth.storage_upload_bytes')
+    @patch('backend.scripts.seed_snowslide_truth.rest_upsert')
+    def test_seed_snowslide_truth_non_authoritative_mode_writes_draft_canary_set(
+        self,
+        rest_upsert_mock,
+        storage_upload_bytes_mock,
+        _storage_upsert_json_mock,
+    ) -> None:
+        rest_upsert_mock.side_effect = [
+            [{'id': 'set-1', 'set_key': 'snowslide-canary', 'status': 'draft', 'authoritative': False}],
+            [{'id': 'item-1'}],
+            [{'id': 'set-1', 'set_key': 'snowslide-canary', 'status': 'draft', 'authoritative': False}],
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            archive_path = Path(tmpdir) / 'snowslide.zip'
+            self._write_archive(archive_path)
+            args = self._build_args(source_zip=archive_path, set_key='snowslide-canary')
+            args.non_authoritative = True
+
+            result = seed_snowslide_truth(args)
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertFalse(result['authoritative'])
+        self.assertEqual(storage_upload_bytes_mock.call_count, 2)
+        set_insert = rest_upsert_mock.call_args_list[0].args[1][0]
+        set_update = rest_upsert_mock.call_args_list[2].args[1][0]
+        self.assertFalse(set_insert['authoritative'])
+        self.assertFalse(set_update['authoritative'])
+        self.assertEqual(result['reference_set_status'], 'draft')
 
     def test_seed_snowslide_truth_rejects_archives_without_validation_or_test_split(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

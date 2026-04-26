@@ -19,15 +19,15 @@ The target Supabase project must also contain the held-out registry tables creat
 ## In-Repo Operator Entry Points
 
 - `.github/workflows/bootstrap_pinned_gate.yml`
-  Temporary manual GitHub Actions workflow for cloud-to-cloud SnowSlide seeding when the archive is too large for local hardware. It downloads a truth/vector archive plus a separate Sentinel-1 VV/VH raster archive into the runner’s ephemeral storage, assembles a canonical held-out directory, runs a strict `--validate-only` preflight against that assembled directory, then runs `seed_snowslide_truth` and `materialize_release_baseline_masks` so the authoritative set ends `active`.
+  Temporary manual GitHub Actions workflow for cloud-to-cloud SnowSlide seeding when the archive is too large for local hardware. It downloads a truth/vector archive plus a separate Sentinel-1 VV/VH raster archive into the runner’s ephemeral storage, assembles a canonical held-out directory, runs a strict `--validate-only` preflight against that assembled directory, then either performs an authoritative activation with real SAR inputs or a non-authoritative canary run that leaves the set in `draft`.
 - `python -m backend.scripts.assemble_seed_archive`
   Runner-side staging CLI. It unwraps the truth archive, extracts the SAR raster archive, pairs vector truth with year-matched VV/VH GeoTIFF rasters, and emits a canonical local held-out directory for seeding.
 - `python -m backend.scripts.bootstrap_release_gate`
   Operator bootstrap CLI for the GitHub-first rollout path. It validates `.env`, syncs secrets into GitHub/Modal/Supabase, seeds the authoritative SnowSlide held-out registry from a local zip, deploys the Modal worker, seeds the DEM volume, and then stops at `refs_ready_only` until a real `SAR_UNET_MODEL_PATH` is configured.
 - `python -m backend.scripts.seed_snowslide_truth`
-  One-off bootstrapping CLI. Seeds authoritative SnowSlide truth masks and canonical scene stacks into `sar-masks`, then registers the held-out set in Supabase as `draft`.
+  One-off bootstrapping CLI. Seeds SnowSlide truth masks and canonical scene stacks into `sar-masks`, then registers the held-out set in Supabase as `draft`. The default path is authoritative; `--non-authoritative` is reserved for plumbing-only canary seeds.
 - `python -m backend.scripts.materialize_release_baseline_masks`
-  Materializes `baseline_mask.tif` for a registered SnowSlide reference set and marks the set `active` when complete.
+  Materializes `baseline_mask.tif` for a registered SnowSlide reference set and marks the set `active` when complete unless `--no-activate` is used for a canary run.
 - `python -m backend.sar_release_manifest`
   Builds a held-out `evaluate-release` manifest either from an ad hoc JSON/CSV registry or from an authoritative SnowSlide `reference_set_key`.
 - `python -m backend.sar_release_promote`
@@ -50,12 +50,16 @@ Inputs:
 - `SAR_RASTER_URL` required
 - `REFERENCE_SET_KEY` optional, defaults to `snowslide-heldout-v1`
 - `SOURCE_VERSION` optional; if blank, the workflow uses the current UTC date
+- `BOOTSTRAP_MODE` optional, defaults to `authoritative`; allowed values are `authoritative` and `canary`
 
 Security and source restrictions:
 - `DATASET_URL` must be a direct downloadable truth/vector archive URL, not a record landing page; it may point either to the original academic record or to a trusted cloud mirror of the same authoritative truth archive
 - `SAR_RASTER_URL` must be a direct downloadable Sentinel-1 VV/VH GeoTIFF archive URL; signed GCS or S3 URLs are preferred over public-read objects when you control the mirror
+- `BOOTSTRAP_MODE=authoritative` is for real SAR activation only and is the only mode allowed to target `snowslide-heldout-v1`
+- `BOOTSTRAP_MODE=canary` is for synthetic or provisional SAR plumbing validation only; it must use a non-production `REFERENCE_SET_KEY` and leaves the seeded set in `draft`
 - the workflow assembles both sources into one canonical local dataset before preflight
 - acceptable truth inputs are either raster truth masks (`.tif/.tiff`) or vector avalanche outlines (`.shp/.geojson/.json`) that can be rasterized against a georeferenced Sentinel-1 GeoTIFF stack or paired VV/VH GeoTIFF rasters
+- GeoPackage truth inputs such as `.gpkg` remain unsupported in this slice and must fail closed until a dedicated extension lands
 - IAS/webcam/optical datasets are invalid for the pinned gate and are rejected in preflight before any storage or Supabase mutation
 - the assembler requires one co-registered VV/VH GeoTIFF pair for every truth year it discovers; for the Davos validation set that currently means both 2018 and 2019, for example:
   - `S1_2018_vv.tif`
@@ -84,12 +88,14 @@ Execution sequence:
 2. verify both ZIP payloads and fail if the SAR raster archive lacks `.tif/.tiff` members
 3. run `python -m backend.scripts.assemble_seed_archive --truth-zip truth_archive.zip --sar-zip sar_rasters.zip --output-dir assembled_seed_dir`
 4. run `python -m backend.scripts.seed_snowslide_truth --source-dir assembled_seed_dir --validate-only ...`
-5. only if preflight returns `status=ok`, run `python -m backend.scripts.seed_snowslide_truth --source-dir assembled_seed_dir ...`
-6. run `python -m backend.scripts.materialize_release_baseline_masks --reference-set-key ...`
-7. fail unless the assembler, preflight, and both mutation JSON payloads return `status=ok` and baseline materialization returns `reference_set_status=active`
+5. only if preflight returns `status=ok`, run `python -m backend.scripts.seed_snowslide_truth --source-dir assembled_seed_dir ...`; add `--non-authoritative` when `BOOTSTRAP_MODE=canary`
+6. run `python -m backend.scripts.materialize_release_baseline_masks --reference-set-key ...`; add `--no-activate` when `BOOTSTRAP_MODE=canary`
+7. fail unless the assembler, preflight, and both mutation JSON payloads return `status=ok`; authoritative mode additionally requires `authoritative=true` and `reference_set_status=active`, while canary mode requires `authoritative=false` and `reference_set_status=draft`
 8. clean up both downloaded archives, the assembled directory, and JSON result files in an `always()` step
 
-This workflow seeds authoritative truth and baseline refs only. It does **not** run held-out `sar-segment`, `evaluate_release`, promoted reruns, or `train_mtslstm`. It remains operationally paused until the operator supplies a valid SAR archive URL.
+This workflow does **not** support a later "silent swap" of mirror ZIP contents into an already seeded authoritative set. Once a run uploads assets into `sar-masks` and records them in Supabase, replacing the source ZIPs in cloud storage does nothing to the active registry; a fresh reseed is required.
+
+Synthetic overlapping SAR harnesses are acceptable only for `BOOTSTRAP_MODE=canary`. Real authoritative activation remains blocked until the operator supplies a valid 2018/2019 Sentinel-1 VV/VH archive.
 
 ## Refs-Ready Bootstrap
 

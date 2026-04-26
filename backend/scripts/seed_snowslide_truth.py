@@ -917,6 +917,7 @@ def _upload_scene_assets(
 
 
 def seed_snowslide_truth(args: argparse.Namespace) -> dict[str, Any]:
+    authoritative = not bool(getattr(args, 'non_authoritative', False))
     with _open_source_from_args(args) as archive:
         scenes, splits, split_name = _inspect_archive(
             archive,
@@ -937,7 +938,7 @@ def seed_snowslide_truth(args: argparse.Namespace) -> dict[str, Any]:
         'split_name': split_name,
         'hazard_type': args.hazard_type,
         'purpose': SAR_RELEASE_PURPOSE,
-        'authoritative': True,
+        'authoritative': authoritative,
         'status': 'draft',
         'notes': args.notes,
     }], on_conflict='set_key')
@@ -980,7 +981,7 @@ def seed_snowslide_truth(args: argparse.Namespace) -> dict[str, Any]:
         'split_name': split_name,
         'registry_asset_ref': registry_asset_ref,
         'status': 'draft',
-        'authoritative': True,
+        'authoritative': authoritative,
         'notes': args.notes,
     }], on_conflict='id')
 
@@ -991,6 +992,7 @@ def seed_snowslide_truth(args: argparse.Namespace) -> dict[str, Any]:
         'scene_count': len(upsert_rows),
         'splits': splits,
         'registry_asset_ref': registry_asset_ref,
+        'authoritative': authoritative,
         'reference_set_status': str((updated_rows[0] if updated_rows else reference_set).get('status') or 'draft'),
     }
 
@@ -1027,6 +1029,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument('--hazard-type', default='avalanche', help='Hazard type for the reference set')
     parser.add_argument('--split', default='validation', help='Deprecated fallback split when the archive does not contain validation/test split metadata')
     parser.add_argument('--notes', default='SnowSlide held-out truth seed', help='Optional registry notes')
+    parser.add_argument('--non-authoritative', action='store_true', help='Seed a draft canary/reference set without marking it authoritative')
     parser.add_argument('--validate-only', action='store_true', help='Inspect the archive and enforce the SAR-only contract without mutating storage or Supabase')
     return parser.parse_args(argv)
 

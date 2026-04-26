@@ -9,25 +9,9 @@ from backend.scripts.materialize_release_baseline_masks import materialize_basel
 
 
 class MaterializeReleaseBaselineMasksTests(unittest.TestCase):
-    @patch('backend.scripts.materialize_release_baseline_masks.activate_reference_set', return_value={'status': 'active'})
-    @patch('backend.scripts.materialize_release_baseline_masks.rest_upsert')
-    @patch('backend.scripts.materialize_release_baseline_masks.storage_upload_bytes')
-    @patch('backend.scripts.materialize_release_baseline_masks.encode_mask_geotiff', return_value=b'tiff-bytes')
-    @patch('backend.scripts.materialize_release_baseline_masks.load_scene_stack', return_value=np.array([
-        [[-20.0, -20.0], [-10.0, -10.0]],
-        [[-24.0, -24.0], [-10.0, -10.0]],
-    ], dtype=np.float32))
-    @patch('backend.scripts.materialize_release_baseline_masks.load_reference_bundle')
-    def test_materialize_baseline_masks_uploads_and_activates_reference_set(
-        self,
-        load_reference_bundle_mock,
-        load_scene_stack_mock,
-        encode_mask_geotiff_mock,
-        storage_upload_bytes_mock,
-        rest_upsert_mock,
-        activate_reference_set_mock,
-    ) -> None:
-        load_reference_bundle_mock.return_value = (
+    @staticmethod
+    def _reference_bundle() -> tuple[dict[str, object], list[dict[str, object]]]:
+        return (
             {
                 'id': 'set-1',
                 'set_key': 'snowslide-v1',
@@ -47,6 +31,26 @@ class MaterializeReleaseBaselineMasksTests(unittest.TestCase):
             }],
         )
 
+    @patch('backend.scripts.materialize_release_baseline_masks.activate_reference_set', return_value={'status': 'active'})
+    @patch('backend.scripts.materialize_release_baseline_masks.rest_upsert')
+    @patch('backend.scripts.materialize_release_baseline_masks.storage_upload_bytes')
+    @patch('backend.scripts.materialize_release_baseline_masks.encode_mask_geotiff', return_value=b'tiff-bytes')
+    @patch('backend.scripts.materialize_release_baseline_masks.load_scene_stack', return_value=np.array([
+        [[-20.0, -20.0], [-10.0, -10.0]],
+        [[-24.0, -24.0], [-10.0, -10.0]],
+    ], dtype=np.float32))
+    @patch('backend.scripts.materialize_release_baseline_masks.load_reference_bundle')
+    def test_materialize_baseline_masks_uploads_and_activates_reference_set(
+        self,
+        load_reference_bundle_mock,
+        load_scene_stack_mock,
+        encode_mask_geotiff_mock,
+        storage_upload_bytes_mock,
+        rest_upsert_mock,
+        activate_reference_set_mock,
+    ) -> None:
+        load_reference_bundle_mock.return_value = self._reference_bundle()
+
         result = materialize_baseline_masks(reference_set_key='snowslide-v1')
 
         self.assertEqual(result['status'], 'ok')
@@ -54,6 +58,34 @@ class MaterializeReleaseBaselineMasksTests(unittest.TestCase):
         storage_upload_bytes_mock.assert_called_once()
         rest_upsert_mock.assert_called_once()
         activate_reference_set_mock.assert_called_once_with('snowslide-v1')
+
+    @patch('backend.scripts.materialize_release_baseline_masks.activate_reference_set')
+    @patch('backend.scripts.materialize_release_baseline_masks.rest_upsert')
+    @patch('backend.scripts.materialize_release_baseline_masks.storage_upload_bytes')
+    @patch('backend.scripts.materialize_release_baseline_masks.encode_mask_geotiff', return_value=b'tiff-bytes')
+    @patch('backend.scripts.materialize_release_baseline_masks.load_scene_stack', return_value=np.array([
+        [[-20.0, -20.0], [-10.0, -10.0]],
+        [[-24.0, -24.0], [-10.0, -10.0]],
+    ], dtype=np.float32))
+    @patch('backend.scripts.materialize_release_baseline_masks.load_reference_bundle')
+    def test_materialize_baseline_masks_no_activate_leaves_set_in_draft(
+        self,
+        load_reference_bundle_mock,
+        _load_scene_stack_mock,
+        _encode_mask_geotiff_mock,
+        storage_upload_bytes_mock,
+        rest_upsert_mock,
+        activate_reference_set_mock,
+    ) -> None:
+        load_reference_bundle_mock.return_value = self._reference_bundle()
+
+        result = materialize_baseline_masks(reference_set_key='snowslide-v1', activate=False)
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(result['reference_set_status'], 'draft')
+        storage_upload_bytes_mock.assert_called_once()
+        rest_upsert_mock.assert_called_once()
+        activate_reference_set_mock.assert_not_called()
 
 
 if __name__ == '__main__':
