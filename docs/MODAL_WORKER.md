@@ -19,7 +19,9 @@ The target Supabase project must also contain the held-out registry tables creat
 ## In-Repo Operator Entry Points
 
 - `.github/workflows/bootstrap_pinned_gate.yml`
-  Temporary manual GitHub Actions workflow for cloud-to-cloud SnowSlide seeding when the archive is too large for local hardware. It downloads a direct Sentinel-1 SAR archive URL into the runner’s ephemeral storage, runs a strict `--validate-only` preflight, then runs `seed_snowslide_truth` and `materialize_release_baseline_masks` so the authoritative set ends `active`.
+  Temporary manual GitHub Actions workflow for cloud-to-cloud SnowSlide seeding when the archive is too large for local hardware. It downloads a truth/vector archive plus a separate Sentinel-1 VV/VH raster archive into the runner’s ephemeral storage, assembles a canonical held-out directory, runs a strict `--validate-only` preflight against that assembled directory, then runs `seed_snowslide_truth` and `materialize_release_baseline_masks` so the authoritative set ends `active`.
+- `python -m backend.scripts.assemble_seed_archive`
+  Runner-side staging CLI. It unwraps the truth archive, extracts the SAR raster archive, pairs vector truth with year-matched VV/VH GeoTIFF rasters, and emits a canonical local held-out directory for seeding.
 - `python -m backend.scripts.bootstrap_release_gate`
   Operator bootstrap CLI for the GitHub-first rollout path. It validates `.env`, syncs secrets into GitHub/Modal/Supabase, seeds the authoritative SnowSlide held-out registry from a local zip, deploys the Modal worker, seeds the DEM volume, and then stops at `refs_ready_only` until a real `SAR_UNET_MODEL_PATH` is configured.
 - `python -m backend.scripts.seed_snowslide_truth`
@@ -45,30 +47,39 @@ Trigger:
 
 Inputs:
 - `DATASET_URL` required
+- `SAR_RASTER_URL` required
 - `REFERENCE_SET_KEY` optional, defaults to `snowslide-heldout-v1`
 - `SOURCE_VERSION` optional; if blank, the workflow uses the current UTC date
 
 Security and source restrictions:
-- `DATASET_URL` must be a direct downloadable archive URL, not a record landing page
-- only SAR-compatible Sentinel-1 held-out archives are allowed
+- `DATASET_URL` must be a direct downloadable truth/vector archive URL, not a record landing page
+- `SAR_RASTER_URL` must be a direct downloadable Sentinel-1 VV/VH GeoTIFF archive URL
+- the workflow assembles both sources into one canonical local dataset before preflight
 - acceptable truth inputs are either raster truth masks (`.tif/.tiff`) or vector avalanche outlines (`.shp/.geojson/.json`) that can be rasterized against a georeferenced Sentinel-1 GeoTIFF stack or paired VV/VH GeoTIFF rasters
 - IAS/webcam/optical datasets are invalid for the pinned gate and are rejected in preflight before any storage or Supabase mutation
-- allowed hosts are fixed to:
+- allowed truth hosts are fixed to:
   - `envidat.ch`
   - `www.envidat.ch`
   - `zenodo.org`
   - `www.zenodo.org`
   - `slf.ch`
   - `www.slf.ch`
-- the workflow rejects non-`https` URLs, custom ports, embedded credentials, and non-ZIP payloads
+- allowed SAR raster hosts are fixed to:
+  - `storage.googleapis.com`
+  - `s3.amazonaws.com`
+  - `*.s3.amazonaws.com`
+  - `dataspace.copernicus.eu`
+- the workflow rejects non-`https` URLs, custom ports, embedded credentials, and non-ZIP payloads for both sources
 
 Execution sequence:
-1. download the archive into the runner workspace with quoted shell input
-2. run `python -m backend.scripts.seed_snowslide_truth --source-zip snowslide_archive.zip --validate-only ...`
-3. only if preflight returns `status=ok`, run `python -m backend.scripts.seed_snowslide_truth --source-zip snowslide_archive.zip ...`
-4. run `python -m backend.scripts.materialize_release_baseline_masks --reference-set-key ...`
-5. fail unless the preflight and both mutation JSON payloads return `status=ok` and baseline materialization returns `reference_set_status=active`
-6. clean up the downloaded archive and JSON result files in an `always()` step
+1. download `truth_archive.zip` and `sar_rasters.zip` into the runner workspace with quoted shell input
+2. verify both ZIP payloads and fail if the SAR raster archive lacks `.tif/.tiff` members
+3. run `python -m backend.scripts.assemble_seed_archive --truth-zip truth_archive.zip --sar-zip sar_rasters.zip --output-dir assembled_seed_dir`
+4. run `python -m backend.scripts.seed_snowslide_truth --source-dir assembled_seed_dir --validate-only ...`
+5. only if preflight returns `status=ok`, run `python -m backend.scripts.seed_snowslide_truth --source-dir assembled_seed_dir ...`
+6. run `python -m backend.scripts.materialize_release_baseline_masks --reference-set-key ...`
+7. fail unless the assembler, preflight, and both mutation JSON payloads return `status=ok` and baseline materialization returns `reference_set_status=active`
+8. clean up both downloaded archives, the assembled directory, and JSON result files in an `always()` step
 
 This workflow seeds authoritative truth and baseline refs only. It does **not** run held-out `sar-segment`, `evaluate_release`, promoted reruns, or `train_mtslstm`. It remains operationally paused until the operator supplies a valid SAR archive URL.
 

@@ -14,6 +14,7 @@ import shapefile
 from rasterio.io import MemoryFile
 from rasterio.transform import from_bounds
 
+from backend.scripts.assemble_seed_archive import assemble_seed_archive
 from backend.scripts.seed_snowslide_truth import (
     seed_snowslide_truth,
     validate_snowslide_archive,
@@ -187,12 +188,14 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
         *,
         source_zip: Path | None = None,
         source_url: str | None = None,
+        source_dir: Path | None = None,
         source_version: str = '2026-04-25',
         set_key: str = 'snowslide-v1',
     ) -> argparse.Namespace:
         return argparse.Namespace(
             source_url=source_url,
             source_zip=source_zip,
+            source_dir=source_dir,
             registry_member=None,
             header=[],
             timeout=300,
@@ -203,6 +206,14 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
             notes='seed run',
             validate_only=False,
         )
+
+    def _write_assembled_source_dir(self, root: Path) -> None:
+        scene_root = root / 'validation' / 'davos' / 'davos_2018'
+        scene_root.mkdir(parents=True, exist_ok=True)
+        for member_name, payload in self._shapefile_truth_members(stem='truth_mask'):
+            (scene_root / member_name).write_bytes(payload)
+        (scene_root / 'vv.tif').write_bytes(self._geotiff_bytes(np.ones((4, 4), dtype=np.float32)))
+        (scene_root / 'vh.tif').write_bytes(self._geotiff_bytes(np.zeros((4, 4), dtype=np.float32)))
 
     @patch('backend.scripts.seed_snowslide_truth.storage_upsert_json', return_value='sar-masks/heldout/snowslide/2026-04-25/reference_sets/snowslide-v1/registry.json')
     @patch('backend.scripts.seed_snowslide_truth.storage_upload_bytes')
@@ -468,6 +479,71 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
                 archive.writestr('Davos_satelliteEvaluationData.zip', inner_bytes)
 
             result = validate_snowslide_archive(self._build_args(source_zip=archive_path))
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(result['scene_count'], 1)
+
+    def test_validate_only_accepts_assembled_source_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / 'assembled_seed_dir'
+            self._write_assembled_source_dir(source_dir)
+
+            result = validate_snowslide_archive(self._build_args(source_dir=source_dir))
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(result['scene_count'], 1)
+        self.assertEqual(result['splits'], ['validation'])
+
+    @patch('backend.scripts.seed_snowslide_truth.storage_upsert_json', return_value='sar-masks/heldout/snowslide/2026-04-25/reference_sets/snowslide-v1/registry.json')
+    @patch('backend.scripts.seed_snowslide_truth.storage_upload_bytes')
+    @patch('backend.scripts.seed_snowslide_truth.rest_upsert')
+    def test_seed_snowslide_truth_accepts_assembled_source_dir(
+        self,
+        rest_upsert_mock,
+        storage_upload_bytes_mock,
+        _storage_upsert_json_mock,
+    ) -> None:
+        rest_upsert_mock.side_effect = [
+            [{'id': 'set-1', 'set_key': 'snowslide-v1', 'status': 'draft'}],
+            [{'id': 'item-1'}],
+            [{'id': 'set-1', 'set_key': 'snowslide-v1', 'status': 'draft'}],
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / 'assembled_seed_dir'
+            self._write_assembled_source_dir(source_dir)
+
+            result = seed_snowslide_truth(self._build_args(source_dir=source_dir))
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(result['scene_count'], 1)
+        self.assertEqual(storage_upload_bytes_mock.call_count, 2)
+
+    def test_validate_only_accepts_directory_assembled_from_truth_and_sar_archives(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            truth_archive = tmp_path / 'truth.zip'
+            sar_archive = tmp_path / 'sar.zip'
+            assembled_dir = tmp_path / 'assembled_seed_dir'
+
+            truth_members = self._shapefile_truth_members(stem='DAvalMap_2018_perimeter')
+            inner_truth_payload = io.BytesIO()
+            with zipfile.ZipFile(inner_truth_payload, 'w') as inner_archive:
+                for member_name, payload in truth_members:
+                    inner_archive.writestr(member_name, payload)
+                inner_archive.writestr('S1_2018_perimeter.shp', truth_members[0][1])
+            with zipfile.ZipFile(truth_archive, 'w') as outer_archive:
+                outer_archive.writestr('DataDescription_EvalSatMappingMethods.pdf', b'%PDF-1.4')
+                outer_archive.writestr('Davos_satelliteEvaluationData.zip', inner_truth_payload.getvalue())
+            with zipfile.ZipFile(sar_archive, 'w') as archive:
+                archive.writestr('S1_2018_vv.tif', self._geotiff_bytes(np.ones((4, 4), dtype=np.float32)))
+                archive.writestr('S1_2018_vh.tif', self._geotiff_bytes(np.zeros((4, 4), dtype=np.float32)))
+
+            assemble_seed_archive(argparse.Namespace(
+                truth_zip=truth_archive,
+                sar_zip=sar_archive,
+                output_dir=assembled_dir,
+            ))
+            result = validate_snowslide_archive(self._build_args(source_dir=assembled_dir))
 
         self.assertEqual(result['status'], 'ok')
         self.assertEqual(result['scene_count'], 1)

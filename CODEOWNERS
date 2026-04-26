@@ -4,6 +4,7 @@
 /backend/sar_release_manifest.py @sanjabh1103
 /backend/sar_release_promote.py @sanjabh1103
 /backend/common/sar_release_refs.py @sanjabh1103
+/backend/scripts/assemble_seed_archive.py @sanjabh1103
 /backend/scripts/seed_snowslide_truth.py @sanjabh1103
 /backend/scripts/materialize_release_baseline_masks.py @sanjabh1103
 /supabase/functions/trigger-job/ @sanjabh1103

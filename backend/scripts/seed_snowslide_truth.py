@@ -67,6 +67,44 @@ class ArchivedScene:
     optical_members: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class _SourceInfo:
+    is_dir_value: bool
+
+    def is_dir(self) -> bool:
+        return self.is_dir_value
+
+
+class _DirectorySource:
+    def __init__(self, root: Path) -> None:
+        if not root.exists():
+            raise ValueError(f'source directory "{root}" does not exist')
+        if not root.is_dir():
+            raise ValueError(f'source directory "{root}" is not a directory')
+        self.root = root
+        self._members = sorted(
+            path.relative_to(self.root).as_posix()
+            for path in self.root.rglob('*')
+        )
+
+    def namelist(self) -> list[str]:
+        return list(self._members)
+
+    def getinfo(self, member_name: str) -> _SourceInfo:
+        normalized = member_name.rstrip('/')
+        path = self.root / normalized
+        if not path.exists():
+            raise KeyError(member_name)
+        return _SourceInfo(is_dir_value=path.is_dir())
+
+    def read(self, member_name: str) -> bytes:
+        normalized = member_name.rstrip('/')
+        path = self.root / normalized
+        if not path.exists() or not path.is_file():
+            raise KeyError(member_name)
+        return path.read_bytes()
+
+
 def _normalize_split(value: str) -> str:
     split = value.strip().lower()
     if split == 'val':
@@ -140,11 +178,17 @@ def _unwrap_nested_data_archive(
 
 
 @contextlib.contextmanager
-def _open_archive_from_args(args: argparse.Namespace) -> Any:
+def _open_source_from_args(args: argparse.Namespace) -> Any:
     temp_archive_path: Path | None = None
-    if args.source_zip:
+    source_dir = getattr(args, 'source_dir', None)
+    source_zip = getattr(args, 'source_zip', None)
+    source_url = getattr(args, 'source_url', None)
+    if source_dir:
+        yield _DirectorySource(source_dir)
+        return
+    if source_zip:
         archive_path = args.source_zip
-    elif args.source_url:
+    elif source_url:
         temp_archive_path = _download_source_archive_to_tempfile(
             source_url=args.source_url,
             headers=_normalize_headers(args.header or []),
@@ -152,7 +196,7 @@ def _open_archive_from_args(args: argparse.Namespace) -> Any:
         )
         archive_path = temp_archive_path
     else:
-        raise ValueError('Provide either --source-url or --source-zip')
+        raise ValueError('Provide exactly one of --source-url, --source-zip, or --source-dir')
 
     try:
         with zipfile.ZipFile(archive_path) as outer_archive:
@@ -865,7 +909,7 @@ def _upload_scene_assets(
 
 
 def seed_snowslide_truth(args: argparse.Namespace) -> dict[str, Any]:
-    with _open_archive_from_args(args) as archive:
+    with _open_source_from_args(args) as archive:
         scenes, splits, split_name = _inspect_archive(
             archive,
             registry_member=args.registry_member,
@@ -913,7 +957,7 @@ def seed_snowslide_truth(args: argparse.Namespace) -> dict[str, Any]:
         'source_version': args.source_version,
         'hazard_type': args.hazard_type,
         'scene_count': len(upsert_rows),
-        'generated_from': args.source_url or str(args.source_zip),
+        'generated_from': args.source_url or str(getattr(args, 'source_zip', '') or getattr(args, 'source_dir', '')),
         'scenes': registry_rows,
     }
     registry_asset_ref = storage_upsert_json(
@@ -944,7 +988,7 @@ def seed_snowslide_truth(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def validate_snowslide_archive(args: argparse.Namespace) -> dict[str, Any]:
-    with _open_archive_from_args(args) as archive:
+    with _open_source_from_args(args) as archive:
         scenes, splits, split_name = _inspect_archive(
             archive,
             registry_member=args.registry_member,
@@ -965,6 +1009,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     source_group = parser.add_mutually_exclusive_group(required=True)
     source_group.add_argument('--source-url', help='Operator-provided SnowSlide archive URL')
     source_group.add_argument('--source-zip', type=Path, help='Local SnowSlide archive zip path')
+    source_group.add_argument('--source-dir', type=Path, help='Local assembled held-out directory path')
     parser.add_argument('--registry-member', help='Optional JSON/CSV member inside the archive describing scenes')
     parser.add_argument('--header', action='append', default=[], help='Optional HTTP header for --source-url, e.g. "Authorization: Bearer ..."')
     parser.add_argument('--timeout', type=int, default=300, help='Download timeout in seconds for --source-url')

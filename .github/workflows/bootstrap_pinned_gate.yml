@@ -4,7 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       DATASET_URL:
-        description: 'Direct Sentinel-1 SAR held-out archive URL on an allowlisted host'
+        description: 'Direct truth/vector held-out archive URL on an allowlisted academic host'
+        required: true
+        type: string
+      SAR_RASTER_URL:
+        description: 'Direct Sentinel-1 VV/VH GeoTIFF archive URL on an allowlisted cloud or EO host'
         required: true
         type: string
       REFERENCE_SET_KEY:
@@ -35,6 +39,7 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       DATASET_URL: ${{ inputs.DATASET_URL }}
+      SAR_RASTER_URL: ${{ inputs.SAR_RASTER_URL }}
       REFERENCE_SET_KEY: ${{ inputs.REFERENCE_SET_KEY }}
       SOURCE_VERSION_INPUT: ${{ inputs.SOURCE_VERSION }}
     steps:
@@ -75,14 +80,14 @@ jobs:
           fi
           echo "value=${value}" >> "${GITHUB_OUTPUT}"
 
-      - name: Validate dataset URL allowlist
+      - name: Validate truth and SAR URL allowlists
         run: |
           set -euo pipefail
           python - <<'PY'
           import os
           from urllib.parse import urlparse
 
-          allowed_hosts = {
+          truth_allowed_hosts = {
               'envidat.ch',
               'www.envidat.ch',
               'zenodo.org',
@@ -90,55 +95,92 @@ jobs:
               'slf.ch',
               'www.slf.ch',
           }
-          url = os.environ['DATASET_URL']
-          parsed = urlparse(url)
-          if parsed.scheme != 'https':
-              raise SystemExit(f'DATASET_URL must use https: {url}')
-          if parsed.hostname not in allowed_hosts:
-              raise SystemExit(
-                  f'DATASET_URL host must be one of {sorted(allowed_hosts)}; got {parsed.hostname!r}'
-              )
-          if parsed.username or parsed.password or parsed.port:
-              raise SystemExit('DATASET_URL must not include credentials or a custom port')
-          if not parsed.path or parsed.path.endswith('/'):
-              raise SystemExit('DATASET_URL must point to a direct archive file, not a landing page')
-          print(f'validated host: {parsed.hostname}')
+          raster_allowed_hosts = {
+              'storage.googleapis.com',
+              's3.amazonaws.com',
+              'dataspace.copernicus.eu',
+          }
+          raster_allowed_suffixes = ('.s3.amazonaws.com',)
+
+          def validate_url(env_name: str, *, exact_hosts: set[str], host_suffixes: tuple[str, ...] = ()) -> None:
+              url = os.environ[env_name]
+              parsed = urlparse(url)
+              if parsed.scheme != 'https':
+                  raise SystemExit(f'{env_name} must use https: {url}')
+              hostname = parsed.hostname or ''
+              if hostname not in exact_hosts and not any(hostname.endswith(suffix) for suffix in host_suffixes):
+                  raise SystemExit(
+                      f'{env_name} host must be one of {sorted(exact_hosts)} or end with {host_suffixes}; got {hostname!r}'
+                  )
+              if parsed.username or parsed.password or parsed.port:
+                  raise SystemExit(f'{env_name} must not include credentials or a custom port')
+              if not parsed.path or parsed.path.endswith('/'):
+                  raise SystemExit(f'{env_name} must point to a direct archive file, not a landing page')
+              print(f'validated {env_name}: {hostname}')
+
+          validate_url('DATASET_URL', exact_hosts=truth_allowed_hosts)
+          validate_url('SAR_RASTER_URL', exact_hosts=raster_allowed_hosts, host_suffixes=raster_allowed_suffixes)
           PY
 
-      - name: Download Sentinel-1 SAR archive
+      - name: Download truth/vector archive
         run: |
           set -euo pipefail
-          wget "${DATASET_URL}" -O snowslide_archive.zip
+          wget "${DATASET_URL}" -O truth_archive.zip
 
-      - name: Verify ZIP payload
+      - name: Download Sentinel-1 VV/VH raster archive
+        run: |
+          set -euo pipefail
+          wget "${SAR_RASTER_URL}" -O sar_rasters.zip
+
+      - name: Verify ZIP payloads
         run: |
           set -euo pipefail
           python - <<'PY'
           import zipfile
           from pathlib import Path
 
-          archive = Path('snowslide_archive.zip')
-          if not archive.exists():
-              raise SystemExit('snowslide_archive.zip was not downloaded')
-          if not zipfile.is_zipfile(archive):
-              raise SystemExit('downloaded payload is not a valid ZIP archive; use a direct dataset file URL')
-          print('zip payload ok')
+          truth_archive = Path('truth_archive.zip')
+          sar_archive = Path('sar_rasters.zip')
+          if not truth_archive.exists():
+              raise SystemExit('truth_archive.zip was not downloaded')
+          if not sar_archive.exists():
+              raise SystemExit('sar_rasters.zip was not downloaded')
+          if not zipfile.is_zipfile(truth_archive):
+              raise SystemExit('downloaded truth payload is not a valid ZIP archive; use a direct dataset file URL')
+          if not zipfile.is_zipfile(sar_archive):
+              raise SystemExit('downloaded SAR raster payload is not a valid ZIP archive; use a direct dataset file URL')
+          with zipfile.ZipFile(sar_archive) as archive:
+              tif_members = [
+                  name for name in archive.namelist()
+                  if Path(name).suffix.lower() in {'.tif', '.tiff'}
+              ]
+          if not tif_members:
+              raise SystemExit('SAR raster archive does not contain any .tif/.tiff members')
+          print('zip payloads ok')
           PY
 
-      - name: Preflight Sentinel-1 SAR archive
+      - name: Assemble truth and Sentinel-1 SAR inputs
+        run: |
+          set -euo pipefail
+          python -m backend.scripts.assemble_seed_archive \
+            --truth-zip truth_archive.zip \
+            --sar-zip sar_rasters.zip \
+            --output-dir assembled_seed_dir | tee assemble_result.json
+
+      - name: Preflight assembled Sentinel-1 SAR dataset
         run: |
           set -euo pipefail
           python -m backend.scripts.seed_snowslide_truth \
-            --source-zip snowslide_archive.zip \
+            --source-dir assembled_seed_dir \
             --set-key "${REFERENCE_SET_KEY}" \
             --source-version "${{ steps.resolve_source_version.outputs.value }}" \
             --validate-only | tee validate_result.json
 
-      - name: Seed authoritative Sentinel-1 SAR refs
+      - name: Seed authoritative assembled Sentinel-1 SAR refs
         run: |
           set -euo pipefail
           python -m backend.scripts.seed_snowslide_truth \
-            --source-zip snowslide_archive.zip \
+            --source-dir assembled_seed_dir \
             --set-key "${REFERENCE_SET_KEY}" \
             --source-version "${{ steps.resolve_source_version.outputs.value }}" | tee seed_result.json
 
@@ -155,12 +197,15 @@ jobs:
           import json
           from pathlib import Path
 
+          assembled = json.loads(Path('assemble_result.json').read_text(encoding='utf-8'))
           validate = json.loads(Path('validate_result.json').read_text(encoding='utf-8'))
           seed = json.loads(Path('seed_result.json').read_text(encoding='utf-8'))
           baseline = json.loads(Path('baseline_result.json').read_text(encoding='utf-8'))
 
+          if assembled.get('status') != 'ok':
+              raise SystemExit(f'assemble_seed_archive failed: {assembled}')
           if validate.get('status') != 'ok':
-              raise SystemExit(f'Sentinel-1 SAR archive preflight failed: {validate}')
+              raise SystemExit(f'assembled Sentinel-1 SAR dataset preflight failed: {validate}')
           if seed.get('status') != 'ok':
               raise SystemExit(f'seed_snowslide_truth failed: {seed}')
           if baseline.get('status') != 'ok':
@@ -172,6 +217,7 @@ jobs:
               json.dumps(
                   {
                       'reference_set_key': baseline.get('reference_set_key'),
+                      'assembled_scene_count': assembled.get('scene_count'),
                       'scene_count': baseline.get('scene_count'),
                       'reference_set_status': baseline.get('reference_set_status'),
                   },
@@ -184,4 +230,4 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          rm -rf snowslide_archive.zip validate_result.json seed_result.json baseline_result.json
+          rm -rf truth_archive.zip sar_rasters.zip assembled_seed_dir assemble_result.json validate_result.json seed_result.json baseline_result.json

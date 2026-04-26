@@ -54,8 +54,11 @@ class GitHubRolloutPolicyTests(unittest.TestCase):
         self.assertNotIn('\npush:\n', bootstrap_gate)
         self.assertIn('group: bootstrap-pinned-gate', bootstrap_gate)
         self.assertIn('DATASET_URL:', bootstrap_gate)
-        self.assertIn('Direct Sentinel-1 SAR held-out archive URL on an allowlisted host', bootstrap_gate)
-        self.assertIn("wget \"${DATASET_URL}\" -O snowslide_archive.zip", bootstrap_gate)
+        self.assertIn('SAR_RASTER_URL:', bootstrap_gate)
+        self.assertIn('Direct truth/vector held-out archive URL on an allowlisted academic host', bootstrap_gate)
+        self.assertIn('Direct Sentinel-1 VV/VH GeoTIFF archive URL on an allowlisted cloud or EO host', bootstrap_gate)
+        self.assertIn("wget \"${DATASET_URL}\" -O truth_archive.zip", bootstrap_gate)
+        self.assertIn("wget \"${SAR_RASTER_URL}\" -O sar_rasters.zip", bootstrap_gate)
         for host in (
             'envidat.ch',
             'www.envidat.ch',
@@ -63,11 +66,17 @@ class GitHubRolloutPolicyTests(unittest.TestCase):
             'www.zenodo.org',
             'slf.ch',
             'www.slf.ch',
+            'storage.googleapis.com',
+            's3.amazonaws.com',
+            'dataspace.copernicus.eu',
+            ".s3.amazonaws.com",
         ):
             self.assertIn(host, bootstrap_gate)
+        self.assertIn('backend.scripts.assemble_seed_archive', bootstrap_gate)
         self.assertIn('backend.scripts.seed_snowslide_truth', bootstrap_gate)
         self.assertIn('--validate-only', bootstrap_gate)
-        self.assertIn('Preflight Sentinel-1 SAR archive', bootstrap_gate)
+        self.assertIn('--source-dir assembled_seed_dir', bootstrap_gate)
+        self.assertIn('Preflight assembled Sentinel-1 SAR dataset', bootstrap_gate)
         self.assertIn('backend.scripts.materialize_release_baseline_masks', bootstrap_gate)
 
     def test_trigger_job_admin_path_requires_supabase_auth_and_allowlists(self) -> None:
@@ -89,6 +98,7 @@ class GitHubRolloutPolicyTests(unittest.TestCase):
             '/backend/sar_release_manifest.py',
             '/backend/sar_release_promote.py',
             '/backend/common/sar_release_refs.py',
+            '/backend/scripts/assemble_seed_archive.py',
             '/backend/scripts/seed_snowslide_truth.py',
             '/backend/scripts/materialize_release_baseline_masks.py',
             '/supabase/functions/trigger-job/',
