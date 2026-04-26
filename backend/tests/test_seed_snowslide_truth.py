@@ -10,6 +10,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
+import shapefile
+from rasterio.io import MemoryFile
+from rasterio.transform import from_bounds
 
 from backend.scripts.seed_snowslide_truth import (
     seed_snowslide_truth,
@@ -41,7 +44,7 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
                 scene_id = str(scene['scene_id'])
                 root = f'{split}/{region_key}/{scene_id}'
                 archive.writestr(
-                    f'{root}/truth_mask.tif',
+                    f'{root}/{scene.get("truth_member_name", "truth_mask.tif")}',
                     scene.get('truth_payload', b'geotiff-bytes'),
                 )
 
@@ -62,6 +65,8 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
 
                 for optical_name, optical_payload in scene.get('optical_members', []):
                     archive.writestr(f'{root}/{optical_name}', optical_payload)
+                for member_name, member_payload in scene.get('extra_members', []):
+                    archive.writestr(f'{root}/{member_name}', member_payload)
             archive.writestr('metadata/readme.txt', 'not a registry')
 
     @staticmethod
@@ -86,7 +91,7 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
                 scene_id = str(scene['scene_id'])
                 root = f'{split}/{region_key}/{scene_id}'
                 archive.writestr(
-                    f'{root}/truth_mask.tif',
+                    f'{root}/{scene.get("truth_member_name", "truth_mask.tif")}',
                     scene.get('truth_payload', b'geotiff-bytes'),
                 )
                 stack_array = scene.get('stack_array')
@@ -103,8 +108,79 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
                     archive.writestr(f'{root}/vh.npy', vh_payload.getvalue())
                 for optical_name, optical_payload in scene.get('optical_members', []):
                     archive.writestr(f'{root}/{optical_name}', optical_payload)
+                for member_name, member_payload in scene.get('extra_members', []):
+                    archive.writestr(f'{root}/{member_name}', member_payload)
             archive.writestr('metadata/readme.txt', 'not a registry')
         return payload.getvalue()
+
+    @staticmethod
+    def _geotiff_bytes(
+        array: np.ndarray,
+        *,
+        bbox: tuple[float, float, float, float] = (-106.6, 39.4, -106.4, 39.6),
+    ) -> bytes:
+        data = np.asarray(array, dtype=np.float32)
+        if data.ndim == 2:
+            data = data[np.newaxis, ...]
+        _, height, width = data.shape
+        transform = from_bounds(*bbox, width=width, height=height)
+        with MemoryFile() as memory_file:
+            with memory_file.open(
+                driver='GTiff',
+                width=width,
+                height=height,
+                count=int(data.shape[0]),
+                dtype='float32',
+                crs='EPSG:4326',
+                transform=transform,
+            ) as dataset:
+                dataset.write(data)
+            return memory_file.read()
+
+    @staticmethod
+    def _geojson_truth_payload() -> bytes:
+        return json.dumps({
+            'type': 'FeatureCollection',
+            'features': [{
+                'type': 'Feature',
+                'properties': {'id': 'truth-1'},
+                'geometry': {
+                    'type': 'Polygon',
+                    'coordinates': [[
+                        [-106.60, 39.40],
+                        [-106.60, 39.52],
+                        [-106.48, 39.52],
+                        [-106.48, 39.40],
+                        [-106.60, 39.40],
+                    ]],
+                },
+            }],
+        }).encode('utf-8')
+
+    @staticmethod
+    def _shapefile_truth_members(*, stem: str = 'truth_mask') -> list[tuple[str, bytes]]:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            shp_path = root / f'{stem}.shp'
+            with shapefile.Writer(str(shp_path)) as writer:
+                writer.field('id', 'C')
+                writer.poly([[
+                    [-106.60, 39.40],
+                    [-106.60, 39.52],
+                    [-106.48, 39.52],
+                    [-106.48, 39.40],
+                    [-106.60, 39.40],
+                ]])
+                writer.record('truth-1')
+            (root / f'{stem}.prj').write_text(
+                'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],'
+                'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]',
+                encoding='utf-8',
+            )
+            members: list[tuple[str, bytes]] = []
+            for suffix in ('.shp', '.shx', '.dbf', '.prj'):
+                members.append((f'{stem}{suffix}', (root / f'{stem}{suffix}').read_bytes()))
+            return members
 
     @staticmethod
     def _build_args(
@@ -330,6 +406,113 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
         storage_upload_bytes_mock.assert_not_called()
         storage_upsert_json_mock.assert_not_called()
 
+    @patch('backend.scripts.seed_snowslide_truth.storage_upsert_json')
+    @patch('backend.scripts.seed_snowslide_truth.storage_upload_bytes')
+    @patch('backend.scripts.seed_snowslide_truth.rest_upsert')
+    def test_validate_only_accepts_geojson_truth_with_geotiff_sar_stack(
+        self,
+        rest_upsert_mock,
+        storage_upload_bytes_mock,
+        storage_upsert_json_mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            archive_path = Path(tmpdir) / 'snowslide.zip'
+            self._write_archive(
+                archive_path,
+                scenes=[{
+                    'split': 'validation',
+                    'region_key': 'davos',
+                    'scene_id': 'S1A_001',
+                    'truth_member_name': 'truth_mask.geojson',
+                    'truth_payload': self._geojson_truth_payload(),
+                    'stack_array': None,
+                    'extra_members': [
+                        ('stack.tif', self._geotiff_bytes(np.stack([
+                            np.ones((4, 4), dtype=np.float32),
+                            np.zeros((4, 4), dtype=np.float32),
+                        ], axis=0))),
+                    ],
+                }],
+            )
+            args = self._build_args(source_zip=archive_path)
+
+            result = validate_snowslide_archive(args)
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(result['scene_count'], 1)
+        rest_upsert_mock.assert_not_called()
+        storage_upload_bytes_mock.assert_not_called()
+        storage_upsert_json_mock.assert_not_called()
+
+    def test_validate_only_unwraps_nested_dataset_zip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            archive_path = Path(tmpdir) / 'outer.zip'
+            inner_bytes = self._build_archive_bytes(
+                scenes=[{
+                    'split': 'validation',
+                    'region_key': 'davos',
+                    'scene_id': 'S1A_001',
+                    'truth_member_name': 'truth_mask.geojson',
+                    'truth_payload': self._geojson_truth_payload(),
+                    'stack_array': None,
+                    'extra_members': [
+                        ('stack.tif', self._geotiff_bytes(np.stack([
+                            np.ones((4, 4), dtype=np.float32),
+                            np.zeros((4, 4), dtype=np.float32),
+                        ], axis=0))),
+                    ],
+                }],
+            )
+            with zipfile.ZipFile(archive_path, 'w') as archive:
+                archive.writestr('DataDescription_EvalSatMappingMethods.pdf', b'%PDF-1.4')
+                archive.writestr('Davos_satelliteEvaluationData.zip', inner_bytes)
+
+            result = validate_snowslide_archive(self._build_args(source_zip=archive_path))
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(result['scene_count'], 1)
+
+    @patch('backend.scripts.seed_snowslide_truth.storage_upsert_json', return_value='sar-masks/heldout/snowslide/2026-04-25/reference_sets/snowslide-v1/registry.json')
+    @patch('backend.scripts.seed_snowslide_truth.storage_upload_bytes')
+    @patch('backend.scripts.seed_snowslide_truth.rest_upsert')
+    def test_seed_snowslide_truth_rasterizes_shapefile_truth_against_geotiff_vv_vh(
+        self,
+        rest_upsert_mock,
+        storage_upload_bytes_mock,
+        _storage_upsert_json_mock,
+    ) -> None:
+        rest_upsert_mock.side_effect = [
+            [{'id': 'set-1', 'set_key': 'snowslide-v1', 'status': 'draft'}],
+            [{'id': 'item-1'}],
+            [{'id': 'set-1', 'set_key': 'snowslide-v1', 'status': 'draft'}],
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            archive_path = Path(tmpdir) / 'snowslide.zip'
+            self._write_archive(
+                archive_path,
+                scenes=[{
+                    'split': 'validation',
+                    'region_key': 'davos',
+                    'scene_id': 'S1A_001',
+                    'truth_member_name': 'truth_mask.shp',
+                    'truth_payload': self._shapefile_truth_members()[0][1],
+                    'stack_array': None,
+                    'extra_members': self._shapefile_truth_members()[1:] + [
+                        ('vv.tif', self._geotiff_bytes(np.ones((4, 4), dtype=np.float32))),
+                        ('vh.tif', self._geotiff_bytes(np.zeros((4, 4), dtype=np.float32))),
+                    ],
+                }],
+            )
+            args = self._build_args(source_zip=archive_path)
+
+            result = seed_snowslide_truth(args)
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(storage_upload_bytes_mock.call_count, 2)
+        truth_upload = storage_upload_bytes_mock.call_args_list[0].kwargs
+        self.assertEqual(truth_upload['content_type'], 'image/tiff')
+        self.assertGreater(len(truth_upload['payload']), 0)
+
     def test_validate_only_rejects_optical_webcam_archives(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             archive_path = Path(tmpdir) / 'snowslide.zip'
@@ -382,6 +565,40 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, 'stack_member or both vv_member and vh_member'):
                 validate_snowslide_archive(args)
+
+    def test_validate_only_rejects_vector_truth_without_geotiff_sar_grid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            archive_path = Path(tmpdir) / 'snowslide.zip'
+            self._write_archive(
+                archive_path,
+                scenes=[{
+                    'split': 'validation',
+                    'region_key': 'davos',
+                    'scene_id': 'S1A_001',
+                    'truth_member_name': 'truth_mask.geojson',
+                    'truth_payload': self._geojson_truth_payload(),
+                    'stack_array': np.ones((2, 4, 4), dtype=np.float32),
+                }],
+            )
+            args = self._build_args(source_zip=archive_path)
+
+            with self.assertRaisesRegex(ValueError, 'vector truth requires a georeferenced SAR raster grid|not a GeoTIFF'):
+                validate_snowslide_archive(args)
+
+    def test_validate_only_rejects_exact_envidat_vector_record_without_sar_rasters(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            archive_path = Path(tmpdir) / 'outer.zip'
+            davos_members = self._shapefile_truth_members(stem='DAvalMap_2018_perimeter')
+            inner_payload = io.BytesIO()
+            with zipfile.ZipFile(inner_payload, 'w') as inner_archive:
+                for member_name, payload in davos_members:
+                    inner_archive.writestr(member_name, payload)
+            with zipfile.ZipFile(archive_path, 'w') as outer_archive:
+                outer_archive.writestr('DataDescription_EvalSatMappingMethods.pdf', b'%PDF-1.4')
+                outer_archive.writestr('Davos_satelliteEvaluationData.zip', inner_payload.getvalue())
+
+            with self.assertRaisesRegex(ValueError, 'missing paired GeoTIFF VV/VH members|georeferenced SAR raster grid'):
+                validate_snowslide_archive(self._build_args(source_zip=archive_path))
 
 
 if __name__ == '__main__':

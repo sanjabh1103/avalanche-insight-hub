@@ -27,9 +27,20 @@ from backend.common.supabase_io import rest_upsert
 from backend.sar_unet_worker import _normalize_stack
 
 try:  # pragma: no cover - optional dependency at runtime
+    from rasterio.crs import CRS
+    from rasterio.features import rasterize
     from rasterio.io import MemoryFile
+    from rasterio.warp import transform_geom
 except Exception:  # pragma: no cover - optional dependency
     MemoryFile = None
+    CRS = None
+    rasterize = None
+    transform_geom = None
+
+try:  # pragma: no cover - optional dependency at runtime
+    import shapefile
+except Exception:  # pragma: no cover - optional dependency
+    shapefile = None
 
 
 SUPPORTED_SPLITS = {'validation', 'val', 'test'}
@@ -37,6 +48,8 @@ TRUTH_SUFFIXES = {'.tif', '.tiff'}
 STACK_SUFFIXES = {'.npz', '.npy'}
 SAR_STACK_SUFFIXES = STACK_SUFFIXES | TRUTH_SUFFIXES
 OPTICAL_SUFFIXES = {'.jpg', '.jpeg', '.png'}
+VECTOR_TRUTH_SUFFIXES = {'.geojson', '.json', '.shp'}
+DOCUMENT_SUFFIXES = {'.md', '.pdf', '.txt'}
 
 
 @dataclass(frozen=True)
@@ -104,6 +117,28 @@ def _download_source_archive_to_tempfile(
     return Path(handle.name)
 
 
+def _unwrap_nested_data_archive(
+    archive: zipfile.ZipFile,
+) -> tuple[zipfile.ZipFile, list[zipfile.ZipFile]]:
+    current = archive
+    nested_archives: list[zipfile.ZipFile] = []
+    while True:
+        member_names = [
+            name for name in current.namelist()
+            if not current.getinfo(name).is_dir()
+        ]
+        zip_members = [name for name in member_names if Path(name).suffix.lower() == '.zip']
+        non_zip_members = [name for name in member_names if Path(name).suffix.lower() != '.zip']
+        if len(zip_members) != 1:
+            break
+        if any(Path(name).suffix.lower() not in DOCUMENT_SUFFIXES for name in non_zip_members):
+            break
+        nested_archive = zipfile.ZipFile(io.BytesIO(current.read(zip_members[0])))
+        nested_archives.append(nested_archive)
+        current = nested_archive
+    return current, nested_archives
+
+
 @contextlib.contextmanager
 def _open_archive_from_args(args: argparse.Namespace) -> Any:
     temp_archive_path: Path | None = None
@@ -120,8 +155,13 @@ def _open_archive_from_args(args: argparse.Namespace) -> Any:
         raise ValueError('Provide either --source-url or --source-zip')
 
     try:
-        with zipfile.ZipFile(archive_path) as archive:
-            yield archive
+        with zipfile.ZipFile(archive_path) as outer_archive:
+            archive, nested_archives = _unwrap_nested_data_archive(outer_archive)
+            try:
+                yield archive
+            finally:
+                for nested_archive in reversed(nested_archives):
+                    nested_archive.close()
     finally:
         if temp_archive_path is not None:
             temp_archive_path.unlink(missing_ok=True)
@@ -269,19 +309,66 @@ def _infer_scenes_from_archive(
         })
         lowered = path.name.lower()
         suffix = path.suffix.lower()
-        if suffix in TRUTH_SUFFIXES and any(token in lowered for token in ('truth', 'mask', 'label', 'target')):
+        if suffix in (TRUTH_SUFFIXES | VECTOR_TRUTH_SUFFIXES) and any(
+            token in lowered for token in ('truth', 'mask', 'label', 'target', 'groundtruth', 'davalmap', 'reference')
+        ):
             entry['truth_member'] = member_name
-        elif suffix in STACK_SUFFIXES and 'stack' in lowered:
+        elif suffix in SAR_STACK_SUFFIXES and 'stack' in lowered:
             entry['stack_member'] = member_name
-        elif suffix in STACK_SUFFIXES and re.search(r'(^|[_-])vv([_.-]|$)', lowered):
+        elif suffix in SAR_STACK_SUFFIXES and re.search(r'(^|[_-])vv([_.-]|$)', lowered):
             entry['vv_member'] = member_name
-        elif suffix in STACK_SUFFIXES and re.search(r'(^|[_-])vh([_.-]|$)', lowered):
+        elif suffix in SAR_STACK_SUFFIXES and re.search(r'(^|[_-])vh([_.-]|$)', lowered):
             entry['vh_member'] = member_name
         elif suffix in OPTICAL_SUFFIXES:
             entry['optical_members'].append(member_name)
     scenes = [_normalize_scene_record(entry, default_split=normalized_default_split) for entry in grouped.values()]
     if not scenes:
         raise ValueError('archive does not contain an inferable validation/test split with truth and stack refs')
+    return scenes
+
+
+def _infer_flat_validation_archive_scenes(
+    archive: zipfile.ZipFile,
+    *,
+    default_split: str | None = None,
+) -> list[ArchivedScene]:
+    split = _normalize_split(default_split or 'validation')
+    lookup = _member_name_lookup(archive)
+    truth_members: list[tuple[str, str]] = []
+    for member_name in archive.namelist():
+        match = re.match(r'(?i)^davalmap_(\d{4})_perimeter\.shp$', PurePosixPath(member_name).name)
+        if match:
+            truth_members.append((match.group(1), member_name))
+    scenes: list[ArchivedScene] = []
+    for year, truth_member in truth_members:
+        stack_member = (
+            lookup.get(f'stack_{year}.tif')
+            or lookup.get(f's1_{year}_stack.tif')
+            or lookup.get(f's1_{year}_composite.tif')
+        )
+        vv_member = (
+            lookup.get(f'vv_{year}.tif')
+            or lookup.get(f's1_{year}_vv.tif')
+            or lookup.get(f's1_{year}_vv_db.tif')
+        )
+        vh_member = (
+            lookup.get(f'vh_{year}.tif')
+            or lookup.get(f's1_{year}_vh.tif')
+            or lookup.get(f's1_{year}_vh_db.tif')
+        )
+        scenes.append(ArchivedScene(
+            external_scene_id=f'davos_{year}',
+            split=split,
+            region_key='davos',
+            truth_member=truth_member,
+            stack_member=stack_member,
+            vv_member=vv_member,
+            vh_member=vh_member,
+            metadata={
+                'source_year': year,
+                'flat_archive_layout': True,
+            },
+        ))
     return scenes
 
 
@@ -299,7 +386,13 @@ def _load_archive_scenes(
     if len(candidates) == 1:
         records = _read_registry_member(archive, candidates[0])
         return [_normalize_scene_record(record, default_split=normalized_default_split) for record in records]
-    return _infer_scenes_from_archive(archive, default_split=normalized_default_split)
+    try:
+        return _infer_scenes_from_archive(archive, default_split=normalized_default_split)
+    except ValueError:
+        flat_scenes = _infer_flat_validation_archive_scenes(archive, default_split=normalized_default_split)
+        if flat_scenes:
+            return flat_scenes
+        raise
 
 
 def _load_array_from_member_payload(payload: bytes, suffix: str) -> np.ndarray:
@@ -331,6 +424,231 @@ def _single_band_array(array: np.ndarray, *, scene: ArchivedScene, member_name: 
     )
 
 
+def _member_name_lookup(archive: zipfile.ZipFile) -> dict[str, str]:
+    return {name.lower(): name for name in archive.namelist()}
+
+
+def _resolve_archive_member(
+    archive: zipfile.ZipFile,
+    member_name: str,
+) -> str | None:
+    return _member_name_lookup(archive).get(member_name.lower())
+
+
+def _load_stack_grid_from_geotiff_member(
+    archive: zipfile.ZipFile,
+    member_name: str,
+) -> tuple[np.ndarray, tuple[int, int], Any, Any]:
+    if MemoryFile is None:
+        raise RuntimeError('rasterio is required to inspect GeoTIFF SAR stack members')
+    with MemoryFile(archive.read(member_name)) as memory_file:
+        with memory_file.open() as dataset:
+            return (
+                np.asarray(dataset.read(), dtype=np.float32),
+                (int(dataset.height), int(dataset.width)),
+                dataset.transform,
+                dataset.crs,
+            )
+
+
+def _stack_raster_grid_for_vector_truth(
+    archive: zipfile.ZipFile,
+    scene: ArchivedScene,
+) -> tuple[tuple[int, int], Any, Any]:
+    if scene.stack_member:
+        stack_suffix = Path(scene.stack_member).suffix.lower()
+        if stack_suffix not in TRUTH_SUFFIXES:
+            raise ValueError(
+                f'scene "{scene.external_scene_id}" uses vector truth "{scene.truth_member}" but stack member '
+                f'"{scene.stack_member}" is not a GeoTIFF; vector truth requires a georeferenced SAR raster grid',
+            )
+        stack, out_shape, transform, crs = _load_stack_grid_from_geotiff_member(archive, scene.stack_member)
+        _normalize_stack(stack)
+        if crs is None:
+            raise ValueError(
+                f'scene "{scene.external_scene_id}" stack member "{scene.stack_member}" is missing a CRS; '
+                'vector truth rasterization requires georeferenced SAR GeoTIFF inputs',
+            )
+        return out_shape, transform, crs
+
+    if not scene.vv_member or not scene.vh_member:
+        raise ValueError(
+            f'scene "{scene.external_scene_id}" uses vector truth "{scene.truth_member}" but is missing paired '
+            'GeoTIFF VV/VH members needed for rasterization',
+        )
+    vv_suffix = Path(scene.vv_member).suffix.lower()
+    vh_suffix = Path(scene.vh_member).suffix.lower()
+    if vv_suffix not in TRUTH_SUFFIXES or vh_suffix not in TRUTH_SUFFIXES:
+        raise ValueError(
+            f'scene "{scene.external_scene_id}" uses vector truth "{scene.truth_member}" but VV/VH members are '
+            'not GeoTIFF rasters; .npy/.npz stacks do not contain a georeferenced grid for rasterization',
+        )
+    vv, vv_shape, vv_transform, vv_crs = _load_stack_grid_from_geotiff_member(archive, scene.vv_member)
+    vh, vh_shape, vh_transform, vh_crs = _load_stack_grid_from_geotiff_member(archive, scene.vh_member)
+    _normalize_stack(np.stack([
+        _single_band_array(vv, scene=scene, member_name=scene.vv_member),
+        _single_band_array(vh, scene=scene, member_name=scene.vh_member),
+    ], axis=0))
+    if vv_shape != vh_shape or vv_transform != vh_transform or str(vv_crs) != str(vh_crs):
+        raise ValueError(
+            f'scene "{scene.external_scene_id}" VV/VH GeoTIFF members do not share the same grid/CRS; '
+            'vector truth rasterization requires aligned Sentinel-1 rasters',
+        )
+    if vv_crs is None:
+        raise ValueError(
+            f'scene "{scene.external_scene_id}" VV member "{scene.vv_member}" is missing a CRS; '
+            'vector truth rasterization requires georeferenced SAR GeoTIFF inputs',
+        )
+    return vv_shape, vv_transform, vv_crs
+
+
+def _load_geojson_truth_geometries(payload: bytes) -> tuple[list[dict[str, Any]], Any]:
+    if CRS is None:
+        raise RuntimeError('rasterio is required to parse vector truth CRS metadata')
+    parsed = json.loads(payload.decode('utf-8'))
+    geometries: list[dict[str, Any]] = []
+    if isinstance(parsed, dict) and parsed.get('type') == 'FeatureCollection':
+        for feature in parsed.get('features') or []:
+            geometry = feature.get('geometry') if isinstance(feature, dict) else None
+            if isinstance(geometry, dict):
+                geometries.append(geometry)
+    elif isinstance(parsed, dict) and parsed.get('type') == 'Feature':
+        geometry = parsed.get('geometry')
+        if isinstance(geometry, dict):
+            geometries.append(geometry)
+    elif isinstance(parsed, dict) and parsed.get('type'):
+        geometries.append(parsed)
+    elif isinstance(parsed, list):
+        for item in parsed:
+            if isinstance(item, dict) and item.get('type'):
+                geometries.append(item.get('geometry') if item.get('type') == 'Feature' else item)
+    if not geometries:
+        raise ValueError('GeoJSON truth member does not contain any polygon geometry')
+
+    crs_value = None
+    if isinstance(parsed, dict):
+        crs_block = parsed.get('crs')
+        if isinstance(crs_block, dict):
+            crs_props = crs_block.get('properties')
+            if isinstance(crs_props, dict):
+                crs_value = crs_props.get('name') or crs_props.get('code')
+    vector_crs = CRS.from_user_input(crs_value or 'EPSG:4326')
+    return geometries, vector_crs
+
+
+def _load_shapefile_truth_geometries(
+    archive: zipfile.ZipFile,
+    member_name: str,
+) -> tuple[list[dict[str, Any]], Any]:
+    if shapefile is None:
+        raise RuntimeError('pyshp is required to read shapefile truth members')
+    if CRS is None:
+        raise RuntimeError('rasterio is required to parse shapefile CRS metadata')
+
+    member_path = PurePosixPath(member_name)
+    stem = str(member_path.with_suffix(''))
+    lookup = _member_name_lookup(archive)
+
+    def _read_component(suffix: str) -> bytes | None:
+        actual_name = lookup.get(f'{stem}{suffix}'.lower())
+        return archive.read(actual_name) if actual_name else None
+
+    shp_bytes = _read_component('.shp')
+    dbf_bytes = _read_component('.dbf')
+    shx_bytes = _read_component('.shx')
+    if shp_bytes is None or dbf_bytes is None or shx_bytes is None:
+        raise ValueError(
+            f'shapefile truth member "{member_name}" is missing one of .shp/.shx/.dbf components inside the archive',
+        )
+
+    reader = shapefile.Reader(
+        shp=io.BytesIO(shp_bytes),
+        shx=io.BytesIO(shx_bytes),
+        dbf=io.BytesIO(dbf_bytes),
+    )
+    geometries = [shape.__geo_interface__ for shape in reader.shapes()]
+    if not geometries:
+        raise ValueError(f'shapefile truth member "{member_name}" does not contain any geometry')
+
+    prj_bytes = _read_component('.prj')
+    vector_crs = CRS.from_wkt(prj_bytes.decode('utf-8')) if prj_bytes else CRS.from_epsg(4326)
+    return geometries, vector_crs
+
+
+def _load_vector_truth_geometries(
+    archive: zipfile.ZipFile,
+    member_name: str,
+) -> tuple[list[dict[str, Any]], Any]:
+    suffix = Path(member_name).suffix.lower()
+    if suffix == '.shp':
+        return _load_shapefile_truth_geometries(archive, member_name)
+    if suffix in {'.geojson', '.json'}:
+        return _load_geojson_truth_geometries(archive.read(member_name))
+    raise ValueError(f'unsupported vector truth member suffix "{suffix}"')
+
+
+def _encode_binary_geotiff(
+    mask: np.ndarray,
+    *,
+    transform: Any,
+    crs: Any,
+) -> bytes:
+    if MemoryFile is None:
+        raise RuntimeError('rasterio is required to encode rasterized truth masks')
+    height, width = mask.shape
+    band = np.asarray(mask > 0, dtype=np.uint8)
+    with MemoryFile() as memory_file:
+        with memory_file.open(
+            driver='GTiff',
+            width=width,
+            height=height,
+            count=1,
+            dtype='uint8',
+            crs=crs,
+            transform=transform,
+            compress='deflate',
+        ) as dataset:
+            dataset.write(band, 1)
+        return memory_file.read()
+
+
+def _rasterize_vector_truth_payload(
+    archive: zipfile.ZipFile,
+    scene: ArchivedScene,
+) -> bytes:
+    if rasterize is None or transform_geom is None:
+        raise RuntimeError('rasterio is required to rasterize vector truth members')
+    out_shape, transform, raster_crs = _stack_raster_grid_for_vector_truth(archive, scene)
+    geometries, vector_crs = _load_vector_truth_geometries(archive, scene.truth_member)
+
+    projected_geometries: list[dict[str, Any]] = []
+    for geometry in geometries:
+        if not isinstance(geometry, dict):
+            continue
+        geometry_type = str(geometry.get('type') or '')
+        if geometry_type not in {'Polygon', 'MultiPolygon'}:
+            raise ValueError(
+                f'scene "{scene.external_scene_id}" truth member "{scene.truth_member}" contains '
+                f'non-polygon geometry "{geometry_type}"',
+            )
+        if vector_crs is not None and raster_crs is not None and str(vector_crs) != str(raster_crs):
+            geometry = transform_geom(vector_crs, raster_crs, geometry)
+        projected_geometries.append(geometry)
+
+    if not projected_geometries:
+        raise ValueError(f'scene "{scene.external_scene_id}" truth member "{scene.truth_member}" has no polygon geometry')
+
+    mask = rasterize(
+        [(geometry, 1) for geometry in projected_geometries],
+        out_shape=out_shape,
+        transform=transform,
+        fill=0,
+        all_touched=False,
+        dtype='uint8',
+    )
+    return _encode_binary_geotiff(mask, transform=transform, crs=raster_crs)
+
+
 def _derived_split_name(splits: list[str], *, fallback: str | None) -> str:
     normalized_fallback = str(fallback or '').strip()
     if splits:
@@ -352,9 +670,18 @@ def _validate_scene_is_sar_compatible(archive: zipfile.ZipFile, scene: ArchivedS
         )
 
     truth_suffix = Path(scene.truth_member).suffix.lower()
+    if truth_suffix in VECTOR_TRUTH_SUFFIXES:
+        _stack_raster_grid_for_vector_truth(archive, scene)
+        geometries, _ = _load_vector_truth_geometries(archive, scene.truth_member)
+        if not geometries:
+            raise ValueError(
+                f'scene "{scene.external_scene_id}" truth member "{scene.truth_member}" has no polygon geometry'
+            )
+        return
+
     if truth_suffix not in TRUTH_SUFFIXES:
         raise ValueError(
-            f'scene "{scene.external_scene_id}" truth member must be GeoTIFF (.tif/.tiff); '
+            f'scene "{scene.external_scene_id}" truth member must be GeoTIFF or vector truth (.tif/.tiff/.shp/.geojson/.json); '
             f'received "{scene.truth_member}"',
         )
 
@@ -447,9 +774,11 @@ def _canonical_stack_payload(archive: zipfile.ZipFile, scene: ArchivedScene) -> 
 
 def _truth_payload(archive: zipfile.ZipFile, scene: ArchivedScene) -> bytes:
     suffix = Path(scene.truth_member).suffix.lower()
+    if suffix in VECTOR_TRUTH_SUFFIXES:
+        return _rasterize_vector_truth_payload(archive, scene)
     if suffix not in TRUTH_SUFFIXES:
         raise ValueError(
-            f'scene "{scene.external_scene_id}" truth member must be GeoTIFF (.tif/.tiff); '
+            f'scene "{scene.external_scene_id}" truth member must be GeoTIFF or vector truth (.tif/.tiff/.shp/.geojson/.json); '
             f'received "{scene.truth_member}"',
         )
     return archive.read(scene.truth_member)

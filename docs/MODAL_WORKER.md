@@ -51,6 +51,7 @@ Inputs:
 Security and source restrictions:
 - `DATASET_URL` must be a direct downloadable archive URL, not a record landing page
 - only SAR-compatible Sentinel-1 held-out archives are allowed
+- acceptable truth inputs are either raster truth masks (`.tif/.tiff`) or vector avalanche outlines (`.shp/.geojson/.json`) that can be rasterized against a georeferenced Sentinel-1 GeoTIFF stack or paired VV/VH GeoTIFF rasters
 - IAS/webcam/optical datasets are invalid for the pinned gate and are rejected in preflight before any storage or Supabase mutation
 - allowed hosts are fixed to:
   - `envidat.ch`
