@@ -56,7 +56,10 @@ class GitHubRolloutPolicyTests(unittest.TestCase):
         self.assertIn('DATASET_URL:', bootstrap_gate)
         self.assertIn('SAR_RASTER_URL:', bootstrap_gate)
         self.assertIn('Direct truth/vector held-out archive URL on an allowlisted academic or trusted cloud mirror host', bootstrap_gate)
-        self.assertIn('Direct Sentinel-1 VV/VH GeoTIFF archive URL on an allowlisted cloud or EO host', bootstrap_gate)
+        self.assertIn(
+            'Direct Sentinel-1 VV/VH GeoTIFF archive URL on an allowlisted cloud or EO host; must contain one co-registered VV/VH pair for every truth year discovered',
+            bootstrap_gate,
+        )
         self.assertIn("wget \"${DATASET_URL}\" -O truth_archive.zip", bootstrap_gate)
         self.assertIn("wget \"${SAR_RASTER_URL}\" -O sar_rasters.zip", bootstrap_gate)
         for host in (

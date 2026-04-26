@@ -660,6 +660,14 @@ def _rasterize_vector_truth_payload(
     archive: zipfile.ZipFile,
     scene: ArchivedScene,
 ) -> bytes:
+    mask, transform, raster_crs = _rasterize_vector_truth_mask(archive, scene)
+    return _encode_binary_geotiff(mask, transform=transform, crs=raster_crs)
+
+
+def _rasterize_vector_truth_mask(
+    archive: zipfile.ZipFile,
+    scene: ArchivedScene,
+) -> tuple[np.ndarray, Any, Any]:
     if rasterize is None or transform_geom is None:
         raise RuntimeError('rasterio is required to rasterize vector truth members')
     out_shape, transform, raster_crs = _stack_raster_grid_for_vector_truth(archive, scene)
@@ -690,7 +698,12 @@ def _rasterize_vector_truth_payload(
         all_touched=False,
         dtype='uint8',
     )
-    return _encode_binary_geotiff(mask, transform=transform, crs=raster_crs)
+    if not np.any(mask > 0):
+        raise ValueError(
+            f'invalid_footprint_intersection: scene "{scene.external_scene_id}" truth member '
+            f'"{scene.truth_member}" footprint does not intersect the SAR raster grid',
+        )
+    return mask, transform, raster_crs
 
 
 def _derived_split_name(splits: list[str], *, fallback: str | None) -> str:
@@ -715,12 +728,7 @@ def _validate_scene_is_sar_compatible(archive: zipfile.ZipFile, scene: ArchivedS
 
     truth_suffix = Path(scene.truth_member).suffix.lower()
     if truth_suffix in VECTOR_TRUTH_SUFFIXES:
-        _stack_raster_grid_for_vector_truth(archive, scene)
-        geometries, _ = _load_vector_truth_geometries(archive, scene.truth_member)
-        if not geometries:
-            raise ValueError(
-                f'scene "{scene.external_scene_id}" truth member "{scene.truth_member}" has no polygon geometry'
-            )
+        _rasterize_vector_truth_mask(archive, scene)
         return
 
     if truth_suffix not in TRUTH_SUFFIXES:

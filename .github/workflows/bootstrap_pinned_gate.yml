@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       SAR_RASTER_URL:
-        description: 'Direct Sentinel-1 VV/VH GeoTIFF archive URL on an allowlisted cloud or EO host'
+        description: 'Direct Sentinel-1 VV/VH GeoTIFF archive URL on an allowlisted cloud or EO host; must contain one co-registered VV/VH pair for every truth year discovered'
         required: true
         type: string
       REFERENCE_SET_KEY:

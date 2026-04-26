@@ -16,6 +16,7 @@ from rasterio.transform import from_bounds
 
 from backend.scripts.assemble_seed_archive import assemble_seed_archive
 from backend.scripts.seed_snowslide_truth import (
+    main,
     seed_snowslide_truth,
     validate_snowslide_archive,
 )
@@ -28,6 +29,7 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
         *,
         scenes: list[dict[str, object]] | None = None,
         include_validation: bool = True,
+        include_metadata_readme: bool = True,
     ) -> None:
         scene_specs = scenes
         if scene_specs is None and include_validation:
@@ -68,7 +70,8 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
                     archive.writestr(f'{root}/{optical_name}', optical_payload)
                 for member_name, member_payload in scene.get('extra_members', []):
                     archive.writestr(f'{root}/{member_name}', member_payload)
-            archive.writestr('metadata/readme.txt', 'not a registry')
+            if include_metadata_readme:
+                archive.writestr('metadata/readme.txt', 'not a registry')
 
     @staticmethod
     def _build_archive_bytes(
@@ -157,6 +160,30 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
                 },
             }],
         }).encode('utf-8')
+
+    @staticmethod
+    def _misaligned_sar_bbox() -> tuple[float, float, float, float]:
+        return (-120.0, 35.0, -119.8, 35.2)
+
+    @classmethod
+    def _misaligned_vector_scene(cls) -> dict[str, object]:
+        return {
+            'split': 'validation',
+            'region_key': 'davos',
+            'scene_id': 'S1A_001',
+            'truth_member_name': 'truth_mask.geojson',
+            'truth_payload': cls._geojson_truth_payload(),
+            'stack_array': None,
+            'extra_members': [
+                ('stack.tif', cls._geotiff_bytes(
+                    np.stack([
+                        np.ones((4, 4), dtype=np.float32),
+                        np.zeros((4, 4), dtype=np.float32),
+                    ], axis=0),
+                    bbox=cls._misaligned_sar_bbox(),
+                )),
+            ],
+        }
 
     @staticmethod
     def _shapefile_truth_members(*, stem: str = 'truth_mask') -> list[tuple[str, bytes]]:
@@ -660,6 +687,41 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, 'vector truth requires a georeferenced SAR raster grid|not a GeoTIFF'):
                 validate_snowslide_archive(args)
+
+    def test_validate_only_returns_invalid_archive_for_non_intersecting_vector_truth(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            archive_path = Path(tmpdir) / 'snowslide.zip'
+            self._write_archive(
+                archive_path,
+                scenes=[self._misaligned_vector_scene()],
+                include_metadata_readme=False,
+            )
+
+            with patch('sys.stdout', new_callable=io.StringIO) as stdout:
+                exit_code = main([
+                    '--source-zip',
+                    str(archive_path),
+                    '--set-key',
+                    'snowslide-v1',
+                    '--source-version',
+                    '2026-04-25',
+                    '--validate-only',
+                ])
+
+        self.assertEqual(exit_code, 1)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload['status'], 'invalid_archive')
+        self.assertTrue(payload['reason'].startswith('invalid_footprint_intersection:'))
+
+    def test_seed_snowslide_truth_rejects_non_intersecting_vector_truth(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            archive_path = Path(tmpdir) / 'snowslide.zip'
+            self._write_archive(archive_path, scenes=[self._misaligned_vector_scene()])
+
+            with self.assertRaises(ValueError) as exc:
+                seed_snowslide_truth(self._build_args(source_zip=archive_path))
+
+        self.assertTrue(str(exc.exception).startswith('invalid_footprint_intersection:'))
 
     def test_validate_only_rejects_exact_envidat_vector_record_without_sar_rasters(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

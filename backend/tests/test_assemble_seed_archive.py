@@ -101,6 +101,41 @@ class AssembleSeedArchiveTests(unittest.TestCase):
             self.assertTrue((scene_root / 'vv.tif').exists())
             self.assertTrue((scene_root / 'vh.tif').exists())
 
+    def test_assemble_seed_archive_pairs_all_truth_years(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            truth_zip = tmp_path / 'truth.zip'
+            sar_zip = tmp_path / 'sar.zip'
+            output_dir = tmp_path / 'assembled'
+
+            with zipfile.ZipFile(truth_zip, 'w') as archive:
+                for stem in ('DAvalMap_2018_perimeter', 'DAvalMap_2019_perimeter'):
+                    for member_name, payload in self._shapefile_truth_members(stem=stem):
+                        archive.writestr(member_name, payload)
+            with zipfile.ZipFile(sar_zip, 'w') as archive:
+                archive.writestr('S1_2018_vv.tif', self._geotiff_bytes(np.ones((4, 4), dtype=np.float32)))
+                archive.writestr('S1_2018_vh.tif', self._geotiff_bytes(np.zeros((4, 4), dtype=np.float32)))
+                archive.writestr('S1_2019_vv.tif', self._geotiff_bytes(np.full((4, 4), 2.0, dtype=np.float32)))
+                archive.writestr('S1_2019_vh.tif', self._geotiff_bytes(np.full((4, 4), -1.0, dtype=np.float32)))
+
+            result = assemble_seed_archive(argparse.Namespace(
+                truth_zip=truth_zip,
+                sar_zip=sar_zip,
+                output_dir=output_dir,
+            ))
+
+            self.assertEqual(result['status'], 'ok')
+            self.assertEqual(result['scene_count'], 2)
+            self.assertEqual(
+                {(scene['scene_id'], scene['year']) for scene in result['scenes']},
+                {('davos_2018', '2018'), ('davos_2019', '2019')},
+            )
+            for year in ('2018', '2019'):
+                scene_root = output_dir / 'validation' / 'davos' / f'davos_{year}'
+                self.assertTrue((scene_root / 'truth_mask.shp').exists())
+                self.assertTrue((scene_root / 'vv.tif').exists())
+                self.assertTrue((scene_root / 'vh.tif').exists())
+
     def test_assemble_seed_archive_rejects_missing_vh_raster(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)

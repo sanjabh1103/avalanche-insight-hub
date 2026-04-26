@@ -53,10 +53,15 @@ Inputs:
 
 Security and source restrictions:
 - `DATASET_URL` must be a direct downloadable truth/vector archive URL, not a record landing page; it may point either to the original academic record or to a trusted cloud mirror of the same authoritative truth archive
-- `SAR_RASTER_URL` must be a direct downloadable Sentinel-1 VV/VH GeoTIFF archive URL
+- `SAR_RASTER_URL` must be a direct downloadable Sentinel-1 VV/VH GeoTIFF archive URL; signed GCS or S3 URLs are preferred over public-read objects when you control the mirror
 - the workflow assembles both sources into one canonical local dataset before preflight
 - acceptable truth inputs are either raster truth masks (`.tif/.tiff`) or vector avalanche outlines (`.shp/.geojson/.json`) that can be rasterized against a georeferenced Sentinel-1 GeoTIFF stack or paired VV/VH GeoTIFF rasters
 - IAS/webcam/optical datasets are invalid for the pinned gate and are rejected in preflight before any storage or Supabase mutation
+- the assembler requires one co-registered VV/VH GeoTIFF pair for every truth year it discovers; for the Davos validation set that currently means both 2018 and 2019, for example:
+  - `S1_2018_vv.tif`
+  - `S1_2018_vh.tif`
+  - `S1_2019_vv.tif`
+  - `S1_2019_vh.tif`
 - allowed truth hosts are fixed to:
   - `envidat.ch`
   - `www.envidat.ch`
