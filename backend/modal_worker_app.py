@@ -211,7 +211,6 @@ if modal is not None:  # pragma: no cover - exercised in deployment, not local t
         volumes={VOLUME_MOUNT: _artifact_volume},
         gpu='T4',
         timeout=7200,
-        retries=0,
     )
     @modal.asgi_app()
     def worker_api() -> Any:

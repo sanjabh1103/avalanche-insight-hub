@@ -90,7 +90,9 @@ BEGIN
   END IF;
 END $$;
 
-CREATE OR REPLACE VIEW public.avalanche_events_decayed AS
+DROP VIEW IF EXISTS public.avalanche_events_decayed;
+
+CREATE VIEW public.avalanche_events_decayed AS
 SELECT
   e.*,
   GREATEST(

@@ -11,7 +11,9 @@ COMMENT ON COLUMN public.avalanche_events.governed_at IS
 CREATE INDEX IF NOT EXISTS idx_avalanche_events_governance_version
   ON public.avalanche_events (governance_version, governed_at DESC);
 
-CREATE OR REPLACE VIEW public.avalanche_events_decayed AS
+DROP VIEW IF EXISTS public.avalanche_events_decayed;
+
+CREATE VIEW public.avalanche_events_decayed AS
 SELECT
   e.*,
   GREATEST(

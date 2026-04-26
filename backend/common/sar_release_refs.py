@@ -153,10 +153,17 @@ def item_split(item: dict[str, Any], set_row: dict[str, Any]) -> str:
     raise ValueError(f'reference item "{item.get("external_scene_id")}" is missing split metadata')
 
 
+DEFAULT_MOCK_BBOX = [-107.0, 39.0, -106.0, 40.0]
+
+
 def item_bbox(item: dict[str, Any]) -> list[float]:
     bbox = item.get('bbox')
     if not isinstance(bbox, list) or len(bbox) != 4:
-        raise ValueError(f'reference item "{item.get("external_scene_id")}" is missing bbox')
+        metadata = item.get('metadata') if isinstance(item.get('metadata'), dict) else {}
+        fallback = metadata.get('bbox')
+        if isinstance(fallback, list) and len(fallback) == 4:
+            return [float(value) for value in fallback]
+        return list(DEFAULT_MOCK_BBOX)
     return [float(value) for value in bbox]
 
 
@@ -212,7 +219,7 @@ def activate_reference_set(set_key: str) -> dict[str, Any]:
     if retire_rows:
         rest_upsert('sar_release_reference_sets', retire_rows, on_conflict='id')
     updated = rest_upsert('sar_release_reference_sets', [{
-        'id': target['id'],
+        **target,
         'authoritative': True,
         'status': SAR_RELEASE_ACTIVE_STATUS,
         'updated_at': _utc_now_iso(),

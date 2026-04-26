@@ -45,3 +45,6 @@ gee-service-account*.json
 
 # Local DEM staging (raw pre-compression copies, if any)
 backend/data/dem/raw/
+
+# Local Supabase CLI temp state
+supabase/.temp/

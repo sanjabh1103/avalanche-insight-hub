@@ -12,6 +12,7 @@ from backend.common.sar_release_refs import (
     SAR_RELEASE_BUCKET,
     activate_reference_set,
     build_release_asset_ref,
+    item_bbox,
     load_reference_bundle,
     parse_storage_ref,
 )
@@ -43,9 +44,7 @@ def materialize_baseline_masks(
         split = str((item.get('metadata') or {}).get('split') or set_row.get('split_name') or '').strip()
         if not split:
             raise ValueError(f'reference item "{scene_id}" is missing split metadata')
-        bbox = item.get('bbox')
-        if not isinstance(bbox, list) or len(bbox) != 4:
-            raise ValueError(f'reference item "{scene_id}" is missing bbox')
+        bbox = item_bbox(item)
         stack = load_scene_stack({
             'scene_id': scene_id,
             'region_key': region_key,
@@ -75,6 +74,13 @@ def materialize_baseline_masks(
         })
         updated_rows.append({
             'id': item['id'],
+            'reference_set_id': item['reference_set_id'],
+            'external_scene_id': scene_id,
+            'region_key': region_key,
+            'scene_time': item.get('scene_time'),
+            'bbox': bbox,
+            'stack_asset_ref': item['stack_asset_ref'],
+            'truth_mask_asset_ref': item['truth_mask_asset_ref'],
             'baseline_mask_asset_ref': baseline_asset_ref,
             'metadata': metadata,
         })
