@@ -22,7 +22,9 @@ import traceback
 from datetime import datetime, timedelta, timezone
 from typing import Iterable
 
+from backend.common.label_governance import materialize_label_governance
 from backend.common.regions import load_regions
+from backend.common.sar_artifacts import persist_sar_artifacts
 from backend.common.supabase_io import has_supabase_credentials, rest_insert
 
 
@@ -189,16 +191,23 @@ def _process_region(ee, region, start_date: datetime | None = None, end_date: da
             continue
         avg_lng = sum(pt[0] for pt in pts) / len(pts)
         avg_lat = sum(pt[1] for pt in pts) / len(pts)
-        events.append({
+        event_payload = {
             'source': 'gee_sar',
             'fusion_source': 'sentinel1_gee',
             'hazard_type': 'avalanche',
             'description': f'Sentinel-1 wet-snow candidate over {region.name}',
             'severity': 3,
             'confidence': 0.55,
+            'label_confidence': 0.72 if coverage_state == 'full_coverage' else 0.48,
+            'training_weight': 0.8 if coverage_state == 'full_coverage' else 0.35,
             'training_eligible': coverage_state == 'full_coverage',
             'training_eligible_reason': None if coverage_state == 'full_coverage' else 'sar_low_coverage',
+            'timestamp': mean_scene_time,
             'location': f'SRID=4326;POINT({avg_lng} {avg_lat})',
+            'source_model': 'gee_threshold_baseline_v1',
+            'source_scene_ids': [str(scene_id) for scene_id in scene_ids],
+            'geometry_type': 'polygon',
+            'mask_asset_ref': None,
             'features': {
                 'vv_threshold_db': GEE_VV_THRESHOLD_DB,
                 'vh_threshold_db': GEE_VH_THRESHOLD_DB,
@@ -213,8 +222,19 @@ def _process_region(ee, region, start_date: datetime | None = None, end_date: da
                 'sar_coverage_state': coverage_state,
                 'shadow_mask_applied': True,
                 'fusion_method': 'quality_mosaic_latest_pixel_v1',
+                'sar_geometry': geom,
+                'sar_centroid': {'lat': avg_lat, 'lng': avg_lng},
             },
+        }
+        governance = materialize_label_governance(event_payload)
+        event_payload.update({
+            'label_confidence': governance['label_confidence'],
+            'training_weight': governance['training_weight'],
+            'training_eligible': governance['training_eligible'],
+            'governance_version': governance['governance_version'],
+            'governed_at': governance['governed_at'],
         })
+        events.append(event_payload)
     return events
 
 
@@ -247,8 +267,12 @@ def _insert_events(events: Iterable[dict]) -> int:
     if not has_supabase_credentials():
         print(f'[gee_extractor] Supabase creds absent; skipping insert of {len(batch)} events')
         return 0
-    rest_insert('avalanche_events', batch)
-    return len(batch)
+    inserted_rows = rest_insert('avalanche_events', batch)
+    try:
+        persist_sar_artifacts(inserted_rows, batch)
+    except Exception as exc:
+        print(f'[gee_extractor] sar artifact persistence skipped: {exc}', file=sys.stderr)
+    return len(inserted_rows)
 
 
 def main() -> int:

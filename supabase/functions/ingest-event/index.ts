@@ -15,15 +15,23 @@ type EventPayload = {
   lat: number;
   lng: number;
   description?: string;
+  timestamp?: string;
   hazard_type?: string;
   source?: string;
   event_type?: string;
   severity?: number;
   confidence?: number;
+  label_confidence?: number;
+  source_model?: string;
+  source_scene_ids?: string[];
+  geometry_type?: string;
+  mask_asset_ref?: string | null;
   location_name?: string;
   fusion_source?: string;
   metadata?: Record<string, unknown>;
 };
+
+const GOVERNANCE_VERSION = 'autonomous_label_governance_v2';
 
 type ElevationSample = {
   name: 'center' | 'north' | 'south' | 'east' | 'west';
@@ -33,6 +41,61 @@ type ElevationSample = {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function sourceWeightFor(source: string, fusionSource?: string): number {
+  const weights: Record<string, number> = {
+    field_report: 1.0,
+    field_report_offline_sync: 1.0,
+    gemini_news: 0.8,
+    newsdata_gemini: 0.8,
+    gee_sar: 0.9,
+    sentinel1_gee: 0.9,
+    sar_unet: 1.1,
+  };
+  const primary = weights[source] ?? null;
+  if (primary !== null) return primary;
+  return weights[fusionSource || ''] ?? 0.75;
+}
+
+function recencyDecay(timestampIso?: string): number {
+  if (!timestampIso) return 1;
+  const ts = new Date(timestampIso);
+  if (Number.isNaN(ts.getTime())) return 1;
+  const ageDays = Math.max(0, (Date.now() - ts.getTime()) / (1000 * 60 * 60 * 24));
+  const halfLifeDays = 30;
+  return clamp(Math.exp((-Math.log(2) * ageDays) / halfLifeDays), 0.2, 1);
+}
+
+function corroborationWeight(metadata: Record<string, unknown>, source: string, fusionSource?: string): number {
+  const corroborationSources = new Set<string>();
+  const metadataSources = metadata.corroboration_sources;
+  if (Array.isArray(metadataSources)) {
+    metadataSources.forEach((entry) => {
+      if (typeof entry === 'string' && entry.trim()) corroborationSources.add(entry.trim().toLowerCase());
+    });
+  }
+  if (source) corroborationSources.add(source.toLowerCase());
+  if (fusionSource) corroborationSources.add(fusionSource.toLowerCase());
+  const count = Math.max(corroborationSources.size, 1);
+  return clamp(1 + (count - 1) * 0.15, 1, 1.45);
+}
+
+function computeTrainingWeight(args: {
+  labelConfidence: number;
+  source: string;
+  fusionSource?: string;
+  timestampIso?: string;
+  metadata: Record<string, unknown>;
+}): number {
+  return clamp(
+    args.labelConfidence
+      * sourceWeightFor(args.source, args.fusionSource)
+      * corroborationWeight(args.metadata, args.source, args.fusionSource)
+      * recencyDecay(args.timestampIso),
+    0.1,
+    1.5,
+  );
 }
 
 function toFiniteNumber(value: unknown, fallback = 0) {
@@ -292,10 +355,32 @@ serve(async (req: Request) => {
       : 'Observed avalanche-related event';
     const source = payload.source || 'field_report';
     const fusionSource = payload.fusion_source || source;
+    const metadata = safeJson(payload.metadata);
     const hazardType = payload.hazard_type || 'avalanche';
     const eventType = payload.event_type || 'unknown';
     const severity = Number.isFinite(payload.severity as number) ? Number(payload.severity) : 3;
     const confidence = clamp(Number.isFinite(payload.confidence as number) ? Number(payload.confidence) : 0.6, 0, 1);
+    const labelConfidence = clamp(Number.isFinite(payload.label_confidence as number) ? Number(payload.label_confidence) : confidence, 0, 1);
+    const sourceModel = typeof payload.source_model === 'string' && payload.source_model.trim()
+      ? payload.source_model.trim()
+      : source;
+    const sourceSceneIds = Array.isArray(payload.source_scene_ids) ? payload.source_scene_ids.map(String) : [];
+    const geometryType = typeof payload.geometry_type === 'string' && payload.geometry_type.trim()
+      ? payload.geometry_type.trim()
+      : 'point';
+    const timestampIso = typeof payload.timestamp === 'string' && payload.timestamp.trim()
+      ? payload.timestamp.trim()
+      : typeof metadata.event_date_iso === 'string' && metadata.event_date_iso
+        ? metadata.event_date_iso
+        : new Date().toISOString();
+    const trainingWeight = computeTrainingWeight({
+      labelConfidence,
+      source,
+      fusionSource,
+      timestampIso,
+      metadata,
+    });
+    const governedAt = new Date().toISOString();
 
     // Story 21: classify deposit vs. release zone AFTER topo is resolved so the
     // heuristic can use slope angle as a corroborating signal.
@@ -309,8 +394,17 @@ serve(async (req: Request) => {
         severity,
         event_type: eventType,
         location: `SRID=4326;POINT(${lng} ${lat})`,
+        timestamp: timestampIso,
         confidence,
+        label_confidence: labelConfidence,
+        training_weight: trainingWeight,
+        governance_version: GOVERNANCE_VERSION,
+        governed_at: governedAt,
         fusion_source: fusionSource,
+        source_model: sourceModel,
+        source_scene_ids: sourceSceneIds,
+        geometry_type: geometryType,
+        mask_asset_ref: payload.mask_asset_ref ?? null,
         elevation_m: topo.elevationM,
         slope_band: topo.slopeBand,
         aspect_bucket: topo.aspectBucket,
@@ -326,11 +420,21 @@ serve(async (req: Request) => {
           source,
           field_report_id: payload.fieldReportId || null,
           location_name: payload.location_name || null,
-          metadata: safeJson(payload.metadata),
+          metadata,
           deposit_zone_classifier: {
             method: classification.method,
             reason: classification.reason,
             training_eligible: classification.trainingEligible,
+          },
+          label_governance: {
+            label_confidence: labelConfidence,
+            training_weight: trainingWeight,
+            governance_version: GOVERNANCE_VERSION,
+            governed_at: governedAt,
+            source_model: sourceModel,
+            source_scene_ids: sourceSceneIds,
+            geometry_type: geometryType,
+            mask_asset_ref: payload.mask_asset_ref ?? null,
           },
         },
         features: {
@@ -341,9 +445,17 @@ serve(async (req: Request) => {
           hazard_type: hazardType,
           source,
           training_eligible: classification.trainingEligible,
+          source_model: sourceModel,
+          source_scene_ids: sourceSceneIds,
+          geometry_type: geometryType,
+          mask_asset_ref: payload.mask_asset_ref ?? null,
+          label_confidence: labelConfidence,
+          training_weight: trainingWeight,
+          governance_version: GOVERNANCE_VERSION,
+          governed_at: governedAt,
         },
       })
-      .select('id, timestamp, source, description, severity, event_type, confidence, location')
+      .select('id, timestamp, source, description, severity, event_type, confidence, label_confidence, training_weight, location')
       .maybeSingle();
     if (eventErr) throw eventErr;
     if (!event?.id) throw new Error('Failed to create avalanche_event row');
@@ -363,6 +475,9 @@ serve(async (req: Request) => {
           training_eligible: classification.trainingEligible,
           training_eligible_reason: classification.reason,
           deposit_zone_method: classification.method,
+          label_confidence: labelConfidence,
+          training_weight: trainingWeight,
+          source_model: sourceModel,
         },
       })
       .eq('id', job.id);
@@ -384,6 +499,11 @@ serve(async (req: Request) => {
         training_eligible: classification.trainingEligible,
         training_eligible_reason: classification.reason,
         classifier_method: classification.method,
+        label_confidence: labelConfidence,
+        training_weight: trainingWeight,
+        governance_version: GOVERNANCE_VERSION,
+        governed_at: governedAt,
+        source_model: sourceModel,
       },
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

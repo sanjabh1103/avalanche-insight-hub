@@ -173,6 +173,30 @@ def fetch_historical_weather_profile(lat: float, lng: float, timestamp: datetime
     }
 
 
+def fetch_historical_weather_window(lat: float, lng: float, start: datetime, end: datetime) -> dict[str, Any]:
+    start_utc = _to_utc(start)
+    end_utc = _to_utc(end)
+    payload = _fetch_open_meteo(
+        OPEN_METEO_HISTORICAL_FORECAST,
+        params={
+            'latitude': f'{lat:.4f}',
+            'longitude': f'{lng:.4f}',
+            'start_date': start_utc.date().isoformat(),
+            'end_date': end_utc.date().isoformat(),
+            'hourly': ','.join(ALL_HOURLY_VARS),
+            'timezone': 'UTC',
+        },
+    )
+    return {
+        'source': 'open_meteo_historical_forecast_window_v1',
+        'latitude': lat,
+        'longitude': lng,
+        'samples': _hourly_payload_to_samples(payload),
+        'start': start_utc.isoformat(),
+        'end': end_utc.isoformat(),
+    }
+
+
 def select_hourly_weather_sample(profile: dict[str, Any], target: datetime) -> dict[str, float]:
     sample = profile.get('sample')
     if sample is None:

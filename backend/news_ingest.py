@@ -2,7 +2,8 @@
 
 Pipeline (runs daily via GitHub Actions):
 
-1. Query newsdata.io for recent articles matching ``avalanche`` keyword.
+1. Query newsdata.io for recent avalanche-related articles across a small
+   multilingual keyword set.
 2. For each article, ask Gemini 2.0 Flash to extract a structured event record
    (is_event, lat/lng, severity, event_date, confidence).
 3. Drop anything that is not a real avalanche OR does not fall inside one of
@@ -43,7 +44,19 @@ SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
 NEWS_LOOKBACK_HOURS = int(os.getenv('NEWS_LOOKBACK_HOURS', '48'))
 NEWS_MAX_ARTICLES = int(os.getenv('NEWS_MAX_ARTICLES', '10'))  # free-tier cap
 NEWS_MIN_CONFIDENCE = float(os.getenv('NEWS_MIN_CONFIDENCE', '0.6'))
-NEWS_QUERY = os.getenv('NEWS_QUERY', 'avalanche')
+NEWS_REQUEST_RETRIES = int(os.getenv('NEWS_REQUEST_RETRIES', '3'))
+NEWS_REQUEST_BACKOFF_SECONDS = float(os.getenv('NEWS_REQUEST_BACKOFF_SECONDS', '1.0'))
+NEWS_QUERY_TERMS = tuple(
+    term.strip() for term in os.getenv(
+        'NEWS_QUERY_TERMS',
+        'avalanche,avalanche snow,avalanches,avalanche neige,avalancha,lawine',
+    ).split(',')
+    if term.strip()
+)
+NEWS_LANGUAGES = tuple(
+    lang.strip() for lang in os.getenv('NEWS_LANGUAGES', 'en,fr,es,de').split(',')
+    if lang.strip()
+)
 
 
 def _has_all_credentials() -> bool:
@@ -61,34 +74,119 @@ def _has_all_credentials() -> bool:
     return True
 
 
-def fetch_newsdata_articles() -> list[dict[str, Any]]:
-    params = {
-        'apikey': NEWSDATA_KEY,
-        'q': NEWS_QUERY,
-        'language': 'en',
-        'size': min(NEWS_MAX_ARTICLES, 10),  # newsdata.io free tier cap
-    }
-    resp = requests.get(NEWSDATA_ENDPOINT, params=params, timeout=30)
-    if resp.status_code >= 400:
-        print(f'[news_ingest] newsdata {resp.status_code}: {resp.text[:300]}', file=sys.stderr)
-    resp.raise_for_status()
-    body = resp.json()
-    results = body.get('results') or []
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=NEWS_LOOKBACK_HOURS)
-    filtered: list[dict[str, Any]] = []
-    for article in results:
-        pub = article.get('pubDate')
+def _redact_url(url: str) -> str:
+    return url.split('?', 1)[0]
+
+
+def _request_json_with_backoff(
+    method: str,
+    url: str,
+    *,
+    params: dict[str, Any] | None = None,
+    payload: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+    timeout: int = 30,
+    retries: int = NEWS_REQUEST_RETRIES,
+) -> dict[str, Any]:
+    last_error: Exception | None = None
+    for attempt in range(retries):
+        response = None
         try:
-            pub_dt = datetime.fromisoformat(pub.replace(' ', 'T').replace('Z', '+00:00'))
-            if pub_dt.tzinfo is None:
-                pub_dt = pub_dt.replace(tzinfo=timezone.utc)
-        except Exception:
-            pub_dt = datetime.now(timezone.utc)
-        if pub_dt < cutoff:
+            response = requests.request(
+                method,
+                url,
+                params=params,
+                json=payload,
+                headers=headers,
+                timeout=timeout,
+            )
+            if response.status_code == 429 or response.status_code >= 500:
+                raise requests.HTTPError(f'{method} {_redact_url(url)} returned {response.status_code}', response=response)
+            response.raise_for_status()
+            return response.json()
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            last_error = exc
+        except requests.HTTPError as exc:
+            status_code = getattr(exc.response, 'status_code', None)
+            if status_code is not None and 400 <= status_code < 500 and status_code != 429:
+                raise
+            last_error = exc
+        except Exception as exc:
+            last_error = exc
+        if attempt < retries - 1:
+            retry_after = 0.0
+            if response is not None:
+                retry_after_header = response.headers.get('Retry-After')
+                if retry_after_header:
+                    try:
+                        retry_after = float(retry_after_header)
+                    except ValueError:
+                        retry_after = 0.0
+            sleep_time = max(NEWS_REQUEST_BACKOFF_SECONDS * (2 ** attempt), retry_after)
+            print(f'[news_ingest] retrying {method} {_redact_url(url)} in {sleep_time:.1f}s', file=sys.stderr)
+            time.sleep(sleep_time)
+    raise last_error or RuntimeError(f'Failed to fetch {_redact_url(url)} after {retries} attempts')
+
+
+def _iter_search_configs() -> Iterable[tuple[str, str]]:
+    for language in NEWS_LANGUAGES or ('en',):
+        for query in NEWS_QUERY_TERMS or ('avalanche',):
+            yield query, language
+
+
+def _parse_pubdate(pub: Any) -> datetime:
+    try:
+        pub_dt = datetime.fromisoformat(str(pub).replace(' ', 'T').replace('Z', '+00:00'))
+        if pub_dt.tzinfo is None:
+            pub_dt = pub_dt.replace(tzinfo=timezone.utc)
+        return pub_dt
+    except Exception:
+        return datetime.now(timezone.utc)
+
+
+def _article_key(article: dict[str, Any]) -> str:
+    return str(article.get('article_id') or article.get('link') or article.get('title') or '')
+
+
+def fetch_newsdata_articles() -> list[dict[str, Any]]:
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=NEWS_LOOKBACK_HOURS)
+    budget = min(NEWS_MAX_ARTICLES, 10)
+    collected: list[dict[str, Any]] = []
+    seen_article_keys: set[str] = set()
+    search_configs = list(_iter_search_configs())
+
+    for query, language in search_configs:
+        if len(collected) >= budget:
+            break
+        params = {
+            'apikey': NEWSDATA_KEY,
+            'q': query,
+            'size': budget,
+            'language': language,
+        }
+        try:
+            body = _request_json_with_backoff('GET', NEWSDATA_ENDPOINT, params=params, timeout=30)
+        except Exception as exc:
+            print(f'[news_ingest] newsdata query failed for {query!r}/{language!r}: {exc}', file=sys.stderr)
             continue
-        filtered.append(article)
-    print(f'[news_ingest] newsdata returned {len(results)} articles; {len(filtered)} within {NEWS_LOOKBACK_HOURS}h window')
-    return filtered
+        results = body.get('results') or []
+        for article in results:
+            key = _article_key(article)
+            if not key or key in seen_article_keys:
+                continue
+            pub_dt = _parse_pubdate(article.get('pubDate'))
+            if pub_dt < cutoff:
+                continue
+            seen_article_keys.add(key)
+            collected.append(article)
+            if len(collected) >= budget:
+                break
+
+    print(
+        f'[news_ingest] newsdata returned {len(collected)} avalanche articles '
+        f'within {NEWS_LOOKBACK_HOURS}h window using {len(search_configs)} query configs'
+    )
+    return collected
 
 
 EXTRACTION_PROMPT = (
@@ -104,7 +202,10 @@ EXTRACTION_PROMPT = (
     "severity: 1=near-miss, 2=small/no casualties, 3=significant damage, "
     "4=multiple casualties, 5=major disaster. "
     "confidence reflects your certainty about extraction accuracy (not the "
-    "event itself)."
+    "event itself). "
+    "You may receive articles in English, French, Spanish, German, or other "
+    "languages; extract from the original text directly and do not require "
+    "English."
 )
 
 
@@ -121,17 +222,17 @@ def extract_event_with_gemini(title: str, content: str) -> Optional[dict[str, An
         },
     }
     try:
-        resp = requests.post(
+        payload = _request_json_with_backoff(
+            'POST',
             f'{GEMINI_ENDPOINT}?key={GEMINI_KEY}',
-            json=body,
+            payload=body,
             timeout=30,
         )
-        resp.raise_for_status()
     except Exception as exc:
         print(f'[news_ingest] gemini call failed: {exc}', file=sys.stderr)
         return None
     try:
-        text = resp.json()['candidates'][0]['content']['parts'][0]['text']
+        text = payload['candidates'][0]['content']['parts'][0]['text']
         record = json.loads(text)
     except Exception as exc:
         print(f'[news_ingest] gemini parse failed: {exc}', file=sys.stderr)
@@ -161,9 +262,7 @@ def load_existing_article_ids() -> set[str]:
         'Authorization': f'Bearer {SUPABASE_SERVICE_ROLE_KEY or ""}',
     }
     try:
-        resp = requests.get(url, params=params, headers=headers, timeout=30)
-        resp.raise_for_status()
-        rows = resp.json()
+        rows = _request_json_with_backoff('GET', url, params=params, headers=headers, timeout=30)
     except Exception as exc:
         print(f'[news_ingest] could not fetch existing gemini_news events: {exc}', file=sys.stderr)
         return set()
@@ -188,6 +287,9 @@ def post_ingest_event(article: dict[str, Any], record: dict[str, Any], region: R
         'event_type': 'reported',
         'severity': int(record.get('severity') or 3),
         'confidence': float(record.get('confidence') or 0.6),
+        'label_confidence': float(record.get('confidence') or 0.6),
+        'source_model': GEMINI_MODEL,
+        'geometry_type': 'point',
         'location_name': record.get('location_name') or region.name,
         'fusion_source': 'newsdata_gemini',
         'metadata': {
@@ -199,6 +301,7 @@ def post_ingest_event(article: dict[str, Any], record: dict[str, Any], region: R
             'event_date_iso': record.get('event_date_iso'),
             'extractor': GEMINI_MODEL,
             'region_key': region.key,
+            'corroboration_sources': ['gemini_news', 'newsdata'],
         },
     }
     headers = {
@@ -206,8 +309,7 @@ def post_ingest_event(article: dict[str, Any], record: dict[str, Any], region: R
         'Authorization': f'Bearer {SUPABASE_SERVICE_ROLE_KEY}',
     }
     try:
-        resp = requests.post(url, json=payload, headers=headers, timeout=60)
-        resp.raise_for_status()
+        _request_json_with_backoff('POST', url, payload=payload, headers=headers, timeout=60)
     except Exception as exc:
         print(f'[news_ingest] ingest-event POST failed for {article.get("article_id")}: {exc}', file=sys.stderr)
         return False

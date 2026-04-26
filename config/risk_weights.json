@@ -1,0 +1,10 @@
+{
+  "fusion_method": "chebyshev_ipa_v2",
+  "weights": {
+    "probability": 1.0,
+    "slope_deviation_from_38deg": 1.0,
+    "aspect_risk": 0.8,
+    "snowpack_weakness": 0.9,
+    "exposure": 0.7
+  }
+}

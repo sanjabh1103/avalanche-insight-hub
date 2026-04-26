@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { RISK_LABELS } from '@/lib/constants';
 import { getRiskColor, type GridCell } from '@/lib/gridUtils';
+import { buildRiskExplanation, selectRiskDrivers } from '@/lib/riskNarratives';
 import type { ShapResult } from '@/lib/shapLoader';
 
 interface WeatherSummary {
@@ -18,42 +19,9 @@ interface Props {
   shapResult?: ShapResult | null;
 }
 
-// F.1: Generate natural language explanation from SHAP values
-function generateRiskExplanation(cell: GridCell): string {
-  const shapEntries = Object.entries(cell.shapValues)
-    .map(([key, value]) => ({ name: key.replace(/_/g, ' '), value: Number(value) }))
-    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
-
-  const topPositive = shapEntries.find(e => e.value > 0);
-  const topNegative = shapEntries.find(e => e.value < 0);
-  const riskLevel = RISK_LABELS[cell.riskScore];
-
-  // Generate contextual explanation based on risk level
-  if (cell.riskScore <= 2) {
-    const reason = topNegative
-      ? `${topNegative.name} (${topNegative.value.toFixed(3)}) stabilizes conditions`
-      : 'favorable terrain and weather patterns';
-    const caution = topPositive
-      ? `Watch for ${topPositive.name} (+${topPositive.value.toFixed(3)}) as a minor risk factor`
-      : 'Overall conditions are stable';
-    return `Low risk (${riskLevel}) due to ${reason}. ${caution}.`;
-  } else if (cell.riskScore >= 4) {
-    const driver = topPositive
-      ? `${topPositive.name} (+${topPositive.value.toFixed(3)}) significantly increases risk`
-      : 'multiple adverse conditions';
-    const mitigation = topNegative
-      ? `Partially offset by ${topNegative.name} (${topNegative.value.toFixed(3)})`
-      : 'No significant stabilizing factors present';
-    return `High risk (${riskLevel}) driven by ${driver}. ${mitigation}.`;
-  } else {
-    const driver = topPositive
-      ? `${topPositive.name} (+${topPositive.value.toFixed(3)}) drives moderate risk`
-      : 'uncertain conditions';
-    const offset = topNegative
-      ? `tempered by ${topNegative.name} (${topNegative.value.toFixed(3)})`
-      : '';
-    return `Moderate risk (${riskLevel}). ${driver} ${offset}.`.trim();
-  }
+function formatCriterionName(value?: string | null): string {
+  if (!value) return 'Unknown';
+  return value.replace(/_/g, ' ');
 }
 
 export default function RiskDashboard({ cell, weatherSummary, shapResult }: Props) {
@@ -71,25 +39,12 @@ export default function RiskDashboard({ cell, weatherSummary, shapResult }: Prop
   // P1.2: Prefer real TreeSHAP from forecast_shap_cache when loaded; fall
   // back to the inline heuristic from cell.shapValues and clearly label the
   // origin so users never see heuristic values framed as TreeSHAP.
-  const realShap = shapResult?.origin === 'forecast_shap_cache' ? shapResult.topFeatures : null;
-  const shapSource: 'treeshap' | 'heuristic' = realShap && realShap.length > 0 ? 'treeshap' : 'heuristic';
-  const shapData = realShap && realShap.length > 0
-    ? realShap.slice(0, 5).map((item) => ({
-        name: item.feature.replace(/_/g, ' '),
-        value: Number(item.shap_value.toFixed(3)),
-        featureValue: Number(item.feature_value.toFixed(3)),
-      }))
-    : Object.entries(cell.shapValues)
-        .map(([key, value]) => ({
-          name: key.replace(/_/g, ' '),
-          value: Number((value as number).toFixed(3)),
-          featureValue: undefined as number | undefined,
-        }))
-        .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
-        .slice(0, 5);
+  const { shapSource, drivers: shapData } = selectRiskDrivers(cell, shapResult);
 
   const maxShap = Math.max(...shapData.map((d) => Math.abs(d.value)), 0.01);
   const coverageState = cell.coverageFlags?.sar_coverage_state;
+  const limitingFactor = cell.limitingFactor ?? cell.shapContext?.limitingFactor;
+  const fusionMethod = cell.fusionMethod ?? cell.shapContext?.fusionMethod;
   const hasResidualShadow = Boolean(cell.coverageFlags?.residual_shadow);
   const isCoverageGood = coverageState === 'good' || coverageState === 'full_coverage';
   const isCoverageLow = coverageState === 'low' || coverageState === 'low_coverage';
@@ -112,6 +67,22 @@ export default function RiskDashboard({ cell, weatherSummary, shapResult }: Prop
           <div className="text-xs text-muted-foreground font-mono">
             Grid [{cell.row},{cell.col}] • {cell.problemType}
           </div>
+          {limitingFactor && (
+            <div className="mt-2 rounded-xl border border-sky-400/25 bg-sky-400/10 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-[0.22em] text-sky-300">Limiting factor</div>
+              <div className="mt-1 text-xs font-mono text-foreground">
+                {formatCriterionName(limitingFactor)}
+                {typeof cell.chebyshevIpaScore === 'number' && Number.isFinite(cell.chebyshevIpaScore)
+                  ? ` • IPA ${cell.chebyshevIpaScore.toFixed(2)}`
+                  : ''}
+              </div>
+              {fusionMethod && (
+                <div className="mt-1 text-[9px] font-mono text-muted-foreground">
+                  fusion: {fusionMethod}
+                </div>
+              )}
+            </div>
+          )}
           {isCoverageGood && !hasResidualShadow && (
             <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5">
               <span className="relative flex h-1.5 w-1.5">
@@ -263,9 +234,9 @@ export default function RiskDashboard({ cell, weatherSummary, shapResult }: Prop
               ? (positiveRisk ? 'hsl(8, 85%, 55%)' : 'hsl(156, 70%, 45%)')
               : 'hsl(156, 72%, 50%)';
             return (
-              <div key={d.name} className="flex items-center gap-2">
+              <div key={d.feature} className="flex items-center gap-2">
                 <span className="text-[9px] text-secondary-foreground w-16 text-right truncate font-mono">
-                  {d.name}
+                  {d.label}
                 </span>
                 <div className="flex-1 h-4 bg-black/20 rounded-full overflow-hidden">
                   <div
@@ -295,7 +266,7 @@ export default function RiskDashboard({ cell, weatherSummary, shapResult }: Prop
           </CardTitle>
         </CardHeader>
         <CardContent className="p-3 pt-1">
-          <p className="text-sm leading-6 text-foreground/90">{generateRiskExplanation(cell)}</p>
+          <p className="text-sm leading-6 text-foreground/90">{buildRiskExplanation(cell, shapResult)}</p>
         </CardContent>
       </Card>
     </div>

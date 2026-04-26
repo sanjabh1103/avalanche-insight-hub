@@ -36,8 +36,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from backend.common.label_governance import materialize_label_governance
 from backend.common.regions import Region, load_regions, repo_root
 from backend.common.real_features import extract_cell_terrain
+from backend.common.sar_artifacts import persist_sar_artifacts
 from backend.common.supabase_io import has_supabase_credentials, rest_insert
 
 import backend.gee_extractor as gee
@@ -135,6 +137,12 @@ def _enrich_and_gate(region: Region, events: list[dict], scene_ts: datetime) -> 
         ev['topo_source'] = 'srtm_local_rasterio'
         ev['topo_resolution_m'] = 30.0
         ev['training_eligible'] = training_eligible
+        ev['label_confidence'] = float(ev.get('label_confidence') or (0.72 if training_eligible else 0.48))
+        ev['training_weight'] = float(ev.get('training_weight') or (0.85 if training_eligible else 0.35))
+        ev['source_model'] = str(ev.get('source_model') or 'gee_threshold_baseline_v1')
+        ev['source_scene_ids'] = [str(scene_id) for scene_id in ev.get('source_scene_ids') or ev.get('features', {}).get('sar_scene_ids') or []]
+        ev['geometry_type'] = str(ev.get('geometry_type') or 'polygon')
+        ev['mask_asset_ref'] = ev.get('mask_asset_ref')
         if not source_training_eligible:
             ev['training_eligible_reason'] = ev.get('training_eligible_reason') or 'sar_low_coverage'
         elif not physics_training_eligible:
@@ -146,6 +154,12 @@ def _enrich_and_gate(region: Region, events: list[dict], scene_ts: datetime) -> 
         features['sar_mean_sensing_time'] = scene_ts.isoformat()
         features['ingest_type'] = 'historical_backfill_v2_local_topo'
         features['physics_gate_deg'] = [SLOPE_MIN_DEG, SLOPE_MAX_DEG]
+        governance = materialize_label_governance(ev)
+        ev['label_confidence'] = governance['label_confidence']
+        ev['training_weight'] = governance['training_weight']
+        ev['training_eligible'] = governance['training_eligible']
+        ev['governance_version'] = governance['governance_version']
+        ev['governed_at'] = governance['governed_at']
         enriched.append(ev)
     return enriched
 
@@ -159,8 +173,12 @@ def _insert_batch(events: list[dict]) -> int:
     inserted = 0
     for i in range(0, len(events), BATCH_SIZE):
         batch = events[i:i + BATCH_SIZE]
-        rest_insert('avalanche_events', batch)
-        inserted += len(batch)
+        inserted_rows = rest_insert('avalanche_events', batch)
+        try:
+            persist_sar_artifacts(inserted_rows, batch)
+        except Exception as exc:
+            print(f'[backfill] sar artifact persistence skipped: {exc}', file=sys.stderr)
+        inserted += len(inserted_rows)
     return inserted
 
 

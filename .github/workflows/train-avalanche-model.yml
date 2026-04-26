@@ -53,6 +53,7 @@ jobs:
   trigger-retraining:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: production
     
     steps:
       # Security: Pin action to specific commit SHA
@@ -168,6 +169,7 @@ jobs:
     needs: trigger-retraining
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: production
     
     steps:
       - name: Checkout repository

@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from backend.common.features import FEATURE_COLUMNS, build_region_grid, generate_training_frame
+from backend.common.label_governance import GOVERNANCE_VERSION, derive_label_governance
 from backend.common.real_features import (
     build_real_feature_row,
     extract_cell_terrain,
@@ -22,6 +23,7 @@ from backend.common.supabase_io import has_supabase_credentials, rest_get
 
 
 NEGATIVES_PER_POSITIVE = 3
+NEGATIVE_TRAINING_WEIGHT = NEGATIVES_PER_POSITIVE / (NEGATIVES_PER_POSITIVE + 1)
 NEGATIVE_DISTANCE_M = 5000.0
 NEGATIVE_TIME_WINDOW_HOURS = 24.0
 NEGATIVE_SLOPE_MIN = 20.0
@@ -137,7 +139,7 @@ def fetch_training_events(hazard_type: str = 'avalanche') -> list[dict[str, Any]
     rows = rest_get(
         'avalanche_events_decayed',
         params={
-            'select': 'id,location,timestamp,severity,source,training_eligible,label_role,verification_status,elevation_m,topo_profile,features,confidence,confidence_decayed',
+            'select': 'id,location,timestamp,severity,source,fusion_source,training_eligible,label_role,verification_status,elevation_m,topo_profile,features,confidence,label_confidence,training_weight,source_model,source_scene_ids,geometry_type,mask_asset_ref,confidence_decayed,governance_version,governed_at',
             'hazard_type': f'eq.{hazard_type}',
             'training_eligible': 'eq.true',
             'order': 'timestamp.asc',
@@ -280,6 +282,13 @@ def build_real_training_frame(
             lat=lat,
             lng=lng,
         )
+        topo_profile = row.get('topo_profile') if isinstance(row.get('topo_profile'), dict) else {}
+        governance = derive_label_governance({
+            **row,
+            'metadata': topo_profile.get('metadata'),
+        })
+        if not governance.training_eligible:
+            continue
         debug_stats['assembled_ok'] += 1
         positives.append({'lat': lat, 'lng': lng, 'timestamp': timestamp, 'region_key': region.key, 'id': row['id']})
         event_source_counts[str(row.get('source') or 'unknown')] += 1
@@ -293,7 +302,19 @@ def build_real_training_frame(
             'label': 1,
             'severity': row.get('severity'),
             'confidence': float(row.get('confidence') or 0.0),
-            'confidence_decayed': float(row.get('confidence_decayed') or row.get('confidence') or 0.0),
+            'label_confidence': governance.label_confidence,
+            'training_weight': governance.training_weight,
+            'source_weight': governance.source_weight,
+            'corroboration_weight': governance.corroboration_weight,
+            'recency_decay': governance.recency_decay,
+            'confidence_decayed': governance.confidence_decayed,
+            'governance_version': str(row.get('governance_version') or GOVERNANCE_VERSION),
+            'governed_at': str(row.get('governed_at') or datetime.now(timezone.utc).isoformat()),
+            'elevation_m_raw': float(terrain['elevation_m']),
+            'slope_angle_deg_raw': float(terrain['slope_angle_deg']),
+            'aspect_deg_raw': float(terrain['aspect_deg']),
+            'terrain_roughness_raw': float(terrain['terrain_roughness']),
+            'curvature_proxy_raw': float(terrain['curvature_proxy']),
             'temperature_2m': assembled['raw_inputs']['temperature_2m'],
             'windspeed_10m': assembled['raw_inputs']['windspeed_10m'],
             **assembled['feature_row'],
@@ -339,7 +360,19 @@ def build_real_training_frame(
                 'label': 0,
                 'severity': None,
                 'confidence': 0.0,
+                'label_confidence': 1.0,
+                'training_weight': NEGATIVE_TRAINING_WEIGHT,
+                'source_weight': 1.0,
+                'corroboration_weight': 1.0,
+                'recency_decay': 1.0,
                 'confidence_decayed': 0.0,
+                'governance_version': GOVERNANCE_VERSION,
+                'governed_at': datetime.now(timezone.utc).isoformat(),
+                'elevation_m_raw': float(negative['terrain']['elevation_m']),
+                'slope_angle_deg_raw': float(negative['terrain']['slope_angle_deg']),
+                'aspect_deg_raw': float(negative['terrain']['aspect_deg']),
+                'terrain_roughness_raw': float(negative['terrain']['terrain_roughness']),
+                'curvature_proxy_raw': float(negative['terrain']['curvature_proxy']),
                 'temperature_2m': assembled['raw_inputs']['temperature_2m'],
                 'windspeed_10m': assembled['raw_inputs']['windspeed_10m'],
                 **assembled['feature_row'],
@@ -348,7 +381,32 @@ def build_real_training_frame(
     frame = pd.DataFrame(dataset_rows)
     if not frame.empty:
         frame = frame.sort_values('timestamp').reset_index(drop=True)
-        frame = frame[['timestamp', 'region_key', 'region_name', 'lat', 'lng', 'label', 'severity', 'confidence', 'confidence_decayed', 'temperature_2m', 'windspeed_10m', *FEATURE_COLUMNS]]
+        frame = frame[[
+            'timestamp',
+            'region_key',
+            'region_name',
+            'lat',
+            'lng',
+            'label',
+            'severity',
+            'confidence',
+            'label_confidence',
+            'training_weight',
+            'source_weight',
+            'corroboration_weight',
+            'recency_decay',
+            'confidence_decayed',
+            'governance_version',
+            'governed_at',
+            'elevation_m_raw',
+            'slope_angle_deg_raw',
+            'aspect_deg_raw',
+            'terrain_roughness_raw',
+            'curvature_proxy_raw',
+            'temperature_2m',
+            'windspeed_10m',
+            *FEATURE_COLUMNS,
+        ]]
 
     positives_count = int((frame['label'] == 1).sum()) if not frame.empty else 0
     negatives_count = int((frame['label'] == 0).sum()) if not frame.empty else 0
@@ -365,7 +423,7 @@ def build_real_training_frame(
             'hazard_type': hazard_type,
             'training_eligible': True,
             'label_role_excluded': True,
-            'verification_status': ['weak', 'verified', 'expert_verified'],
+            'verification_status': ['unverified', 'weak', 'verified', 'expert_verified'],
             'negative_ratio': NEGATIVES_PER_POSITIVE,
             'negative_distance_m': NEGATIVE_DISTANCE_M,
             'negative_time_window_hours': NEGATIVE_TIME_WINDOW_HOURS,
@@ -374,6 +432,7 @@ def build_real_training_frame(
         'oldest_timestamp': frame['timestamp'].min().isoformat() if not frame.empty else None,
         'newest_timestamp': frame['timestamp'].max().isoformat() if not frame.empty else None,
         'event_source_counts': dict(event_source_counts),
+        'mean_training_weight': float(frame['training_weight'].mean()) if not frame.empty else None,
         'debug_stats': debug_stats,
     }
     return frame, manifest
@@ -407,6 +466,20 @@ def load_training_frame(
     )
     synthetic = generate_training_frame(load_regions(), samples_per_region=samples_per_region, seed=seed)
     synthetic['severity'] = None
+    synthetic['confidence'] = synthetic['label'].astype(float)
+    synthetic['label_confidence'] = np.where(synthetic['label'] == 1, 0.55, 1.0)
+    synthetic['training_weight'] = np.where(synthetic['label'] == 1, 0.55, 1.0)
+    synthetic['source_weight'] = 1.0
+    synthetic['corroboration_weight'] = 1.0
+    synthetic['recency_decay'] = 1.0
+    synthetic['confidence_decayed'] = synthetic['label_confidence']
+    synthetic['governance_version'] = GOVERNANCE_VERSION
+    synthetic['governed_at'] = datetime.now(timezone.utc).isoformat()
+    synthetic['elevation_m_raw'] = synthetic['elevation'] * 5000.0
+    synthetic['slope_angle_deg_raw'] = synthetic['slope'] * 60.0
+    synthetic['aspect_deg_raw'] = 180.0
+    synthetic['terrain_roughness_raw'] = synthetic['terrain_roughness'] * 150.0
+    synthetic['curvature_proxy_raw'] = synthetic['curvature_proxy'] * 50.0
     synthetic['temperature_2m'] = synthetic['temp_gradient'] * 20 - 10
     synthetic['windspeed_10m'] = synthetic['wind_loading'] * 55
     return synthetic, {

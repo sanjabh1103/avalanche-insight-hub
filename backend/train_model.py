@@ -30,7 +30,7 @@ from backend.common.artifacts import create_artifact_dir, dump_json, dump_joblib
 from backend.common.config import load_settings
 from backend.common.features import FEATURE_COLUMNS
 from backend.common.schema_drift import feature_columns_hash, label_schema_hash
-from backend.common.supabase_io import has_supabase_credentials, patch_first_row
+from backend.common.supabase_io import has_supabase_credentials, patch_first_row, rest_get
 from backend.common.training_dataset import load_training_frame
 
 
@@ -53,6 +53,76 @@ DRIFT_BASELINE_DAYS = int(os.getenv('DRIFT_BASELINE_DAYS', '30'))
 DRIFT_REGION_MEAN_THRESHOLD = float(os.getenv('DRIFT_REGION_MEAN_THRESHOLD', '0.12'))
 DRIFT_FEATURE_MAX_THRESHOLD = float(os.getenv('DRIFT_FEATURE_MAX_THRESHOLD', '0.18'))
 DRIFT_NEW_POSITIVE_THRESHOLD = int(os.getenv('DRIFT_NEW_POSITIVE_THRESHOLD', '10'))
+MTS_RUNTIME_PROVIDER = os.getenv('MTS_RUNTIME_PROVIDER', 'local').strip() or 'local'
+SAR_RELEASE_GATE_PASSED = os.getenv('SAR_RELEASE_GATE_PASSED', '').lower() in ('1', 'true', 'yes')
+REQUESTED_DATASET_SNAPSHOT_ID = os.getenv('REQUESTED_DATASET_SNAPSHOT_ID')
+
+
+def build_dataset_snapshot_id(dataset_manifest: dict[str, object] | None) -> str:
+    if not isinstance(dataset_manifest, dict):
+        return 'unknown'
+    version = str(dataset_manifest.get('training_dataset_version') or 'unknown')
+    newest_timestamp = dataset_manifest.get('newest_timestamp')
+    if isinstance(newest_timestamp, str) and newest_timestamp:
+        return f'{version}:{newest_timestamp}'
+    return version
+
+
+def collect_sar_unet_volume_stats(dataset_manifest: dict[str, object] | None) -> dict[str, int]:
+    fallback_promoted = 0
+    if isinstance(dataset_manifest, dict):
+        source_counts = dataset_manifest.get('event_source_counts')
+        if isinstance(source_counts, dict):
+            fallback_promoted = int(source_counts.get('sar_unet') or 0)
+    if not has_supabase_credentials():
+        return {
+            'sar_unet_shadow_count': 0,
+            'sar_unet_promoted_count': fallback_promoted,
+            'sar_unet_promoted_region_count': 0,
+            'sar_unet_promoted_scene_date_count': 0,
+        }
+    try:
+        rows = rest_get(
+            'avalanche_events',
+            params={
+                'select': 'timestamp,training_eligible,features',
+                'source': 'eq.sar_unet',
+                'order': 'timestamp.desc',
+                'limit': '2000',
+            },
+        ) or []
+    except Exception as exc:  # pragma: no cover - network path
+        print(f'[train_model] could not collect sar_unet volume stats ({exc}); using manifest fallback', file=sys.stderr)
+        return {
+            'sar_unet_shadow_count': 0,
+            'sar_unet_promoted_count': fallback_promoted,
+            'sar_unet_promoted_region_count': 0,
+            'sar_unet_promoted_scene_date_count': 0,
+        }
+
+    shadow_count = 0
+    promoted_rows: list[dict[str, object]] = []
+    for row in rows:
+        if bool(row.get('training_eligible')):
+            promoted_rows.append(row)
+        else:
+            shadow_count += 1
+    promoted_regions = {
+        str((row.get('features') or {}).get('region_key') or 'unknown')
+        for row in promoted_rows
+        if isinstance(row.get('features'), dict)
+    }
+    promoted_scene_dates = {
+        str(row.get('timestamp'))[:10]
+        for row in promoted_rows
+        if row.get('timestamp')
+    }
+    return {
+        'sar_unet_shadow_count': shadow_count,
+        'sar_unet_promoted_count': len(promoted_rows),
+        'sar_unet_promoted_region_count': len(promoted_regions),
+        'sar_unet_promoted_scene_date_count': len(promoted_scene_dates),
+    }
 
 
 def peirce_skill_score_max(y_true: np.ndarray, y_prob: np.ndarray) -> tuple[float, float]:
@@ -108,8 +178,12 @@ def chronological_split(frame: pd.DataFrame, train_ratio: float = 0.7, calib_rat
 def _event_sample_weights(frame: pd.DataFrame, *, decay_floor: float = 0.3, drift_multiplier: float = 1.0) -> np.ndarray:
     if frame.empty:
         return np.array([], dtype=float)
-    if 'confidence_decayed' in frame.columns:
+    if 'training_weight' in frame.columns:
+        weights = frame['training_weight'].astype(float).to_numpy()
+    elif 'confidence_decayed' in frame.columns:
         weights = frame['confidence_decayed'].astype(float).to_numpy()
+    elif 'label_confidence' in frame.columns:
+        weights = frame['label_confidence'].astype(float).to_numpy()
     elif 'confidence' in frame.columns:
         weights = frame['confidence'].astype(float).to_numpy()
     else:
@@ -353,6 +427,44 @@ def fit_model(seed: int, frame: pd.DataFrame, dataset_manifest: dict[str, object
         'raw_mean_prob_p99': float(np.quantile(raw_mean_prob, 0.99)) if raw_mean_prob.size else None,
     }
 
+    lstm_head = None
+    dataset_snapshot_id = build_dataset_snapshot_id(dataset_manifest)
+    sar_volume_stats = collect_sar_unet_volume_stats(dataset_manifest)
+    lstm_head_meta: dict[str, object] = {
+        'enabled': False,
+        'train_flag': os.getenv('TRAIN_MTS_LSTM_HEAD', os.getenv('TRAIN_LSTM_HEAD', 'true')).lower() in ('1', 'true', 'yes'),
+        'use_flag_default': os.getenv('USE_MTS_LSTM_HEAD', os.getenv('USE_LSTM_HEAD', 'true')).lower() in ('1', 'true', 'yes'),
+        'dynamic_model_type': 'mts_lstm_v1',
+        'surrogate_model_role': 'tree_shap_surrogate',
+        'runtime_provider': MTS_RUNTIME_PROVIDER,
+        'dataset_snapshot_id': dataset_snapshot_id,
+        **sar_volume_stats,
+    }
+    try:
+        from backend.lstm_model import fit_lstm_head
+        lstm_head = fit_lstm_head(
+            train_df=train_df,
+            test_df=test_df,
+            rf_metrics=metrics,
+            seed=seed,
+            selected_features=selected_features,
+            dataset_manifest=dataset_manifest,
+            sar_volume_stats=sar_volume_stats,
+            runtime_provider=MTS_RUNTIME_PROVIDER,
+            sar_release_gate_passed=SAR_RELEASE_GATE_PASSED,
+            requested_dataset_snapshot_id=REQUESTED_DATASET_SNAPSHOT_ID or dataset_snapshot_id,
+        )
+        if lstm_head is not None:
+            lstm_head_meta = getattr(lstm_head, 'metadata', lstm_head_meta)
+            if getattr(lstm_head, 'model', None) is None:
+                lstm_head = None
+    except Exception as exc:  # pragma: no cover - optional sibling model path
+        lstm_head_meta = {
+            **lstm_head_meta,
+            'enabled': False,
+            'error': str(exc),
+        }
+
     # P2.2: Hash of the active FEATURE_COLUMNS + observed label enum so
     # daily_inference can detect schema drift and refuse to serve a stale
     # artifact against an evolved feature set.
@@ -365,6 +477,7 @@ def fit_model(seed: int, frame: pd.DataFrame, dataset_manifest: dict[str, object
         'selector': selector,
         'base_model': rf,
         'calibrated_model': calibrated_model,
+        'surrogate_model': calibrated_model,
         'feature_columns': FEATURE_COLUMNS,
         'selected_features': selected_features,
         'feature_means': x_res_sel.mean().to_dict(),
@@ -373,13 +486,19 @@ def fit_model(seed: int, frame: pd.DataFrame, dataset_manifest: dict[str, object
         'calibration_error': calibration_error,
         'tree_variance_policy': tree_variance_policy,
         'metrics': metrics,
+        'lstm_head': lstm_head,
+        'lstm_head_meta': lstm_head_meta,
         'cv_metrics': cv_metrics,
         'dataset_manifest': dataset_manifest,
         'training_dataset_version': dataset_manifest.get('training_dataset_version', 'unknown'),
+        'dataset_snapshot_id': dataset_snapshot_id,
         'created_at': datetime.now(timezone.utc).isoformat(),
         'seed': seed,
         'feature_columns_hash': feature_hash,
         'label_schema_hash': label_hash,
+        'dynamic_model_type': 'mts_lstm_v1' if lstm_head is not None else 'surrogate_rf_v1',
+        'dynamic_model_version': lstm_head_meta.get('dynamic_model_version') if isinstance(lstm_head_meta, dict) else None,
+        'surrogate_model_version': datetime.now(timezone.utc).isoformat(),
     }
     return bundle
 
@@ -393,8 +512,13 @@ def publish_metadata(artifact_dir: Path, bundle: dict[str, object]):
         'calibration_method': bundle['calibration_method'],
         'calibration_error': bundle['calibration_error'],
         'metrics': bundle['metrics'],
+        'lstm_head_meta': bundle.get('lstm_head_meta'),
+        'dynamic_model_type': bundle.get('dynamic_model_type'),
+        'dynamic_model_version': bundle.get('dynamic_model_version'),
+        'surrogate_model_version': bundle.get('surrogate_model_version'),
         'dataset_manifest': bundle.get('dataset_manifest'),
         'training_dataset_version': bundle.get('training_dataset_version'),
+        'dataset_snapshot_id': bundle.get('dataset_snapshot_id'),
         'artifact_dir': str(artifact_dir),
         'published_at': datetime.now(timezone.utc).isoformat(),
     }
@@ -622,7 +746,7 @@ def main() -> int:
         abc_version = f"opt-abc-{artifact_dir.name}"
         abc_summary = build_optimization_summary(
             abc_result,
-            runtime_mode='edge_fallback',
+            runtime_mode='batch_async',
             version=abc_version,
         )
         metadata['optimization_summary'] = abc_summary
@@ -656,7 +780,11 @@ def main() -> int:
             'version': f"async-{artifact_dir.name}",
             'last_trained': metadata['published_at'],
             'f1_score': metadata['metrics']['f1'],
+            'inference_backend': 'batch_async',
             'next_run': None,
+            'feature_version': str(bundle.get('dynamic_model_type') or 'surrogate_rf_v1'),
+            'calibration_profile_version': str(bundle.get('dynamic_model_version') or 'surrogate_rf_v1'),
+            'threshold_profile_version': str(bundle.get('surrogate_model_version') or 'surrogate_rf_v1'),
         }
         if abc_summary is not None:
             payload['optimization_version'] = str(abc_summary['optimization_version'])

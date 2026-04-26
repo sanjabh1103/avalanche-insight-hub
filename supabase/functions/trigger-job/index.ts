@@ -129,7 +129,7 @@ async function invokeEdgeFunction(
    };
  }
 
- async function invokeModalWorker(
+async function invokeModalWorker(
    capabilities: RuntimeCapabilities,
    endpoint: string,
    payload: Record<string, unknown>,
@@ -165,10 +165,174 @@ async function invokeEdgeFunction(
    }
  }
 
- function toNumber(value: unknown, fallback = 0) {
-   const numeric = typeof value === 'number' ? value : Number(value);
-   return Number.isFinite(numeric) ? numeric : fallback;
- }
+async function invokeWorkerEndpoint(
+  capabilities: RuntimeCapabilities,
+  endpoint: string,
+  aliases: string[],
+  payload: Record<string, unknown>,
+  timeoutMs = 15000,
+) {
+  for (const candidate of [endpoint, ...aliases]) {
+    const result = await invokeModalWorker(capabilities, candidate, payload, timeoutMs);
+    if (result !== null) {
+      return { endpoint: candidate, result };
+    }
+  }
+  return null;
+}
+
+function toNumber(value: unknown, fallback = 0) {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+class RequestValidationError extends Error {
+  status: number;
+
+  constructor(message: string, status = 400) {
+    super(message);
+    this.name = 'RequestValidationError';
+    this.status = status;
+  }
+}
+
+function extractEvaluationManifest(body: Record<string, unknown>) {
+  const inlineManifest = body.evaluation_manifest;
+  if (inlineManifest && typeof inlineManifest === 'object' && !Array.isArray(inlineManifest)) {
+    return inlineManifest as Record<string, unknown>;
+  }
+
+  const rawManifest = body.evaluation_manifest_json;
+  if (typeof rawManifest === 'string' && rawManifest.trim()) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawManifest);
+    } catch {
+      throw new RequestValidationError(
+        `evaluation_manifest_json is not valid JSON: ${String(rawManifest).slice(0, 200)}`,
+      );
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new RequestValidationError('evaluation_manifest_json must decode to a JSON object');
+    }
+    return parsed as Record<string, unknown>;
+  }
+
+  return null;
+}
+
+function extractBearerToken(authorizationHeader: string | null) {
+  if (!authorizationHeader) return null;
+  const [scheme, token] = authorizationHeader.split(/\s+/, 2);
+  if (!scheme || scheme.toLowerCase() !== 'bearer' || !token) {
+    return null;
+  }
+  return token.trim() || null;
+}
+
+function parseCsvEnv(raw: string | undefined, { lowercase = false } = {}) {
+  return new Set(
+    (raw ?? '')
+      .split(',')
+      .map((value) => lowercase ? value.trim().toLowerCase() : value.trim())
+      .filter(Boolean),
+  );
+}
+
+function extractAdminRoles(appMetadata: unknown) {
+  if (!appMetadata || typeof appMetadata !== 'object') {
+    return [] as string[];
+  }
+  const roles = (appMetadata as Record<string, unknown>).roles;
+  if (Array.isArray(roles)) {
+    return roles
+      .map((value) => typeof value === 'string' ? value.trim().toLowerCase() : '')
+      .filter(Boolean);
+  }
+  if (typeof roles === 'string' && roles.trim()) {
+    return [roles.trim().toLowerCase()];
+  }
+  return [] as string[];
+}
+
+interface EvaluateReleaseRequestContext {
+  evaluationManifest: Record<string, unknown> | null;
+  referenceSetKey: string | null;
+  adminAudit: Record<string, unknown> | null;
+}
+
+async function prepareEvaluateReleaseRequest(
+  body: Record<string, unknown>,
+  callerAuthorization: string | null,
+) : Promise<EvaluateReleaseRequestContext> {
+  const evaluationManifest = extractEvaluationManifest(body);
+  const referenceSetKey = typeof body.reference_set_key === 'string' && body.reference_set_key.trim()
+    ? body.reference_set_key.trim()
+    : null;
+
+  if (!evaluationManifest) {
+    return {
+      evaluationManifest: null,
+      referenceSetKey,
+      adminAudit: null,
+    };
+  }
+
+  const token = extractBearerToken(callerAuthorization);
+  if (!token) {
+    throw new RequestValidationError(
+      'ad hoc evaluation manifests require an authenticated admin bearer token',
+      401,
+    );
+  }
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const authKey = Deno.env.get('SB_PUBLISHABLE_KEY')
+    ?? Deno.env.get('SUPABASE_ANON_KEY')
+    ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !authKey) {
+    throw new Error('Missing Supabase auth configuration for admin manifest authorization');
+  }
+
+  const authClient = createClient(supabaseUrl, authKey);
+  const { data, error } = await authClient.auth.getUser(token);
+  if (error || !data?.user) {
+    throw new RequestValidationError(
+      'ad hoc evaluation manifests require a valid admin bearer token',
+      401,
+    );
+  }
+
+  const user = data.user;
+  const adminRoles = extractAdminRoles(user.app_metadata);
+  const adminUserIds = parseCsvEnv(Deno.env.get('ADMIN_USER_IDS'));
+  const adminEmails = parseCsvEnv(Deno.env.get('ADMIN_USER_EMAILS'), { lowercase: true });
+  const normalizedEmail = typeof user.email === 'string' ? user.email.trim().toLowerCase() : '';
+
+  let authSource: string | null = null;
+  if (adminRoles.includes('admin')) {
+    authSource = 'app_metadata.roles';
+  } else if (adminUserIds.has(user.id)) {
+    authSource = 'ADMIN_USER_IDS';
+  } else if (normalizedEmail && adminEmails.has(normalizedEmail)) {
+    authSource = 'ADMIN_USER_EMAILS';
+  }
+
+  if (!authSource) {
+    throw new RequestValidationError('ad hoc evaluation manifests require admin privileges', 403);
+  }
+
+  return {
+    evaluationManifest,
+    referenceSetKey,
+    adminAudit: {
+      user_id: user.id,
+      user_email: user.email ?? null,
+      app_metadata_roles: adminRoles,
+      auth_source: authSource,
+    },
+  };
+}
 
  function incrementSemver(version: string | null | undefined) {
    const currentVersion = version || 'v1.0.0';
@@ -187,20 +351,6 @@ async function invokeEdgeFunction(
      if (Array.isArray(record.results)) return record.results as Record<string, unknown>[];
    }
    return [];
- }
-
- function geometryToWkt(geometry: unknown) {
-   if (!geometry || typeof geometry !== 'object' || Array.isArray(geometry)) return null;
-   const record = geometry as Record<string, unknown>;
-   if (record.type !== 'Polygon' || !Array.isArray(record.coordinates) || !Array.isArray(record.coordinates[0])) {
-     return null;
-   }
-   const ring = (record.coordinates[0] as unknown[])
-     .map((point) => Array.isArray(point) && point.length >= 2 ? `${toNumber(point[0]).toFixed(6)} ${toNumber(point[1]).toFixed(6)}` : null)
-     .filter((point): point is string => Boolean(point));
-   if (ring.length < 4) return null;
-   const closedRing = ring[0] === ring[ring.length - 1] ? ring : [...ring, ring[0]];
-   return `SRID=4326;POLYGON((${closedRing.join(', ')}))`;
  }
 
  function nextOptimizationRunAt() {
@@ -265,6 +415,9 @@ serve(async (req: Request) => {
     const body = await req.json();
     const { type, bbox, hazard_type: hazardType = 'avalanche' } = body;
     const capabilities = detectRuntimeCapabilities();
+    const evaluateReleaseContext = type === 'evaluate_release'
+      ? await prepareEvaluateReleaseRequest(body as Record<string, unknown>, callerAuthorization)
+      : null;
     const validTypes = [
       'daily_enrichment',
       'sentinel_refresh',
@@ -280,6 +433,7 @@ serve(async (req: Request) => {
       'model_optimization',
       'forecast_grid_precompute',
       'ml_train',
+      'evaluate_release',
     ];
     if (!validTypes.includes(type)) {
       return new Response(JSON.stringify({ error: 'Invalid job type' }), {
@@ -357,6 +511,18 @@ serve(async (req: Request) => {
           capability_summary: capabilities.summary,
           sar_enabled: capabilities.sarEnabled,
           gpu_enabled: capabilities.gpuEnabled,
+          ...(type === 'evaluate_release'
+            ? {
+              release_gate: {
+                gate_source: evaluateReleaseContext?.evaluationManifest ? 'admin_manifest' : 'reference_set_key',
+                reference_set_key: evaluateReleaseContext?.referenceSetKey ?? null,
+                prediction_model_version: typeof body.prediction_model_version === 'string' && body.prediction_model_version.trim()
+                  ? body.prediction_model_version.trim()
+                  : null,
+                admin_audit: evaluateReleaseContext?.adminAudit ?? null,
+              },
+            }
+            : {}),
         },
       })
       .select('id')
@@ -378,7 +544,15 @@ serve(async (req: Request) => {
           );
           const newsData = await newsRes.json();
           const articles = newsData.results?.slice(0, 5) || [];
-          result = { articlesProcessed: articles.length, source: 'newsdata.io' };
+          let ingestedEvents = 0;
+          let ingestFailures = 0;
+          result = {
+            articlesProcessed: articles.length,
+            ingestedEvents,
+            ingestFailures,
+            source: 'newsdata.io',
+            ingestionPath: 'ingest-event',
+          };
 
           if (GEMINI_KEY && articles.length > 0) {
             for (const article of articles) {
@@ -410,25 +584,55 @@ serve(async (req: Request) => {
                 if (jsonMatch) {
                   const event = JSON.parse(jsonMatch[0]);
                   if (event && event.latitude && event.longitude) {
-                    // Reverse geocode if Gemini didn't provide location_name
                     let locName = event.location_name || '';
                     if (!locName) {
                       locName = await reverseGeocode(event.latitude, event.longitude);
                     }
-                    await supabase.from('avalanche_events').insert({
-                      source: 'newsdata.io',
-                      description: event.description || article.title,
-                      severity: Math.min(5, Math.max(1, event.severity || 3)),
-                      event_type: ['slab', 'loose', 'wet', 'glide', 'cornice'].includes(event.type) ? event.type : 'unknown',
-                      location: `SRID=4326;POINT(${event.longitude} ${event.latitude})`,
-                      confidence: 0.7,
-                      fusion_source: 'gemini_extraction',
-                      features: { location_name: locName || article.title },
-                    });
+                    const confidence = Number(Math.max(0.45, Math.min(0.95, toNumber(event.confidence, 0.7))).toFixed(3));
+                    await invokeEdgeFunction(
+                      'ingest-event',
+                      {
+                        lat: toNumber(event.latitude),
+                        lng: toNumber(event.longitude),
+                        hazard_type: hazardType,
+                        source: 'gemini_news',
+                        fusion_source: 'newsdata_gemini',
+                        source_model: 'gemini-2.0-flash',
+                        description: event.description || article.title || 'News-sourced avalanche event',
+                        severity: Math.min(5, Math.max(1, Math.round(toNumber(event.severity, 3)))),
+                        event_type: ['slab', 'loose', 'wet', 'glide', 'cornice'].includes(event.type) ? event.type : 'reported',
+                        confidence,
+                        label_confidence: confidence,
+                        geometry_type: 'point',
+                        location_name: locName || article.title || 'Unknown location',
+                        metadata: {
+                          news_article_id: article.article_id || article.link || null,
+                          news_link: article.link || null,
+                          news_title: article.title || null,
+                          news_source: article.source_id || null,
+                          news_pub_date: article.pubDate || null,
+                          event_date_iso: article.pubDate || null,
+                          extractor: 'gemini-2.0-flash',
+                          corroboration_sources: ['gemini_news', 'newsdata'],
+                        },
+                      },
+                      callerAuthorization,
+                      callerApiKey,
+                    );
+                    ingestedEvents += 1;
                   }
                 }
-              } catch { /* skip */ }
+              } catch {
+                ingestFailures += 1;
+              }
             }
+            result = {
+              articlesProcessed: articles.length,
+              ingestedEvents,
+              ingestFailures,
+              source: 'newsdata.io',
+              ingestionPath: 'ingest-event',
+            };
           }
         } catch (e) {
           result = { error: 'NewsData fetch failed', details: (e as Error).message };
@@ -448,64 +652,46 @@ serve(async (req: Request) => {
         if (asfRes.ok) {
           const scenes = normalizeAsfScenes(await asfRes.json());
           const sceneCount = scenes.length;
-          let detectionsInserted = 0;
+          let detectionsPreviewed = 0;
+          let detectionsPersisted = 0;
+          let workerEndpoint: string | null = null;
+          let workerResult: Record<string, unknown> | null = null;
           let fallbackUsed = true;
 
           if (sceneCount > 1 && capabilities.sarEnabled && capabilities.gpuEnabled) {
-            const modalResult = await invokeModalWorker(capabilities, 'sar-detect', {
+            const workerInvocation = await invokeWorkerEndpoint(capabilities, 'sar-segment', ['sar-detect'], {
               job_id: job.id,
               hazard_type: hazardType,
               bbox: searchBbox,
               scenes,
-            }, 15000);
-            const detections = Array.isArray(modalResult?.detections) ? modalResult.detections as Record<string, unknown>[] : [];
-
-            for (const detection of detections) {
-              const lat = toNumber(detection.lat, (searchBbox[0] + searchBbox[2]) / 2);
-              const lng = toNumber(detection.lng, (searchBbox[1] + searchBbox[3]) / 2);
-              const polygonWkt = geometryToWkt(detection.geometry);
-              const locName = await reverseGeocode(lat, lng);
-              const confidence = Number(Math.max(0.1, Math.min(0.99, toNumber(detection.confidence, 0.72))).toFixed(3));
-              const sceneIds = Array.isArray(detection.scene_ids)
-                ? detection.scene_ids.filter((item) => typeof item === 'string')
-                : scenes.slice(0, 2).map((scene) => String(scene.sceneName || scene.fileID || scene.id || 'unknown-scene'));
-              const { error: insertErr } = await supabase.from('avalanche_events').insert({
-                hazard_type: hazardType,
-                source: 'Sentinel-1',
-                description: typeof detection.description === 'string' && detection.description
-                  ? detection.description
-                  : 'Sentinel-1 SAR backscatter anomaly detected',
-                severity: Math.max(1, Math.min(5, Math.round(toNumber(detection.severity, 3)))),
-                event_type: 'slab',
-                location: `SRID=4326;POINT(${lng} ${lat})`,
-                event_geom: polygonWkt as unknown,
-                confidence,
-                fusion_source: 'sentinel1_backscatter',
-                detection_mode: 'full',
-                detection_confidence: confidence,
-                satellite_scene_ids: sceneIds,
-                backscatter_delta_db: toNumber(detection.backscatter_delta_db, 0),
-                coherence_drop: toNumber(detection.coherence_drop, 0),
-                sar_metadata: detection,
-                features: {
-                  location_name: locName,
-                  runtime_mode: capabilities.mode,
-                  source: 'Sentinel-1',
-                },
-              });
-              if (!insertErr) {
-                detectionsInserted += 1;
-              }
+              shadow_mode: true,
+              persist_events: true,
+              training_eligible: false,
+              training_eligible_reason: 'sar_unet_shadow_mode',
+            }, 20000);
+            if (workerInvocation?.result) {
+              workerEndpoint = workerInvocation.endpoint;
+              workerResult = workerInvocation.result;
+              detectionsPreviewed = Array.isArray(workerResult.detections)
+                ? workerResult.detections.length
+                : 0;
+              detectionsPersisted = Math.max(0, Math.round(toNumber(workerResult.persisted_events, 0)));
+              fallbackUsed = false;
             }
-
-            fallbackUsed = detectionsInserted === 0;
           }
 
+          const maskAssetRefs = workerResult && Array.isArray(workerResult.mask_asset_refs)
+            ? workerResult.mask_asset_refs.filter((item): item is string => typeof item === 'string')
+            : [];
           const satelliteStats = {
             last_refresh_at: new Date().toISOString(),
             scenes_found: sceneCount,
-            detections_inserted: detectionsInserted,
+            detections_previewed: detectionsPreviewed,
+            detections_persisted: detectionsPersisted,
             mode: capabilities.mode,
+            worker_endpoint: workerEndpoint,
+            shadow_mode: workerResult?.shadow_mode !== false,
+            mask_asset_refs: maskAssetRefs.slice(0, 10),
             fallback_used: fallbackUsed,
           };
           await updateModelStatus(supabase, hazardType, {
@@ -516,16 +702,25 @@ serve(async (req: Request) => {
               sar_enabled: capabilities.sarEnabled,
               gpu_enabled: capabilities.gpuEnabled,
             },
-            sar_pipeline_version: capabilities.sarEnabled ? 'sentinel1-change-detect-v1' : 'edge-sar-fallback-v1',
+            sar_pipeline_version: workerEndpoint
+              ? String(workerResult?.model_version || 'sar_unet_shadow_v1')
+              : capabilities.sarEnabled
+                ? 'sentinel_refresh_preview_only_v1'
+                : 'edge-sar-fallback-v1',
             satellite_detection_stats: satelliteStats,
           });
 
           result = {
             scenesFound: sceneCount,
             source: 'ASF Vertex',
-            detections: detectionsInserted,
+            detectionsPreviewed,
+            detectionsPersisted,
+            detections: workerResult?.detections || [],
+            maskAssetRefs,
             runtimeMode: capabilities.mode,
             capabilitySummary: capabilities.summary,
+            workerEndpoint,
+            shadowMode: workerResult?.shadow_mode !== false,
             fallbackUsed,
           };
         } else {
@@ -565,12 +760,21 @@ serve(async (req: Request) => {
       } else {
         const newVersion = incrementSemver(currentVersion);
         const edgeImprovement = 0.002 + Math.random() * 0.004;
-        const modalResult = await invokeModalWorker(capabilities, 'train', {
+        const workerInvocation = await invokeWorkerEndpoint(capabilities, 'train-mtslstm', ['train'], {
           job_id: job.id,
           hazard_type: hazardType,
           current_version: currentVersion,
           optimization_summary: currentModel?.optimization_summary || {},
+          dataset_snapshot_id: 'latest',
+          epochs: 50,
+          early_stopping: true,
+          minimum_epochs_before_early_stopping: 10,
+          patience_early_stopping: 7,
+          shadow_mode: true,
+          promotion_rule: 'strict_pss_gt_rf_and_brier_lte_rf',
+          sar_release_gate_passed: false,
         }, 20000);
+        const modalResult = workerInvocation?.result;
         const improvement = capabilities.gpuEnabled
           ? Math.max(0.003, toNumber(modalResult?.f1_improvement, 0.008))
           : edgeImprovement;
@@ -597,7 +801,7 @@ serve(async (req: Request) => {
           f1_improvement: parseFloat(improvement.toFixed(4)),
           runtimeMode: capabilities.mode,
           capabilitySummary: capabilities.summary,
-          optimizer: capabilities.gpuEnabled ? 'modal-train' : 'edge-lite',
+          optimizer: capabilities.gpuEnabled ? (workerInvocation?.endpoint || 'train-mtslstm') : 'edge-lite',
         };
       }
 
@@ -613,11 +817,97 @@ serve(async (req: Request) => {
         callerApiKey,
       );
     } else if (type === 'retrain_avalanche_model') {
-      result = { simulated: true, hazard_type: hazardType, training_status: 'queued' };
+      const workerInvocation = await invokeWorkerEndpoint(capabilities, 'train-mtslstm', ['train'], {
+        job_id: job.id,
+        hazard_type: hazardType,
+        requested_by: 'trigger-job',
+        request_type: type,
+        dataset_snapshot_id: 'latest',
+        epochs: 50,
+        early_stopping: true,
+        minimum_epochs_before_early_stopping: 10,
+        patience_early_stopping: 7,
+        shadow_mode: true,
+        promotion_rule: 'strict_pss_gt_rf_and_brier_lte_rf',
+        sar_release_gate_passed: false,
+      }, 20000);
+      result = {
+        simulated: !workerInvocation,
+        hazard_type: hazardType,
+        training_status: workerInvocation ? 'submitted' : 'queued',
+        runtimeMode: capabilities.mode,
+        workerEndpoint: workerInvocation?.endpoint || null,
+        workerResult: workerInvocation?.result || null,
+      };
     } else if (type === 'forecast_grid_precompute') {
-      result = { simulated: true, hazard_type: hazardType, forecast_grid_status: 'queued' };
+      const workerInvocation = await invokeWorkerEndpoint(capabilities, 'infer-mtslstm', [], {
+        job_id: job.id,
+        hazard_type: hazardType,
+        requested_by: 'trigger-job',
+        request_type: type,
+        dataset_snapshot_id: 'latest',
+      }, 20000);
+      result = {
+        simulated: !workerInvocation,
+        hazard_type: hazardType,
+        forecast_grid_status: workerInvocation ? 'submitted' : 'queued',
+        runtimeMode: capabilities.mode,
+        workerEndpoint: workerInvocation?.endpoint || null,
+        workerResult: workerInvocation?.result || null,
+      };
+    } else if (type === 'evaluate_release') {
+      const evaluationManifest = evaluateReleaseContext?.evaluationManifest ?? null;
+      const referenceSetKey = evaluateReleaseContext?.referenceSetKey ?? null;
+      if (!evaluationManifest && !referenceSetKey) {
+        throw new RequestValidationError(
+          'evaluate_release requires reference_set_key or evaluation_manifest_json/evaluation_manifest',
+        );
+      }
+      const workerPayload: Record<string, unknown> = evaluationManifest
+        ? { ...evaluationManifest }
+        : { reference_set_key: referenceSetKey };
+      if (typeof body.prediction_model_version === 'string' && body.prediction_model_version.trim()) {
+        workerPayload.prediction_model_version = body.prediction_model_version.trim();
+      }
+      const workerInvocation = await invokeWorkerEndpoint(capabilities, 'evaluate-release', [], {
+        ...workerPayload,
+        job_id: job.id,
+        hazard_type: hazardType,
+        requested_by: 'trigger-job',
+        request_type: type,
+        release_target: 'sar_unet',
+      }, 20000);
+      result = {
+        simulated: !workerInvocation,
+        hazard_type: hazardType,
+        evaluation_status: workerInvocation ? 'submitted' : 'queued',
+        runtimeMode: capabilities.mode,
+        workerEndpoint: workerInvocation?.endpoint || null,
+        workerResult: workerInvocation?.result || null,
+      };
     } else if (type === 'ml_train') {
-      result = { simulated: true, hazard_type: hazardType, training_status: 'queued' };
+      const workerInvocation = await invokeWorkerEndpoint(capabilities, 'train-mtslstm', ['train'], {
+        job_id: job.id,
+        hazard_type: hazardType,
+        requested_by: 'trigger-job',
+        request_type: type,
+        dataset_snapshot_id: 'latest',
+        epochs: 50,
+        early_stopping: true,
+        minimum_epochs_before_early_stopping: 10,
+        patience_early_stopping: 7,
+        shadow_mode: true,
+        promotion_rule: 'strict_pss_gt_rf_and_brier_lte_rf',
+        sar_release_gate_passed: false,
+      }, 20000);
+      result = {
+        simulated: !workerInvocation,
+        hazard_type: hazardType,
+        training_status: workerInvocation ? 'submitted' : 'queued',
+        runtimeMode: capabilities.mode,
+        workerEndpoint: workerInvocation?.endpoint || null,
+        workerResult: workerInvocation?.result || null,
+      };
     } else if (type === 'model_optimization') {
       const { data: currentModel } = await supabase
         .from('model_status')
@@ -730,6 +1020,9 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
+    const statusCode = typeof (err as { status?: unknown }).status === 'number'
+      ? Number((err as { status: number }).status)
+      : 500;
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (supabaseUrl && serviceRoleKey && jobId) {
@@ -744,7 +1037,7 @@ serve(async (req: Request) => {
       }
     }
     return new Response(JSON.stringify({ error: (err as Error).message }), {
-      status: 500,
+      status: statusCode,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

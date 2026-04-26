@@ -23,12 +23,19 @@ import ThemeToggle from '@/components/ThemeToggle';
 import HistoricalEventsToggle, { type AvalancheEvent } from '@/components/HistoricalEventsToggle';
 import ExpertModePanel from '@/components/ExpertModePanel';
 import VoxelNeighborhoodModal from '@/components/VoxelNeighborhoodModal';
-import { forecastGridRowToHourlyGrids, generateForecastGrid, type ForecastGridRowRecord, type GridCell } from '@/lib/gridUtils';
+import {
+  forecastGridRowToHourlyGrids,
+  forecastGridRowToRunoutPolygons,
+  forecastGridRowToSarGeometries,
+  type ForecastGridRowRecord,
+  type GridCell,
+} from '@/lib/gridUtils';
 import { loadShapForCell, type ShapResult } from '@/lib/shapLoader';
 import { supabase } from '@/integrations/supabase/client';
 import { useIsMobile } from '@/hooks/use-mobile';
 
-type ForecastSource = 'precomputed' | 'forecast_api' | 'generated' | null;
+type ForecastSource = 'precomputed' | 'legacy_shared' | null;
+type ForecastAvailability = 'ready' | 'stale' | 'unavailable';
 
 export default function Index() {
   const isMobile = useIsMobile();
@@ -43,7 +50,10 @@ export default function Index() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [forecastId, setForecastId] = useState<string | undefined>();
   const [hourlyGrids, setHourlyGrids] = useState<GridCell[][] | null>(null);
+  const [activeForecastRow, setActiveForecastRow] = useState<ForecastGridRowRecord | null>(null);
   const [forecastSource, setForecastSource] = useState<ForecastSource>(null);
+  const [forecastAvailability, setForecastAvailability] = useState<ForecastAvailability>('unavailable');
+  const [forecastNotice, setForecastNotice] = useState<string | null>(null);
   const [shapResult, setShapResult] = useState<ShapResult | null>(null);
   const [showEvents, setShowEvents] = useState(false);
   const [remoteEvents, setRemoteEvents] = useState<AvalancheEvent[]>([]);
@@ -60,7 +70,7 @@ export default function Index() {
   const [show3DModal, setShow3DModal] = useState(false);
   const [playingTimeline, setPlayingTimeline] = useState(false);
 
-  const maxHour = hourlyGrids ? hourlyGrids.length - 1 : (expertMode ? 71 : 24);
+  const maxHour = hourlyGrids ? hourlyGrids.length - 1 : 0;
 
   useEffect(() => {
     const nextTab: 'dashboard' | 'admin' = location.pathname.startsWith('/admin') ? 'admin' : 'dashboard';
@@ -69,8 +79,11 @@ export default function Index() {
 
   const hydrateForecastGridRow = useCallback((row: ForecastGridRowRecord) => {
     const grids = forecastGridRowToHourlyGrids(row);
+    setActiveForecastRow(row);
     setForecastId(row.id);
     setForecastSource('precomputed');
+    setForecastAvailability(row.status === 'ready' ? 'ready' : 'stale');
+    setForecastNotice(row.status === 'ready' ? null : 'Using a non-ready precomputed batch artifact.');
     setHourlyGrids(grids);
     const summary = row.weather_summary;
     if (summary && typeof summary === 'object' && !Array.isArray(summary)) {
@@ -86,6 +99,19 @@ export default function Index() {
       }
     }
     return grids;
+  }, []);
+
+  const setUnavailableForecast = useCallback((message: string) => {
+    setActiveForecastRow(null);
+    setForecastId(undefined);
+    setForecastSource(null);
+    setForecastAvailability('unavailable');
+    setForecastNotice(message);
+    setHourlyGrids(null);
+    setSelectedCell(null);
+    setTimeOffset(0);
+    setPlayingTimeline(false);
+    setWeatherSummary(null);
   }, []);
 
   const loadLatestForecastGrid = useCallback(async (regionName: string) => {
@@ -271,6 +297,7 @@ export default function Index() {
 
         const legacy = await supabase.from('forecasts').select('hourly_grids, bbox').eq('id', sharedForecast).maybeSingle();
         if (legacy.data?.hourly_grids && Array.isArray(legacy.data.hourly_grids)) {
+          setActiveForecastRow(null);
           setHourlyGrids(legacy.data.hourly_grids as unknown as GridCell[][]);
           setForecastId(sharedForecast);
           const cellParam = params.get('cell');
@@ -286,8 +313,10 @@ export default function Index() {
               }
             }
           }
-          toast.success('Restored shared forecast view');
-          setForecastSource('forecast_api');
+          toast.success('Restored shared legacy forecast view');
+          setForecastSource('legacy_shared');
+          setForecastAvailability('stale');
+          setForecastNotice('Shared view restored from the legacy forecast table.');
         }
       })();
     }
@@ -297,7 +326,7 @@ export default function Index() {
     if (hourlyGrids && hourlyGrids[timeOffset]) {
       return { cells: hourlyGrids[timeOffset], timestamp: new Date(Date.now() + timeOffset * 3600000).toISOString(), bbox: region.bbox };
     }
-    return generateForecastGrid(region.bbox, timeOffset);
+    return { cells: [], timestamp: new Date().toISOString(), bbox: region.bbox };
   }, [timeOffset, region.bbox, hourlyGrids]);
 
   const controlInset = !isMobile && (expertPanelOpen || sidebarOpen) ? 'calc(23rem + 1rem)' : '1rem';
@@ -308,7 +337,16 @@ export default function Index() {
   }, [isMobile]);
 
   const handleRegionChange = useCallback((r: Region) => {
-    setRegion(r); setSelectedCell(null); setHourlyGrids(null); setForecastId(undefined); setForecastSource(null); setTimeOffset(0); setWeatherSummary(null);
+    setRegion(r);
+    setSelectedCell(null);
+    setHourlyGrids(null);
+    setActiveForecastRow(null);
+    setForecastId(undefined);
+    setForecastSource(null);
+    setForecastAvailability('unavailable');
+    setForecastNotice(null);
+    setTimeOffset(0);
+    setWeatherSummary(null);
   }, []);
 
   useEffect(() => {
@@ -318,13 +356,17 @@ export default function Index() {
         const latest = await loadLatestForecastGrid(region.name);
         if (alive && latest) {
           hydrateForecastGridRow(latest);
+        } else if (alive) {
+          setUnavailableForecast(`No fresh precomputed forecast is available for ${region.name}.`);
         }
       } catch {
-        // Keep the existing simulated fallback when no precomputed grid exists.
+        if (alive) {
+          setUnavailableForecast(`Failed to load the latest precomputed forecast for ${region.name}.`);
+        }
       }
     })();
     return () => { alive = false; };
-  }, [region.name, hydrateForecastGridRow, loadLatestForecastGrid]);
+  }, [region.name, hydrateForecastGridRow, loadLatestForecastGrid, setUnavailableForecast]);
 
   // P1.2: Load real TreeSHAP from forecast_shap_cache whenever the user
   // selects a different cell or a new grid is hydrated. The loader has its
@@ -347,50 +389,23 @@ export default function Index() {
   const runForecast = useCallback(async () => {
     setForecasting(true);
     setForecastSource(null);
-    const hours = expertMode ? 72 : 24;
     try {
-      toast.info(`Loading ${hours}h precomputed forecast...`);
+      toast.info('Refreshing precomputed forecast...');
       const latest = await loadLatestForecastGrid(region.name);
       if (latest) {
         hydrateForecastGridRow(latest);
         toast.success(`Loaded precomputed forecast for ${region.name}`);
         return;
       }
-      toast.info('No precomputed forecast available yet — using legacy generator as fallback');
-      const { data, error } = await supabase.functions.invoke('run-forecast', {
-        body: { bbox: region.bbox, timeOffset, regionName: region.name, hours },
-        headers: {
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-      });
-      if (error) throw error;
-      if (data?.forecastId) {
-        setForecastId(data.forecastId);
-        setForecastSource('forecast_api');
-        setWeatherSummary(data?.weatherSummary || null);
-        const { data: forecast } = await supabase.from('forecasts').select('hourly_grids').eq('id', data.forecastId).maybeSingle();
-        if (forecast?.hourly_grids && Array.isArray(forecast.hourly_grids)) {
-          setHourlyGrids(forecast.hourly_grids as unknown as GridCell[][]);
-        } else {
-          setForecastId(undefined);
-          setForecastSource('generated');
-          setHourlyGrids(Array.from({ length: hours }, (_, hour) => generateForecastGrid(region.bbox, hour).cells));
-        }
-      }
-      const fallbackInfo = data?.fallback_used ? ' • Fallback: yes' : '';
-      toast.success(`Forecast complete • Source: ${data?.weatherSource || 'simulation'} • Mode: ${data?.capability_summary || data?.mode || 'Edge-only fallback'}${fallbackInfo} • ${data?.hours || hours + 1} hours`);
-      if (data?.weatherSummary) {
-        toast.info(`Real weather: ${data.weatherSummary.snowfall_24h}cm snow, ${data.weatherSummary.wind_speed}km/h wind`);
-      }
+      setUnavailableForecast(`No fresh precomputed forecast is available for ${region.name}.`);
+      toast.error('No fresh precomputed forecast is available yet.');
     } catch {
-      setForecastId(undefined);
-      setHourlyGrids(Array.from({ length: hours }, (_, hour) => generateForecastGrid(region.bbox, hour).cells));
-      setForecastSource('generated');
-      toast.success('Forecast generated (client simulation)');
+      setUnavailableForecast(`Failed to refresh the precomputed forecast for ${region.name}.`);
+      toast.error('Failed to refresh the precomputed forecast.');
     } finally {
       setForecasting(false);
     }
-  }, [expertMode, hydrateForecastGridRow, loadLatestForecastGrid, region.bbox, region.name, timeOffset]);
+  }, [hydrateForecastGridRow, loadLatestForecastGrid, region.name, setUnavailableForecast]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -526,9 +541,9 @@ export default function Index() {
                   maxWidth: sidebarOpen && isMobile ? 'calc(100vw - 2rem)' : '100%',
                 }}
               >
-                <Button onClick={runForecast} disabled={forecasting} className="h-11 mr-1 text-[11px] uppercase tracking-[0.18em] font-semibold gap-2 bg-emerald-500 text-black hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 rounded-2xl touch-manipulation whitespace-nowrap px-4" aria-label="Run forecast">
+                <Button onClick={runForecast} disabled={forecasting} className="h-11 mr-1 text-[11px] uppercase tracking-[0.18em] font-semibold gap-2 bg-emerald-500 text-black hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 rounded-2xl touch-manipulation whitespace-nowrap px-4" aria-label="Refresh precomputed forecast">
                   {forecasting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mountain className="h-4 w-4" />}
-                  {isMobile ? 'FORECAST' : expertMode ? 'RUN 72H' : 'RUN 24H'}
+                  {isMobile ? 'REFRESH' : 'REFRESH BATCH'}
                 </Button>
                 <ShareForecast forecastId={forecastId} region={region} hour={timeOffset} selectedCell={selectedCell} expertMode={expertMode} show3D={show3DModal} />
                 <ExportForecast grid={grid} events={historicalEvents} regionName={region.name} hour={timeOffset} canExport={Boolean(forecastId)} />
@@ -565,8 +580,20 @@ export default function Index() {
               showRoads={expertMode && showRoads}
               showInfra={expertMode && showInfra}
               showVectorPolygons={expertMode && showVectorPolygons}
+              runoutPolygons={activeForecastRow ? forecastGridRowToRunoutPolygons(activeForecastRow) : []}
+              sarEventGeometries={activeForecastRow ? forecastGridRowToSarGeometries(activeForecastRow) : []}
               bbox={region.bbox}
             />
+            {!hourlyGrids && (
+              <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex justify-center">
+                <div className="max-w-xl rounded-2xl border border-amber-500/25 bg-black/65 px-4 py-3 text-center shadow-2xl shadow-black/25 backdrop-blur-xl">
+                  <div className="text-[10px] uppercase tracking-[0.24em] text-amber-300">Batch Forecast Unavailable</div>
+                  <div className="mt-1 text-sm text-foreground">
+                    {forecastNotice || `No fresh precomputed forecast is available for ${region.name}.`}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Legend */}
@@ -577,13 +604,11 @@ export default function Index() {
           {/* Data source indicator */}
           {hourlyGrids && (
             <div className="absolute top-[11rem] right-4 z-10 md:top-[8.75rem] lg:top-[7.5rem]">
-              <span className="glass-panel rounded-full px-3 py-1 text-[10px] font-mono text-emerald-400">
+              <span className={`glass-panel rounded-full px-3 py-1 text-[10px] font-mono ${forecastAvailability === 'ready' ? 'text-emerald-400' : 'text-amber-300'}`}>
                 ● {forecastSource === 'precomputed'
                   ? 'PRECOMPUTED GRID'
-                  : forecastSource === 'forecast_api'
-                    ? 'FORECAST RUN'
-                    : forecastSource === 'generated'
-                      ? 'SIMULATED GRID'
+                  : forecastSource === 'legacy_shared'
+                    ? 'LEGACY SHARED GRID'
                       : 'FORECAST DATA'} ({hourlyGrids.length}h)
               </span>
             </div>

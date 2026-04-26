@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Rectangle, CircleMarker, Popup, Polygon, Tooltip, useMap } from 'react-leaflet';
 import type { LatLngBoundsExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -19,6 +19,8 @@ interface Props {
   showRoads?: boolean;
   showInfra?: boolean;
   showVectorPolygons?: boolean;
+  runoutPolygons?: Array<Record<string, unknown>>;
+  sarEventGeometries?: Array<Record<string, unknown>>;
   bbox?: [number, number, number, number];
 }
 
@@ -45,7 +47,7 @@ function confidenceColor(confidence: number): string {
 export default function AvalancheMap({
   cells, selectedCell, onCellClick, center, zoom,
   historicalEvents = [], showHeatmap = false, showRoads = false, showInfra = false,
-  showVectorPolygons = false, bbox,
+  showVectorPolygons = false, runoutPolygons = [], sarEventGeometries = [], bbox,
 }: Props) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme !== 'light';
@@ -53,7 +55,7 @@ export default function AvalancheMap({
     ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
     : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 
-  // Generate smoothed polygons for high-risk cells when vector mode is on
+  // Render persisted batch overlays when vector mode is on.
   const [vectorPolygons, setVectorPolygons] = useState<{key: string; positions: [number, number][][]}[]>([]);
 
   useEffect(() => {
@@ -62,40 +64,45 @@ export default function AvalancheMap({
       return;
     }
 
-    let mounted = true;
-    const generatePolygons = async () => {
-      try {
-        const turf = await import('@turf/turf');
-        const highRisk = cells.filter(c => c.riskScore > 3);
-        if (!highRisk.length || !mounted) return;
+    const persistedRunout = runoutPolygons
+      .filter((item) => Array.isArray(item.polygon) && item.polygon.length > 0)
+      .map((item, index) => ({
+        key: `runout-${index}`,
+        positions: [
+          (item.polygon as unknown[]).map((coord) => {
+            const point = coord as [number, number];
+            return [Number(point[1]), Number(point[0])] as [number, number];
+          }),
+        ],
+      }));
 
-        // Create buffered polygons from cell centers
-        const features = highRisk.map(c => {
-          const centerLat = (c.lat + c.latEnd) / 2;
-          const centerLng = (c.lng + c.lngEnd) / 2;
-          const pt = turf.point([centerLng, centerLat]);
-          return turf.buffer(pt, 2, { units: 'kilometers' });
-        });
+    if (persistedRunout.length > 0) {
+      setVectorPolygons(persistedRunout);
+      return;
+    }
 
-        const fc = turf.featureCollection(features as GeoJSON.Feature<GeoJSON.Polygon>[]);
-        const dissolved = turf.dissolve(fc as GeoJSON.FeatureCollection<GeoJSON.Polygon>);
-        const polygons = (dissolved.features || []).map((f: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>, i: number) => {
-          const coords = f.geometry.type === 'Polygon'
-            ? [f.geometry.coordinates[0].map((c) => [c[1], c[0]] as [number, number])]
-            : f.geometry.coordinates.map((polygon) =>
-                polygon[0].map((c) => [c[1], c[0]] as [number, number])
-              );
-          return { key: `vp-${i}`, positions: coords };
-        });
-        if (mounted) setVectorPolygons(polygons);
-      } catch {
-        if (mounted) setVectorPolygons([]);
-      }
-    };
+    const sarPolygons = sarEventGeometries
+      .map((item, index) => {
+        const geometry = item.geometry as GeoJSON.Geometry | undefined;
+        if (!geometry) return null;
+        if (geometry.type === 'Polygon') {
+          return {
+            key: `sar-${index}`,
+            positions: [geometry.coordinates[0].map((coord) => [coord[1], coord[0]] as [number, number])],
+          };
+        }
+        if (geometry.type === 'MultiPolygon') {
+          return {
+            key: `sar-${index}`,
+            positions: geometry.coordinates.map((polygon) => polygon[0].map((coord) => [coord[1], coord[0]] as [number, number])),
+          };
+        }
+        return null;
+      })
+      .filter((item): item is {key: string; positions: [number, number][][]} => item !== null);
 
-    generatePolygons();
-    return () => { mounted = false; };
-  }, [cells, showVectorPolygons]);
+    setVectorPolygons(sarPolygons);
+  }, [runoutPolygons, sarEventGeometries, showVectorPolygons]);
 
   return (
     <MapContainer center={center} zoom={zoom} className="h-full w-full z-0 theme-aware-map" zoomControl={true} touchZoom={true} dragging={true}>

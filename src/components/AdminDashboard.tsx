@@ -411,6 +411,9 @@ export default function AdminDashboard() {
             <div className="font-mono text-right text-foreground">{String(optimizationSummary?.class_balance_report?.strategy || 'n/a')}</div>
           </div>
           <div className="text-[10px] text-muted-foreground">
+            LSTM/PINN refs: TRAIN_LSTM_HEAD • USE_LSTM_HEAD • LSTM_BLEND_WEIGHT • PINN_LAMBDA
+          </div>
+          <div className="text-[10px] text-muted-foreground">
             Next optimization: {modelStatus?.next_optimization_run ? new Date(modelStatus.next_optimization_run).toLocaleString() : 'not scheduled'}
           </div>
         </CardContent>

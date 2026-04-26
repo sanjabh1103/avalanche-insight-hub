@@ -9,7 +9,7 @@ import pandas as pd
 
 from backend.common.features import FEATURE_COLUMNS
 from backend.common.regions import Region
-from backend.common.training_dataset import build_real_training_frame
+from backend.common.training_dataset import NEGATIVE_TRAINING_WEIGHT, build_real_training_frame
 
 
 class TrainingDatasetBuilderTests(unittest.TestCase):
@@ -42,6 +42,8 @@ class TrainingDatasetBuilderTests(unittest.TestCase):
                 'training_eligible': True,
                 'label_role': 'core',
                 'verification_status': 'unverified',
+                'label_confidence': 0.8,
+                'training_weight': 0.95,
             }
         ]
         extract_cell_terrain_mock.return_value = {
@@ -102,9 +104,16 @@ class TrainingDatasetBuilderTests(unittest.TestCase):
         self.assertEqual(manifest['positive_count'], 1)
         self.assertEqual(manifest['negative_count'], 1)
         self.assertIn('debug_stats', manifest)
+        self.assertIn('mean_training_weight', manifest)
         self.assertEqual(manifest['debug_stats']['assembled_ok'], 1)
         self.assertEqual(manifest['debug_stats']['terrain_failed'], 0)
         self.assertEqual(frame.iloc[0]['timestamp'], pd.Timestamp('2024-01-01T00:00:00Z'))
+        self.assertIn('training_weight', frame.columns)
+        self.assertIn('label_confidence', frame.columns)
+        self.assertLess(frame.iloc[0]['training_weight'], 0.95)
+        self.assertEqual(frame.iloc[0]['governance_version'], 'autonomous_label_governance_v2')
+        negative_row = frame.loc[frame['label'] == 0].iloc[0]
+        self.assertAlmostEqual(float(negative_row['training_weight']), NEGATIVE_TRAINING_WEIGHT, places=6)
 
 
 if __name__ == '__main__':

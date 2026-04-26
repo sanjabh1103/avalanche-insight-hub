@@ -5,8 +5,14 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { MapPin, Send, Loader2, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
 import type { AvalancheEvent } from '@/components/HistoricalEventsToggle';
+import {
+  enqueueFieldReport,
+  flushQueuedFieldReports,
+  type QueuedFieldReport,
+} from '@/lib/offlineFieldReports';
+import { submitQueuedFieldReport } from '@/lib/fieldReportSync';
+import { supabase } from '@/integrations/supabase/client';
 
 // Story 17: lightweight online/offline hook used to show users when their
 // submission will be queued by the Workbox BackgroundSync plugin.
@@ -54,6 +60,47 @@ export default function FieldReportForm({ open, onClose, onSubmitted, regionCent
     }
   }, [open, setFallbackCoordinates]);
 
+  const buildQueuedReport = useCallback((
+    clientReportId: string,
+    reportLat: number,
+    reportLng: number,
+    reportDescription: string,
+    userId?: string | null,
+  ): QueuedFieldReport => ({
+    id: clientReportId,
+    clientReportId,
+    lat: reportLat,
+    lng: reportLng,
+    description: reportDescription,
+    createdAt: new Date().toISOString(),
+    userId: userId ?? null,
+  }), []);
+
+  useEffect(() => {
+    if (!online || !open) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const queued = await flushQueuedFieldReports(async (report) => {
+          if (cancelled) return;
+          await submitQueuedFieldReport(report);
+        });
+        if (!cancelled && queued > 0) {
+          toast.success(`Syncing ${queued} offline report${queued === 1 ? '' : 's'}...`);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('Queued field report flush failed:', (error as Error).message);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [online, open]);
+
   const handleSubmit = async () => {
     if (!description.trim()) {
       toast.error('Please provide a description');
@@ -82,29 +129,36 @@ export default function FieldReportForm({ open, onClose, onSubmitted, regionCent
     }
 
     setSubmitting(true);
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    // BUG-02 fix: Stable client_report_id so duplicate submissions reuse the same idempotency key
-    const idSeed = `${user?.id || 'anon'}|${parsedLat.toFixed(6)}|${parsedLng.toFixed(6)}|${description.trim().toLowerCase()}`;
-    const clientReportId = `field-${btoa(unescape(encodeURIComponent(idSeed))).replace(/=+$/g, '').slice(0, 24)}`;
-    
+    let userId: string | null = null;
+
     try {
-      const { data: report, error } = await supabase.from('field_reports').upsert({
-        user_id: user?.id,
-        hazard_type: 'avalanche',
-        review_status: 'pending',
-        training_eligible: false,
-        description: description.trim(),
-        location: `SRID=4326;POINT(${parsedLng} ${parsedLat})` as unknown,
-        client_report_id: clientReportId,
-      }, {
-        onConflict: 'client_report_id',
-      }).select('id').maybeSingle();
-      if (error) throw error;
-      if (!report?.id) {
-        throw new Error('Failed to create field report');
+      const { data: { user } } = await supabase.auth.getUser();
+      userId = user?.id ?? null;
+      const idSeed = `${user?.id || 'anon'}|${parsedLat.toFixed(6)}|${parsedLng.toFixed(6)}|${description.trim().toLowerCase()}`;
+      const clientReportId = `field-${btoa(unescape(encodeURIComponent(idSeed))).replace(/=+$/g, '').slice(0, 24)}`;
+      const queuedReport = buildQueuedReport(clientReportId, parsedLat, parsedLng, description.trim(), userId);
+
+      if (!online) {
+        await enqueueFieldReport(queuedReport);
+        onSubmitted?.({
+          id: `queued-${clientReportId}`,
+          lat: parsedLat,
+          lng: parsedLng,
+          severity: 3,
+          confidence: 0.6,
+          description: description.trim(),
+          source: 'field_report',
+          event_type: 'unknown',
+          timestamp: queuedReport.createdAt,
+          location_name: '',
+        });
+        toast.info('Offline: report queued locally and will sync automatically when you reconnect');
+        setDescription('');
+        onClose();
+        return;
       }
 
+      await submitQueuedFieldReport(queuedReport);
       onSubmitted?.({
         id: `field-report-${Date.now()}`,
         lat: parsedLat,
@@ -117,30 +171,36 @@ export default function FieldReportForm({ open, onClose, onSubmitted, regionCent
         timestamp: new Date().toISOString(),
         location_name: '',
       });
-
-      // B9 fix: Show success toast immediately after successful insert (before enrichment and close)
       toast.success('Field report submitted successfully');
-
-      // Fire enrichment async - don't block UI on this
-      supabase.functions.invoke('field-report-enrichment', {
-        body: {
-          fieldReportId: report.id,
-          lat: parsedLat,
-          lng: parsedLng,
-          description: description.trim(),
-          hazard_type: 'avalanche',
-        },
-      }).then(({ error: enrichmentError }) => {
-        if (enrichmentError) {
-          console.error('field-report-enrichment failed', enrichmentError);
-        }
-      });
 
       setDescription('');
       onClose();
     } catch (err: unknown) {
-      console.error('field report submit failed', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to submit report');
+      const idSeed = `${userId || 'anon'}|${parsedLat.toFixed(6)}|${parsedLng.toFixed(6)}|${description.trim().toLowerCase()}`;
+      const clientReportId = `field-${btoa(unescape(encodeURIComponent(idSeed))).replace(/=+$/g, '').slice(0, 24)}`;
+      const queuedReport = buildQueuedReport(clientReportId, parsedLat, parsedLng, description.trim(), userId);
+      try {
+        await enqueueFieldReport(queuedReport);
+        onSubmitted?.({
+          id: `queued-${clientReportId}`,
+          lat: parsedLat,
+          lng: parsedLng,
+          severity: 3,
+          confidence: 0.6,
+          description: description.trim(),
+          source: 'field_report',
+          event_type: 'unknown',
+          timestamp: queuedReport.createdAt,
+          location_name: '',
+        });
+        toast.info('Network issue: report queued locally and will sync automatically');
+        setDescription('');
+        onClose();
+      } catch (queueErr) {
+        console.error('field report submit failed', err);
+        console.error('field report queue failed', queueErr);
+        toast.error(err instanceof Error ? err.message : 'Failed to submit report');
+      }
     } finally {
       setSubmitting(false);
     }

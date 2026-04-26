@@ -44,14 +44,14 @@ export default defineConfig(({ mode }) => ({
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         runtimeCaching: [
           {
-            // Match any Supabase Edge Function invocation to ingest-event.
+            // Match browser-submitted field reports and direct ingest-event posts.
             urlPattern: ({ url, request }) =>
-              request.method === "POST" && /\/functions\/v1\/ingest-event\b/.test(url.pathname),
+              request.method === "POST" && /\/functions\/v1\/(ingest-event|field-report-enrichment)\b/.test(url.pathname),
             handler: "NetworkOnly",
             method: "POST",
             options: {
               backgroundSync: {
-                name: "ingest-event-queue",
+                name: "field-report-queue",
                 options: {
                   // Retain queued POSTs for up to 24h while offline.
                   maxRetentionTime: 24 * 60,

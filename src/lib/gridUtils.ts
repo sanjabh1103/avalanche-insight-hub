@@ -14,6 +14,11 @@ export interface GridCell {
   problemType: string;
   shapValues: Record<string, number>;
   probability?: number;
+  rfProbability?: number;
+  fusionMethod?: string;
+  limitingFactor?: string;
+  chebyshevIpaScore?: number;
+  hazardVector?: Record<string, number>;
   confidenceLower?: number;
   confidenceUpper?: number;
   uncertaintySpan?: number;
@@ -25,8 +30,15 @@ export interface GridCell {
   terrainInputs?: Record<string, number>;
   modelVersion?: string;
   calibrationProfile?: string;
+  dynamicModelType?: string;
+  dynamicModelVersion?: string;
+  surrogateModelVersion?: string;
+  uncertaintyMethod?: string;
   featureValues?: Record<string, number>;
   shapContext?: {
+    limitingFactor?: string;
+    fusionMethod?: string;
+    hazardVector?: Record<string, number>;
     topFeatures: Array<{
       feature: string;
       shap_value: number;
@@ -73,6 +85,19 @@ export interface ForecastGrid {
   bbox: [number, number, number, number];
 }
 
+export interface ForecastModelMetadata {
+  model_version?: string;
+  dynamic_model_type?: string;
+  dynamic_model_version?: string;
+  surrogate_model_version?: string;
+  uncertainty_method?: string;
+  label_snapshot_id?: string;
+  sar_mask_asset_refs?: string[];
+  sar_event_geometries?: Array<Record<string, unknown>>;
+  stale?: boolean;
+  [key: string]: unknown;
+}
+
 export interface ForecastGridRowRecord {
   id: string;
   region_name: string;
@@ -83,8 +108,9 @@ export interface ForecastGridRowRecord {
   grid_geojson: unknown;
   runout_polygons?: unknown;
   weather_summary?: unknown;
-  model_metadata?: unknown;
+  model_metadata?: ForecastModelMetadata | unknown;
   status?: string;
+  created_at?: string;
 }
 
 function normalizeUncertaintyClass(span: number | undefined): 'low' | 'medium' | 'high' | undefined {
@@ -125,6 +151,15 @@ function normalizeCell(cell: Partial<GridCell> & Record<string, unknown>): GridC
     problemType: String(cell.problemType ?? cell.problem_type ?? 'Unknown'),
     shapValues: (cell.shapValues as Record<string, number>) || (cell.shap_values as Record<string, number>) || {},
     probability: typeof probability === 'number' && Number.isFinite(probability) ? probability : undefined,
+    rfProbability: cell.rfProbability !== undefined
+      ? Number(cell.rfProbability)
+      : (cell.rf_probability !== undefined ? Number(cell.rf_probability) : undefined),
+    fusionMethod: typeof cell.fusionMethod === 'string' ? cell.fusionMethod : (typeof cell.fusion_method === 'string' ? String(cell.fusion_method) : undefined),
+    limitingFactor: typeof cell.limitingFactor === 'string' ? cell.limitingFactor : (typeof cell.limiting_factor === 'string' ? String(cell.limiting_factor) : undefined),
+    chebyshevIpaScore: cell.chebyshevIpaScore !== undefined
+      ? Number(cell.chebyshevIpaScore)
+      : (cell.chebyshev_ipa_score !== undefined ? Number(cell.chebyshev_ipa_score) : undefined),
+    hazardVector: normalizeNumberRecord(cell.hazardVector ?? cell.hazard_vector),
     confidenceLower,
     confidenceUpper,
     uncertaintySpan,
@@ -140,6 +175,10 @@ function normalizeCell(cell: Partial<GridCell> & Record<string, unknown>): GridC
     terrainInputs: (cell.terrainInputs as Record<string, number>) || (cell.terrain_inputs as Record<string, number>) || undefined,
     modelVersion: typeof cell.modelVersion === 'string' ? cell.modelVersion : (typeof cell.model_version === 'string' ? String(cell.model_version) : undefined),
     calibrationProfile: typeof cell.calibrationProfile === 'string' ? cell.calibrationProfile : (typeof cell.calibration_profile === 'string' ? String(cell.calibration_profile) : undefined),
+    dynamicModelType: typeof cell.dynamicModelType === 'string' ? cell.dynamicModelType : (typeof cell.dynamic_model_type === 'string' ? String(cell.dynamic_model_type) : undefined),
+    dynamicModelVersion: typeof cell.dynamicModelVersion === 'string' ? cell.dynamicModelVersion : (typeof cell.dynamic_model_version === 'string' ? String(cell.dynamic_model_version) : undefined),
+    surrogateModelVersion: typeof cell.surrogateModelVersion === 'string' ? cell.surrogateModelVersion : (typeof cell.surrogate_model_version === 'string' ? String(cell.surrogate_model_version) : undefined),
+    uncertaintyMethod: typeof cell.uncertaintyMethod === 'string' ? cell.uncertaintyMethod : (typeof cell.uncertainty_method === 'string' ? String(cell.uncertainty_method) : undefined),
     featureValues: (cell.featureValues as Record<string, number>) || (cell.feature_values as Record<string, number>) || undefined,
     shapContext: normalizeShapContext(cell.shapContext ?? cell.shap_context),
     explanationSummary: typeof cell.explanationSummary === 'string'
@@ -152,9 +191,17 @@ function normalizeCell(cell: Partial<GridCell> & Record<string, unknown>): GridC
 
 function normalizeShapContext(value: unknown): GridCell['shapContext'] {
   if (!value || typeof value !== 'object') return undefined;
+  const rowValue = value as Record<string, unknown>;
   const topFeatures = (value as Record<string, unknown>).topFeatures ?? (value as Record<string, unknown>).top_features;
   if (!Array.isArray(topFeatures)) return undefined;
   return {
+    limitingFactor: typeof rowValue.limitingFactor === 'string'
+      ? rowValue.limitingFactor
+      : (typeof rowValue.limiting_factor === 'string' ? String(rowValue.limiting_factor) : undefined),
+    fusionMethod: typeof rowValue.fusionMethod === 'string'
+      ? rowValue.fusionMethod
+      : (typeof rowValue.fusion_method === 'string' ? String(rowValue.fusion_method) : undefined),
+    hazardVector: normalizeNumberRecord(rowValue.hazardVector ?? rowValue.hazard_vector),
     topFeatures: topFeatures
       .filter((item) => item && typeof item === 'object')
       .map((item) => {
@@ -167,6 +214,14 @@ function normalizeShapContext(value: unknown): GridCell['shapContext'] {
         };
       }),
   };
+}
+
+function normalizeNumberRecord(value: unknown): Record<string, number> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .map(([key, raw]) => [key, Number(raw)] as const)
+    .filter(([, numeric]) => Number.isFinite(numeric));
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
 function normalizeCoverageFlags(value: unknown): GridCell['coverageFlags'] {
@@ -228,6 +283,17 @@ export function forecastGridRowToHourlyGrids(row: ForecastGridRowRecord): GridCe
   const cells = forecastGridRowToCells(row);
   const horizonHours = Math.max(1, Math.min(Number(row.horizon_hours || 24), 72));
   return Array.from({ length: horizonHours }, () => cells.map((cell) => ({ ...cell })));
+}
+
+export function forecastGridRowToRunoutPolygons(row: ForecastGridRowRecord): Array<Record<string, unknown>> {
+  return Array.isArray(row.runout_polygons) ? row.runout_polygons as Array<Record<string, unknown>> : [];
+}
+
+export function forecastGridRowToSarGeometries(row: ForecastGridRowRecord): Array<Record<string, unknown>> {
+  const metadata = row.model_metadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return [];
+  const geometries = (metadata as ForecastModelMetadata).sar_event_geometries;
+  return Array.isArray(geometries) ? geometries : [];
 }
 
 // Simulated storm physics for grid generation

@@ -1,0 +1,175 @@
+name: Bootstrap Pinned Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      DATASET_URL:
+        description: 'Direct SnowSlide archive URL on an allowlisted host'
+        required: true
+        type: string
+      REFERENCE_SET_KEY:
+        description: 'Authoritative held-out reference set key'
+        required: false
+        default: 'snowslide-heldout-v1'
+        type: string
+      SOURCE_VERSION:
+        description: 'External dataset version identifier; defaults to current UTC date when omitted'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bootstrap-pinned-gate
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    name: Seed authoritative SnowSlide refs
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      DATASET_URL: ${{ inputs.DATASET_URL }}
+      REFERENCE_SET_KEY: ${{ inputs.REFERENCE_SET_KEY }}
+      SOURCE_VERSION_INPUT: ${{ inputs.SOURCE_VERSION }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 1
+          lfs: false
+          persist-credentials: false
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
+
+      - name: Validate required secrets
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY}" ]; then
+            echo "::error::SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured as GitHub secrets"
+            exit 1
+          fi
+
+      - name: Install backend dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install --no-cache-dir -r backend/requirements.txt
+
+      - name: Resolve source version
+        id: resolve_source_version
+        run: |
+          set -euo pipefail
+          if [ -n "${SOURCE_VERSION_INPUT}" ]; then
+            value="${SOURCE_VERSION_INPUT}"
+          else
+            value="$(date -u +%F)"
+          fi
+          echo "value=${value}" >> "${GITHUB_OUTPUT}"
+
+      - name: Validate dataset URL allowlist
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+
+          allowed_hosts = {
+              'envidat.ch',
+              'www.envidat.ch',
+              'zenodo.org',
+              'www.zenodo.org',
+              'slf.ch',
+              'www.slf.ch',
+          }
+          url = os.environ['DATASET_URL']
+          parsed = urlparse(url)
+          if parsed.scheme != 'https':
+              raise SystemExit(f'DATASET_URL must use https: {url}')
+          if parsed.hostname not in allowed_hosts:
+              raise SystemExit(
+                  f'DATASET_URL host must be one of {sorted(allowed_hosts)}; got {parsed.hostname!r}'
+              )
+          if parsed.username or parsed.password or parsed.port:
+              raise SystemExit('DATASET_URL must not include credentials or a custom port')
+          if not parsed.path or parsed.path.endswith('/'):
+              raise SystemExit('DATASET_URL must point to a direct archive file, not a landing page')
+          print(f'validated host: {parsed.hostname}')
+          PY
+
+      - name: Download SnowSlide archive
+        run: |
+          set -euo pipefail
+          wget "${DATASET_URL}" -O snowslide_archive.zip
+
+      - name: Verify ZIP payload
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+
+          archive = Path('snowslide_archive.zip')
+          if not archive.exists():
+              raise SystemExit('snowslide_archive.zip was not downloaded')
+          if not zipfile.is_zipfile(archive):
+              raise SystemExit('downloaded payload is not a valid ZIP archive; use a direct dataset file URL')
+          print('zip payload ok')
+          PY
+
+      - name: Seed authoritative SnowSlide refs
+        run: |
+          set -euo pipefail
+          python -m backend.scripts.seed_snowslide_truth \
+            --source-zip snowslide_archive.zip \
+            --set-key "${REFERENCE_SET_KEY}" \
+            --source-version "${{ steps.resolve_source_version.outputs.value }}" | tee seed_result.json
+
+      - name: Materialize baselines and activate reference set
+        run: |
+          set -euo pipefail
+          python -m backend.scripts.materialize_release_baseline_masks \
+            --reference-set-key "${REFERENCE_SET_KEY}" | tee baseline_result.json
+
+      - name: Verify bootstrap results
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          seed = json.loads(Path('seed_result.json').read_text(encoding='utf-8'))
+          baseline = json.loads(Path('baseline_result.json').read_text(encoding='utf-8'))
+
+          if seed.get('status') != 'ok':
+              raise SystemExit(f'seed_snowslide_truth failed: {seed}')
+          if baseline.get('status') != 'ok':
+              raise SystemExit(f'materialize_release_baseline_masks failed: {baseline}')
+          if baseline.get('reference_set_status') != 'active':
+              raise SystemExit(f'authoritative reference set did not reach active status: {baseline}')
+
+          print(
+              json.dumps(
+                  {
+                      'reference_set_key': baseline.get('reference_set_key'),
+                      'scene_count': baseline.get('scene_count'),
+                      'reference_set_status': baseline.get('reference_set_status'),
+                  },
+                  sort_keys=True,
+              )
+          )
+          PY
+
+      - name: Cleanup bootstrap artifacts
+        if: always()
+        run: |
+          set -euo pipefail
+          rm -rf snowslide_archive.zip seed_result.json baseline_result.json
