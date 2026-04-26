@@ -52,7 +52,7 @@ Inputs:
 - `SOURCE_VERSION` optional; if blank, the workflow uses the current UTC date
 
 Security and source restrictions:
-- `DATASET_URL` must be a direct downloadable truth/vector archive URL, not a record landing page
+- `DATASET_URL` must be a direct downloadable truth/vector archive URL, not a record landing page; it may point either to the original academic record or to a trusted cloud mirror of the same authoritative truth archive
 - `SAR_RASTER_URL` must be a direct downloadable Sentinel-1 VV/VH GeoTIFF archive URL
 - the workflow assembles both sources into one canonical local dataset before preflight
 - acceptable truth inputs are either raster truth masks (`.tif/.tiff`) or vector avalanche outlines (`.shp/.geojson/.json`) that can be rasterized against a georeferenced Sentinel-1 GeoTIFF stack or paired VV/VH GeoTIFF rasters
@@ -64,6 +64,9 @@ Security and source restrictions:
   - `www.zenodo.org`
   - `slf.ch`
   - `www.slf.ch`
+  - `storage.googleapis.com`
+  - `s3.amazonaws.com`
+  - `*.s3.amazonaws.com`
 - allowed SAR raster hosts are fixed to:
   - `storage.googleapis.com`
   - `s3.amazonaws.com`
