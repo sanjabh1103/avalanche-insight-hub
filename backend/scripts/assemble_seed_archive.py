@@ -96,9 +96,27 @@ def _iter_files(root: Path) -> list[Path]:
     return sorted(path for path in root.rglob('*') if path.is_file())
 
 
+def _truth_stem_family(path: Path) -> str:
+    lowered = path.stem.lower()
+    year = _extract_year_token(lowered)
+    if year:
+        lowered = re.sub(fr'(^|[_-]){year}(?=$|[_-])', '', lowered)
+    return re.sub(r'^[_-]+|[_-]+$', '', lowered)
+
+
+def _is_auxiliary_truth_layer(path: Path) -> bool:
+    return _truth_stem_family(path) in {
+        'groundtruthcoverage',
+        'vali_points',
+        'validation_area',
+    }
+
+
 def _is_truth_candidate(path: Path) -> bool:
     lowered = path.stem.lower()
     if path.suffix.lower() not in VECTOR_TRUTH_SUFFIXES:
+        return False
+    if _is_auxiliary_truth_layer(path):
         return False
     return any(token in lowered for token in ('truth', 'davalmap', 'reference'))
 
