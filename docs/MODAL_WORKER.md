@@ -19,7 +19,7 @@ The target Supabase project must also contain the held-out registry tables creat
 ## In-Repo Operator Entry Points
 
 - `.github/workflows/bootstrap_pinned_gate.yml`
-  Temporary manual GitHub Actions workflow for cloud-to-cloud SnowSlide seeding when the archive is too large for local hardware. It downloads a direct archive URL into the runner’s ephemeral storage, runs `seed_snowslide_truth`, then runs `materialize_release_baseline_masks` so the authoritative set ends `active`.
+  Temporary manual GitHub Actions workflow for cloud-to-cloud SnowSlide seeding when the archive is too large for local hardware. It downloads a direct Sentinel-1 SAR archive URL into the runner’s ephemeral storage, runs a strict `--validate-only` preflight, then runs `seed_snowslide_truth` and `materialize_release_baseline_masks` so the authoritative set ends `active`.
 - `python -m backend.scripts.bootstrap_release_gate`
   Operator bootstrap CLI for the GitHub-first rollout path. It validates `.env`, syncs secrets into GitHub/Modal/Supabase, seeds the authoritative SnowSlide held-out registry from a local zip, deploys the Modal worker, seeds the DEM volume, and then stops at `refs_ready_only` until a real `SAR_UNET_MODEL_PATH` is configured.
 - `python -m backend.scripts.seed_snowslide_truth`
@@ -50,6 +50,8 @@ Inputs:
 
 Security and source restrictions:
 - `DATASET_URL` must be a direct downloadable archive URL, not a record landing page
+- only SAR-compatible Sentinel-1 held-out archives are allowed
+- IAS/webcam/optical datasets are invalid for the pinned gate and are rejected in preflight before any storage or Supabase mutation
 - allowed hosts are fixed to:
   - `envidat.ch`
   - `www.envidat.ch`
@@ -61,12 +63,13 @@ Security and source restrictions:
 
 Execution sequence:
 1. download the archive into the runner workspace with quoted shell input
-2. run `python -m backend.scripts.seed_snowslide_truth --source-zip snowslide_archive.zip ...`
-3. run `python -m backend.scripts.materialize_release_baseline_masks --reference-set-key ...`
-4. fail unless both JSON payloads return `status=ok` and baseline materialization returns `reference_set_status=active`
-5. clean up the downloaded archive and JSON result files in an `always()` step
+2. run `python -m backend.scripts.seed_snowslide_truth --source-zip snowslide_archive.zip --validate-only ...`
+3. only if preflight returns `status=ok`, run `python -m backend.scripts.seed_snowslide_truth --source-zip snowslide_archive.zip ...`
+4. run `python -m backend.scripts.materialize_release_baseline_masks --reference-set-key ...`
+5. fail unless the preflight and both mutation JSON payloads return `status=ok` and baseline materialization returns `reference_set_status=active`
+6. clean up the downloaded archive and JSON result files in an `always()` step
 
-This workflow seeds authoritative truth and baseline refs only. It does **not** run held-out `sar-segment`, `evaluate_release`, promoted reruns, or `train_mtslstm`.
+This workflow seeds authoritative truth and baseline refs only. It does **not** run held-out `sar-segment`, `evaluate_release`, promoted reruns, or `train_mtslstm`. It remains operationally paused until the operator supplies a valid SAR archive URL.
 
 ## Refs-Ready Bootstrap
 

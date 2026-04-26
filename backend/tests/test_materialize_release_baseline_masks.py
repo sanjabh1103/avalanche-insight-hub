@@ -37,10 +37,12 @@ class MaterializeReleaseBaselineMasksTests(unittest.TestCase):
             },
             [{
                 'id': 'item-1',
+                'reference_set_id': 'set-1',
                 'external_scene_id': 'S1A_001',
                 'region_key': 'colorado_rockies',
                 'bbox': [-106.6, 39.4, -106.4, 39.6],
                 'stack_asset_ref': 'sar-masks/heldout/snowslide/2026-04-25/validation/colorado_rockies/S1A_001/stack.npz',
+                'truth_mask_asset_ref': 'sar-masks/heldout/snowslide/2026-04-25/validation/colorado_rockies/S1A_001/truth_mask.tif',
                 'metadata': {'split': 'validation'},
             }],
         )

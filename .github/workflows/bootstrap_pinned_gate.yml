@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       DATASET_URL:
-        description: 'Direct SnowSlide archive URL on an allowlisted host'
+        description: 'Direct Sentinel-1 SAR held-out archive URL on an allowlisted host'
         required: true
         type: string
       REFERENCE_SET_KEY:
@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   bootstrap:
-    name: Seed authoritative SnowSlide refs
+    name: Seed authoritative Sentinel-1 SAR refs
     runs-on: ubuntu-latest
     environment: production
     env:
@@ -105,7 +105,7 @@ jobs:
           print(f'validated host: {parsed.hostname}')
           PY
 
-      - name: Download SnowSlide archive
+      - name: Download Sentinel-1 SAR archive
         run: |
           set -euo pipefail
           wget "${DATASET_URL}" -O snowslide_archive.zip
@@ -125,7 +125,16 @@ jobs:
           print('zip payload ok')
           PY
 
-      - name: Seed authoritative SnowSlide refs
+      - name: Preflight Sentinel-1 SAR archive
+        run: |
+          set -euo pipefail
+          python -m backend.scripts.seed_snowslide_truth \
+            --source-zip snowslide_archive.zip \
+            --set-key "${REFERENCE_SET_KEY}" \
+            --source-version "${{ steps.resolve_source_version.outputs.value }}" \
+            --validate-only | tee validate_result.json
+
+      - name: Seed authoritative Sentinel-1 SAR refs
         run: |
           set -euo pipefail
           python -m backend.scripts.seed_snowslide_truth \
@@ -146,9 +155,12 @@ jobs:
           import json
           from pathlib import Path
 
+          validate = json.loads(Path('validate_result.json').read_text(encoding='utf-8'))
           seed = json.loads(Path('seed_result.json').read_text(encoding='utf-8'))
           baseline = json.loads(Path('baseline_result.json').read_text(encoding='utf-8'))
 
+          if validate.get('status') != 'ok':
+              raise SystemExit(f'Sentinel-1 SAR archive preflight failed: {validate}')
           if seed.get('status') != 'ok':
               raise SystemExit(f'seed_snowslide_truth failed: {seed}')
           if baseline.get('status') != 'ok':
@@ -172,4 +184,4 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          rm -rf snowslide_archive.zip seed_result.json baseline_result.json
+          rm -rf snowslide_archive.zip validate_result.json seed_result.json baseline_result.json

@@ -35,6 +35,8 @@ except Exception:  # pragma: no cover - optional dependency
 SUPPORTED_SPLITS = {'validation', 'val', 'test'}
 TRUTH_SUFFIXES = {'.tif', '.tiff'}
 STACK_SUFFIXES = {'.npz', '.npy'}
+SAR_STACK_SUFFIXES = STACK_SUFFIXES | TRUTH_SUFFIXES
+OPTICAL_SUFFIXES = {'.jpg', '.jpeg', '.png'}
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,7 @@ class ArchivedScene:
     scene_time: str | None = None
     bbox: list[float] | None = None
     metadata: dict[str, Any] | None = None
+    optical_members: tuple[str, ...] = ()
 
 
 def _normalize_split(value: str) -> str:
@@ -187,14 +190,18 @@ def _infer_split_from_path(member_name: str) -> str | None:
     return None
 
 
-def _normalize_scene_record(record: dict[str, Any]) -> ArchivedScene:
+def _normalize_scene_record(
+    record: dict[str, Any],
+    *,
+    default_split: str | None = None,
+) -> ArchivedScene:
     scene_id = str(
         record.get('external_scene_id')
         or record.get('scene_id')
         or record.get('id')
         or ''
     ).strip()
-    split_value = str(record.get('split') or '').strip()
+    split_value = str(record.get('split') or default_split or '').strip()
     if not scene_id:
         raise ValueError('every registry scene must include scene_id/external_scene_id')
     if not split_value:
@@ -209,11 +216,16 @@ def _normalize_scene_record(record: dict[str, Any]) -> ArchivedScene:
     stack_member = _record_member(record, keys=('stack_member', 'stack_path', 'stack_archive_path'))
     vv_member = _record_member(record, keys=('vv_member', 'vv_path'))
     vh_member = _record_member(record, keys=('vh_member', 'vh_path'))
-    if not stack_member and not (vv_member and vh_member):
-        raise ValueError(f'scene "{scene_id}" must include stack_member or both vv_member and vh_member')
     bbox = _normalize_bbox(record.get('bbox'), scene_id=scene_id)
     metadata = dict(record)
-    for key in ('external_scene_id', 'scene_id', 'id', 'split', 'region_key', 'region', 'truth_member', 'truth_mask_member', 'truth_mask_path', 'mask_path', 'label_path', 'stack_member', 'stack_path', 'stack_archive_path', 'vv_member', 'vv_path', 'vh_member', 'vh_path', 'bbox'):
+    optical_members = tuple(
+        str(item).strip()
+        for item in record.get('optical_members', ())
+        if isinstance(item, str) and item.strip()
+    )
+    if not stack_member and not (vv_member and vh_member) and not optical_members:
+        raise ValueError(f'scene "{scene_id}" must include stack_member or both vv_member and vh_member')
+    for key in ('external_scene_id', 'scene_id', 'id', 'split', 'region_key', 'region', 'truth_member', 'truth_mask_member', 'truth_mask_path', 'mask_path', 'label_path', 'stack_member', 'stack_path', 'stack_archive_path', 'vv_member', 'vv_path', 'vh_member', 'vh_path', 'bbox', 'optical_members'):
         metadata.pop(key, None)
     return ArchivedScene(
         external_scene_id=scene_id,
@@ -226,16 +238,22 @@ def _normalize_scene_record(record: dict[str, Any]) -> ArchivedScene:
         scene_time=str(record.get('scene_time') or record.get('timestamp') or '').strip() or None,
         bbox=bbox,
         metadata=metadata,
+        optical_members=optical_members,
     )
 
 
-def _infer_scenes_from_archive(archive: zipfile.ZipFile) -> list[ArchivedScene]:
+def _infer_scenes_from_archive(
+    archive: zipfile.ZipFile,
+    *,
+    default_split: str | None = None,
+) -> list[ArchivedScene]:
     grouped: dict[tuple[str, str, str], dict[str, Any]] = {}
+    normalized_default_split = _normalize_split(default_split) if default_split else None
     for member_name in archive.namelist():
         info = archive.getinfo(member_name)
         if info.is_dir():
             continue
-        split = _infer_split_from_path(member_name)
+        split = _infer_split_from_path(member_name) or normalized_default_split
         if split is None:
             continue
         path = PurePosixPath(member_name)
@@ -247,6 +265,7 @@ def _infer_scenes_from_archive(archive: zipfile.ZipFile) -> list[ArchivedScene]:
             'split': split,
             'region_key': region_key,
             'metadata': {},
+            'optical_members': [],
         })
         lowered = path.name.lower()
         suffix = path.suffix.lower()
@@ -258,21 +277,29 @@ def _infer_scenes_from_archive(archive: zipfile.ZipFile) -> list[ArchivedScene]:
             entry['vv_member'] = member_name
         elif suffix in STACK_SUFFIXES and re.search(r'(^|[_-])vh([_.-]|$)', lowered):
             entry['vh_member'] = member_name
-    scenes = [_normalize_scene_record(entry) for entry in grouped.values()]
+        elif suffix in OPTICAL_SUFFIXES:
+            entry['optical_members'].append(member_name)
+    scenes = [_normalize_scene_record(entry, default_split=normalized_default_split) for entry in grouped.values()]
     if not scenes:
         raise ValueError('archive does not contain an inferable validation/test split with truth and stack refs')
     return scenes
 
 
-def _load_archive_scenes(archive: zipfile.ZipFile, *, registry_member: str | None = None) -> list[ArchivedScene]:
+def _load_archive_scenes(
+    archive: zipfile.ZipFile,
+    *,
+    registry_member: str | None = None,
+    default_split: str | None = None,
+) -> list[ArchivedScene]:
+    normalized_default_split = _normalize_split(default_split) if default_split else None
     if registry_member:
         records = _read_registry_member(archive, registry_member)
-        return [_normalize_scene_record(record) for record in records]
+        return [_normalize_scene_record(record, default_split=normalized_default_split) for record in records]
     candidates = _candidate_registry_members(archive.namelist())
     if len(candidates) == 1:
         records = _read_registry_member(archive, candidates[0])
-        return [_normalize_scene_record(record) for record in records]
-    return _infer_scenes_from_archive(archive)
+        return [_normalize_scene_record(record, default_split=normalized_default_split) for record in records]
+    return _infer_scenes_from_archive(archive, default_split=normalized_default_split)
 
 
 def _load_array_from_member_payload(payload: bytes, suffix: str) -> np.ndarray:
@@ -292,6 +319,108 @@ def _load_array_from_member_payload(payload: bytes, suffix: str) -> np.ndarray:
     raise ValueError(f'unsupported stack member suffix "{suffix}"')
 
 
+def _single_band_array(array: np.ndarray, *, scene: ArchivedScene, member_name: str) -> np.ndarray:
+    normalized = np.asarray(array, dtype=np.float32)
+    if normalized.ndim == 2:
+        return normalized
+    if normalized.ndim == 3 and normalized.shape[0] == 1:
+        return np.asarray(normalized[0], dtype=np.float32)
+    raise ValueError(
+        f'scene "{scene.external_scene_id}" member "{member_name}" must resolve to a single VV or VH band; '
+        f'received shape {normalized.shape}',
+    )
+
+
+def _derived_split_name(splits: list[str], *, fallback: str | None) -> str:
+    normalized_fallback = str(fallback or '').strip()
+    if splits:
+        return '+'.join(splits) if len(splits) > 1 else splits[0]
+    if normalized_fallback:
+        return normalized_fallback
+    return 'validation'
+
+
+def _scene_has_optical_only_payload(scene: ArchivedScene) -> bool:
+    return bool(scene.optical_members) and not scene.stack_member and not (scene.vv_member and scene.vh_member)
+
+
+def _validate_scene_is_sar_compatible(archive: zipfile.ZipFile, scene: ArchivedScene) -> None:
+    if _scene_has_optical_only_payload(scene):
+        raise ValueError(
+            f'scene "{scene.external_scene_id}" contains optical/webcam imagery ({", ".join(scene.optical_members)}) '
+            'but no Sentinel-1 SAR stack or VV/VH members; optical datasets are invalid for the pinned SAR gate',
+        )
+
+    truth_suffix = Path(scene.truth_member).suffix.lower()
+    if truth_suffix not in TRUTH_SUFFIXES:
+        raise ValueError(
+            f'scene "{scene.external_scene_id}" truth member must be GeoTIFF (.tif/.tiff); '
+            f'received "{scene.truth_member}"',
+        )
+
+    if scene.stack_member:
+        stack_suffix = Path(scene.stack_member).suffix.lower()
+        if stack_suffix in OPTICAL_SUFFIXES:
+            raise ValueError(
+                f'scene "{scene.external_scene_id}" stack member "{scene.stack_member}" is optical imagery; '
+                'a Sentinel-1 SAR archive must provide a 2-channel stack or VV/VH bands',
+            )
+        if stack_suffix not in SAR_STACK_SUFFIXES:
+            raise ValueError(
+                f'scene "{scene.external_scene_id}" stack member "{scene.stack_member}" uses unsupported suffix '
+                f'"{stack_suffix}"; expected .npz, .npy, .tif, or .tiff',
+            )
+        stack = _load_array_from_member_payload(archive.read(scene.stack_member), stack_suffix)
+        _normalize_stack(stack)
+        return
+
+    if not scene.vv_member or not scene.vh_member:
+        raise ValueError(
+            f'scene "{scene.external_scene_id}" is missing a Sentinel-1 SAR stack or paired VV/VH members; '
+            'optical or incomplete archives are invalid for the pinned SAR gate',
+        )
+
+    for member_name in (scene.vv_member, scene.vh_member):
+        suffix = Path(member_name).suffix.lower()
+        if suffix in OPTICAL_SUFFIXES:
+            raise ValueError(
+                f'scene "{scene.external_scene_id}" member "{member_name}" is optical imagery; '
+                'a Sentinel-1 SAR archive must provide VV/VH raster bands',
+            )
+        if suffix not in SAR_STACK_SUFFIXES:
+            raise ValueError(
+                f'scene "{scene.external_scene_id}" member "{member_name}" uses unsupported suffix "{suffix}"; '
+                'expected .npz, .npy, .tif, or .tiff',
+            )
+
+    vv = _single_band_array(
+        _load_array_from_member_payload(archive.read(scene.vv_member), Path(scene.vv_member).suffix.lower()),
+        scene=scene,
+        member_name=scene.vv_member,
+    )
+    vh = _single_band_array(
+        _load_array_from_member_payload(archive.read(scene.vh_member), Path(scene.vh_member).suffix.lower()),
+        scene=scene,
+        member_name=scene.vh_member,
+    )
+    _normalize_stack(np.stack([vv, vh], axis=0))
+
+
+def _inspect_archive(
+    archive: zipfile.ZipFile,
+    *,
+    registry_member: str | None = None,
+    default_split: str | None = None,
+) -> tuple[list[ArchivedScene], list[str], str]:
+    scenes = _ensure_validation_or_test_scenes(
+        _load_archive_scenes(archive, registry_member=registry_member, default_split=default_split),
+    )
+    for scene in scenes:
+        _validate_scene_is_sar_compatible(archive, scene)
+    splits = sorted({scene.split for scene in scenes if scene.split})
+    return scenes, splits, _derived_split_name(splits, fallback=default_split)
+
+
 def _canonical_stack_payload(archive: zipfile.ZipFile, scene: ArchivedScene) -> bytes:
     if scene.stack_member:
         payload = archive.read(scene.stack_member)
@@ -299,12 +428,16 @@ def _canonical_stack_payload(archive: zipfile.ZipFile, scene: ArchivedScene) -> 
     else:
         if not scene.vv_member or not scene.vh_member:
             raise ValueError(f'scene "{scene.external_scene_id}" is missing stack or vv/vh members')
-        vv = _load_array_from_member_payload(archive.read(scene.vv_member), Path(scene.vv_member).suffix.lower())
-        vh = _load_array_from_member_payload(archive.read(scene.vh_member), Path(scene.vh_member).suffix.lower())
-        if vv.ndim == 3:
-            vv = vv[0]
-        if vh.ndim == 3:
-            vh = vh[0]
+        vv = _single_band_array(
+            _load_array_from_member_payload(archive.read(scene.vv_member), Path(scene.vv_member).suffix.lower()),
+            scene=scene,
+            member_name=scene.vv_member,
+        )
+        vh = _single_band_array(
+            _load_array_from_member_payload(archive.read(scene.vh_member), Path(scene.vh_member).suffix.lower()),
+            scene=scene,
+            member_name=scene.vh_member,
+        )
         stack = np.stack([vv, vh], axis=0)
     normalized = _normalize_stack(stack)
     buffer = io.BytesIO()
@@ -404,8 +537,10 @@ def _upload_scene_assets(
 
 def seed_snowslide_truth(args: argparse.Namespace) -> dict[str, Any]:
     with _open_archive_from_args(args) as archive:
-        scenes = _ensure_validation_or_test_scenes(
-            _load_archive_scenes(archive, registry_member=args.registry_member),
+        scenes, splits, split_name = _inspect_archive(
+            archive,
+            registry_member=args.registry_member,
+            default_split=getattr(args, 'split', None),
         )
         items, registry_rows = _upload_scene_assets(
             archive,
@@ -414,12 +549,11 @@ def seed_snowslide_truth(args: argparse.Namespace) -> dict[str, Any]:
             bucket=args.bucket,
         )
 
-    splits = sorted({scene['metadata']['split'] for scene in items if isinstance(scene.get('metadata'), dict)})
     set_rows = rest_upsert('sar_release_reference_sets', [{
         'set_key': args.set_key,
         'source_name': SAR_RELEASE_SOURCE_NAME,
         'source_version': args.source_version,
-        'split_name': '+'.join(splits) if len(splits) > 1 else (splits[0] if splits else 'validation'),
+        'split_name': split_name,
         'hazard_type': args.hazard_type,
         'purpose': SAR_RELEASE_PURPOSE,
         'authoritative': True,
@@ -460,6 +594,9 @@ def seed_snowslide_truth(args: argparse.Namespace) -> dict[str, Any]:
     )
     updated_rows = rest_upsert('sar_release_reference_sets', [{
         'id': reference_set_id,
+        'set_key': args.set_key,
+        'source_version': args.source_version,
+        'split_name': split_name,
         'registry_asset_ref': registry_asset_ref,
         'status': 'draft',
         'authoritative': True,
@@ -477,6 +614,23 @@ def seed_snowslide_truth(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def validate_snowslide_archive(args: argparse.Namespace) -> dict[str, Any]:
+    with _open_archive_from_args(args) as archive:
+        scenes, splits, split_name = _inspect_archive(
+            archive,
+            registry_member=args.registry_member,
+            default_split=getattr(args, 'split', None),
+        )
+    return {
+        'status': 'ok',
+        'set_key': args.set_key,
+        'scene_count': len(scenes),
+        'splits': splits,
+        'split_name': split_name,
+        'source_version': args.source_version,
+    }
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Seed authoritative SnowSlide held-out truth into sar-masks + Supabase registry')
     source_group = parser.add_mutually_exclusive_group(required=True)
@@ -489,13 +643,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument('--source-version', required=True, help='External dataset version identifier')
     parser.add_argument('--bucket', default=SAR_RELEASE_BUCKET, help='Supabase storage bucket for held-out assets')
     parser.add_argument('--hazard-type', default='avalanche', help='Hazard type for the reference set')
+    parser.add_argument('--split', default='validation', help='Deprecated fallback split when the archive does not contain validation/test split metadata')
     parser.add_argument('--notes', default='SnowSlide held-out truth seed', help='Optional registry notes')
+    parser.add_argument('--validate-only', action='store_true', help='Inspect the archive and enforce the SAR-only contract without mutating storage or Supabase')
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    result = seed_snowslide_truth(args)
+    try:
+        result = validate_snowslide_archive(args) if args.validate_only else seed_snowslide_truth(args)
+    except (ValueError, RuntimeError) as exc:
+        if args.validate_only:
+            print(json.dumps({
+                'status': 'invalid_archive',
+                'reason': str(exc),
+            }, indent=2, sort_keys=True))
+            return 1
+        raise
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 

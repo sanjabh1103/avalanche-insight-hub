@@ -54,6 +54,7 @@ class GitHubRolloutPolicyTests(unittest.TestCase):
         self.assertNotIn('\npush:\n', bootstrap_gate)
         self.assertIn('group: bootstrap-pinned-gate', bootstrap_gate)
         self.assertIn('DATASET_URL:', bootstrap_gate)
+        self.assertIn('Direct Sentinel-1 SAR held-out archive URL on an allowlisted host', bootstrap_gate)
         self.assertIn("wget \"${DATASET_URL}\" -O snowslide_archive.zip", bootstrap_gate)
         for host in (
             'envidat.ch',
@@ -65,6 +66,8 @@ class GitHubRolloutPolicyTests(unittest.TestCase):
         ):
             self.assertIn(host, bootstrap_gate)
         self.assertIn('backend.scripts.seed_snowslide_truth', bootstrap_gate)
+        self.assertIn('--validate-only', bootstrap_gate)
+        self.assertIn('Preflight Sentinel-1 SAR archive', bootstrap_gate)
         self.assertIn('backend.scripts.materialize_release_baseline_masks', bootstrap_gate)
 
     def test_trigger_job_admin_path_requires_supabase_auth_and_allowlists(self) -> None:
