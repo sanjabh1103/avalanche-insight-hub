@@ -26,6 +26,11 @@ except Exception:  # pragma: no cover - optional dependency
     torch = None
     _HAS_TORCH = False
 
+if _HAS_TORCH:
+    from backend.models.mts_lstm import BranchedMTSLSTM
+else:  # pragma: no cover - exercised only when torch missing
+    BranchedMTSLSTM = None
+
 
 def _flag(name: str, default: bool) -> bool:
     raw = os.getenv(name)
@@ -124,45 +129,6 @@ class LSTMHead:
             seed_base=int(seed_base),
         )
         return stacked.mean(axis=0), stacked.std(axis=0)
-
-
-if _HAS_TORCH:
-    class BranchedMTSLSTM(torch.nn.Module):
-        def __init__(self, hourly_input_size: int, daily_input_size: int, static_input_size: int) -> None:
-            super().__init__()
-            self.hourly_lstm = torch.nn.LSTM(
-                input_size=hourly_input_size,
-                hidden_size=32,
-                num_layers=1,
-                batch_first=True,
-            )
-            self.daily_lstm = torch.nn.LSTM(
-                input_size=daily_input_size,
-                hidden_size=24,
-                num_layers=1,
-                batch_first=True,
-            )
-            self.static_encoder = torch.nn.Sequential(
-                torch.nn.Linear(static_input_size, 16),
-                torch.nn.ReLU(),
-                torch.nn.Dropout(MTS_DROPOUT),
-            )
-            self.head = torch.nn.Sequential(
-                torch.nn.Linear(32 + 24 + 16, 32),
-                torch.nn.ReLU(),
-                torch.nn.Dropout(MTS_DROPOUT),
-                torch.nn.Linear(32, 1),
-            )
-
-        def forward(self, hourly: torch.Tensor, daily: torch.Tensor, static: torch.Tensor) -> torch.Tensor:
-            hourly_out, _ = self.hourly_lstm(hourly)
-            daily_out, _ = self.daily_lstm(daily)
-            static_out = self.static_encoder(static)
-            merged = torch.cat([hourly_out[:, -1, :], daily_out[:, -1, :], static_out], dim=1)
-            return self.head(merged).squeeze(-1)
-else:  # pragma: no cover - exercised only when torch missing
-    BranchedMTSLSTM = None
-
 
 def _sequence_norm_stats(array: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     mean = array.mean(axis=(0, 1), keepdims=True)
@@ -336,6 +302,7 @@ def fit_lstm_head(
         hourly_input_size=len(dynamic_features),
         daily_input_size=len(dynamic_features),
         static_input_size=len(static_features),
+        dropout=MTS_DROPOUT,
     )
     optimizer = torch.optim.AdamW(model.parameters(), lr=MTS_LSTM_LR)
     positives = max(1, int((train_df['label'] == 1).sum()))

@@ -14,6 +14,7 @@ from backend.lstm_model import (
     fit_lstm_head,
     predict_production_probability,
 )
+from backend.models.mts_lstm import BranchedMTSLSTM as ExtractedBranchedMTSLSTM
 
 
 class _DummyHead:
@@ -48,6 +49,11 @@ class PredictProductionProbabilityTests(unittest.TestCase):
 
         self.assertIsNotNone(head)
         self.assertEqual(head.metadata['seed'], 23)
+
+    def test_lstm_model_reexports_extracted_model_class(self) -> None:
+        from backend.lstm_model import BranchedMTSLSTM
+
+        self.assertIs(BranchedMTSLSTM, ExtractedBranchedMTSLSTM)
 
     def test_promoted_model_uses_seeded_uncertainty_fallback_when_mc_dropout_collapses(self) -> None:
         head = _DummyHead(promoted=True, std=0.0, ensemble_std=0.012)
