@@ -48,6 +48,7 @@ MIN_EVENTS_FOR_TRAINING = int(os.getenv('MIN_EVENTS_FOR_TRAINING', '30'))
 SKIP_EVENT_PRECHECK = os.getenv('SKIP_EVENT_PRECHECK', 'false').lower() in ('1', 'true', 'yes')
 ALLOW_SYNTHETIC_BOOTSTRAP = os.getenv('ALLOW_SYNTHETIC_BOOTSTRAP', 'false').lower() in ('1', 'true', 'yes')
 ALLOW_DRIFT_SKIP = os.getenv('ALLOW_DRIFT_SKIP', 'false').lower() in ('1', 'true', 'yes')
+ALLOW_MODEL_STATUS_PUBLISH = os.getenv('ALLOW_MODEL_STATUS_PUBLISH', 'true').lower() in ('1', 'true', 'yes')
 DRIFT_WINDOW_DAYS = int(os.getenv('DRIFT_WINDOW_DAYS', '7'))
 DRIFT_BASELINE_DAYS = int(os.getenv('DRIFT_BASELINE_DAYS', '30'))
 DRIFT_REGION_MEAN_THRESHOLD = float(os.getenv('DRIFT_REGION_MEAN_THRESHOLD', '0.12'))
@@ -66,6 +67,14 @@ def build_dataset_snapshot_id(dataset_manifest: dict[str, object] | None) -> str
     if isinstance(newest_timestamp, str) and newest_timestamp:
         return f'{version}:{newest_timestamp}'
     return version
+
+
+def publish_guard_reason(*, is_synthetic: bool, allow_publish: bool) -> str | None:
+    if is_synthetic:
+        return 'synthetic_bootstrap_not_published'
+    if not allow_publish:
+        return 'shadow_only_remote_training'
+    return None
 
 
 def collect_sar_unet_volume_stats(dataset_manifest: dict[str, object] | None) -> dict[str, int]:
@@ -768,14 +777,24 @@ def main() -> int:
     # real-data model until fresh labeled events arrive.
     manifest = bundle.get('dataset_manifest') if isinstance(bundle.get('dataset_manifest'), dict) else {}
     is_synthetic = bool(manifest.get('is_synthetic'))
+    publish_skip_reason = publish_guard_reason(
+        is_synthetic=is_synthetic,
+        allow_publish=ALLOW_MODEL_STATUS_PUBLISH,
+    )
+    if publish_skip_reason is not None:
+        metadata['publish_skipped'] = publish_skip_reason
     if is_synthetic:
-        metadata['publish_skipped'] = 'synthetic_bootstrap_not_published'
         print(
             "[train_model] Refusing to publish synthetic-bootstrap artifact to Supabase.",
             file=sys.stderr,
         )
+    elif not ALLOW_MODEL_STATUS_PUBLISH:
+        print(
+            "[train_model] Shadow-only remote training: skipping model_status publish.",
+            file=sys.stderr,
+        )
 
-    if has_supabase_credentials() and not is_synthetic:
+    if has_supabase_credentials() and not is_synthetic and ALLOW_MODEL_STATUS_PUBLISH:
         payload: dict[str, object] = {
             'version': f"async-{artifact_dir.name}",
             'last_trained': metadata['published_at'],

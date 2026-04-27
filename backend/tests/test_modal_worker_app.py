@@ -4,6 +4,7 @@ import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
 os.environ.setdefault('AVALANCHE_SKIP_MODAL_IMPORT', '1')
@@ -16,8 +17,11 @@ from backend.modal_worker_app import (
     handle_sar_segment,
     handle_train_mtslstm,
     normalize_model_volume_path,
+    poll_train_mtslstm_job,
+    run_remote_train_mtslstm,
     seed_dem_directory,
     seed_model_volume_file,
+    submit_train_mtslstm_job,
 )
 
 
@@ -79,6 +83,85 @@ class ModalWorkerAppTests(unittest.TestCase):
         self.assertEqual(status_code, 200)
         self.assertEqual(body['status'], 'ok')
         handle_mock.assert_called_once_with(payload)
+
+    def test_submit_train_mtslstm_job_returns_call_id(self) -> None:
+        class _FakeCall:
+            object_id = 'fc-123'
+
+        class _FakeFunction:
+            def __init__(self) -> None:
+                self.payload = None
+
+            def spawn(self, payload):
+                self.payload = payload
+                return _FakeCall()
+
+        fake_function = _FakeFunction()
+        fake_modal = SimpleNamespace(
+            Function=SimpleNamespace(
+                from_name=lambda app_name, fn_name: fake_function,
+            ),
+        )
+
+        with patch('backend.modal_worker_app.modal', fake_modal):
+            result = submit_train_mtslstm_job({'dataset_snapshot_id': 'latest'})
+
+        self.assertEqual(result['status'], 'accepted')
+        self.assertEqual(result['call_id'], 'fc-123')
+        self.assertEqual(fake_function.payload, {'dataset_snapshot_id': 'latest'})
+
+    def test_poll_train_mtslstm_job_returns_pending_on_timeout(self) -> None:
+        class _FakeFunctionCall:
+            def get(self, timeout: int = 0):
+                raise TimeoutError()
+
+        fake_modal = SimpleNamespace(
+            FunctionCall=SimpleNamespace(from_id=lambda call_id: _FakeFunctionCall()),
+            exception=SimpleNamespace(OutputExpiredError=RuntimeError),
+        )
+
+        with patch('backend.modal_worker_app.modal', fake_modal):
+            status_code, body = poll_train_mtslstm_job('fc-123')
+
+        self.assertEqual(status_code, 202)
+        self.assertEqual(body['status'], 'pending')
+
+    def test_poll_train_mtslstm_job_returns_result_when_complete(self) -> None:
+        class _FakeFunctionCall:
+            def get(self, timeout: int = 0):
+                return {'status': 'ok', 'artifact_dir': '/artifacts/20260427T000000Z'}
+
+        fake_modal = SimpleNamespace(
+            FunctionCall=SimpleNamespace(from_id=lambda call_id: _FakeFunctionCall()),
+            exception=SimpleNamespace(OutputExpiredError=RuntimeError),
+        )
+
+        with patch('backend.modal_worker_app.modal', fake_modal):
+            status_code, body = poll_train_mtslstm_job('fc-123')
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(body['status'], 'ok')
+
+    @patch('backend.modal_worker_app.run_train_mtslstm', return_value={'status': 'ok'})
+    def test_run_remote_train_mtslstm_reloads_and_commits_volume(self, run_train_mock) -> None:
+        calls: list[str] = []
+
+        def _reload() -> None:
+            calls.append('reload')
+
+        def _commit() -> None:
+            calls.append('commit')
+
+        result = run_remote_train_mtslstm(
+            {'dataset_snapshot_id': 'latest'},
+            artifact_root=Path('/artifacts'),
+            volume_reload=_reload,
+            volume_commit=_commit,
+        )
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(calls, ['reload', 'commit'])
+        run_train_mock.assert_called_once_with({'dataset_snapshot_id': 'latest'}, artifact_root=Path('/artifacts'))
 
     def test_seed_dem_directory_copies_missing_dems_only(self) -> None:
         with TemporaryDirectory() as tmpdir:

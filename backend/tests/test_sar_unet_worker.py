@@ -503,6 +503,8 @@ class SarUnetWorkerTests(unittest.TestCase):
         self.assertFalse(report['production_eligibility_gate_passed'])
         self.assertEqual(report['epochs_requested'], 50)
         self.assertTrue(report['early_stopped'])
+        env = run_python_module_mock.call_args.kwargs['env']
+        self.assertEqual(env['ALLOW_MODEL_STATUS_PUBLISH'], 'false')
 
     @patch('backend.sar_unet_worker._run_python_module')
     def test_run_infer_mtslstm_returns_shadow_summary(self, run_python_module_mock) -> None:

@@ -1099,6 +1099,7 @@ def run_train_mtslstm(
         'MTS_RUNTIME_PROVIDER': 'modal',
         'TRAIN_MTS_LSTM_HEAD': 'true',
         'USE_MTS_LSTM_HEAD': 'true',
+        'ALLOW_MODEL_STATUS_PUBLISH': 'true' if _flag_from_payload(request.get('allow_publish'), False) else 'false',
         'MTS_LSTM_EPOCHS': str(int(request.get('epochs') or DEFAULT_LSTM_EPOCHS)),
         'MTS_LSTM_EARLY_STOPPING': 'true' if _flag_from_payload(request.get('early_stopping'), True) else 'false',
         'MTS_LSTM_MIN_EPOCHS_BEFORE_EARLY_STOPPING': str(int(request.get('minimum_epochs_before_early_stopping') or DEFAULT_LSTM_MIN_EPOCHS)),

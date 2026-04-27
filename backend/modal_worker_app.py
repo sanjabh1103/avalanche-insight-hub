@@ -8,7 +8,7 @@ from pathlib import PurePosixPath
 from typing import Any, Callable
 
 from backend.common.config import load_settings
-from backend.sar_unet_worker import SAR_UNET_SEGMENTATION_THRESHOLD, run_worker_request
+from backend.sar_unet_worker import SAR_UNET_SEGMENTATION_THRESHOLD, run_train_mtslstm, run_worker_request
 
 if str(os.environ.get('AVALANCHE_SKIP_MODAL_IMPORT') or '').strip().lower() in {'1', 'true', 'yes', 'on'}:
     modal = None
@@ -20,10 +20,12 @@ else:
 
 try:  # pragma: no cover - optional dependency for deployment only
     from fastapi import FastAPI, HTTPException, Request
+    from fastapi.responses import JSONResponse
 except Exception:  # pragma: no cover - optional dependency
     FastAPI = None
     HTTPException = RuntimeError  # type: ignore[assignment]
     Request = Any  # type: ignore[misc,assignment]
+    JSONResponse = None  # type: ignore[assignment]
 
 # Volume mount path — artifact root inside the Modal container.
 # Matches ARTIFACT_ROOT env var so sar_unet_worker.py writes here automatically.
@@ -31,6 +33,8 @@ VOLUME_MOUNT = '/artifacts'
 DEM_VOLUME_ROOT = f'{VOLUME_MOUNT}/dem'
 MODEL_VOLUME_ROOT = f'{VOLUME_MOUNT}/models'
 WORKER_TOKEN_ENV = 'MODAL_WORKER_TOKEN'
+MODAL_APP_NAME = 'avalanche-modal-worker'
+MODAL_REMOTE_TRAIN_FUNCTION = 'train_mts_lstm_remote'
 
 
 def _artifact_root() -> Path:
@@ -73,6 +77,69 @@ def handle_infer_mtslstm(payload: dict[str, Any]) -> dict[str, Any]:
 
 def handle_evaluate_release(payload: dict[str, Any]) -> dict[str, Any]:
     return _dispatch_worker_request('evaluate-release', payload)
+
+
+def run_remote_train_mtslstm(
+    payload: dict[str, Any],
+    *,
+    artifact_root: Path,
+    volume_reload: Callable[[], None] | None = None,
+    volume_commit: Callable[[], None] | None = None,
+) -> dict[str, Any]:
+    if volume_reload is not None:
+        volume_reload()
+    report = run_train_mtslstm(payload, artifact_root=artifact_root)
+    if volume_commit is not None:
+        volume_commit()
+    return report
+
+
+def submit_train_mtslstm_job(payload: dict[str, Any]) -> dict[str, Any]:
+    if modal is None:
+        raise RuntimeError('modal must be installed to submit remote MTS-LSTM jobs')
+    train_function = modal.Function.from_name(MODAL_APP_NAME, MODAL_REMOTE_TRAIN_FUNCTION)
+    call = train_function.spawn(payload)
+    return {
+        'status': 'accepted',
+        'call_id': str(call.object_id),
+        'request_type': 'train_mtslstm',
+        'runtime_provider': 'modal',
+    }
+
+
+def poll_train_mtslstm_job(call_id: str) -> tuple[int, dict[str, Any]]:
+    if modal is None:
+        raise RuntimeError('modal must be installed to poll remote MTS-LSTM jobs')
+    function_call = modal.FunctionCall.from_id(call_id)
+    output_expired_error = getattr(getattr(modal, 'exception', None), 'OutputExpiredError', None)
+    try:
+        result = function_call.get(timeout=0)
+    except TimeoutError:
+        return 202, {
+            'status': 'pending',
+            'call_id': call_id,
+            'request_type': 'train_mtslstm',
+            'runtime_provider': 'modal',
+        }
+    except Exception as exc:
+        if output_expired_error is not None and isinstance(exc, output_expired_error):
+            return 404, {
+                'status': 'not_found',
+                'call_id': call_id,
+                'request_type': 'train_mtslstm',
+                'runtime_provider': 'modal',
+                'reason': 'result_expired',
+            }
+        raise
+    if isinstance(result, dict):
+        return 200, result
+    return 200, {
+        'status': 'ok',
+        'call_id': call_id,
+        'request_type': 'train_mtslstm',
+        'runtime_provider': 'modal',
+        'result': result,
+    }
 
 
 def _route_handlers() -> dict[str, Callable[[dict[str, Any]], dict[str, Any]]]:
@@ -185,7 +252,16 @@ def create_fastapi_app(volume_reload: Callable[[], None] | None = None, volume_c
 
     app = FastAPI(title='avalanche-modal-worker')
 
+    def _authorize_or_raise(authorization_header: str | None) -> None:
+        try:
+            authorize_bearer_request(authorization_header)
+        except PermissionError as exc:
+            raise HTTPException(status_code=401, detail={'status': 'unauthorized', 'reason': str(exc)}) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail={'status': 'misconfigured', 'reason': str(exc)}) from exc
+
     async def _handle(request: Request, route: str, commit_after: bool) -> dict[str, Any]:
+        _authorize_or_raise(request.headers.get('Authorization'))
         if volume_reload is not None:
             volume_reload()
         payload = await request.json()
@@ -206,7 +282,27 @@ def create_fastapi_app(volume_reload: Callable[[], None] | None = None, volume_c
 
     @app.post('/train-mtslstm')
     async def train_mtslstm(request: Request) -> dict[str, Any]:
-        return await _handle(request, '/train-mtslstm', True)
+        _authorize_or_raise(request.headers.get('Authorization'))
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            payload = {}
+        try:
+            return submit_train_mtslstm_job(payload)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail={'status': 'misconfigured', 'reason': str(exc)}) from exc
+
+    @app.get('/train-mtslstm/result/{call_id}')
+    async def train_mtslstm_result(call_id: str, request: Request) -> Any:
+        _authorize_or_raise(request.headers.get('Authorization'))
+        try:
+            status_code, body = poll_train_mtslstm_job(call_id)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail={'status': 'misconfigured', 'reason': str(exc)}) from exc
+        if status_code == 202:
+            return JSONResponse(status_code=202, content=body)
+        if status_code != 200:
+            raise HTTPException(status_code=status_code, detail=body)
+        return body
 
     @app.post('/infer-mtslstm')
     async def infer_mtslstm(request: Request) -> dict[str, Any]:
@@ -220,7 +316,7 @@ def create_fastapi_app(volume_reload: Callable[[], None] | None = None, volume_c
 
 
 if modal is not None:  # pragma: no cover - exercised in deployment, not local tests
-    app = modal.App('avalanche-modal-worker')
+    app = modal.App(MODAL_APP_NAME)
     _artifact_volume = modal.Volume.from_name('avalanche-artifacts', create_if_missing=True)
     _secrets = [modal.Secret.from_name('avalanche-supabase-secrets')]
 
@@ -249,6 +345,22 @@ if modal is not None:  # pragma: no cover - exercised in deployment, not local t
     @modal.asgi_app()
     def worker_api() -> Any:
         return create_fastapi_app(
+            volume_reload=_artifact_volume.reload,
+            volume_commit=_artifact_volume.commit,
+        )
+
+    @app.function(
+        image=image,
+        secrets=_secrets,
+        volumes={VOLUME_MOUNT: _artifact_volume},
+        gpu='T4',
+        timeout=14400,
+        retries=0,
+    )
+    def train_mts_lstm_remote(request: dict[str, Any]) -> dict[str, Any]:
+        return run_remote_train_mtslstm(
+            request,
+            artifact_root=Path(VOLUME_MOUNT),
             volume_reload=_artifact_volume.reload,
             volume_commit=_artifact_volume.commit,
         )
