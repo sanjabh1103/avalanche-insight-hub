@@ -32,6 +32,7 @@ from backend.common.risk_math import (
 from backend.common.supabase_io import has_supabase_credentials, patch_first_row, rest_get, rest_upsert
 from backend.common.sequence_features import build_inference_branches
 from backend.lstm_model import predict_production_probability
+from backend.models.surrogate_rf import build_tree_shap_explainer, collect_tree_probabilities, compute_tree_shap
 
 
 def _fetch_latest_sar_summary(region_key: str) -> dict[str, object]:
@@ -236,54 +237,6 @@ def terrain_adjusted_risk_level(
     )
 
 
-def cell_probabilities(base_model, x_sel: pd.DataFrame) -> np.ndarray:
-    trees = getattr(base_model, 'estimators_', [])
-    if not trees:
-        return np.zeros(len(x_sel))
-    tree_probs = np.column_stack([tree.predict_proba(x_sel)[:, 1] for tree in trees])
-    return tree_probs
-
-
-def top_feature_contributions(row: pd.Series, selected_features: list[str], feature_means: dict[str, float], feature_importances: np.ndarray) -> dict[str, float]:
-    contributions = {
-        feature: float((row[feature] - feature_means.get(feature, 0.0)) * importance)
-        for feature, importance in zip(selected_features, feature_importances)
-    }
-    return dict(sorted(contributions.items(), key=lambda item: abs(item[1]), reverse=True)[:5])
-
-
-def compute_tree_shap(explainer, selected_frame: pd.DataFrame, selected_features: list[str]) -> tuple[dict[str, float], list[dict[str, float | str | int]]]:
-    shap_values = explainer.shap_values(selected_frame)
-    if isinstance(shap_values, list):
-        shap_vector = np.asarray(shap_values[-1])[0]
-    else:
-        shap_array = np.asarray(shap_values)
-        if shap_array.ndim == 3:
-            shap_vector = shap_array[0, :, -1]
-        else:
-            shap_vector = shap_array[0]
-
-    feature_values = selected_frame.iloc[0].to_dict()
-    ordered = sorted(
-        [
-            {
-                'feature': feature,
-                'shap_value': float(value),
-                'feature_value': float(feature_values[feature]),
-            }
-            for feature, value in zip(selected_features, shap_vector)
-        ],
-        key=lambda item: abs(float(item['shap_value'])),
-        reverse=True,
-    )[:5]
-    for rank, item in enumerate(ordered, start=1):
-        item['rank'] = rank
-    return (
-        {item['feature']: float(item['shap_value']) for item in ordered},
-        ordered,
-    )
-
-
 def build_cells(region, bundle, grid_size: int, forecast_date: pd.Timestamp):
     selector = bundle['selector']
     calibrated_model = bundle['calibrated_model']
@@ -304,9 +257,7 @@ def build_cells(region, bundle, grid_size: int, forecast_date: pd.Timestamp):
     # P2.1: Fetch SAR summary once per region so per-cell coverage flags
     # reflect real orbital coverage instead of the old hardcoded default.
     sar_summary = _fetch_latest_sar_summary(region.key)
-    import shap
-
-    explainer = shap.TreeExplainer(base_model)
+    explainer = build_tree_shap_explainer(base_model)
     dem_path = repo_root() / 'backend' / 'data' / 'dem' / f'{region.key}.tif'
     rows = []
 
@@ -324,7 +275,7 @@ def build_cells(region, bundle, grid_size: int, forecast_date: pd.Timestamp):
         feature_row = assembled['feature_row']
         feature_frame = pd.DataFrame([feature_row], columns=FEATURE_COLUMNS)
         selected_frame = pd.DataFrame(selector.transform(feature_frame), columns=selected_features)
-        probabilities = cell_probabilities(base_model, selected_frame)
+        probabilities = collect_tree_probabilities(base_model, selected_frame)
         rf_probability = float(calibrated_model.predict_proba(selected_frame)[0, 1])
         sequence_branches = None
         if lstm_head is not None and getattr(lstm_head, 'model', None) is not None:
@@ -454,7 +405,15 @@ def build_cells(region, bundle, grid_size: int, forecast_date: pd.Timestamp):
     return rows
 
 
-def upsert_forecast_grid(region, bundle, forecast_date: pd.Timestamp, rows: list[dict[str, object]], horizon_hours: int):
+def upsert_forecast_grid(
+    region,
+    bundle,
+    forecast_date: pd.Timestamp,
+    rows: list[dict[str, object]],
+    horizon_hours: int,
+    *,
+    dry_run: bool = False,
+):
     weather_inputs = [row['weather_inputs'] for row in rows if isinstance(row.get('weather_inputs'), dict)]
     terrain_inputs = [row['terrain_inputs'] for row in rows if isinstance(row.get('terrain_inputs'), dict)]
     sar_evidence = _fetch_region_sar_evidence(region.key)
@@ -522,7 +481,7 @@ def upsert_forecast_grid(region, bundle, forecast_date: pd.Timestamp, rows: list
         },
         'status': 'ready',
     }
-    if has_supabase_credentials():
+    if has_supabase_credentials() and not dry_run:
         rest_upsert('forecast_grids', [payload], on_conflict='hazard_type,region_key,forecast_date,horizon_hours')
         _upsert_shap_cache(region, bundle, forecast_date, rows)
     return payload
@@ -589,13 +548,13 @@ def _upsert_shap_cache(region, bundle, forecast_date: pd.Timestamp, rows: list[d
         return
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description='Generate forecast grids for Avalanche Insight Hub')
     parser.add_argument('--artifact-root', type=Path, default=load_settings().artifact_root)
     parser.add_argument('--forecast-hours', type=int, default=load_settings().forecast_horizon_hours)
     parser.add_argument('--grid-size', type=int, default=load_settings().grid_size)
     parser.add_argument('--dry-run', action='store_true', default=load_settings().dry_run)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     try:
         artifact_dir = latest_artifact_dir(args.artifact_root)
@@ -635,7 +594,14 @@ def main() -> int:
     outputs = []
     for region in regions:
         rows = build_cells(region, bundle, grid_size=args.grid_size, forecast_date=forecast_date)
-        payload = upsert_forecast_grid(region, bundle, forecast_date, rows, horizon_hours=args.forecast_hours)
+        payload = upsert_forecast_grid(
+            region,
+            bundle,
+            forecast_date,
+            rows,
+            args.forecast_hours,
+            dry_run=bool(args.dry_run),
+        )
         outputs.append(payload)
 
     dump_json(artifact_dir / 'forecast_grids.json', outputs)
@@ -645,6 +611,8 @@ def main() -> int:
     inference_manifest = {
         'artifact_dir': str(artifact_dir),
         'regions_written': len(outputs),
+        'total_cells_written': sum(len(payload.get('grid_geojson') or []) for payload in outputs),
+        'dry_run': bool(args.dry_run),
         'regions': [
             {
                 'region_key': payload.get('region_key'),
@@ -661,7 +629,7 @@ def main() -> int:
     }
     dump_json(artifact_dir / 'inference_manifest.json', inference_manifest)
 
-    if has_supabase_credentials():
+    if has_supabase_credentials() and not args.dry_run:
         # P0.2: Compute next scheduled run (24h from now) so the admin dashboard
         # can flag staleness instead of showing an indefinite 'null'.
         next_run = (datetime.now(timezone.utc) + pd.Timedelta(hours=24)).isoformat()

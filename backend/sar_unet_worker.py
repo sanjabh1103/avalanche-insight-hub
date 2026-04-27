@@ -1085,6 +1085,59 @@ def _load_training_summary(artifact_dir: Path | None) -> tuple[dict[str, Any], d
     return metrics if isinstance(metrics, dict) else {}, lstm_head_meta if isinstance(lstm_head_meta, dict) else {}
 
 
+def _load_inference_summary(artifact_dir: Path | None) -> tuple[dict[str, Any], dict[str, Any]]:
+    if artifact_dir is None:
+        return {}, {}
+    manifest_path = artifact_dir / 'inference_manifest.json'
+    forecast_path = artifact_dir / 'forecast_grids.json'
+    manifest = load_json(manifest_path) if manifest_path.exists() else {}
+    forecast_payload = load_json(forecast_path) if forecast_path.exists() else []
+    if not isinstance(manifest, dict):
+        manifest = {}
+    if not isinstance(forecast_payload, list):
+        forecast_payload = []
+
+    total_cells_written = 0
+    cells_with_shap = 0
+    sample_dominant_driver = None
+    surrogate_model_version = None
+    dynamic_model_type = None
+    dynamic_model_version = None
+    for region_payload in forecast_payload:
+        if not isinstance(region_payload, dict):
+            continue
+        metadata = region_payload.get('model_metadata') if isinstance(region_payload.get('model_metadata'), dict) else {}
+        surrogate_model_version = surrogate_model_version or metadata.get('surrogate_model_version')
+        dynamic_model_type = dynamic_model_type or metadata.get('dynamic_model_type')
+        dynamic_model_version = dynamic_model_version or metadata.get('dynamic_model_version')
+        grid_geojson = region_payload.get('grid_geojson') if isinstance(region_payload.get('grid_geojson'), list) else []
+        total_cells_written += len(grid_geojson)
+        for cell in grid_geojson:
+            if not isinstance(cell, dict):
+                continue
+            shap_context = cell.get('shap_context') if isinstance(cell.get('shap_context'), dict) else {}
+            top_features = shap_context.get('top_features') if isinstance(shap_context.get('top_features'), list) else []
+            has_shap = bool(cell.get('shap_values')) or bool(top_features)
+            if has_shap:
+                cells_with_shap += 1
+            if sample_dominant_driver is None:
+                dominant_driver = cell.get('dominant_driver_feature')
+                if isinstance(dominant_driver, str) and dominant_driver.strip():
+                    sample_dominant_driver = dominant_driver
+
+    return manifest, {
+        'regions_written': manifest.get('regions_written', len(forecast_payload)),
+        'total_cells_written': manifest.get('total_cells_written', total_cells_written),
+        'cells_with_shap': cells_with_shap,
+        'sample_dominant_driver': sample_dominant_driver,
+        'surrogate_model_version': surrogate_model_version,
+        'dynamic_model_type': dynamic_model_type,
+        'dynamic_model_version': dynamic_model_version,
+        'completed_at': manifest.get('completed_at'),
+        'dry_run': bool(manifest.get('dry_run', False)),
+    }
+
+
 def run_train_mtslstm(
     request: dict[str, Any],
     *,
@@ -1159,6 +1212,8 @@ def run_infer_mtslstm(
     artifact_root: Path,
 ) -> dict[str, Any]:
     artifact_root.mkdir(parents=True, exist_ok=True)
+    dry_run = _flag_from_payload(request.get('dry_run'), False)
+    shadow_mode = _flag_from_payload(request.get('shadow_mode'), True)
     env = os.environ.copy()
     env.update({
         'ARTIFACT_ROOT': str(artifact_root),
@@ -1166,7 +1221,8 @@ def run_infer_mtslstm(
         'FORECAST_HOURS': str(int(request.get('forecast_hours') or env.get('FORECAST_HOURS') or '72')),
         'GRID_SIZE': str(int(request.get('grid_size') or env.get('GRID_SIZE') or '20')),
     })
-    completed = _run_python_module('backend.daily_inference', env=env)
+    args = ['--dry-run'] if dry_run else None
+    completed = _run_python_module('backend.daily_inference', env=env, args=args)
     try:
         artifact_dir = latest_artifact_dir(artifact_root)
     except Exception:
@@ -1174,23 +1230,32 @@ def run_infer_mtslstm(
     inference_manifest = {}
     lstm_head_meta = {}
     if artifact_dir is not None:
-        manifest_path = artifact_dir / 'inference_manifest.json'
-        if manifest_path.exists():
-            inference_manifest = load_json(manifest_path)
+        inference_manifest, summary = _load_inference_summary(artifact_dir)
         metrics_path = artifact_dir / 'training_metrics.json'
         if metrics_path.exists():
             training_metrics = load_json(metrics_path)
             candidate = training_metrics.get('lstm_head_meta') if isinstance(training_metrics, dict) else {}
             lstm_head_meta = candidate if isinstance(candidate, dict) else {}
+    else:
+        summary = {}
     report = {
         'status': 'ok' if completed.returncode == 0 else 'failed',
         'request_type': str(request.get('request_type') or 'infer_mtslstm'),
+        'runtime_provider': 'modal',
         'artifact_dir': str(artifact_dir) if artifact_dir else None,
         'forecast_hours': int(request.get('forecast_hours') or env.get('FORECAST_HOURS') or '72'),
-        'regions_written': inference_manifest.get('regions_written'),
-        'completed_at': inference_manifest.get('completed_at'),
+        'regions_written': summary.get('regions_written'),
+        'total_cells_written': summary.get('total_cells_written'),
+        'cells_with_shap': summary.get('cells_with_shap'),
+        'sample_dominant_driver': summary.get('sample_dominant_driver'),
+        'surrogate_model_version': summary.get('surrogate_model_version'),
+        'dynamic_model_type': summary.get('dynamic_model_type'),
+        'dynamic_model_version': summary.get('dynamic_model_version'),
+        'completed_at': summary.get('completed_at') or inference_manifest.get('completed_at'),
         'promotion_gate_passed': bool(lstm_head_meta.get('promotion_gate_passed')),
-        'shadow_mode_active': not bool(lstm_head_meta.get('promotion_gate_passed')),
+        'shadow_mode': shadow_mode,
+        'shadow_mode_active': shadow_mode,
+        'dry_run': dry_run,
         'dataset_snapshot_id': lstm_head_meta.get('dataset_snapshot_id'),
         'stdout_tail': _tail_lines(completed.stdout),
         'stderr_tail': _tail_lines(completed.stderr),

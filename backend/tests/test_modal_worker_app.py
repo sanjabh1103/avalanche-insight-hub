@@ -17,10 +17,13 @@ from backend.modal_worker_app import (
     handle_sar_segment,
     handle_train_mtslstm,
     normalize_model_volume_path,
+    poll_infer_mtslstm_job,
     poll_train_mtslstm_job,
+    run_remote_infer_mtslstm,
     run_remote_train_mtslstm,
     seed_dem_directory,
     seed_model_volume_file,
+    submit_infer_mtslstm_job,
     submit_train_mtslstm_job,
 )
 
@@ -142,6 +145,65 @@ class ModalWorkerAppTests(unittest.TestCase):
         self.assertEqual(status_code, 200)
         self.assertEqual(body['status'], 'ok')
 
+    def test_submit_infer_mtslstm_job_returns_call_id(self) -> None:
+        class _FakeCall:
+            object_id = 'fc-456'
+
+        class _FakeFunction:
+            def __init__(self) -> None:
+                self.payload = None
+
+            def spawn(self, payload):
+                self.payload = payload
+                return _FakeCall()
+
+        fake_function = _FakeFunction()
+        fake_modal = SimpleNamespace(
+            Function=SimpleNamespace(
+                from_name=lambda app_name, fn_name: fake_function,
+            ),
+        )
+
+        with patch('backend.modal_worker_app.modal', fake_modal):
+            result = submit_infer_mtslstm_job({'forecast_hours': 72, 'dry_run': True})
+
+        self.assertEqual(result['status'], 'accepted')
+        self.assertEqual(result['call_id'], 'fc-456')
+        self.assertEqual(fake_function.payload, {'forecast_hours': 72, 'dry_run': True})
+
+    def test_poll_infer_mtslstm_job_returns_pending_on_timeout(self) -> None:
+        class _FakeFunctionCall:
+            def get(self, timeout: int = 0):
+                raise TimeoutError()
+
+        fake_modal = SimpleNamespace(
+            FunctionCall=SimpleNamespace(from_id=lambda call_id: _FakeFunctionCall()),
+            exception=SimpleNamespace(OutputExpiredError=RuntimeError),
+        )
+
+        with patch('backend.modal_worker_app.modal', fake_modal):
+            status_code, body = poll_infer_mtslstm_job('fc-456')
+
+        self.assertEqual(status_code, 202)
+        self.assertEqual(body['status'], 'pending')
+
+    def test_poll_infer_mtslstm_job_returns_result_when_complete(self) -> None:
+        class _FakeFunctionCall:
+            def get(self, timeout: int = 0):
+                return {'status': 'ok', 'cells_with_shap': 400}
+
+        fake_modal = SimpleNamespace(
+            FunctionCall=SimpleNamespace(from_id=lambda call_id: _FakeFunctionCall()),
+            exception=SimpleNamespace(OutputExpiredError=RuntimeError),
+        )
+
+        with patch('backend.modal_worker_app.modal', fake_modal):
+            status_code, body = poll_infer_mtslstm_job('fc-456')
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(body['status'], 'ok')
+        self.assertEqual(body['cells_with_shap'], 400)
+
     @patch('backend.modal_worker_app.run_train_mtslstm', return_value={'status': 'ok'})
     def test_run_remote_train_mtslstm_reloads_and_commits_volume(self, run_train_mock) -> None:
         calls: list[str] = []
@@ -162,6 +224,28 @@ class ModalWorkerAppTests(unittest.TestCase):
         self.assertEqual(result['status'], 'ok')
         self.assertEqual(calls, ['reload', 'commit'])
         run_train_mock.assert_called_once_with({'dataset_snapshot_id': 'latest'}, artifact_root=Path('/artifacts'))
+
+    @patch('backend.modal_worker_app.handle_infer_mtslstm', return_value={'status': 'ok', 'cells_with_shap': 5})
+    def test_run_remote_infer_mtslstm_reloads_and_commits_volume(self, handle_infer_mock) -> None:
+        calls: list[str] = []
+
+        def _reload() -> None:
+            calls.append('reload')
+
+        def _commit() -> None:
+            calls.append('commit')
+
+        result = run_remote_infer_mtslstm(
+            {'forecast_hours': 72, 'dry_run': True},
+            artifact_root=Path('/artifacts'),
+            volume_reload=_reload,
+            volume_commit=_commit,
+        )
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(result['cells_with_shap'], 5)
+        self.assertEqual(calls, ['reload', 'commit'])
+        handle_infer_mock.assert_called_once_with({'forecast_hours': 72, 'dry_run': True})
 
     def test_seed_dem_directory_copies_missing_dems_only(self) -> None:
         with TemporaryDirectory() as tmpdir:

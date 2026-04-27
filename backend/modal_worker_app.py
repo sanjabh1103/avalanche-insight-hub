@@ -35,6 +35,7 @@ MODEL_VOLUME_ROOT = f'{VOLUME_MOUNT}/models'
 WORKER_TOKEN_ENV = 'MODAL_WORKER_TOKEN'
 MODAL_APP_NAME = 'avalanche-modal-worker'
 MODAL_REMOTE_TRAIN_FUNCTION = 'train_mts_lstm_remote'
+MODAL_REMOTE_INFER_FUNCTION = 'infer_mts_lstm_remote'
 
 
 def _artifact_root() -> Path:
@@ -94,6 +95,21 @@ def run_remote_train_mtslstm(
     return report
 
 
+def run_remote_infer_mtslstm(
+    payload: dict[str, Any],
+    *,
+    artifact_root: Path,
+    volume_reload: Callable[[], None] | None = None,
+    volume_commit: Callable[[], None] | None = None,
+) -> dict[str, Any]:
+    if volume_reload is not None:
+        volume_reload()
+    report = handle_infer_mtslstm(payload)
+    if volume_commit is not None:
+        volume_commit()
+    return report
+
+
 def submit_train_mtslstm_job(payload: dict[str, Any]) -> dict[str, Any]:
     if modal is None:
         raise RuntimeError('modal must be installed to submit remote MTS-LSTM jobs')
@@ -137,6 +153,54 @@ def poll_train_mtslstm_job(call_id: str) -> tuple[int, dict[str, Any]]:
         'status': 'ok',
         'call_id': call_id,
         'request_type': 'train_mtslstm',
+        'runtime_provider': 'modal',
+        'result': result,
+    }
+
+
+def submit_infer_mtslstm_job(payload: dict[str, Any]) -> dict[str, Any]:
+    if modal is None:
+        raise RuntimeError('modal must be installed to submit remote MTS-LSTM inference jobs')
+    infer_function = modal.Function.from_name(MODAL_APP_NAME, MODAL_REMOTE_INFER_FUNCTION)
+    call = infer_function.spawn(payload)
+    return {
+        'status': 'accepted',
+        'call_id': str(call.object_id),
+        'request_type': 'infer_mtslstm',
+        'runtime_provider': 'modal',
+    }
+
+
+def poll_infer_mtslstm_job(call_id: str) -> tuple[int, dict[str, Any]]:
+    if modal is None:
+        raise RuntimeError('modal must be installed to poll remote MTS-LSTM inference jobs')
+    function_call = modal.FunctionCall.from_id(call_id)
+    output_expired_error = getattr(getattr(modal, 'exception', None), 'OutputExpiredError', None)
+    try:
+        result = function_call.get(timeout=0)
+    except TimeoutError:
+        return 202, {
+            'status': 'pending',
+            'call_id': call_id,
+            'request_type': 'infer_mtslstm',
+            'runtime_provider': 'modal',
+        }
+    except Exception as exc:
+        if output_expired_error is not None and isinstance(exc, output_expired_error):
+            return 404, {
+                'status': 'not_found',
+                'call_id': call_id,
+                'request_type': 'infer_mtslstm',
+                'runtime_provider': 'modal',
+                'reason': 'result_expired',
+            }
+        raise
+    if isinstance(result, dict):
+        return 200, result
+    return 200, {
+        'status': 'ok',
+        'call_id': call_id,
+        'request_type': 'infer_mtslstm',
         'runtime_provider': 'modal',
         'result': result,
     }
@@ -306,7 +370,27 @@ def create_fastapi_app(volume_reload: Callable[[], None] | None = None, volume_c
 
     @app.post('/infer-mtslstm')
     async def infer_mtslstm(request: Request) -> dict[str, Any]:
-        return await _handle(request, '/infer-mtslstm', True)
+        _authorize_or_raise(request.headers.get('Authorization'))
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            payload = {}
+        try:
+            return submit_infer_mtslstm_job(payload)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail={'status': 'misconfigured', 'reason': str(exc)}) from exc
+
+    @app.get('/infer-mtslstm/result/{call_id}')
+    async def infer_mtslstm_result(call_id: str, request: Request) -> Any:
+        _authorize_or_raise(request.headers.get('Authorization'))
+        try:
+            status_code, body = poll_infer_mtslstm_job(call_id)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail={'status': 'misconfigured', 'reason': str(exc)}) from exc
+        if status_code == 202:
+            return JSONResponse(status_code=202, content=body)
+        if status_code != 200:
+            raise HTTPException(status_code=status_code, detail=body)
+        return body
 
     @app.post('/evaluate-release')
     async def evaluate_release(request: Request) -> dict[str, Any]:
@@ -359,6 +443,22 @@ if modal is not None:  # pragma: no cover - exercised in deployment, not local t
     )
     def train_mts_lstm_remote(request: dict[str, Any]) -> dict[str, Any]:
         return run_remote_train_mtslstm(
+            request,
+            artifact_root=Path(VOLUME_MOUNT),
+            volume_reload=_artifact_volume.reload,
+            volume_commit=_artifact_volume.commit,
+        )
+
+    @app.function(
+        image=image,
+        secrets=_secrets,
+        volumes={VOLUME_MOUNT: _artifact_volume},
+        gpu='T4',
+        timeout=7200,
+        retries=0,
+    )
+    def infer_mts_lstm_remote(request: dict[str, Any]) -> dict[str, Any]:
+        return run_remote_infer_mtslstm(
             request,
             artifact_root=Path(VOLUME_MOUNT),
             volume_reload=_artifact_volume.reload,

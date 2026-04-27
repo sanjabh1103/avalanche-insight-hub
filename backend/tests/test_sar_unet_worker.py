@@ -546,7 +546,36 @@ class SarUnetWorkerTests(unittest.TestCase):
             artifact_dir = artifact_root / '20260425T010000Z'
             artifact_dir.mkdir()
             (artifact_dir / 'inference_manifest.json').write_text(
-                '{"regions_written":3,"completed_at":"2026-04-25T01:23:45+00:00"}',
+                '{"regions_written":3,"total_cells_written":5,"dry_run":true,"completed_at":"2026-04-25T01:23:45+00:00"}',
+                encoding='utf-8',
+            )
+            (artifact_dir / 'forecast_grids.json').write_text(
+                json.dumps([
+                    {
+                        'region_key': 'davos',
+                        'grid_geojson': [
+                            {
+                                'row': 0,
+                                'col': 0,
+                                'dominant_driver_feature': 'snowfall_24h',
+                                'shap_values': {'snowfall_24h': 0.42},
+                                'shap_context': {'top_features': [{'feature': 'snowfall_24h', 'rank': 1}]},
+                            },
+                            {
+                                'row': 0,
+                                'col': 1,
+                                'dominant_driver_feature': 'wind_loading',
+                                'shap_values': {'wind_loading': -0.11},
+                                'shap_context': {'top_features': [{'feature': 'wind_loading', 'rank': 1}]},
+                            },
+                        ],
+                        'model_metadata': {
+                            'surrogate_model_version': 'rf_surrogate_v1',
+                            'dynamic_model_type': 'mts_lstm',
+                            'dynamic_model_version': 'mts_lstm_shadow_v1',
+                        },
+                    },
+                ]),
                 encoding='utf-8',
             )
             (artifact_dir / 'training_metrics.json').write_text(
@@ -559,6 +588,8 @@ class SarUnetWorkerTests(unittest.TestCase):
                     'hazard_type': 'avalanche',
                     'request_type': 'infer_mtslstm',
                     'forecast_hours': 72,
+                    'dry_run': True,
+                    'shadow_mode': True,
                 },
                 artifact_root=artifact_root,
             )
@@ -567,6 +598,14 @@ class SarUnetWorkerTests(unittest.TestCase):
         self.assertEqual(report['regions_written'], 3)
         self.assertTrue(report['shadow_mode_active'])
         self.assertEqual(report['dataset_snapshot_id'], 'real_event_join_v1:2026-04-25T00:00:00+00:00')
+        self.assertTrue(report['dry_run'])
+        self.assertEqual(report['total_cells_written'], 5)
+        self.assertEqual(report['cells_with_shap'], 2)
+        self.assertEqual(report['sample_dominant_driver'], 'snowfall_24h')
+        self.assertEqual(report['surrogate_model_version'], 'rf_surrogate_v1')
+        self.assertEqual(report['dynamic_model_type'], 'mts_lstm')
+        self.assertEqual(report['dynamic_model_version'], 'mts_lstm_shadow_v1')
+        self.assertEqual(run_python_module_mock.call_args.kwargs['args'], ['--dry-run'])
 
 
     @patch('backend.sar_unet_worker.has_supabase_credentials', return_value=False)
