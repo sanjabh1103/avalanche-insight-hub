@@ -44,6 +44,7 @@ except Exception:  # pragma: no cover - optional dependency
 
 
 SAR_MASK_BUCKET = os.environ.get('SAR_MASK_BUCKET', 'sar-masks')
+SAR_UNET_MODEL_FAMILY = str(os.environ.get('SAR_UNET_MODEL_FAMILY') or 'resnet34_unet').strip() or 'resnet34_unet'
 SAR_UNET_MODEL_VERSION = os.environ.get('SAR_UNET_MODEL_VERSION', 'sar_unet_resnet34_shadow_v1')
 SAR_UNET_SEGMENTATION_THRESHOLD = float(os.environ.get('SAR_UNET_SEGMENTATION_THRESHOLD', '0.5'))
 SAR_UNET_PROMOTED = os.environ.get('SAR_UNET_PROMOTED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
@@ -85,6 +86,7 @@ class SegmentationDetection:
 class LoadedUnetModel:
     model: Any
     checkpoint_key_mismatch: dict[str, Any]
+    model_family: str
 
 
 def _utc_now_iso() -> str:
@@ -176,6 +178,66 @@ def load_scene_stack(scene: dict[str, Any]) -> np.ndarray:
     )
 
 
+def _normalize_bitemporal_stack(stack: Any) -> tuple[np.ndarray, np.ndarray]:
+    array = np.asarray(stack, dtype=np.float32)
+    if array.ndim == 2:
+        raise ValueError(
+            f'Expected a 4-channel bi-temporal stack but received a single 2D array of shape {array.shape}. '
+            'Provide pre/post channels separately or pass a stack of shape (4, H, W) or (H, W, 4).',
+        )
+    if array.ndim != 3:
+        raise ValueError(f'expected a 4-channel bi-temporal stack, received shape {array.shape}')
+    if array.shape[0] != 4 and array.shape[-1] == 4 and array.shape[0] not in {2, 4}:
+        array = np.moveaxis(array, -1, 0)
+    if array.shape[0] != 4:
+        raise ValueError(
+            f'expected a 4-channel bi-temporal stack, received shape {array.shape}; '
+            'the Swin shadow path requires [pre_vv, pre_vh, post_vv, post_vh]',
+        )
+    array = np.nan_to_num(array.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+    return array[:2], array[2:]
+
+
+def load_bitemporal_scene_inputs(scene: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
+    if scene.get('pre_channels') is not None and scene.get('post_channels') is not None:
+        return _normalize_stack(scene['pre_channels']), _normalize_stack(scene['post_channels'])
+    if all(scene.get(key) is not None for key in ('pre_vv', 'pre_vh', 'post_vv', 'post_vh')):
+        return (
+            _normalize_stack(np.stack([scene['pre_vv'], scene['pre_vh']], axis=0)),
+            _normalize_stack(np.stack([scene['post_vv'], scene['post_vh']], axis=0)),
+        )
+
+    for pre_key, post_key in (
+        ('pre_stack_ref', 'post_stack_ref'),
+        ('pre_stack_path', 'post_stack_path'),
+        ('pre_stack_url', 'post_stack_url'),
+    ):
+        pre_value = scene.get(pre_key)
+        post_value = scene.get(post_key)
+        if isinstance(pre_value, str) and pre_value.strip() and isinstance(post_value, str) and post_value.strip():
+            return (
+                _normalize_stack(_load_stack_array_from_string_ref(pre_value.strip())),
+                _normalize_stack(_load_stack_array_from_string_ref(post_value.strip())),
+            )
+
+    four_channel_candidates = (
+        scene.get('temporal_channels'),
+        scene.get('channels'),
+    )
+    for candidate in four_channel_candidates:
+        if candidate is not None:
+            return _normalize_bitemporal_stack(candidate)
+    for key in ('stack_ref', 'stack_path', 'stack_url'):
+        value = scene.get(key)
+        if isinstance(value, str) and value.strip():
+            return _normalize_bitemporal_stack(_load_stack_array_from_string_ref(value.strip()))
+
+    raise ValueError(
+        f"scene {_scene_id(scene)} is missing bi-temporal SAR patch data; "
+        'swinunet_tiny_diff requires pre/post stacks or a 4-channel temporal stack',
+    )
+
+
 def _checkpoint_key_mismatch_summary(load_result: Any) -> dict[str, Any]:
     missing_keys = [str(item) for item in (getattr(load_result, 'missing_keys', None) or [])]
     unexpected_keys = [str(item) for item in (getattr(load_result, 'unexpected_keys', None) or [])]
@@ -188,23 +250,130 @@ def _checkpoint_key_mismatch_summary(load_result: Any) -> dict[str, Any]:
     }
 
 
-def build_unet_model(model_path: Path, *, device: str) -> LoadedUnetModel:
-    if torch is None or smp is None:
-        raise RuntimeError('torch and segmentation_models_pytorch are required for sar_unet_worker')
-    if not model_path.exists():
-        raise FileNotFoundError(f'SAR U-Net weights not found: {model_path}')
-    model = smp.Unet(
+def _normalize_model_family(model_family: str | None) -> str:
+    resolved = str(model_family or SAR_UNET_MODEL_FAMILY).strip() or 'resnet34_unet'
+    if resolved not in {'resnet34_unet', 'swinunet_tiny_diff'}:
+        raise ValueError(
+            f'unsupported SAR_UNET_MODEL_FAMILY "{resolved}"; '
+            'expected one of: resnet34_unet, swinunet_tiny_diff',
+        )
+    return resolved
+
+
+def _extract_state_dict(payload: Any) -> dict[str, Any]:
+    if isinstance(payload, dict):
+        for key in ('state_dict', 'model_state_dict', 'model'):
+            nested = payload.get(key)
+            if isinstance(nested, dict):
+                return nested
+        return payload
+    raise RuntimeError('checkpoint payload must be a dict or contain a nested state_dict')
+
+
+def _build_resnet34_unet_model() -> Any:
+    if smp is None:
+        raise RuntimeError('segmentation_models_pytorch is required for SAR model family resnet34_unet')
+    return smp.Unet(
         encoder_name='resnet34',
         encoder_weights=None,
         in_channels=2,
         classes=1,
         activation=None,
     )
-    state_dict = torch.load(model_path, map_location=device)
-    if isinstance(state_dict, dict) and isinstance(state_dict.get('state_dict'), dict):
-        state_dict = state_dict['state_dict']
+
+
+def _build_swinunet_tiny_diff_model(*, image_size: int) -> Any:
+    from backend.models.swinunet_tiny_diff import ChangeDetectionSwinUNet, require_swin_runtime
+
+    require_swin_runtime()
+    return ChangeDetectionSwinUNet(
+        img_size=image_size,
+        sar_in_channels=2,
+        aux_in_channels=4,
+        num_classes=1,
+        use_aux=False,
+        model_size='tiny',
+        fusion_type='diff',
+    )
+
+
+def _obvious_checkpoint_family_mismatch(
+    *,
+    model_family: str,
+    state_dict: dict[str, Any],
+    checkpoint_key_mismatch: dict[str, Any],
+) -> str | None:
+    state_keys = [str(key) for key in state_dict]
+    provided_key_count = len(state_keys)
+    unexpected_count = int(checkpoint_key_mismatch.get('unexpected_count') or 0)
+    matched_provided_key_count = max(0, provided_key_count - unexpected_count)
+    checkpoint_key_mismatch['provided_key_count'] = provided_key_count
+    checkpoint_key_mismatch['matched_provided_key_count'] = matched_provided_key_count
+    checkpoint_key_mismatch['provided_match_ratio'] = (
+        float(matched_provided_key_count) / float(provided_key_count)
+        if provided_key_count
+        else 1.0
+    )
+    if provided_key_count < 10:
+        return None
+    if matched_provided_key_count == 0:
+        return (
+            f'checkpoint is incompatible with selected SAR_UNET_MODEL_FAMILY={model_family}; '
+            'no checkpoint keys matched the target model graph'
+        )
+
+    lower_keys = [key.lower() for key in state_keys]
+    resnet_hits = sum(
+        1
+        for key in lower_keys
+        if key.startswith('encoder.') or key.startswith('decoder.') or key.startswith('segmentation_head.')
+    )
+    swin_hits = sum(
+        1
+        for key in lower_keys
+        if key.startswith('sar_encoder.')
+        or key.startswith('fusion_stages.')
+        or key.startswith('decoder.layers_up.')
+        or key.startswith('aux_encoder.')
+        or 'swin' in key
+    )
+    if model_family == 'resnet34_unet' and swin_hits >= 10 and checkpoint_key_mismatch['provided_match_ratio'] < 0.25:
+        return 'checkpoint appears to target the Swin bi-temporal family, not resnet34_unet'
+    if model_family == 'swinunet_tiny_diff' and resnet_hits >= 10 and checkpoint_key_mismatch['provided_match_ratio'] < 0.25:
+        return 'checkpoint appears to target the ResNet34 U-Net family, not swinunet_tiny_diff'
+    return None
+
+
+def build_unet_model(
+    model_path: Path,
+    *,
+    device: str,
+    model_family: str | None = None,
+    image_size: int | None = None,
+    promoted: bool | None = None,
+) -> LoadedUnetModel:
+    if torch is None:
+        raise RuntimeError('torch is required for sar_unet_worker')
+    if not model_path.exists():
+        raise FileNotFoundError(f'SAR U-Net weights not found: {model_path}')
+    resolved_family = _normalize_model_family(model_family)
+    promoted_mode = SAR_UNET_PROMOTED if promoted is None else bool(promoted)
+    if resolved_family == 'swinunet_tiny_diff':
+        if image_size is None:
+            raise ValueError('swinunet_tiny_diff requires image_size during model construction')
+        model = _build_swinunet_tiny_diff_model(image_size=image_size)
+    else:
+        model = _build_resnet34_unet_model()
+    state_dict = _extract_state_dict(torch.load(model_path, map_location=device))
     load_result = model.load_state_dict(state_dict, strict=False)
     checkpoint_key_mismatch = _checkpoint_key_mismatch_summary(load_result)
+    mismatch_reason = _obvious_checkpoint_family_mismatch(
+        model_family=resolved_family,
+        state_dict=state_dict,
+        checkpoint_key_mismatch=checkpoint_key_mismatch,
+    )
+    if mismatch_reason:
+        raise RuntimeError(mismatch_reason)
     if checkpoint_key_mismatch['has_mismatch']:
         print(
             '[sar_unet_worker] load_state_dict key mismatch: '
@@ -212,7 +381,7 @@ def build_unet_model(model_path: Path, *, device: str) -> LoadedUnetModel:
             f"{checkpoint_key_mismatch['unexpected_count']} unexpected",
             file=sys.stderr,
         )
-        if SAR_UNET_PROMOTED:
+        if promoted_mode:
             raise RuntimeError(
                 'Promoted SAR U-Net checkpoints must load cleanly; '
                 f"received {checkpoint_key_mismatch['missing_count']} missing and "
@@ -223,6 +392,7 @@ def build_unet_model(model_path: Path, *, device: str) -> LoadedUnetModel:
     return LoadedUnetModel(
         model=model,
         checkpoint_key_mismatch=checkpoint_key_mismatch,
+        model_family=resolved_family,
     )
 
 
@@ -234,6 +404,25 @@ def predict_probability_mask(model: Any, stack: np.ndarray, *, device: str) -> n
         logits = model(tensor)
         probabilities = torch.sigmoid(logits).detach().cpu().numpy()
     return np.asarray(probabilities[0, 0], dtype=np.float32)
+
+
+def predict_bitemporal_probability_mask(model: Any, pre_stack: np.ndarray, post_stack: np.ndarray, *, device: str) -> np.ndarray:
+    if torch is None:
+        raise RuntimeError('torch is required for sar_unet_worker inference')
+    pre_tensor = torch.from_numpy(pre_stack[np.newaxis, ...]).float().to(device)
+    post_tensor = torch.from_numpy(post_stack[np.newaxis, ...]).float().to(device)
+    with torch.no_grad():
+        logits = model(pre_tensor, post_tensor)
+        probabilities = torch.sigmoid(logits).detach().cpu().numpy()
+    return np.asarray(probabilities[0, 0], dtype=np.float32)
+
+
+def predict_scene_probability_mask(loaded_model: LoadedUnetModel, scene: dict[str, Any], *, device: str) -> np.ndarray:
+    if loaded_model.model_family == 'swinunet_tiny_diff':
+        pre_stack, post_stack = load_bitemporal_scene_inputs(scene)
+        return predict_bitemporal_probability_mask(loaded_model.model, pre_stack, post_stack, device=device)
+    stack = load_scene_stack(scene)
+    return predict_probability_mask(loaded_model.model, stack, device=device)
 
 
 def _pixel_to_lng(col: float, west: float, east: float, width: int) -> float:
@@ -733,6 +922,7 @@ def run_segmentation(
     persist_events: bool = True,
     promoted: bool = SAR_UNET_PROMOTED,
     model_version: str = SAR_UNET_MODEL_VERSION,
+    model_family: str = SAR_UNET_MODEL_FAMILY,
 ) -> dict[str, Any]:
     artifact_dir = create_artifact_dir(artifact_root)
     if not scenes:
@@ -740,12 +930,26 @@ def run_segmentation(
         dump_json(artifact_dir / 'sar_segment_manifest.json', manifest)
         return manifest
 
-    loaded_model = build_unet_model(model_path, device=device)
+    resolved_family = _normalize_model_family(model_family)
+    image_size = None
+    if resolved_family == 'swinunet_tiny_diff':
+        first_pre_stack, first_post_stack = load_bitemporal_scene_inputs(scenes[0])
+        if first_pre_stack.shape != first_post_stack.shape:
+            raise ValueError('swinunet_tiny_diff requires pre/post stacks with identical shapes')
+        if first_pre_stack.shape[1] != first_pre_stack.shape[2]:
+            raise ValueError('swinunet_tiny_diff currently requires square scene patches')
+        image_size = int(first_pre_stack.shape[1])
+    loaded_model = build_unet_model(
+        model_path,
+        device=device,
+        model_family=resolved_family,
+        image_size=image_size,
+        promoted=promoted,
+    )
     detections: list[SegmentationDetection] = []
     records: list[dict[str, Any]] = []
     for scene in scenes:
-        stack = load_scene_stack(scene)
-        probability_mask = predict_probability_mask(loaded_model.model, stack, device=device)
+        probability_mask = predict_scene_probability_mask(loaded_model, scene, device=device)
         bbox = _coerce_bbox(scene.get('bbox'))
         mask_asset_ref = None
         desired_prediction_ref = scene.get('prediction_mask')
@@ -786,6 +990,7 @@ def run_segmentation(
     manifest = {
         'status': 'ok',
         'shadow_mode': not promoted,
+        'model_family': loaded_model.model_family,
         'model_version': model_version,
         'scene_count': len(scenes),
         'detections_count': len(detections),
@@ -1026,6 +1231,7 @@ def run_worker_request(
     dry_run: bool = False,
 ) -> dict[str, Any]:
     artifact_root.mkdir(parents=True, exist_ok=True)
+    prediction_model_family = str(manifest.get('model_family') or SAR_UNET_MODEL_FAMILY)
     prediction_model_version = str(manifest.get('prediction_model_version') or SAR_UNET_MODEL_VERSION)
 
     if mode == 'evaluate-release':
@@ -1095,6 +1301,7 @@ def run_worker_request(
         hazard_type=hazard_type,
         persist_events=persist_events,
         promoted=not _flag_from_payload(manifest.get('shadow_mode'), not SAR_UNET_PROMOTED),
+        model_family=prediction_model_family,
         model_version=prediction_model_version,
     )
 

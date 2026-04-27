@@ -20,6 +20,7 @@ from backend.sar_unet_worker import (
     build_shadow_event_record,
     evaluate_scene_manifest,
     flip_to_training_eligible,
+    load_bitemporal_scene_inputs,
     load_scene_stack,
     polygonize_probability_mask,
     persist_shadow_detections,
@@ -114,6 +115,29 @@ class SarUnetWorkerTests(unittest.TestCase):
 
         self.assertEqual(loaded.shape, (2, 4, 4))
         self.assertAlmostEqual(float(loaded[0, 0, 0]), 1.0, places=5)
+
+    def test_load_bitemporal_scene_inputs_splits_four_channel_stack(self) -> None:
+        pre_stack, post_stack = load_bitemporal_scene_inputs({
+            'scene_id': 'S1A_002',
+            'channels': np.stack([
+                np.ones((4, 4), dtype=np.float32) * 1.0,
+                np.ones((4, 4), dtype=np.float32) * 2.0,
+                np.ones((4, 4), dtype=np.float32) * 3.0,
+                np.ones((4, 4), dtype=np.float32) * 4.0,
+            ], axis=0),
+        })
+
+        self.assertEqual(pre_stack.shape, (2, 4, 4))
+        self.assertEqual(post_stack.shape, (2, 4, 4))
+        self.assertAlmostEqual(float(pre_stack[0, 0, 0]), 1.0, places=5)
+        self.assertAlmostEqual(float(post_stack[1, 0, 0]), 4.0, places=5)
+
+    def test_load_bitemporal_scene_inputs_rejects_two_channel_scene_contract(self) -> None:
+        with self.assertRaisesRegex(ValueError, 'expected a 4-channel bi-temporal stack'):
+            load_bitemporal_scene_inputs({
+                'scene_id': 'S1A_003',
+                'channels': np.ones((2, 4, 4), dtype=np.float32),
+            })
 
     @patch('backend.sar_unet_worker.requests.get')
     def test_load_mask_array_reads_http_npy(self, requests_get_mock) -> None:
@@ -219,6 +243,65 @@ class SarUnetWorkerTests(unittest.TestCase):
                 patch('backend.sar_unet_worker.torch', SimpleNamespace(load=lambda *args, **kwargs: {'state_dict': {}})):
             with self.assertRaisesRegex(RuntimeError, 'Promoted SAR U-Net checkpoints must load cleanly'):
                 build_unet_model(Path(handle.name), device='cpu')
+
+    @patch('backend.sar_unet_worker._build_swinunet_tiny_diff_model')
+    @patch('backend.sar_unet_worker.torch')
+    def test_build_unet_model_routes_to_swin_family_builder(self, torch_mock, swin_builder_mock) -> None:
+        class _DummyModel:
+            def load_state_dict(self, state_dict, strict=False):
+                return SimpleNamespace(missing_keys=[], unexpected_keys=[])
+
+            def to(self, device):
+                self.device = device
+                return self
+
+            def eval(self):
+                self.evaluated = True
+
+        swin_builder_mock.return_value = _DummyModel()
+        torch_mock.load.return_value = {'state_dict': {'sar_encoder.model.patch_embed.proj.weight': 1}}
+
+        with tempfile.NamedTemporaryFile() as handle:
+            loaded = build_unet_model(
+                Path(handle.name),
+                device='cpu',
+                model_family='swinunet_tiny_diff',
+                image_size=128,
+            )
+
+        swin_builder_mock.assert_called_once_with(image_size=128)
+        self.assertEqual(loaded.model_family, 'swinunet_tiny_diff')
+
+    @patch('backend.sar_unet_worker.SAR_UNET_PROMOTED', False)
+    def test_build_unet_model_rejects_cross_family_checkpoint_in_shadow_mode(self) -> None:
+        class _DummyModel:
+            def load_state_dict(self, state_dict, strict=False):
+                return SimpleNamespace(
+                    missing_keys=['encoder.layer1.weight', 'decoder.blocks.0.weight'],
+                    unexpected_keys=list(state_dict.keys()),
+                )
+
+            def to(self, device):
+                return self
+
+            def eval(self):
+                return None
+
+        checkpoint_keys = {
+            f'sar_encoder.stage{i}.block{j}.weight': 1
+            for i in range(5)
+            for j in range(2)
+        }
+        with tempfile.NamedTemporaryFile() as handle, \
+                patch('backend.sar_unet_worker.smp', SimpleNamespace(Unet=lambda **_: _DummyModel())), \
+                patch('backend.sar_unet_worker.torch', SimpleNamespace(load=lambda *args, **kwargs: {'state_dict': checkpoint_keys})):
+            with self.assertRaisesRegex(RuntimeError, 'SAR_UNET_MODEL_FAMILY=resnet34_unet'):
+                build_unet_model(
+                    Path(handle.name),
+                    device='cpu',
+                    model_family='resnet34_unet',
+                    promoted=False,
+                )
 
     @patch('backend.sar_unet_worker.has_supabase_credentials', return_value=True)
     @patch('backend.sar_unet_worker.persist_sar_artifacts', return_value=1)

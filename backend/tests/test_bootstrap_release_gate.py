@@ -47,6 +47,9 @@ class BootstrapReleaseGateTests(unittest.TestCase):
             'MODAL_WORKER_TOKEN=worker-token-secret',
             'MODAL_TOKEN_ID=modal-token-id',
             'MODAL_TOKEN_SECRET=modal-token-secret',
+            'SAR_UNET_MODEL_FAMILY=resnet34_unet',
+            'SAR_UNET_MODEL_VERSION=sar_unet_resnet34_shadow_v1',
+            'SAR_UNET_PROMOTED=false',
             'GEMINI_API_KEY=gemini-secret',
             'NEWSDATA_API_KEY=newsdata-secret',
         ]
@@ -66,6 +69,9 @@ class BootstrapReleaseGateTests(unittest.TestCase):
 
         self.assertEqual(result['status'], 'ok')
         self.assertEqual(result['rollout_state'], 'refs_ready_only')
+        self.assertEqual(result['sar_unet_model_family'], 'resnet34_unet')
+        self.assertEqual(result['sar_unet_model_version'], 'sar_unet_resnet34_shadow_v1')
+        self.assertFalse(result['sar_unet_promoted'])
         self.assertIn('SUPABASE_URL<-VITE_SUPABASE_URL', result['resolved_aliases'])
         self.assertIn('SUPABASE_ANON_KEY<-VITE_SUPABASE_PUBLISHABLE_KEY', result['resolved_aliases'])
         dumped = json.dumps(result)
@@ -83,8 +89,14 @@ class BootstrapReleaseGateTests(unittest.TestCase):
 
         self.assertEqual(github_values['SUPABASE_URL'], 'https://supabase.example.test')
         self.assertEqual(github_values['MODAL_WORKER_URL'], 'https://worker.modal.run')
+        self.assertEqual(github_values['SAR_UNET_MODEL_FAMILY'], 'resnet34_unet')
+        self.assertEqual(github_values['SAR_UNET_MODEL_VERSION'], 'sar_unet_resnet34_shadow_v1')
+        self.assertEqual(github_values['SAR_UNET_PROMOTED'], 'false')
         self.assertIn('GEE_SERVICE_ACCOUNT_JSON', github_values)
         self.assertTrue(github_values['GEE_SERVICE_ACCOUNT_JSON'].startswith('{'))
+        self.assertEqual(modal_values['SAR_UNET_MODEL_FAMILY'], 'resnet34_unet')
+        self.assertEqual(modal_values['SAR_UNET_MODEL_VERSION'], 'sar_unet_resnet34_shadow_v1')
+        self.assertEqual(modal_values['SAR_UNET_PROMOTED'], 'false')
         self.assertEqual(modal_values['SAR_UNET_MODEL_PATH'], '/artifacts/checkpoints/sar.ckpt')
         self.assertEqual(supabase_values['SUPABASE_ANON_KEY'], 'anon-public-key')
         self.assertEqual(supabase_values['ADMIN_USER_EMAILS'], 'ops@example.com')
@@ -102,6 +114,9 @@ class BootstrapReleaseGateTests(unittest.TestCase):
             )
 
         self.assertEqual(result['status'], 'dry_run')
+        self.assertIn('SAR_UNET_MODEL_FAMILY', result['github_secret_names'])
+        self.assertIn('SAR_UNET_MODEL_VERSION', result['modal_secret_keys'])
+        self.assertIn('SAR_UNET_PROMOTED', result['modal_secret_keys'])
         self.assertIn('SUPABASE_URL', result['github_secret_names'])
         self.assertIn('MODAL_WORKER_TOKEN', result['supabase_secret_names'])
         self.assertTrue(any(command.startswith('modal secret create avalanche-supabase-secrets --from-json') for command in result['commands_planned']))

@@ -6,6 +6,7 @@ This project uses Modal as the only GPU execution backend for the Wave 4 SAR and
 
 - `MODAL_WORKER_URL`: base URL for the deployed worker
 - `MODAL_WORKER_TOKEN`: bearer token for the worker. The ASGI worker validates `Authorization: Bearer <token>` on every request.
+- `SAR_UNET_MODEL_FAMILY`: defaults to `resnet34_unet`; `swinunet_tiny_diff` is reserved for the paper-family bi-temporal Swin path
 - `SAR_UNET_MODEL_PATH`: checkpoint path available to the worker runtime
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
@@ -30,6 +31,8 @@ The target Supabase project must also contain the held-out registry tables creat
   Materializes `baseline_mask.tif` for a registered SnowSlide reference set and marks the set `active` when complete unless `--no-activate` is used for a canary run.
 - `python -m backend.scripts.evaluate_canary_release`
   Draft-only operator harness. It seeds zero-valued synthetic prediction masks under the standard `predictions/<model_version>/prediction_mask.tif` path for a non-authoritative reference set, builds a manual `scenes[]` manifest, and posts that manifest to the worker’s `evaluate-release` endpoint without requiring `SAR_UNET_MODEL_PATH`.
+- `python -m backend.scripts.fetch_sota_sar_weights`
+  Operator ingestion helper. It downloads a signed checkpoint into `backend/data/models/`, rejects obvious HTML or empty payloads, and atomically updates local `.env` with `SAR_UNET_MODEL_PATH`. It only updates `SAR_UNET_MODEL_FAMILY` or `SAR_UNET_MODEL_VERSION` when the operator passes those flags explicitly.
 - `python -m backend.sar_release_manifest`
   Builds a held-out `evaluate-release` manifest either from an ad hoc JSON/CSV registry or from an authoritative SnowSlide `reference_set_key`.
 - `python -m backend.sar_release_promote`
@@ -115,9 +118,12 @@ Required local `.env` inputs:
 - `ADMIN_USER_EMAILS` and/or `ADMIN_USER_IDS`
 
 Optional for this slice:
+- `SAR_UNET_MODEL_FAMILY`
 - `SAR_UNET_MODEL_PATH`
 
 If `SAR_UNET_MODEL_PATH` is absent, the bootstrap completes in `refs_ready_only` state and intentionally does **not** attempt held-out `sar-segment`, the official authoritative `evaluate_release` gate, promoted reruns, or `train_mtslstm` with `sar_release_gate_passed=true`. Draft canary evaluation remains possible through `python -m backend.scripts.evaluate_canary_release` because `evaluate-release` itself does not read `SAR_UNET_MODEL_PATH`.
+
+The bootstrap secret sync now propagates `SAR_UNET_MODEL_FAMILY`, `SAR_UNET_MODEL_VERSION`, `SAR_UNET_PROMOTED`, and `SAR_UNET_MODEL_PATH` into the live Modal runtime. Local `.env` values alone are not the deployment source of truth.
 
 Recommended sequence:
 
@@ -178,6 +184,8 @@ Accepted scene payloads:
 - `channels` as `(2, H, W)` or `(H, W, 2)`
 - `vv` + `vh`
 - `stack_ref`, `stack_path`, or `stack_url` pointing to a two-channel array
+
+The default `resnet34_unet` path consumes the two-channel VV/VH contract above. The `swinunet_tiny_diff` family is bi-temporal and expects either explicit pre/post inputs (`pre_channels` + `post_channels`, `pre_vv`/`pre_vh` + `post_vv`/`post_vh`, `pre_stack_ref` + `post_stack_ref`) or a 4-channel temporal stack ordered as `[pre_vv, pre_vh, post_vv, post_vh]`. The currently materialized held-out `stack.npz` assets remain 2-channel VV/VH, so switching the runtime family to `swinunet_tiny_diff` before a compatible checkpoint and temporal scene contract exist will fail closed.
 
 For authoritative held-out reruns, `sar-segment` may also receive:
 

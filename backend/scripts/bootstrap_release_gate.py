@@ -20,6 +20,8 @@ MODAL_APP_REF = 'backend/modal_worker_app.py'
 MODAL_DEM_SOURCE_ROOT = 'backend/data/dem'
 GITHUB_PRODUCTION_ENVIRONMENT = 'production'
 MOCK_ARCHIVE_NAME = 'snowslide_mock.zip'
+DEFAULT_SAR_UNET_MODEL_FAMILY = 'resnet34_unet'
+DEFAULT_SAR_UNET_MODEL_VERSION = 'sar_unet_resnet34_shadow_v1'
 
 
 @dataclass(frozen=True)
@@ -38,6 +40,9 @@ class RolloutEnv:
     modal_worker_url: str | None
     admin_user_ids: str | None
     admin_user_emails: str | None
+    sar_unet_model_family: str
+    sar_unet_model_version: str
+    sar_unet_promoted: bool
     sar_unet_model_path: str | None
     gemini_api_key: str | None
     newsdata_api_key: str | None
@@ -80,6 +85,12 @@ def _load_gee_service_account_json(key_file: Path | None) -> str | None:
     return json.dumps(parsed, separators=(',', ':'))
 
 
+def _flag_from_env(value: str | None, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return str(value).strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
 def load_rollout_env(env_file: Path) -> RolloutEnv:
     resolved_env_file = env_file.expanduser().resolve()
     raw_values = parse_env_file(resolved_env_file)
@@ -99,6 +110,9 @@ def load_rollout_env(env_file: Path) -> RolloutEnv:
         modal_worker_url=raw_values.get('MODAL_WORKER_URL'),
         admin_user_ids=raw_values.get('ADMIN_USER_IDS'),
         admin_user_emails=raw_values.get('ADMIN_USER_EMAILS'),
+        sar_unet_model_family=raw_values.get('SAR_UNET_MODEL_FAMILY') or DEFAULT_SAR_UNET_MODEL_FAMILY,
+        sar_unet_model_version=raw_values.get('SAR_UNET_MODEL_VERSION') or DEFAULT_SAR_UNET_MODEL_VERSION,
+        sar_unet_promoted=_flag_from_env(raw_values.get('SAR_UNET_PROMOTED'), default=False),
         sar_unet_model_path=raw_values.get('SAR_UNET_MODEL_PATH'),
         gemini_api_key=raw_values.get('GEMINI_API_KEY'),
         newsdata_api_key=raw_values.get('NEWSDATA_API_KEY'),
@@ -156,6 +170,9 @@ def validate_rollout_env(env_file: Path) -> dict[str, Any]:
         'missing_required_now': _required_now_missing(env),
         'missing_required_for_slice': _required_rollout_missing(env),
         'resolved_aliases': resolved_aliases,
+        'sar_unet_model_family': env.sar_unet_model_family,
+        'sar_unet_model_version': env.sar_unet_model_version,
+        'sar_unet_promoted': env.sar_unet_promoted,
         'rollout_state': rollout_state,
         'next_blocker': next_blocker,
     }
@@ -168,6 +185,9 @@ def build_github_secret_values(env: RolloutEnv, *, modal_worker_url: str | None 
         'MODAL_TOKEN_ID': env.modal_token_id or '',
         'MODAL_TOKEN_SECRET': env.modal_token_secret or '',
         'MODAL_WORKER_TOKEN': env.modal_worker_token or '',
+        'SAR_UNET_MODEL_FAMILY': env.sar_unet_model_family,
+        'SAR_UNET_MODEL_VERSION': env.sar_unet_model_version,
+        'SAR_UNET_PROMOTED': 'true' if env.sar_unet_promoted else 'false',
         'GEE_SERVICE_ACCOUNT_EMAIL': env.gee_service_account_email or '',
         'GEE_SERVICE_ACCOUNT_JSON': env.gee_service_account_json or '',
     }
@@ -185,6 +205,9 @@ def build_modal_secret_values(env: RolloutEnv) -> dict[str, str]:
         'SUPABASE_URL': env.supabase_url or '',
         'SUPABASE_SERVICE_ROLE_KEY': env.supabase_service_role_key or '',
         'MODAL_WORKER_TOKEN': env.modal_worker_token or '',
+        'SAR_UNET_MODEL_FAMILY': env.sar_unet_model_family,
+        'SAR_UNET_MODEL_VERSION': env.sar_unet_model_version,
+        'SAR_UNET_PROMOTED': 'true' if env.sar_unet_promoted else 'false',
     }
     if env.sar_unet_model_path:
         values['SAR_UNET_MODEL_PATH'] = env.sar_unet_model_path
@@ -279,6 +302,9 @@ def _subprocess_env(env: RolloutEnv) -> dict[str, str]:
         child['MODAL_TOKEN_ID'] = env.modal_token_id
     if env.modal_token_secret:
         child['MODAL_TOKEN_SECRET'] = env.modal_token_secret
+    child['SAR_UNET_MODEL_FAMILY'] = env.sar_unet_model_family
+    child['SAR_UNET_MODEL_VERSION'] = env.sar_unet_model_version
+    child['SAR_UNET_PROMOTED'] = 'true' if env.sar_unet_promoted else 'false'
     if env.sar_unet_model_path:
         child['SAR_UNET_MODEL_PATH'] = env.sar_unet_model_path
     return child
