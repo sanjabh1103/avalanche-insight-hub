@@ -35,6 +35,20 @@ from backend.lstm_model import predict_production_probability
 from backend.models.surrogate_rf import build_tree_shap_explainer, collect_tree_probabilities, compute_tree_shap
 
 
+DEFAULT_DEM_DIR = repo_root() / 'backend' / 'data' / 'dem'
+
+
+def _dem_root() -> Path:
+    raw = str(os.getenv('DEM_ROOT') or os.getenv('DEM_DIR') or '').strip()
+    if not raw:
+        return DEFAULT_DEM_DIR
+    return Path(raw).expanduser()
+
+
+def _dem_path(region_key: str) -> Path:
+    return _dem_root() / f'{region_key}.tif'
+
+
 def _fetch_latest_sar_summary(region_key: str) -> dict[str, object]:
     """P2.1: Read the latest SAR scene summary for this region so the voxel
     grid can surface real `sar_coverage_state` and `residual_shadow` flags
@@ -258,7 +272,7 @@ def build_cells(region, bundle, grid_size: int, forecast_date: pd.Timestamp):
     # reflect real orbital coverage instead of the old hardcoded default.
     sar_summary = _fetch_latest_sar_summary(region.key)
     explainer = build_tree_shap_explainer(base_model)
-    dem_path = repo_root() / 'backend' / 'data' / 'dem' / f'{region.key}.tif'
+    dem_path = _dem_path(region.key)
     rows = []
 
     for cell in region_grid:

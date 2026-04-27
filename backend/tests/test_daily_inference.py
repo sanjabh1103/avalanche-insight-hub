@@ -249,6 +249,96 @@ class ForecastGridMetadataTests(unittest.TestCase):
         self.assertEqual(cell['shap_context']['top_features'][0]['feature'], 'snowfall_24h')
         self.assertEqual(cell['inference_backend'], 'github_actions_surrogate_rf')
 
+    @patch.dict('os.environ', {'DEM_ROOT': '/artifacts/dem'}, clear=False)
+    @patch('backend.daily_inference._fetch_latest_sar_summary', return_value={})
+    @patch('backend.daily_inference.fetch_historical_weather_window', return_value={'samples': []})
+    @patch('backend.daily_inference.select_hourly_weather_sample', return_value={})
+    @patch('backend.daily_inference.fetch_forecast_weather_profile', return_value={'samples': []})
+    @patch('backend.daily_inference.predict_production_probability', return_value=(0.67, None))
+    @patch('backend.daily_inference.collect_tree_probabilities', return_value=np.asarray([[0.4, 0.8]], dtype=np.float32))
+    @patch('backend.daily_inference.compute_tree_shap', return_value=({}, []))
+    @patch('backend.daily_inference.build_tree_shap_explainer', return_value=object())
+    @patch('backend.daily_inference.extract_cell_terrain')
+    @patch('backend.daily_inference.build_real_feature_row')
+    @patch('backend.daily_inference.build_region_grid')
+    def test_build_cells_reads_dem_from_env_root(
+        self,
+        build_grid_mock,
+        build_feature_row_mock,
+        extract_terrain_mock,
+        _build_explainer_mock,
+        _compute_tree_shap_mock,
+        _collect_tree_probs_mock,
+        _predict_production_probability_mock,
+        _forecast_weather_mock,
+        _select_hourly_mock,
+        _history_mock,
+        _sar_summary_mock,
+    ) -> None:
+        build_grid_mock.return_value = [{
+            'row': 0,
+            'col': 0,
+            'lat': 46.8,
+            'lng': 9.8,
+            'lat_end': 46.81,
+            'lng_end': 9.81,
+        }]
+        extract_terrain_mock.return_value = {
+            'elevation_m': 2450.0,
+            'slope_angle_deg': 38.0,
+            'aspect_deg': 180.0,
+            'clamped_to_bounds': 0.0,
+            'window_search_needed': 0.0,
+        }
+        feature_row = {feature: 0.1 for feature in FEATURE_COLUMNS}
+        build_feature_row_mock.return_value = {
+            'feature_row': feature_row,
+            'raw_inputs': {
+                'temperature_2m': -8.0,
+                'windspeed_10m': 11.0,
+                'winddirection_10m': 180.0,
+                'downscaled_temperature_c': -9.0,
+                'snowfall_24h_cm': 18.0,
+                'precipitation_24h_mm': 9.0,
+            },
+            'snowpack_proxy': SimpleNamespace(
+                estimated_shear_strength=0.42,
+                snow_settlement_index=0.16,
+                season_start='2025-11-01',
+                method='proxy_v1',
+            ),
+        }
+
+        class _DummySelector:
+            def transform(self, frame: pd.DataFrame) -> np.ndarray:
+                return np.asarray([[0.7, 0.3]], dtype=np.float32)
+
+        class _DummyCalibratedModel:
+            def predict_proba(self, frame: pd.DataFrame) -> np.ndarray:
+                return np.asarray([[0.33, 0.67]], dtype=np.float32)
+
+        bundle = {
+            'selector': _DummySelector(),
+            'calibrated_model': _DummyCalibratedModel(),
+            'base_model': object(),
+            'selected_features': ['snowfall_24h', 'wind_loading'],
+            'feature_means': {'snowfall_24h': 0.2, 'wind_loading': 0.1},
+            'surrogate_model_version': 'rf_surrogate_v1',
+            'created_at': '2026-04-25T00:00:00+00:00',
+            'calibration_method': 'isotonic_v1',
+        }
+        region = SimpleNamespace(key='davos', center=(46.8, 9.8))
+
+        build_cells(
+            region=region,
+            bundle=bundle,
+            grid_size=1,
+            forecast_date=pd.Timestamp('2026-04-25T00:00:00Z'),
+        )
+
+        terrain_call = extract_terrain_mock.call_args.args[0]
+        self.assertEqual(terrain_call, '/artifacts/dem/davos.tif')
+
 
 if __name__ == '__main__':
     unittest.main()
