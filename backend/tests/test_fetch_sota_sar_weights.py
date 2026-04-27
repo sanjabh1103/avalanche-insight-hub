@@ -95,6 +95,29 @@ class FetchSotaSarWeightsTests(unittest.TestCase):
             self.assertIn('SAR_UNET_MODEL_FAMILY="swinunet_tiny_diff"', env_text)
             self.assertIn('SAR_UNET_MODEL_VERSION="swin_transformer_v2_tiny_shadow_v1"', env_text)
 
+    @patch('backend.scripts.fetch_sota_sar_weights.requests.get')
+    def test_fetch_weights_uses_env_model_path_override(self, requests_get_mock) -> None:
+        response = Mock()
+        response.ok = True
+        response.content = b'PT\x00swin-shadow'
+        response.headers = {'Content-Type': 'application/octet-stream'}
+        requests_get_mock.return_value = response
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            env_path = root / '.env'
+            env_path.write_text('SAR_UNET_PROMOTED=false\n', encoding='utf-8')
+
+            fetch_sota_sar_weights(
+                model_url='https://example.com/swin.pt',
+                output=root / 'weights' / 'swin.pt',
+                env_file=env_path,
+                env_model_path='/artifacts/models/swin_transformer_v2_tiny.pt',
+            )
+
+            env_text = env_path.read_text(encoding='utf-8')
+            self.assertIn('SAR_UNET_MODEL_PATH="/artifacts/models/swin_transformer_v2_tiny.pt"', env_text)
+
 
 if __name__ == '__main__':
     unittest.main()

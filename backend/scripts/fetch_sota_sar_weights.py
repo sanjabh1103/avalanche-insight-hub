@@ -121,6 +121,7 @@ def fetch_sota_sar_weights(
     env_file: Path = Path('.env'),
     model_family: str | None = None,
     model_version: str | None = None,
+    env_model_path: str | None = None,
 ) -> dict[str, Any]:
     resolved_output = _resolve_output_path(output)
     resolved_env_file = env_file.expanduser().resolve()
@@ -128,7 +129,9 @@ def fetch_sota_sar_weights(
     write_bytes_atomic(resolved_output, payload)
 
     env_updates = {
-        'SAR_UNET_MODEL_PATH': _env_relative_path(resolved_output, resolved_env_file),
+        'SAR_UNET_MODEL_PATH': str(env_model_path).strip()
+        if env_model_path is not None and str(env_model_path).strip()
+        else _env_relative_path(resolved_output, resolved_env_file),
     }
     normalized_family = _normalize_model_family(model_family)
     if normalized_family is not None:
@@ -153,6 +156,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument('--env-file', type=Path, default=Path('.env'))
     parser.add_argument('--model-family')
     parser.add_argument('--model-version')
+    parser.add_argument('--env-model-path')
     return parser.parse_args(argv)
 
 
@@ -164,6 +168,7 @@ def main(argv: list[str] | None = None) -> int:
         env_file=args.env_file,
         model_family=args.model_family,
         model_version=args.model_version,
+        env_model_path=args.env_model_path,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0

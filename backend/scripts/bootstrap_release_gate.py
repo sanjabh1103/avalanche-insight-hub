@@ -22,6 +22,7 @@ GITHUB_PRODUCTION_ENVIRONMENT = 'production'
 MOCK_ARCHIVE_NAME = 'snowslide_mock.zip'
 DEFAULT_SAR_UNET_MODEL_FAMILY = 'resnet34_unet'
 DEFAULT_SAR_UNET_MODEL_VERSION = 'sar_unet_resnet34_shadow_v1'
+DEFAULT_SAR_UNET_DEVICE = 'cpu'
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,7 @@ class RolloutEnv:
     sar_unet_model_family: str
     sar_unet_model_version: str
     sar_unet_promoted: bool
+    sar_unet_device: str
     sar_unet_model_path: str | None
     gemini_api_key: str | None
     newsdata_api_key: str | None
@@ -113,6 +115,7 @@ def load_rollout_env(env_file: Path) -> RolloutEnv:
         sar_unet_model_family=raw_values.get('SAR_UNET_MODEL_FAMILY') or DEFAULT_SAR_UNET_MODEL_FAMILY,
         sar_unet_model_version=raw_values.get('SAR_UNET_MODEL_VERSION') or DEFAULT_SAR_UNET_MODEL_VERSION,
         sar_unet_promoted=_flag_from_env(raw_values.get('SAR_UNET_PROMOTED'), default=False),
+        sar_unet_device=raw_values.get('SAR_UNET_DEVICE') or DEFAULT_SAR_UNET_DEVICE,
         sar_unet_model_path=raw_values.get('SAR_UNET_MODEL_PATH'),
         gemini_api_key=raw_values.get('GEMINI_API_KEY'),
         newsdata_api_key=raw_values.get('NEWSDATA_API_KEY'),
@@ -173,6 +176,7 @@ def validate_rollout_env(env_file: Path) -> dict[str, Any]:
         'sar_unet_model_family': env.sar_unet_model_family,
         'sar_unet_model_version': env.sar_unet_model_version,
         'sar_unet_promoted': env.sar_unet_promoted,
+        'sar_unet_device': env.sar_unet_device,
         'rollout_state': rollout_state,
         'next_blocker': next_blocker,
     }
@@ -188,6 +192,7 @@ def build_github_secret_values(env: RolloutEnv, *, modal_worker_url: str | None 
         'SAR_UNET_MODEL_FAMILY': env.sar_unet_model_family,
         'SAR_UNET_MODEL_VERSION': env.sar_unet_model_version,
         'SAR_UNET_PROMOTED': 'true' if env.sar_unet_promoted else 'false',
+        'SAR_UNET_DEVICE': env.sar_unet_device,
         'GEE_SERVICE_ACCOUNT_EMAIL': env.gee_service_account_email or '',
         'GEE_SERVICE_ACCOUNT_JSON': env.gee_service_account_json or '',
     }
@@ -208,6 +213,7 @@ def build_modal_secret_values(env: RolloutEnv) -> dict[str, str]:
         'SAR_UNET_MODEL_FAMILY': env.sar_unet_model_family,
         'SAR_UNET_MODEL_VERSION': env.sar_unet_model_version,
         'SAR_UNET_PROMOTED': 'true' if env.sar_unet_promoted else 'false',
+        'SAR_UNET_DEVICE': env.sar_unet_device,
     }
     if env.sar_unet_model_path:
         values['SAR_UNET_MODEL_PATH'] = env.sar_unet_model_path
@@ -305,6 +311,7 @@ def _subprocess_env(env: RolloutEnv) -> dict[str, str]:
     child['SAR_UNET_MODEL_FAMILY'] = env.sar_unet_model_family
     child['SAR_UNET_MODEL_VERSION'] = env.sar_unet_model_version
     child['SAR_UNET_PROMOTED'] = 'true' if env.sar_unet_promoted else 'false'
+    child['SAR_UNET_DEVICE'] = env.sar_unet_device
     if env.sar_unet_model_path:
         child['SAR_UNET_MODEL_PATH'] = env.sar_unet_model_path
     return child

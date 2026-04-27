@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
+
+os.environ.setdefault('AVALANCHE_SKIP_MODAL_IMPORT', '1')
 
 from backend.modal_worker_app import (
     authorize_bearer_request,
@@ -12,7 +15,9 @@ from backend.modal_worker_app import (
     handle_infer_mtslstm,
     handle_sar_segment,
     handle_train_mtslstm,
+    normalize_model_volume_path,
     seed_dem_directory,
+    seed_model_volume_file,
 )
 
 
@@ -89,6 +94,48 @@ class ModalWorkerAppTests(unittest.TestCase):
 
         self.assertEqual(first['copied'], 1)
         self.assertEqual(second['skipped'], 1)
+
+    def test_normalize_model_volume_path_rejects_paths_outside_models(self) -> None:
+        with self.assertRaisesRegex(ValueError, 'expected an absolute path under /models/'):
+            normalize_model_volume_path('/tmp/swin.pt')
+
+    def test_seed_model_volume_file_uses_models_remote_path(self) -> None:
+        class _FakeBatch:
+            def __init__(self) -> None:
+                self.uploads: list[tuple[Path, str]] = []
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def put_file(self, source_path, remote_path) -> None:
+                self.uploads.append((Path(source_path), remote_path))
+
+        class _FakeVolume:
+            def __init__(self) -> None:
+                self.batch = _FakeBatch()
+
+            def batch_upload(self, force: bool = False):
+                self.force = force
+                return self.batch
+
+        with TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / 'swin.pt'
+            source.write_bytes(b'checkpoint')
+            volume = _FakeVolume()
+
+            result = seed_model_volume_file(
+                volume,
+                source,
+                remote_model_path='/models/swin_transformer_v2_tiny.pt',
+            )
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(result['remote_model_path'], '/models/swin_transformer_v2_tiny.pt')
+        self.assertEqual(result['runtime_model_path'], '/artifacts/models/swin_transformer_v2_tiny.pt')
+        self.assertEqual(volume.batch.uploads, [(source.resolve(), '/models/swin_transformer_v2_tiny.pt')])
 
 
 if __name__ == '__main__':

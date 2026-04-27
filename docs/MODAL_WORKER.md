@@ -8,6 +8,7 @@ This project uses Modal as the only GPU execution backend for the Wave 4 SAR and
 - `MODAL_WORKER_TOKEN`: bearer token for the worker. The ASGI worker validates `Authorization: Bearer <token>` on every request.
 - `SAR_UNET_MODEL_FAMILY`: defaults to `resnet34_unet`; `swinunet_tiny_diff` is reserved for the paper-family bi-temporal Swin path
 - `SAR_UNET_MODEL_PATH`: checkpoint path available to the worker runtime
+- `SAR_UNET_DEVICE`: defaults to `cpu`; set `cuda` for GPU shadow validation
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SAR_MASK_BUCKET`: defaults to `sar-masks`
@@ -41,6 +42,8 @@ The target Supabase project must also contain the held-out registry tables creat
   Deploys the in-repo Modal ASGI worker surface that exposes the worker endpoints below on one base URL.
 - `modal run backend/modal_worker_app.py --source-root backend/data/dem`
   Seeds Git LFS-backed DEM assets into the persistent Modal volume at `/artifacts/dem`.
+- `modal run backend/modal_worker_app.py --source-model-path backend/data/models/swin_transformer_v2_tiny.pt --remote-model-path /models/swin_transformer_v2_tiny.pt`
+  Uploads a fetched checkpoint into the existing Modal volume so the worker can read it at `/artifacts/models/swin_transformer_v2_tiny.pt` at runtime.
 
 ## Cloud Bootstrap Workflow
 

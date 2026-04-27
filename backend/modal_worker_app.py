@@ -4,15 +4,19 @@ import json
 import os
 import shutil
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any, Callable
 
 from backend.common.config import load_settings
 from backend.sar_unet_worker import SAR_UNET_SEGMENTATION_THRESHOLD, run_worker_request
 
-try:  # pragma: no cover - optional dependency for deployment only
-    import modal
-except Exception:  # pragma: no cover - optional dependency
+if str(os.environ.get('AVALANCHE_SKIP_MODAL_IMPORT') or '').strip().lower() in {'1', 'true', 'yes', 'on'}:
     modal = None
+else:
+    try:  # pragma: no cover - optional dependency for deployment only
+        import modal
+    except Exception:  # pragma: no cover - optional dependency
+        modal = None
 
 try:  # pragma: no cover - optional dependency for deployment only
     from fastapi import FastAPI, HTTPException, Request
@@ -25,6 +29,7 @@ except Exception:  # pragma: no cover - optional dependency
 # Matches ARTIFACT_ROOT env var so sar_unet_worker.py writes here automatically.
 VOLUME_MOUNT = '/artifacts'
 DEM_VOLUME_ROOT = f'{VOLUME_MOUNT}/dem'
+MODEL_VOLUME_ROOT = f'{VOLUME_MOUNT}/models'
 WORKER_TOKEN_ENV = 'MODAL_WORKER_TOKEN'
 
 
@@ -145,6 +150,35 @@ def seed_dem_directory(source_root: Path, destination_root: Path) -> dict[str, A
     }
 
 
+def normalize_model_volume_path(remote_model_path: str) -> str:
+    candidate = PurePosixPath(str(remote_model_path or '').strip() or '/models/swin_transformer_v2_tiny.pt')
+    if not candidate.is_absolute():
+        candidate = PurePosixPath('/') / candidate
+    if '..' in candidate.parts:
+        raise ValueError(f'invalid remote model path "{remote_model_path}": parent traversal is not allowed')
+    if len(candidate.parts) < 3 or candidate.parts[1] != 'models' or not candidate.name:
+        raise ValueError(
+            f'invalid remote model path "{remote_model_path}": expected an absolute path under /models/',
+        )
+    return candidate.as_posix()
+
+
+def seed_model_volume_file(volume: Any, source_model_path: Path, *, remote_model_path: str) -> dict[str, Any]:
+    source_model_path = source_model_path.expanduser().resolve()
+    if not source_model_path.exists() or not source_model_path.is_file():
+        raise FileNotFoundError(f'model checkpoint not found: {source_model_path}')
+    remote_path = normalize_model_volume_path(remote_model_path)
+    with volume.batch_upload(force=True) as batch:
+        batch.put_file(source_model_path, remote_path)
+    return {
+        'status': 'ok',
+        'source_model_path': str(source_model_path),
+        'remote_model_path': remote_path,
+        'runtime_model_path': str(PurePosixPath(MODEL_VOLUME_ROOT) / PurePosixPath(remote_path).relative_to('/models')),
+        'bytes_uploaded': source_model_path.stat().st_size,
+    }
+
+
 def create_fastapi_app(volume_reload: Callable[[], None] | None = None, volume_commit: Callable[[], None] | None = None) -> Any:
     if FastAPI is None:
         raise RuntimeError('fastapi must be installed in the Modal image to serve the ASGI worker app')
@@ -250,7 +284,20 @@ if modal is not None:  # pragma: no cover - exercised in deployment, not local t
         }
 
     @app.local_entrypoint()
-    def seed_dem_volume(source_root: str = 'backend/data/dem') -> None:
+    def seed_artifact_volume(
+        source_root: str = 'backend/data/dem',
+        source_model_path: str = '',
+        remote_model_path: str = '/models/swin_transformer_v2_tiny.pt',
+    ) -> None:
+        if str(source_model_path).strip():
+            result = seed_model_volume_file(
+                _artifact_volume,
+                Path(source_model_path),
+                remote_model_path=remote_model_path,
+            )
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return
+
         root = Path(source_root)
         files = [(path.name, path.read_bytes()) for path in sorted(root.glob('*.tif'))]
         readme = root / 'README.md'
