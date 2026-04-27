@@ -28,6 +28,8 @@ The target Supabase project must also contain the held-out registry tables creat
   One-off bootstrapping CLI. Seeds SnowSlide truth masks and canonical scene stacks into `sar-masks`, then registers the held-out set in Supabase as `draft`. The default path is authoritative; `--non-authoritative` is reserved for plumbing-only canary seeds.
 - `python -m backend.scripts.materialize_release_baseline_masks`
   Materializes `baseline_mask.tif` for a registered SnowSlide reference set and marks the set `active` when complete unless `--no-activate` is used for a canary run.
+- `python -m backend.scripts.evaluate_canary_release`
+  Draft-only operator harness. It seeds zero-valued synthetic prediction masks under the standard `predictions/<model_version>/prediction_mask.tif` path for a non-authoritative reference set, builds a manual `scenes[]` manifest, and posts that manifest to the worker’s `evaluate-release` endpoint without requiring `SAR_UNET_MODEL_PATH`.
 - `python -m backend.sar_release_manifest`
   Builds a held-out `evaluate-release` manifest either from an ad hoc JSON/CSV registry or from an authoritative SnowSlide `reference_set_key`.
 - `python -m backend.sar_release_promote`
@@ -115,7 +117,7 @@ Required local `.env` inputs:
 Optional for this slice:
 - `SAR_UNET_MODEL_PATH`
 
-If `SAR_UNET_MODEL_PATH` is absent, the bootstrap completes in `refs_ready_only` state and intentionally does **not** attempt held-out `sar-segment`, `evaluate_release`, promoted reruns, or `train_mtslstm` with `sar_release_gate_passed=true`.
+If `SAR_UNET_MODEL_PATH` is absent, the bootstrap completes in `refs_ready_only` state and intentionally does **not** attempt held-out `sar-segment`, the official authoritative `evaluate_release` gate, promoted reruns, or `train_mtslstm` with `sar_release_gate_passed=true`. Draft canary evaluation remains possible through `python -m backend.scripts.evaluate_canary_release` because `evaluate-release` itself does not read `SAR_UNET_MODEL_PATH`.
 
 Recommended sequence:
 
@@ -251,6 +253,8 @@ Official gate usage should prefer `reference_set_key` over ad hoc refs. The work
 }
 ```
 
+`evaluate-release` does **not** read `SAR_UNET_MODEL_PATH`. That checkpoint gate only applies to `/sar-segment`. The key-only manifest resolver shown above is authoritative-only; it expects an `authoritative=true`, `status=active` reference set.
+
 ## Evaluation Manifest Contract
 
 `evaluate-release` must receive a manifest with a non-empty `scenes[]` list. Each scene must include:
@@ -307,6 +311,21 @@ python -m backend.sar_release_manifest \
   --prediction-model-version sar_unet_resnet34_shadow_v1 \
   --output /tmp/eval_manifest.json
 ```
+
+For a draft canary set, do not rely on `reference_set_key` alone. Seed synthetic prediction masks in the draft namespace and dispatch a manual `scenes[]` payload instead:
+
+```bash
+python3 -m backend.scripts.evaluate_canary_release \
+  --env-file .env \
+  --reference-set-key canary-test-v1 \
+  --prediction-model-version sar_unet_resnet34_shadow_v1
+```
+
+That harness:
+- requires `authoritative=false` and `status!=active`
+- uploads zero-valued prediction masks under `predictions/<model_version>/prediction_mask.tif`
+- posts a manual `scenes[]` manifest to `POST /evaluate-release`
+- leaves the canary set in `draft` and does not mutate the authoritative registry
 
 Registry rows must contain:
 
