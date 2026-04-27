@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 import numpy as np
 import requests
 
-from backend.common.artifacts import create_artifact_dir, dump_json, latest_artifact_dir, load_joblib, load_json
+from backend.common.artifacts import create_artifact_dir, dump_json, is_artifact_run_dir, latest_artifact_dir, load_joblib, load_json
 from backend.common.config import load_settings
 from backend.common.label_governance import materialize_label_governance
 from backend.common.sar_release_refs import load_reference_bundle, parse_storage_ref, reference_item_to_scene
@@ -1048,13 +1048,13 @@ def flip_to_training_eligible(event_ids: list[str]) -> int:
 def _artifact_snapshot(root: Path) -> set[str]:
     if not root.exists():
         return set()
-    return {path.name for path in root.iterdir() if path.is_dir()}
+    return {path.name for path in root.iterdir() if is_artifact_run_dir(path)}
 
 
 def _discover_new_artifact_dir(root: Path, before: set[str]) -> Path | None:
     if not root.exists():
         return None
-    candidates = sorted(path for path in root.iterdir() if path.is_dir() and path.name not in before)
+    candidates = sorted(path for path in root.iterdir() if is_artifact_run_dir(path) and path.name not in before)
     return candidates[-1] if candidates else None
 
 
@@ -1095,6 +1095,8 @@ def run_train_mtslstm(
     env = os.environ.copy()
     env.update({
         'ARTIFACT_ROOT': str(artifact_root),
+        'DEM_ROOT': str(Path(env.get('DEM_ROOT') or artifact_root / 'dem')),
+        'DEM_DIR': str(Path(env.get('DEM_DIR') or env.get('DEM_ROOT') or artifact_root / 'dem')),
         'HAZARD_TYPE': str(request.get('hazard_type') or env.get('HAZARD_TYPE') or 'avalanche'),
         'MTS_RUNTIME_PROVIDER': 'modal',
         'TRAIN_MTS_LSTM_HEAD': 'true',

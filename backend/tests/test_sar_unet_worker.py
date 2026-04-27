@@ -504,7 +504,34 @@ class SarUnetWorkerTests(unittest.TestCase):
         self.assertEqual(report['epochs_requested'], 50)
         self.assertTrue(report['early_stopped'])
         env = run_python_module_mock.call_args.kwargs['env']
+        self.assertEqual(env['DEM_ROOT'], str(artifact_root / 'dem'))
+        self.assertEqual(env['DEM_DIR'], str(artifact_root / 'dem'))
         self.assertEqual(env['ALLOW_MODEL_STATUS_PUBLISH'], 'false')
+
+    @patch('backend.sar_unet_worker._run_python_module')
+    def test_run_train_mtslstm_ignores_support_directories_when_training_fails_early(self, run_python_module_mock) -> None:
+        run_python_module_mock.return_value = subprocess.CompletedProcess(
+            args=['python', '-m', 'backend.train_model'],
+            returncode=1,
+            stdout='',
+            stderr='training failed\n',
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_root = Path(tmpdir)
+            (artifact_root / 'dem').mkdir()
+            (artifact_root / 'models').mkdir()
+
+            report = run_train_mtslstm(
+                {
+                    'hazard_type': 'avalanche',
+                    'request_type': 'train_mtslstm',
+                    'dataset_snapshot_id': 'latest',
+                },
+                artifact_root=artifact_root,
+            )
+
+        self.assertEqual(report['status'], 'failed')
+        self.assertIsNone(report['artifact_dir'])
 
     @patch('backend.sar_unet_worker._run_python_module')
     def test_run_infer_mtslstm_returns_shadow_summary(self, run_python_module_mock) -> None:

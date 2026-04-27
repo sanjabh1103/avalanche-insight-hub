@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -11,15 +12,20 @@ import joblib
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ARTIFACT_ROOT = Path(os.environ.get('ARTIFACT_ROOT', ROOT / 'backend' / 'artifacts'))
+ARTIFACT_RUN_PATTERN = re.compile(r'^\d{8}T\d{6}Z$')
 
 
 def timestamp_slug() -> str:
     return datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
 
 
+def is_artifact_run_dir(path: Path) -> bool:
+    return path.is_dir() and bool(ARTIFACT_RUN_PATTERN.fullmatch(path.name))
+
+
 def latest_artifact_dir(root: Path | None = None) -> Path:
     artifact_root = root or DEFAULT_ARTIFACT_ROOT
-    candidates = sorted([path for path in artifact_root.iterdir() if path.is_dir()]) if artifact_root.exists() else []
+    candidates = sorted([path for path in artifact_root.iterdir() if is_artifact_run_dir(path)]) if artifact_root.exists() else []
     if not candidates:
         raise FileNotFoundError(f'No artifact directories found in {artifact_root}')
     return candidates[-1]

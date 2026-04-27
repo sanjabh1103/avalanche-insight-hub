@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -29,7 +30,7 @@ NEGATIVE_TIME_WINDOW_HOURS = 24.0
 NEGATIVE_SLOPE_MIN = 20.0
 NEGATIVE_SLOPE_MAX = 65.0
 
-DEM_DIR = repo_root() / 'backend' / 'data' / 'dem'
+DEFAULT_DEM_DIR = repo_root() / 'backend' / 'data' / 'dem'
 
 
 def haversine_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -105,8 +106,15 @@ def match_region(lat: float, lng: float, regions: list[Region]) -> Region | None
     return None
 
 
+def _dem_root() -> Path:
+    raw = str(os.getenv('DEM_ROOT') or os.getenv('DEM_DIR') or '').strip()
+    if not raw:
+        return DEFAULT_DEM_DIR
+    return Path(raw).expanduser()
+
+
 def _dem_path(region_key: str) -> Path:
-    return DEM_DIR / f'{region_key}.tif'
+    return _dem_root() / f'{region_key}.tif'
 
 
 @lru_cache(maxsize=4096)

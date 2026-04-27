@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -9,10 +11,19 @@ import pandas as pd
 
 from backend.common.features import FEATURE_COLUMNS
 from backend.common.regions import Region
-from backend.common.training_dataset import NEGATIVE_TRAINING_WEIGHT, build_real_training_frame
+from backend.common.training_dataset import NEGATIVE_TRAINING_WEIGHT, _dem_path, build_real_training_frame
 
 
 class TrainingDatasetBuilderTests(unittest.TestCase):
+    @patch.dict(os.environ, {'DEM_ROOT': '/artifacts/dem'}, clear=False)
+    def test_dem_path_prefers_dem_root_environment_variable(self) -> None:
+        self.assertEqual(_dem_path('colorado_rockies'), Path('/artifacts/dem/colorado_rockies.tif'))
+
+    @patch.dict(os.environ, {'DEM_DIR': '/compat/dem'}, clear=False)
+    def test_dem_path_uses_dem_dir_compat_alias_when_dem_root_missing(self) -> None:
+        with patch.dict(os.environ, {'DEM_ROOT': ''}, clear=False):
+            self.assertEqual(_dem_path('swiss_alps'), Path('/compat/dem/swiss_alps.tif'))
+
     @patch('backend.common.training_dataset._sample_negatives_for_event')
     @patch('backend.common.training_dataset.build_real_feature_row')
     @patch('backend.common.training_dataset.select_hourly_weather_sample')
