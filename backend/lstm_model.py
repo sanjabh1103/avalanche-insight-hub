@@ -16,8 +16,8 @@ from backend.common.sequence_features import (
     DYNAMIC_SEQUENCE_FEATURES,
     STATIC_SEQUENCE_FEATURES,
     SequenceBranches,
-    build_training_branch_arrays,
 )
+from backend.data.mts_lstm_loader import build_mts_lstm_dataloaders
 
 try:  # pragma: no cover - optional dependency at import time
     import torch
@@ -53,6 +53,7 @@ MTS_ENSEMBLE_SAMPLES = int(os.getenv('MTS_ENSEMBLE_SAMPLES', '4'))
 MTS_MIN_UNCERTAINTY_STD = float(os.getenv('MTS_MIN_UNCERTAINTY_STD', '0.005'))
 MTS_HOURLY_STEPS = int(os.getenv('MTS_HOURLY_STEPS', str(DEFAULT_HOURLY_STEPS)))
 MTS_DAILY_STEPS = int(os.getenv('MTS_DAILY_STEPS', str(DEFAULT_DAILY_STEPS)))
+MTS_LSTM_BATCH_SIZE = int(os.getenv('MTS_LSTM_BATCH_SIZE', '32'))
 MTS_RUNTIME_PROVIDER = os.getenv('MTS_RUNTIME_PROVIDER', 'local').strip() or 'local'
 MTS_SAR_RELEASE_GATE_PASSED = _flag('SAR_RELEASE_GATE_PASSED', False)
 MTS_SAR_VOLUME_MIN_EVENTS = int(os.getenv('MTS_SAR_VOLUME_MIN_EVENTS', '50'))
@@ -260,43 +261,28 @@ def fit_lstm_head(
     static_features = list(STATIC_SEQUENCE_FEATURES)
     region_centers = {region.key: (float(region.center[0]), float(region.center[1])) for region in load_regions()}
 
-    train_branches = build_training_branch_arrays(
-        train_df,
+    train_loader, validation_loader, normalization_stats = build_mts_lstm_dataloaders(
+        train_df=train_df,
+        validation_df=test_df,
         region_centers=region_centers,
         dynamic_features=dynamic_features,
         static_features=static_features,
         hourly_steps=MTS_HOURLY_STEPS,
         daily_steps=MTS_DAILY_STEPS,
+        batch_size=MTS_LSTM_BATCH_SIZE,
     )
-    test_branches = build_training_branch_arrays(
-        test_df,
-        region_centers=region_centers,
-        dynamic_features=dynamic_features,
-        static_features=static_features,
-        hourly_steps=MTS_HOURLY_STEPS,
-        daily_steps=MTS_DAILY_STEPS,
+    test_branches = SequenceBranches(
+        hourly=np.asarray(validation_loader.dataset.hourly, dtype=np.float32),
+        daily=np.asarray(validation_loader.dataset.daily, dtype=np.float32),
+        static=np.asarray(validation_loader.dataset.static, dtype=np.float32),
     )
 
-    hourly_mean, hourly_std = _sequence_norm_stats(train_branches.hourly)
-    daily_mean, daily_std = _sequence_norm_stats(train_branches.daily)
-    static_mean, static_std = _vector_norm_stats(train_branches.static)
-
-    x_train_hourly = torch.tensor((train_branches.hourly - hourly_mean) / hourly_std, dtype=torch.float32)
-    x_train_daily = torch.tensor((train_branches.daily - daily_mean) / daily_std, dtype=torch.float32)
-    x_train_static = torch.tensor((train_branches.static - static_mean) / static_std, dtype=torch.float32)
-    y_train = torch.tensor(train_df['label'].astype(float).to_numpy(), dtype=torch.float32)
-    sample_weights = torch.tensor(
-        train_df.get('training_weight', pd.Series(1.0, index=train_df.index)).astype(float).to_numpy(),
-        dtype=torch.float32,
-    )
-    x_test_hourly = torch.tensor((test_branches.hourly - hourly_mean) / hourly_std, dtype=torch.float32)
-    x_test_daily = torch.tensor((test_branches.daily - daily_mean) / daily_std, dtype=torch.float32)
-    x_test_static = torch.tensor((test_branches.static - static_mean) / static_std, dtype=torch.float32)
-    y_test_tensor = torch.tensor(test_df['label'].astype(float).to_numpy(), dtype=torch.float32)
-    validation_weights = torch.tensor(
-        test_df.get('training_weight', pd.Series(1.0, index=test_df.index)).astype(float).to_numpy(),
-        dtype=torch.float32,
-    )
+    hourly_mean = normalization_stats.hourly_mean
+    hourly_std = normalization_stats.hourly_std
+    daily_mean = normalization_stats.daily_mean
+    daily_std = normalization_stats.daily_std
+    static_mean = normalization_stats.static_mean
+    static_std = normalization_stats.static_std
 
     model = BranchedMTSLSTM(
         hourly_input_size=len(dynamic_features),
@@ -319,21 +305,29 @@ def fit_lstm_head(
 
     model.train()
     for epoch in range(epochs_requested):
-        optimizer.zero_grad()
-        logits = model(x_train_hourly, x_train_daily, x_train_static)
-        weighted_loss = loss_fn(logits, y_train) * sample_weights
-        loss = weighted_loss.mean()
-        loss.backward()
-        optimizer.step()
+        for batch in train_loader:
+            optimizer.zero_grad()
+            logits = model(batch['hourly'], batch['daily'], batch['static'])
+            weighted_loss = loss_fn(logits, batch['label']) * batch['sample_weight']
+            loss = weighted_loss.mean()
+            loss.backward()
+            optimizer.step()
         epochs_completed = epoch + 1
 
         should_validate = (epochs_completed % MTS_VALIDATE_EVERY == 0) or epochs_completed == epochs_requested
         if not should_validate:
             continue
         model.eval()
+        validation_loss_total = 0.0
+        validation_items = 0
         with torch.no_grad():
-            validation_logits = model(x_test_hourly, x_test_daily, x_test_static)
-            validation_loss = float((loss_fn(validation_logits, y_test_tensor) * validation_weights).mean().item())
+            for batch in validation_loader:
+                validation_logits = model(batch['hourly'], batch['daily'], batch['static'])
+                batch_loss = (loss_fn(validation_logits, batch['label']) * batch['sample_weight']).mean()
+                batch_count = int(batch['label'].shape[0])
+                validation_loss_total += float(batch_loss.item()) * batch_count
+                validation_items += batch_count
+        validation_loss = float(validation_loss_total / max(1, validation_items))
         model.train()
 
         if validation_loss < best_validation_loss - 1e-6:
