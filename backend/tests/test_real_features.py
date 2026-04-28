@@ -1,13 +1,87 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 import importlib
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
+import requests
 
-from backend.common.real_features import _find_valid_window, compute_dynamic_lapse_profile, extract_cell_terrain
+from backend.common import real_features
+from backend.common.real_features import (
+    _fetch_open_meteo,
+    _find_valid_window,
+    compute_dynamic_lapse_profile,
+    extract_cell_terrain,
+    fetch_historical_weather_window,
+)
+
+
+class FakeResponse:
+    def __init__(self, status_code: int, payload: dict[str, object], *, headers: dict[str, str] | None = None):
+        self.status_code = status_code
+        self._payload = payload
+        self.headers = headers or {}
+        self.text = json.dumps(payload)
+
+    def json(self) -> dict[str, object]:
+        return self._payload
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise requests.HTTPError(f'HTTP {self.status_code}', response=self)
+
+
+class OpenMeteoTests(unittest.TestCase):
+    def test_fetch_open_meteo_retries_rate_limits(self) -> None:
+        transient = FakeResponse(429, {'error': 'rate limited'}, headers={'Retry-After': '0'})
+        success = FakeResponse(200, {'hourly': {'time': []}})
+
+        with patch.object(real_features.requests, 'get', side_effect=[transient, success]) as get_mock:
+            with patch.object(real_features.time, 'sleep', return_value=None) as sleep_mock:
+                payload = _fetch_open_meteo('https://example.test', params={'latitude': '1.0'})
+
+        self.assertEqual(payload, {'hourly': {'time': []}})
+        self.assertEqual(get_mock.call_count, 2)
+        sleep_mock.assert_called_once()
+
+    def test_fetch_historical_weather_window_falls_back_to_archive_after_rate_limits(self) -> None:
+        transient = FakeResponse(429, {'error': 'rate limited'}, headers={'Retry-After': '0'})
+        archive_success = FakeResponse(
+            200,
+            {
+                'hourly': {
+                    'time': ['2026-04-21T00:00'],
+                    'temperature_2m': [-6.0],
+                    'precipitation': [1.2],
+                    'snowfall': [0.8],
+                    'snow_depth': [0.4],
+                    'windspeed_10m': [18.0],
+                    'winddirection_10m': [240.0],
+                    'freezing_level_height': [None],
+                }
+            },
+        )
+
+        with patch.object(real_features.requests, 'get', side_effect=[transient, transient, transient, archive_success]) as get_mock:
+            with patch.object(real_features.time, 'sleep', return_value=None) as sleep_mock:
+                profile = fetch_historical_weather_window(
+                    lat=-41.0,
+                    lng=-71.0,
+                    start=datetime(2026, 4, 21, tzinfo=timezone.utc),
+                    end=datetime(2026, 4, 28, tzinfo=timezone.utc),
+                )
+
+        self.assertEqual(profile['source'], 'open_meteo_historical_archive_window_fallback_v1')
+        self.assertEqual(len(profile['samples']), 1)
+        self.assertEqual(profile['samples'][0].values['windspeed_10m'], 18.0)
+        self.assertEqual(get_mock.call_count, 4)
+        self.assertEqual(get_mock.call_args_list[-1].args[0], real_features.OPEN_METEO_ARCHIVE)
+        self.assertEqual(sleep_mock.call_count, 2)
 
 
 class DynamicLapseProfileTests(unittest.TestCase):

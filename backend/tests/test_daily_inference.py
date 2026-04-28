@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from backend.common.features import FEATURE_COLUMNS
+from backend.common.snowpack_proxy import SnowpackProxy
 from backend.daily_inference import build_cells, main, upsert_forecast_grid
 
 
@@ -175,6 +176,7 @@ class ForecastGridMetadataTests(unittest.TestCase):
     @patch('backend.daily_inference.collect_tree_probabilities', return_value=np.asarray([[0.4, 0.8]], dtype=np.float32))
     @patch('backend.daily_inference.compute_tree_shap')
     @patch('backend.daily_inference.build_tree_shap_explainer', return_value=object())
+    @patch('backend.daily_inference.fetch_batched_cell_snowpack_proxies_strict')
     @patch('backend.daily_inference.extract_cell_terrain')
     @patch('backend.daily_inference.build_real_feature_row')
     @patch('backend.daily_inference.build_region_grid')
@@ -183,6 +185,7 @@ class ForecastGridMetadataTests(unittest.TestCase):
         build_grid_mock,
         build_feature_row_mock,
         extract_terrain_mock,
+        fetch_snowpack_proxies_mock,
         _build_explainer_mock,
         compute_tree_shap_mock,
         _collect_tree_probs_mock,
@@ -207,6 +210,14 @@ class ForecastGridMetadataTests(unittest.TestCase):
             'lat_end': 46.81,
             'lng_end': 9.81,
         }]
+        fetch_snowpack_proxies_mock.return_value = [
+            SnowpackProxy(
+                estimated_shear_strength=0.42,
+                snow_settlement_index=0.16,
+                season_start='2025-11-01',
+                method='seasonal_cumulative_v1',
+            )
+        ]
         extract_terrain_mock.return_value = {
             'elevation_m': 2450.0,
             'slope_angle_deg': 38.0,
@@ -277,6 +288,179 @@ class ForecastGridMetadataTests(unittest.TestCase):
         self.assertEqual(cell['shap_values']['snowfall_24h'], 0.42)
         self.assertEqual(cell['shap_context']['top_features'][0]['feature'], 'snowfall_24h')
         self.assertEqual(cell['inference_backend'], 'github_actions_surrogate_rf')
+        self.assertEqual(
+            build_feature_row_mock.call_args.kwargs['snowpack_proxy_override'].method,
+            'seasonal_cumulative_v1',
+        )
+
+    @patch('backend.daily_inference._fetch_latest_sar_summary', return_value={})
+    @patch('backend.daily_inference.fetch_historical_weather_window', side_effect=RuntimeError('HTTP 429'))
+    @patch('backend.daily_inference.select_hourly_weather_sample', return_value={})
+    @patch('backend.daily_inference.fetch_forecast_weather_profile', return_value={'samples': []})
+    @patch('backend.daily_inference.predict_production_probability', return_value=(0.67, {'enabled': True, 'dynamic_model_type': 'mts_lstm_v1', 'dynamic_model_version': 'mts-lstm-42'}))
+    @patch('backend.daily_inference.collect_tree_probabilities', return_value=np.asarray([[0.4, 0.8]], dtype=np.float32))
+    @patch('backend.daily_inference.compute_tree_shap', return_value=({'snowfall_24h': 0.42}, [{'feature': 'snowfall_24h', 'shap_value': 0.42, 'feature_value': 0.7, 'rank': 1}]))
+    @patch('backend.daily_inference.build_tree_shap_explainer', return_value=object())
+    @patch('backend.daily_inference.fetch_batched_cell_snowpack_proxies_strict')
+    @patch('backend.daily_inference.build_inference_branches', return_value=SimpleNamespace(hourly=np.zeros((24, 6)), daily=np.zeros((7, 6)), static=np.zeros((6,))))
+    @patch('backend.daily_inference.extract_cell_terrain')
+    @patch('backend.daily_inference.build_real_feature_row')
+    @patch('backend.daily_inference.build_region_grid')
+    def test_build_cells_fails_closed_when_history_is_unavailable(
+        self,
+        build_grid_mock,
+        build_feature_row_mock,
+        extract_terrain_mock,
+        _build_branches_mock,
+        fetch_snowpack_proxies_mock,
+        _build_explainer_mock,
+        _compute_tree_shap_mock,
+        _collect_tree_probs_mock,
+        _predict_production_probability_mock,
+        _forecast_weather_mock,
+        _select_hourly_mock,
+        history_mock,
+        _sar_summary_mock,
+    ) -> None:
+        build_grid_mock.return_value = [{
+            'row': 0,
+            'col': 0,
+            'lat': 46.8,
+            'lng': 9.8,
+            'lat_end': 46.81,
+            'lng_end': 9.81,
+        }]
+        fetch_snowpack_proxies_mock.return_value = [
+            SnowpackProxy(
+                estimated_shear_strength=0.42,
+                snow_settlement_index=0.16,
+                season_start='2025-11-01',
+                method='seasonal_cumulative_v1',
+            )
+        ]
+        extract_terrain_mock.return_value = {
+            'elevation_m': 2450.0,
+            'slope_angle_deg': 38.0,
+            'aspect_deg': 180.0,
+            'clamped_to_bounds': 0.0,
+            'window_search_needed': 0.0,
+        }
+        feature_row = {feature: 0.1 for feature in FEATURE_COLUMNS}
+        feature_row.update({
+            'snowfall_24h': 0.7,
+            'wind_loading': 0.3,
+            'temp_gradient': 0.2,
+            'freezing_level_proxy': 0.4,
+            'elevation': 0.6,
+            'terrain_roughness': 0.5,
+            'aspect_loading': 0.25,
+            'slope': 0.45,
+        })
+        build_feature_row_mock.return_value = {
+            'feature_row': feature_row,
+            'raw_inputs': {
+                'temperature_2m': -8.0,
+                'windspeed_10m': 11.0,
+                'winddirection_10m': 180.0,
+                'downscaled_temperature_c': -9.0,
+                'snowfall_24h_cm': 18.0,
+                'precipitation_24h_mm': 9.0,
+            },
+            'snowpack_proxy': SimpleNamespace(
+                estimated_shear_strength=0.42,
+                snow_settlement_index=0.16,
+                season_start='2025-11-01',
+                method='proxy_v1',
+            ),
+        }
+
+        class _DummySelector:
+            def transform(self, frame: pd.DataFrame) -> np.ndarray:
+                return np.asarray([[0.7, 0.3]], dtype=np.float32)
+
+        class _DummyCalibratedModel:
+            def predict_proba(self, frame: pd.DataFrame) -> np.ndarray:
+                return np.asarray([[0.33, 0.67]], dtype=np.float32)
+
+        bundle = {
+            'selector': _DummySelector(),
+            'calibrated_model': _DummyCalibratedModel(),
+            'base_model': object(),
+            'selected_features': ['snowfall_24h', 'wind_loading'],
+            'feature_means': {'snowfall_24h': 0.2, 'wind_loading': 0.1},
+            'surrogate_model_version': 'rf_surrogate_v1',
+            'created_at': '2026-04-25T00:00:00+00:00',
+            'calibration_method': 'isotonic_v1',
+            'lstm_head': SimpleNamespace(
+                model=object(),
+                dynamic_features=['snowfall_24h', 'precipitation_24h', 'wind_loading', 'wind_directional_loading', 'temp_gradient', 'freezing_level_proxy'],
+                static_features=['slope', 'elevation', 'aspect_loading', 'terrain_roughness', 'curvature_proxy', 'northness'],
+                metadata={'hourly_steps': 24, 'daily_steps': 7},
+            ),
+        }
+        region = SimpleNamespace(key='davos', center=(46.8, 9.8))
+
+        with self.assertRaisesRegex(RuntimeError, 'HTTP 429'):
+            build_cells(
+                region=region,
+                bundle=bundle,
+                grid_size=1,
+                forecast_date=pd.Timestamp('2026-04-25T00:00:00Z'),
+            )
+
+        history_mock.assert_called_once()
+        build_feature_row_mock.assert_not_called()
+
+    @patch('backend.daily_inference._fetch_latest_sar_summary', return_value={})
+    @patch('backend.daily_inference.fetch_historical_weather_window', return_value={'samples': []})
+    @patch('backend.daily_inference.select_hourly_weather_sample', return_value={})
+    @patch('backend.daily_inference.fetch_forecast_weather_profile', return_value={'samples': []})
+    @patch('backend.daily_inference.fetch_batched_cell_snowpack_proxies_strict', side_effect=RuntimeError('missing seasonal payload'))
+    @patch('backend.daily_inference.build_tree_shap_explainer', return_value=object())
+    @patch('backend.daily_inference.extract_cell_terrain')
+    @patch('backend.daily_inference.build_real_feature_row')
+    @patch('backend.daily_inference.build_region_grid')
+    def test_build_cells_fails_closed_when_snowpack_proxy_is_unavailable(
+        self,
+        build_grid_mock,
+        build_feature_row_mock,
+        _extract_terrain_mock,
+        _build_explainer_mock,
+        _fetch_snowpack_proxies_mock,
+        _forecast_weather_mock,
+        _select_hourly_mock,
+        _history_mock,
+        _sar_summary_mock,
+    ) -> None:
+        build_grid_mock.return_value = [{
+            'row': 0,
+            'col': 0,
+            'lat': 46.8,
+            'lng': 9.8,
+            'lat_end': 46.81,
+            'lng_end': 9.81,
+        }]
+        bundle = {
+            'selector': SimpleNamespace(transform=lambda frame: np.asarray([[0.7, 0.3]], dtype=np.float32)),
+            'calibrated_model': SimpleNamespace(predict_proba=lambda frame: np.asarray([[0.33, 0.67]], dtype=np.float32)),
+            'base_model': object(),
+            'selected_features': ['snowfall_24h', 'wind_loading'],
+            'feature_means': {'snowfall_24h': 0.2, 'wind_loading': 0.1},
+            'surrogate_model_version': 'rf_surrogate_v1',
+            'created_at': '2026-04-25T00:00:00+00:00',
+            'calibration_method': 'isotonic_v1',
+        }
+        region = SimpleNamespace(key='davos', center=(46.8, 9.8))
+
+        with self.assertRaisesRegex(RuntimeError, 'missing seasonal payload'):
+            build_cells(
+                region=region,
+                bundle=bundle,
+                grid_size=1,
+                forecast_date=pd.Timestamp('2026-04-25T00:00:00Z'),
+            )
+
+        build_feature_row_mock.assert_not_called()
 
     @patch.dict('os.environ', {'DEM_ROOT': '/artifacts/dem'}, clear=False)
     @patch('backend.daily_inference._fetch_latest_sar_summary', return_value={})
@@ -287,6 +471,7 @@ class ForecastGridMetadataTests(unittest.TestCase):
     @patch('backend.daily_inference.collect_tree_probabilities', return_value=np.asarray([[0.4, 0.8]], dtype=np.float32))
     @patch('backend.daily_inference.compute_tree_shap', return_value=({}, []))
     @patch('backend.daily_inference.build_tree_shap_explainer', return_value=object())
+    @patch('backend.daily_inference.fetch_batched_cell_snowpack_proxies_strict')
     @patch('backend.daily_inference.extract_cell_terrain')
     @patch('backend.daily_inference.build_real_feature_row')
     @patch('backend.daily_inference.build_region_grid')
@@ -295,6 +480,7 @@ class ForecastGridMetadataTests(unittest.TestCase):
         build_grid_mock,
         build_feature_row_mock,
         extract_terrain_mock,
+        fetch_snowpack_proxies_mock,
         _build_explainer_mock,
         _compute_tree_shap_mock,
         _collect_tree_probs_mock,
@@ -312,6 +498,14 @@ class ForecastGridMetadataTests(unittest.TestCase):
             'lat_end': 46.81,
             'lng_end': 9.81,
         }]
+        fetch_snowpack_proxies_mock.return_value = [
+            SnowpackProxy(
+                estimated_shear_strength=0.42,
+                snow_settlement_index=0.16,
+                season_start='2025-11-01',
+                method='seasonal_cumulative_v1',
+            )
+        ]
         extract_terrain_mock.return_value = {
             'elevation_m': 2450.0,
             'slope_angle_deg': 38.0,

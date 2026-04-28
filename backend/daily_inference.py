@@ -29,6 +29,7 @@ from backend.common.risk_math import (
     legacy_max_risk_level,
     risk_level as ipa_risk_level,
 )
+from backend.common.snowpack_proxy import fetch_batched_cell_snowpack_proxies_strict
 from backend.common.supabase_io import has_supabase_credentials, patch_first_row, rest_get, rest_upsert
 from backend.common.sequence_features import build_inference_branches
 from backend.lstm_model import predict_production_probability
@@ -251,7 +252,12 @@ def terrain_adjusted_risk_level(
     )
 
 
-def build_cells(region, bundle, grid_size: int, forecast_date: pd.Timestamp):
+def build_cells(
+    region,
+    bundle,
+    grid_size: int,
+    forecast_date: pd.Timestamp,
+):
     selector = bundle['selector']
     calibrated_model = bundle['calibrated_model']
     base_model = bundle['base_model']
@@ -274,10 +280,24 @@ def build_cells(region, bundle, grid_size: int, forecast_date: pd.Timestamp):
     explainer = build_tree_shap_explainer(base_model)
     dem_path = _dem_path(region.key)
     rows = []
+    cell_centers = [
+        (
+            float(cell['lat'] + (cell['lat_end'] - cell['lat']) / 2),
+            float(cell['lng'] + (cell['lng_end'] - cell['lng']) / 2),
+        )
+        for cell in region_grid
+    ]
+    snowpack_proxies = fetch_batched_cell_snowpack_proxies_strict(
+        coordinates=cell_centers,
+        as_of=forecast_date.to_pydatetime(),
+    )
+    if len(snowpack_proxies) != len(region_grid):
+        raise RuntimeError(
+            f'Snowpack proxy count mismatch for {region.key}: '
+            f'expected {len(region_grid)}, received {len(snowpack_proxies)}'
+        )
 
-    for cell in region_grid:
-        center_lat = float(cell['lat'] + (cell['lat_end'] - cell['lat']) / 2)
-        center_lng = float(cell['lng'] + (cell['lng_end'] - cell['lng']) / 2)
+    for cell, (center_lat, center_lng), snowpack_proxy in zip(region_grid, cell_centers, snowpack_proxies):
         terrain = extract_cell_terrain(str(dem_path), lat=center_lat, lng=center_lng)
         assembled = build_real_feature_row(
             weather_sample=weather_sample,
@@ -285,6 +305,7 @@ def build_cells(region, bundle, grid_size: int, forecast_date: pd.Timestamp):
             timestamp=forecast_date.to_pydatetime(),
             lat=center_lat,
             lng=center_lng,
+            snowpack_proxy_override=snowpack_proxy,
         )
         feature_row = assembled['feature_row']
         feature_frame = pd.DataFrame([feature_row], columns=FEATURE_COLUMNS)
@@ -618,7 +639,12 @@ def main(argv: list[str] | None = None) -> int:
 
     outputs = []
     for region in regions:
-        rows = build_cells(region, bundle, grid_size=args.grid_size, forecast_date=forecast_date)
+        rows = build_cells(
+            region,
+            bundle,
+            grid_size=args.grid_size,
+            forecast_date=forecast_date,
+        )
         payload = upsert_forecast_grid(
             region,
             bundle,

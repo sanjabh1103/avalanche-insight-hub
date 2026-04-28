@@ -16,9 +16,10 @@ from __future__ import annotations
 
 import math
 import os
+import time
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from typing import Iterable
+from typing import Any, Iterable
 
 import numpy as np
 import requests
@@ -26,6 +27,14 @@ import requests
 
 OPEN_METEO_ARCHIVE = 'https://archive-api.open-meteo.com/v1/archive'
 OPEN_METEO_TIMEOUT = float(os.getenv('OPEN_METEO_TIMEOUT', '8'))
+OPEN_METEO_RETRIES = int(os.getenv('OPEN_METEO_RETRIES', '3'))
+OPEN_METEO_BATCH_SIZE = 50
+OPEN_METEO_DAILY_VARS = (
+    'temperature_2m_mean',
+    'temperature_2m_min',
+    'snowfall_sum',
+    'precipitation_sum',
+)
 
 
 @dataclass(frozen=True)
@@ -46,28 +55,79 @@ def winter_season_start(as_of: datetime) -> date:
     return date(as_of.year - 1, 11, 1)
 
 
+def _archive_request_params(
+    latitudes: list[float],
+    longitudes: list[float],
+    season_start: date,
+    as_of: datetime,
+) -> dict[str, str]:
+    return {
+        'latitude': ','.join(f'{lat:.4f}' for lat in latitudes),
+        'longitude': ','.join(f'{lng:.4f}' for lng in longitudes),
+        'start_date': season_start.isoformat(),
+        'end_date': as_of.date().isoformat(),
+        'daily': ','.join(OPEN_METEO_DAILY_VARS),
+        'timezone': 'UTC',
+    }
+
+
+def _fetch_archive_payload(*, params: dict[str, str], retries: int = OPEN_METEO_RETRIES) -> Any:
+    last_error: Exception | None = None
+    for attempt in range(retries):
+        response = None
+        try:
+            response = requests.get(
+                OPEN_METEO_ARCHIVE,
+                params=params,
+                timeout=OPEN_METEO_TIMEOUT,
+            )
+            if response.status_code == 429 or response.status_code >= 500:
+                raise requests.HTTPError(f'HTTP {response.status_code}', response=response)
+            response.raise_for_status()
+            return response.json()
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            last_error = exc
+        except requests.HTTPError as exc:
+            status_code = getattr(exc.response, 'status_code', None)
+            if status_code is not None and 400 <= status_code < 500 and status_code != 429:
+                raise
+            last_error = exc
+        if attempt < retries - 1:
+            retry_after = 0.0
+            if response is not None:
+                retry_after_header = response.headers.get('Retry-After')
+                if retry_after_header:
+                    try:
+                        retry_after = float(retry_after_header)
+                    except ValueError:
+                        retry_after = 0.0
+            time.sleep(max(2 ** attempt, retry_after))
+    raise last_error or RuntimeError(f'Failed to fetch from {OPEN_METEO_ARCHIVE} after {retries} attempts')
+
+
+def _normalize_archive_batch_payload(payload: Any, *, expected_count: int) -> list[dict[str, Any]]:
+    if isinstance(payload, list):
+        items = payload
+    elif isinstance(payload, dict):
+        items = [payload]
+    else:
+        raise RuntimeError(f'Unexpected Open-Meteo archive payload type: {type(payload).__name__}')
+    if len(items) != expected_count:
+        raise RuntimeError(
+            f'Open-Meteo archive payload count mismatch: expected {expected_count}, received {len(items)}'
+        )
+    if not all(isinstance(item, dict) for item in items):
+        raise RuntimeError('Open-Meteo archive payload contains non-object entries')
+    return items
+
+
 def _fetch_seasonal_weather(lat: float, lng: float, season_start: date, as_of: datetime) -> dict | None:
     try:
-        response = requests.get(
-            OPEN_METEO_ARCHIVE,
-            params={
-                'latitude': f'{lat:.4f}',
-                'longitude': f'{lng:.4f}',
-                'start_date': season_start.isoformat(),
-                'end_date': as_of.date().isoformat(),
-                'daily': ','.join([
-                    'temperature_2m_mean',
-                    'temperature_2m_min',
-                    'snowfall_sum',
-                    'precipitation_sum',
-                ]),
-                'timezone': 'UTC',
-            },
-            timeout=OPEN_METEO_TIMEOUT,
+        payload = _fetch_archive_payload(
+            params=_archive_request_params([lat], [lng], season_start, as_of),
         )
-        if response.status_code != 200:
-            return None
-        return response.json().get('daily') or None
+        items = _normalize_archive_batch_payload(payload, expected_count=1)
+        return items[0].get('daily') or None
     except Exception:  # pragma: no cover - network fallback is intentional
         return None
 
@@ -142,6 +202,50 @@ def compute_cell_snowpack_proxy(
                 method=proxy.method,
             )
     return _fallback_proxy(weather_inputs, terrain_inputs)
+
+
+def fetch_batched_cell_snowpack_proxies_strict(
+    *,
+    coordinates: Iterable[tuple[float, float]],
+    as_of: datetime,
+    batch_size: int = OPEN_METEO_BATCH_SIZE,
+) -> list[SnowpackProxy]:
+    coords = list(coordinates)
+    if not coords:
+        return []
+    if batch_size <= 0:
+        raise ValueError('batch_size must be positive')
+
+    season_start = winter_season_start(as_of)
+    proxies: list[SnowpackProxy] = []
+    for offset in range(0, len(coords), batch_size):
+        batch = coords[offset:offset + batch_size]
+        latitudes = [float(lat) for lat, _ in batch]
+        longitudes = [float(lng) for _, lng in batch]
+        payload = _fetch_archive_payload(
+            params=_archive_request_params(latitudes, longitudes, season_start, as_of),
+        )
+        items = _normalize_archive_batch_payload(payload, expected_count=len(batch))
+        for batch_index, item in enumerate(items):
+            daily = item.get('daily')
+            if not isinstance(daily, dict):
+                raise RuntimeError(
+                    f'Missing daily seasonal weather payload for batch cell index {offset + batch_index}'
+                )
+            proxy = _proxy_from_seasonal(daily)
+            if proxy is None:
+                raise RuntimeError(
+                    f'Unable to compute seasonal snowpack proxy for batch cell index {offset + batch_index}'
+                )
+            proxies.append(
+                SnowpackProxy(
+                    estimated_shear_strength=proxy.estimated_shear_strength,
+                    snow_settlement_index=proxy.snow_settlement_index,
+                    season_start=season_start.isoformat(),
+                    method=proxy.method,
+                )
+            )
+    return proxies
 
 
 def compute_region_snowpack_proxy(

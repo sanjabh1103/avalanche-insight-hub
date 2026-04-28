@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -10,11 +11,12 @@ from typing import Any
 import numpy as np
 import requests
 
-from backend.common.snowpack_proxy import compute_cell_snowpack_proxy
+from backend.common.snowpack_proxy import SnowpackProxy, compute_cell_snowpack_proxy
 
 
 OPEN_METEO_FORECAST = 'https://api.open-meteo.com/v1/forecast'
 OPEN_METEO_HISTORICAL_FORECAST = 'https://historical-forecast-api.open-meteo.com/v1/forecast'
+OPEN_METEO_ARCHIVE = 'https://archive-api.open-meteo.com/v1/archive'
 OPEN_METEO_TIMEOUT = 20.0
 STANDARD_LAPSE_RATE_C_PER_M = -0.0065
 PRESSURE_LEVELS = ('1000hPa', '925hPa', '850hPa', '700hPa')
@@ -37,6 +39,15 @@ PRESSURE_HOURLY_VARS = tuple(
 )
 
 ALL_HOURLY_VARS = SURFACE_HOURLY_VARS + PRESSURE_HOURLY_VARS
+ARCHIVE_HOURLY_VARS = (
+    'temperature_2m',
+    'precipitation',
+    'snowfall',
+    'snow_depth',
+    'windspeed_10m',
+    'winddirection_10m',
+    'freezing_level_height',
+)
 
 
 @dataclass(frozen=True)
@@ -70,33 +81,53 @@ def _normalize(value: float, scale: float, lower: float = 0.0, upper: float = 1.
 
 
 def _fetch_open_meteo(url: str, *, params: dict[str, Any], retries: int = 3) -> dict[str, Any]:
-    import time
     last_error: Exception | None = None
     for attempt in range(retries):
+        response = None
         try:
             response = requests.get(
                 url,
                 params=params,
                 timeout=OPEN_METEO_TIMEOUT,
             )
+            if response.status_code == 429 or response.status_code >= 500:
+                raise requests.HTTPError(f'HTTP {response.status_code}', response=response)
             response.raise_for_status()
             return response.json()
-        except (requests.Timeout, requests.ConnectionError) as e:
-            last_error = e
-            if attempt < retries - 1:
-                sleep_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
-                time.sleep(sleep_time)
-            continue
-        except requests.HTTPError as e:
-            # Don't retry on 4xx errors (client errors)
-            if e.response.status_code >= 400 and e.response.status_code < 500:
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            last_error = exc
+        except requests.HTTPError as exc:
+            status_code = getattr(exc.response, 'status_code', None)
+            if status_code is not None and 400 <= status_code < 500 and status_code != 429:
                 raise
-            last_error = e
-            if attempt < retries - 1:
-                time.sleep(2 ** attempt)
-            continue
+            last_error = exc
+        if attempt < retries - 1:
+            retry_after = 0.0
+            if response is not None:
+                retry_after_header = response.headers.get('Retry-After')
+                if retry_after_header:
+                    try:
+                        retry_after = float(retry_after_header)
+                    except ValueError:
+                        retry_after = 0.0
+            time.sleep(max(2 ** attempt, retry_after))
     # All retries exhausted
     raise last_error or RuntimeError(f"Failed to fetch from {url} after {retries} attempts")
+
+
+def _is_rate_limited(exc: Exception) -> bool:
+    return getattr(getattr(exc, 'response', None), 'status_code', None) == 429
+
+
+def _historical_archive_params(*, lat: float, lng: float, start_date: str, end_date: str) -> dict[str, Any]:
+    return {
+        'latitude': f'{lat:.4f}',
+        'longitude': f'{lng:.4f}',
+        'start_date': start_date,
+        'end_date': end_date,
+        'hourly': ','.join(ARCHIVE_HOURLY_VARS),
+        'timezone': 'UTC',
+    }
 
 
 def _hourly_payload_to_samples(payload: dict[str, Any]) -> list[HourlyWeatherSample]:
@@ -152,20 +183,37 @@ def fetch_forecast_weather_profile(region_center: tuple[float, float], forecast_
 
 def fetch_historical_weather_profile(lat: float, lng: float, timestamp: datetime) -> dict[str, Any]:
     target = _to_utc(timestamp)
-    payload = _fetch_open_meteo(
-        OPEN_METEO_HISTORICAL_FORECAST,
-        params={
-            'latitude': f'{lat:.4f}',
-            'longitude': f'{lng:.4f}',
-            'start_date': (target - timedelta(hours=12)).date().isoformat(),
-            'end_date': (target + timedelta(hours=12)).date().isoformat(),
-            'hourly': ','.join(ALL_HOURLY_VARS),
-            'timezone': 'UTC',
-        },
-    )
+    start_date = (target - timedelta(hours=12)).date().isoformat()
+    end_date = (target + timedelta(hours=12)).date().isoformat()
+    payload_source = 'open_meteo_historical_forecast_v1'
+    try:
+        payload = _fetch_open_meteo(
+            OPEN_METEO_HISTORICAL_FORECAST,
+            params={
+                'latitude': f'{lat:.4f}',
+                'longitude': f'{lng:.4f}',
+                'start_date': start_date,
+                'end_date': end_date,
+                'hourly': ','.join(ALL_HOURLY_VARS),
+                'timezone': 'UTC',
+            },
+        )
+    except requests.HTTPError as exc:
+        if not _is_rate_limited(exc):
+            raise
+        payload = _fetch_open_meteo(
+            OPEN_METEO_ARCHIVE,
+            params=_historical_archive_params(
+                lat=lat,
+                lng=lng,
+                start_date=start_date,
+                end_date=end_date,
+            ),
+        )
+        payload_source = 'open_meteo_historical_archive_fallback_v1'
     samples = _hourly_payload_to_samples(payload)
     return {
-        'source': 'open_meteo_historical_forecast_v1',
+        'source': payload_source,
         'latitude': lat,
         'longitude': lng,
         'samples': samples,
@@ -176,19 +224,36 @@ def fetch_historical_weather_profile(lat: float, lng: float, timestamp: datetime
 def fetch_historical_weather_window(lat: float, lng: float, start: datetime, end: datetime) -> dict[str, Any]:
     start_utc = _to_utc(start)
     end_utc = _to_utc(end)
-    payload = _fetch_open_meteo(
-        OPEN_METEO_HISTORICAL_FORECAST,
-        params={
-            'latitude': f'{lat:.4f}',
-            'longitude': f'{lng:.4f}',
-            'start_date': start_utc.date().isoformat(),
-            'end_date': end_utc.date().isoformat(),
-            'hourly': ','.join(ALL_HOURLY_VARS),
-            'timezone': 'UTC',
-        },
-    )
+    start_date = start_utc.date().isoformat()
+    end_date = end_utc.date().isoformat()
+    payload_source = 'open_meteo_historical_forecast_window_v1'
+    try:
+        payload = _fetch_open_meteo(
+            OPEN_METEO_HISTORICAL_FORECAST,
+            params={
+                'latitude': f'{lat:.4f}',
+                'longitude': f'{lng:.4f}',
+                'start_date': start_date,
+                'end_date': end_date,
+                'hourly': ','.join(ALL_HOURLY_VARS),
+                'timezone': 'UTC',
+            },
+        )
+    except requests.HTTPError as exc:
+        if not _is_rate_limited(exc):
+            raise
+        payload = _fetch_open_meteo(
+            OPEN_METEO_ARCHIVE,
+            params=_historical_archive_params(
+                lat=lat,
+                lng=lng,
+                start_date=start_date,
+                end_date=end_date,
+            ),
+        )
+        payload_source = 'open_meteo_historical_archive_window_fallback_v1'
     return {
-        'source': 'open_meteo_historical_forecast_window_v1',
+        'source': payload_source,
         'latitude': lat,
         'longitude': lng,
         'samples': _hourly_payload_to_samples(payload),
@@ -395,6 +460,7 @@ def build_real_feature_row(
     timestamp: datetime,
     lat: float,
     lng: float,
+    snowpack_proxy_override: SnowpackProxy | None = None,
 ) -> dict[str, Any]:
     terrain_elevation = float(terrain['elevation_m'])
     lapse = compute_dynamic_lapse_profile(weather_sample, terrain_elevation_m=terrain_elevation)
@@ -422,15 +488,18 @@ def build_real_feature_row(
     wind_loading_norm = _normalize(wind_loading_raw, 55.0)
     elevation_norm = _normalize(terrain_elevation, 5000.0)
 
-    snowpack_proxy = _cached_snowpack_proxy(
-        round(lat, 3),
-        round(lng, 3),
-        _to_utc(timestamp).isoformat(),
-        _normalize(snowfall_24h_cm, 40.0),
-        wind_loading_norm,
-        temp_gradient_norm,
-        elevation_norm,
-    )
+    if snowpack_proxy_override is not None:
+        snowpack_proxy = snowpack_proxy_override
+    else:
+        snowpack_proxy = _cached_snowpack_proxy(
+            round(lat, 3),
+            round(lng, 3),
+            _to_utc(timestamp).isoformat(),
+            _normalize(snowfall_24h_cm, 40.0),
+            wind_loading_norm,
+            temp_gradient_norm,
+            elevation_norm,
+        )
 
     feature_row = {
         'snowfall_24h': _normalize(snowfall_24h_cm, 40.0),
