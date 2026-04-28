@@ -607,6 +607,85 @@ class SarUnetWorkerTests(unittest.TestCase):
         self.assertEqual(report['dynamic_model_version'], 'mts_lstm_shadow_v1')
         self.assertEqual(run_python_module_mock.call_args.kwargs['args'], ['--dry-run'])
 
+    @patch('backend.sar_unet_worker._run_python_module')
+    def test_run_infer_mtslstm_honors_explicit_artifact_dir(self, run_python_module_mock) -> None:
+        run_python_module_mock.return_value = subprocess.CompletedProcess(
+            args=['python', '-m', 'backend.daily_inference'],
+            returncode=0,
+            stdout='inference ok\n',
+            stderr='',
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_root = Path(tmpdir)
+            artifact_dir = artifact_root / '20260425T010000Z'
+            artifact_dir.mkdir()
+            (artifact_dir / 'model.joblib').write_bytes(b'joblib-placeholder')
+            (artifact_dir / 'inference_manifest.json').write_text(
+                '{"regions_written":1,"total_cells_written":2,"dry_run":true,"completed_at":"2026-04-25T01:23:45+00:00"}',
+                encoding='utf-8',
+            )
+            (artifact_dir / 'forecast_grids.json').write_text(
+                json.dumps([
+                    {
+                        'region_key': 'davos',
+                        'grid_geojson': [
+                            {
+                                'row': 0,
+                                'col': 0,
+                                'dominant_driver_feature': 'snowfall_24h',
+                                'shap_values': {'snowfall_24h': 0.42},
+                                'shap_context': {'top_features': [{'feature': 'snowfall_24h', 'rank': 1}]},
+                            },
+                        ],
+                        'model_metadata': {
+                            'surrogate_model_version': 'rf_surrogate_v1',
+                            'dynamic_model_type': 'mts_lstm',
+                            'dynamic_model_version': 'mts_lstm_shadow_v1',
+                        },
+                    },
+                ]),
+                encoding='utf-8',
+            )
+
+            report = run_infer_mtslstm(
+                {
+                    'request_type': 'infer_mtslstm',
+                    'forecast_hours': 72,
+                    'dry_run': True,
+                    'shadow_mode': True,
+                    'artifact_dir': str(artifact_dir),
+                },
+                artifact_root=artifact_root,
+            )
+
+        self.assertEqual(report['status'], 'ok')
+        self.assertEqual(report['artifact_dir'], str(artifact_dir.resolve()))
+        self.assertEqual(
+            run_python_module_mock.call_args.kwargs['args'],
+            ['--dry-run', '--artifact-dir', str(artifact_dir.resolve())],
+        )
+
+    def test_run_infer_mtslstm_fails_closed_for_artifact_dir_outside_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_root = Path(tmpdir) / 'artifacts'
+            artifact_root.mkdir()
+            outside_dir = Path(tmpdir) / '20260425T010000Z'
+            outside_dir.mkdir()
+            (outside_dir / 'model.joblib').write_bytes(b'joblib-placeholder')
+
+            report = run_infer_mtslstm(
+                {
+                    'request_type': 'infer_mtslstm',
+                    'forecast_hours': 72,
+                    'dry_run': True,
+                    'shadow_mode': True,
+                    'artifact_dir': str(outside_dir),
+                },
+                artifact_root=artifact_root,
+            )
+
+        self.assertEqual(report['status'], 'failed')
+        self.assertIn('artifact_dir must resolve under', report['stderr_tail'][0])
 
     @patch('backend.sar_unet_worker.has_supabase_credentials', return_value=False)
     def test_flip_to_training_eligible_is_noop_without_credentials(self, _mock) -> None:

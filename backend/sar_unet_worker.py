@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 import numpy as np
 import requests
 
-from backend.common.artifacts import create_artifact_dir, dump_json, is_artifact_run_dir, latest_artifact_dir, load_joblib, load_json
+from backend.common.artifacts import create_artifact_dir, dump_json, is_artifact_run_dir, latest_artifact_dir, load_joblib, load_json, resolve_artifact_dir
 from backend.common.config import load_settings
 from backend.common.label_governance import materialize_label_governance
 from backend.common.sar_release_refs import load_reference_bundle, parse_storage_ref, reference_item_to_scene
@@ -1138,6 +1138,18 @@ def _load_inference_summary(artifact_dir: Path | None) -> tuple[dict[str, Any], 
     }
 
 
+def _resolve_requested_infer_artifact_dir(
+    request: dict[str, Any],
+    *,
+    artifact_root: Path,
+) -> tuple[Path | None, str | None]:
+    raw_artifact_dir = request.get('artifact_dir')
+    if raw_artifact_dir is None or not str(raw_artifact_dir).strip():
+        return None, None
+    resolved = resolve_artifact_dir(artifact_root, str(raw_artifact_dir), require_model=True)
+    return resolved, str(resolved)
+
+
 def run_train_mtslstm(
     request: dict[str, Any],
     *,
@@ -1214,19 +1226,56 @@ def run_infer_mtslstm(
     artifact_root.mkdir(parents=True, exist_ok=True)
     dry_run = _flag_from_payload(request.get('dry_run'), False)
     shadow_mode = _flag_from_payload(request.get('shadow_mode'), True)
+    forecast_hours = int(request.get('forecast_hours') or os.environ.get('FORECAST_HOURS') or '72')
+    requested_artifact_dir = request.get('artifact_dir')
+    try:
+        resolved_artifact_dir, resolved_artifact_dir_text = _resolve_requested_infer_artifact_dir(
+            request,
+            artifact_root=artifact_root,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        return {
+            'status': 'failed',
+            'request_type': str(request.get('request_type') or 'infer_mtslstm'),
+            'runtime_provider': 'modal',
+            'artifact_dir': str(requested_artifact_dir).strip() if requested_artifact_dir is not None else None,
+            'forecast_hours': forecast_hours,
+            'regions_written': None,
+            'total_cells_written': None,
+            'cells_with_shap': None,
+            'sample_dominant_driver': None,
+            'surrogate_model_version': None,
+            'dynamic_model_type': None,
+            'dynamic_model_version': None,
+            'completed_at': None,
+            'promotion_gate_passed': False,
+            'shadow_mode': shadow_mode,
+            'shadow_mode_active': shadow_mode,
+            'dry_run': dry_run,
+            'dataset_snapshot_id': None,
+            'stdout_tail': [],
+            'stderr_tail': [str(exc)],
+            'subprocess_returncode': None,
+        }
     env = os.environ.copy()
     env.update({
         'ARTIFACT_ROOT': str(artifact_root),
         'HAZARD_TYPE': str(request.get('hazard_type') or env.get('HAZARD_TYPE') or 'avalanche'),
-        'FORECAST_HOURS': str(int(request.get('forecast_hours') or env.get('FORECAST_HOURS') or '72')),
+        'FORECAST_HOURS': str(forecast_hours),
         'GRID_SIZE': str(int(request.get('grid_size') or env.get('GRID_SIZE') or '20')),
     })
-    args = ['--dry-run'] if dry_run else None
+    args: list[str] = []
+    if dry_run:
+        args.append('--dry-run')
+    if resolved_artifact_dir_text:
+        args.extend(['--artifact-dir', resolved_artifact_dir_text])
     completed = _run_python_module('backend.daily_inference', env=env, args=args)
-    try:
-        artifact_dir = latest_artifact_dir(artifact_root)
-    except Exception:
-        artifact_dir = None
+    artifact_dir = resolved_artifact_dir
+    if artifact_dir is None:
+        try:
+            artifact_dir = latest_artifact_dir(artifact_root)
+        except Exception:
+            artifact_dir = None
     inference_manifest = {}
     lstm_head_meta = {}
     if artifact_dir is not None:
@@ -1243,7 +1292,7 @@ def run_infer_mtslstm(
         'request_type': str(request.get('request_type') or 'infer_mtslstm'),
         'runtime_provider': 'modal',
         'artifact_dir': str(artifact_dir) if artifact_dir else None,
-        'forecast_hours': int(request.get('forecast_hours') or env.get('FORECAST_HOURS') or '72'),
+        'forecast_hours': forecast_hours,
         'regions_written': summary.get('regions_written'),
         'total_cells_written': summary.get('total_cells_written'),
         'cells_with_shap': summary.get('cells_with_shap'),

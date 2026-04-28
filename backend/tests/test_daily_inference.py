@@ -118,10 +118,10 @@ class ForecastGridMetadataTests(unittest.TestCase):
     @patch('backend.daily_inference.build_cells', return_value=[])
     @patch('backend.daily_inference.load_regions', return_value=[SimpleNamespace(key='davos', name='Davos')])
     @patch('backend.daily_inference.load_joblib', return_value={'created_at': '2026-04-25T00:00:00+00:00'})
-    @patch('backend.daily_inference.latest_artifact_dir')
+    @patch('backend.daily_inference.resolve_artifact_dir')
     def test_main_skips_model_status_publish_in_dry_run(
         self,
-        latest_artifact_dir_mock,
+        resolve_artifact_dir_mock,
         _load_joblib_mock,
         _load_regions_mock,
         _build_cells_mock,
@@ -130,12 +130,41 @@ class ForecastGridMetadataTests(unittest.TestCase):
         _has_creds_mock,
         patch_first_row_mock,
     ) -> None:
-        latest_artifact_dir_mock.return_value = Path('/tmp/fake-artifact-dir')
+        resolve_artifact_dir_mock.return_value = Path('/tmp/fake-artifact-dir')
 
         exit_code = main(['--dry-run'])
 
         self.assertEqual(exit_code, 0)
         self.assertTrue(upsert_forecast_grid_mock.call_args.kwargs['dry_run'])
+        patch_first_row_mock.assert_not_called()
+
+    @patch('backend.daily_inference.patch_first_row')
+    @patch('backend.daily_inference.has_supabase_credentials', return_value=True)
+    @patch('backend.daily_inference.dump_json')
+    @patch('backend.daily_inference.upsert_forecast_grid', return_value={'region_key': 'davos', 'region_name': 'Davos', 'forecast_date': '2026-04-25', 'horizon_hours': 72, 'grid_geojson': []})
+    @patch('backend.daily_inference.build_cells', return_value=[])
+    @patch('backend.daily_inference.load_regions', return_value=[SimpleNamespace(key='davos', name='Davos')])
+    @patch('backend.daily_inference.load_joblib', return_value={'created_at': '2026-04-25T00:00:00+00:00'})
+    @patch('backend.daily_inference.resolve_artifact_dir')
+    def test_main_honors_explicit_artifact_dir(
+        self,
+        resolve_artifact_dir_mock,
+        _load_joblib_mock,
+        _load_regions_mock,
+        _build_cells_mock,
+        _upsert_forecast_grid_mock,
+        _dump_json_mock,
+        _has_creds_mock,
+        patch_first_row_mock,
+    ) -> None:
+        artifact_dir = Path('/tmp/fake-artifact-dir')
+        resolve_artifact_dir_mock.return_value = artifact_dir
+
+        exit_code = main(['--dry-run', '--artifact-dir', str(artifact_dir)])
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(resolve_artifact_dir_mock.call_args.args[1], artifact_dir)
+        self.assertTrue(resolve_artifact_dir_mock.call_args.kwargs['require_model'])
         patch_first_row_mock.assert_not_called()
 
     @patch('backend.daily_inference._fetch_latest_sar_summary', return_value={})

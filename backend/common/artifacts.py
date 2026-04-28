@@ -31,6 +31,32 @@ def latest_artifact_dir(root: Path | None = None) -> Path:
     return candidates[-1]
 
 
+def resolve_artifact_dir(
+    root: Path | None = None,
+    requested: str | Path | None = None,
+    *,
+    require_model: bool = False,
+) -> Path:
+    artifact_root = (root or DEFAULT_ARTIFACT_ROOT).expanduser().resolve()
+    if requested is None or not str(requested).strip():
+        artifact_dir = latest_artifact_dir(artifact_root)
+    else:
+        raw_candidate = Path(str(requested).strip()).expanduser()
+        candidate = (artifact_root / raw_candidate) if not raw_candidate.is_absolute() else raw_candidate
+        artifact_dir = candidate.resolve()
+        try:
+            artifact_dir.relative_to(artifact_root)
+        except ValueError as exc:
+            raise ValueError(f'artifact_dir must resolve under {artifact_root}') from exc
+        if not artifact_dir.exists():
+            raise FileNotFoundError(f'artifact_dir not found: {artifact_dir}')
+        if not is_artifact_run_dir(artifact_dir):
+            raise ValueError(f'artifact_dir must point to an artifact run directory: {artifact_dir}')
+    if require_model and not (artifact_dir / 'model.joblib').is_file():
+        raise FileNotFoundError(f'model.joblib not found under artifact_dir: {artifact_dir}')
+    return artifact_dir
+
+
 def create_artifact_dir(root: Path | None = None) -> Path:
     artifact_root = root or DEFAULT_ARTIFACT_ROOT
     artifact_dir = artifact_root / timestamp_slug()

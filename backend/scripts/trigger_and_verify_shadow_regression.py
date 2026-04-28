@@ -29,8 +29,9 @@ def build_inference_payload(
     *,
     forecast_hours: int = DEFAULT_FORECAST_HOURS,
     grid_size: int = DEFAULT_GRID_SIZE,
+    artifact_dir: str | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload = {
         'request_type': 'infer_mtslstm',
         'forecast_hours': int(forecast_hours),
         'grid_size': int(grid_size),
@@ -38,6 +39,9 @@ def build_inference_payload(
         'dry_run': True,
         'allow_publish': False,
     }
+    if artifact_dir:
+        payload['artifact_dir'] = str(artifact_dir)
+    return payload
 
 
 def _response_payload(response: requests.Response) -> dict[str, Any]:

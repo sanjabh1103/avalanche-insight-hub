@@ -110,100 +110,138 @@ def run_remote_infer_mtslstm(
     return report
 
 
-def submit_train_mtslstm_job(payload: dict[str, Any]) -> dict[str, Any]:
+def _require_modal() -> Any:
     if modal is None:
-        raise RuntimeError('modal must be installed to submit remote MTS-LSTM jobs')
-    train_function = modal.Function.from_name(MODAL_APP_NAME, MODAL_REMOTE_TRAIN_FUNCTION)
-    call = train_function.spawn(payload)
+        raise RuntimeError('modal must be installed to submit or poll remote MTS-LSTM jobs')
+    return modal
+
+
+def _accepted_modal_job(call: Any, request_type: str) -> dict[str, Any]:
     return {
         'status': 'accepted',
         'call_id': str(call.object_id),
-        'request_type': 'train_mtslstm',
+        'request_type': request_type,
         'runtime_provider': 'modal',
     }
+
+
+def _pending_modal_job(call_id: str, request_type: str) -> dict[str, Any]:
+    return {
+        'status': 'pending',
+        'call_id': call_id,
+        'request_type': request_type,
+        'runtime_provider': 'modal',
+    }
+
+
+def _expired_modal_job(call_id: str, request_type: str) -> dict[str, Any]:
+    return {
+        'status': 'not_found',
+        'call_id': call_id,
+        'request_type': request_type,
+        'runtime_provider': 'modal',
+        'reason': 'result_expired',
+    }
+
+
+def _ok_modal_job(call_id: str, request_type: str, result: Any) -> dict[str, Any]:
+    if isinstance(result, dict):
+        return result
+    return {
+        'status': 'ok',
+        'call_id': call_id,
+        'request_type': request_type,
+        'runtime_provider': 'modal',
+        'result': result,
+    }
+
+
+def submit_train_mtslstm_job(payload: dict[str, Any]) -> dict[str, Any]:
+    modal_module = _require_modal()
+    train_function = modal_module.Function.from_name(MODAL_APP_NAME, MODAL_REMOTE_TRAIN_FUNCTION)
+    call = train_function.spawn(payload)
+    return _accepted_modal_job(call, 'train_mtslstm')
+
+
+async def submit_train_mtslstm_job_async(payload: dict[str, Any]) -> dict[str, Any]:
+    modal_module = _require_modal()
+    train_function = modal_module.Function.from_name(MODAL_APP_NAME, MODAL_REMOTE_TRAIN_FUNCTION)
+    call = await train_function.spawn.aio(payload)
+    return _accepted_modal_job(call, 'train_mtslstm')
 
 
 def poll_train_mtslstm_job(call_id: str) -> tuple[int, dict[str, Any]]:
-    if modal is None:
-        raise RuntimeError('modal must be installed to poll remote MTS-LSTM jobs')
-    function_call = modal.FunctionCall.from_id(call_id)
-    output_expired_error = getattr(getattr(modal, 'exception', None), 'OutputExpiredError', None)
+    modal_module = _require_modal()
+    function_call = modal_module.FunctionCall.from_id(call_id)
+    output_expired_error = getattr(getattr(modal_module, 'exception', None), 'OutputExpiredError', None)
     try:
         result = function_call.get(timeout=0)
     except TimeoutError:
-        return 202, {
-            'status': 'pending',
-            'call_id': call_id,
-            'request_type': 'train_mtslstm',
-            'runtime_provider': 'modal',
-        }
+        return 202, _pending_modal_job(call_id, 'train_mtslstm')
     except Exception as exc:
         if output_expired_error is not None and isinstance(exc, output_expired_error):
-            return 404, {
-                'status': 'not_found',
-                'call_id': call_id,
-                'request_type': 'train_mtslstm',
-                'runtime_provider': 'modal',
-                'reason': 'result_expired',
-            }
+            return 404, _expired_modal_job(call_id, 'train_mtslstm')
         raise
-    if isinstance(result, dict):
-        return 200, result
-    return 200, {
-        'status': 'ok',
-        'call_id': call_id,
-        'request_type': 'train_mtslstm',
-        'runtime_provider': 'modal',
-        'result': result,
-    }
+    return 200, _ok_modal_job(call_id, 'train_mtslstm', result)
+
+
+async def poll_train_mtslstm_job_async(call_id: str) -> tuple[int, dict[str, Any]]:
+    modal_module = _require_modal()
+    function_call = modal_module.FunctionCall.from_id(call_id)
+    output_expired_error = getattr(getattr(modal_module, 'exception', None), 'OutputExpiredError', None)
+    try:
+        result = await function_call.get.aio(timeout=0)
+    except TimeoutError:
+        return 202, _pending_modal_job(call_id, 'train_mtslstm')
+    except Exception as exc:
+        if output_expired_error is not None and isinstance(exc, output_expired_error):
+            return 404, _expired_modal_job(call_id, 'train_mtslstm')
+        raise
+    return 200, _ok_modal_job(call_id, 'train_mtslstm', result)
 
 
 def submit_infer_mtslstm_job(payload: dict[str, Any]) -> dict[str, Any]:
-    if modal is None:
-        raise RuntimeError('modal must be installed to submit remote MTS-LSTM inference jobs')
-    infer_function = modal.Function.from_name(MODAL_APP_NAME, MODAL_REMOTE_INFER_FUNCTION)
+    modal_module = _require_modal()
+    infer_function = modal_module.Function.from_name(MODAL_APP_NAME, MODAL_REMOTE_INFER_FUNCTION)
     call = infer_function.spawn(payload)
-    return {
-        'status': 'accepted',
-        'call_id': str(call.object_id),
-        'request_type': 'infer_mtslstm',
-        'runtime_provider': 'modal',
-    }
+    return _accepted_modal_job(call, 'infer_mtslstm')
+
+
+async def submit_infer_mtslstm_job_async(payload: dict[str, Any]) -> dict[str, Any]:
+    modal_module = _require_modal()
+    infer_function = modal_module.Function.from_name(MODAL_APP_NAME, MODAL_REMOTE_INFER_FUNCTION)
+    call = await infer_function.spawn.aio(payload)
+    return _accepted_modal_job(call, 'infer_mtslstm')
 
 
 def poll_infer_mtslstm_job(call_id: str) -> tuple[int, dict[str, Any]]:
-    if modal is None:
-        raise RuntimeError('modal must be installed to poll remote MTS-LSTM inference jobs')
-    function_call = modal.FunctionCall.from_id(call_id)
-    output_expired_error = getattr(getattr(modal, 'exception', None), 'OutputExpiredError', None)
+    modal_module = _require_modal()
+    function_call = modal_module.FunctionCall.from_id(call_id)
+    output_expired_error = getattr(getattr(modal_module, 'exception', None), 'OutputExpiredError', None)
     try:
         result = function_call.get(timeout=0)
     except TimeoutError:
-        return 202, {
-            'status': 'pending',
-            'call_id': call_id,
-            'request_type': 'infer_mtslstm',
-            'runtime_provider': 'modal',
-        }
+        return 202, _pending_modal_job(call_id, 'infer_mtslstm')
     except Exception as exc:
         if output_expired_error is not None and isinstance(exc, output_expired_error):
-            return 404, {
-                'status': 'not_found',
-                'call_id': call_id,
-                'request_type': 'infer_mtslstm',
-                'runtime_provider': 'modal',
-                'reason': 'result_expired',
-            }
+            return 404, _expired_modal_job(call_id, 'infer_mtslstm')
         raise
-    if isinstance(result, dict):
-        return 200, result
-    return 200, {
-        'status': 'ok',
-        'call_id': call_id,
-        'request_type': 'infer_mtslstm',
-        'runtime_provider': 'modal',
-        'result': result,
-    }
+    return 200, _ok_modal_job(call_id, 'infer_mtslstm', result)
+
+
+async def poll_infer_mtslstm_job_async(call_id: str) -> tuple[int, dict[str, Any]]:
+    modal_module = _require_modal()
+    function_call = modal_module.FunctionCall.from_id(call_id)
+    output_expired_error = getattr(getattr(modal_module, 'exception', None), 'OutputExpiredError', None)
+    try:
+        result = await function_call.get.aio(timeout=0)
+    except TimeoutError:
+        return 202, _pending_modal_job(call_id, 'infer_mtslstm')
+    except Exception as exc:
+        if output_expired_error is not None and isinstance(exc, output_expired_error):
+            return 404, _expired_modal_job(call_id, 'infer_mtslstm')
+        raise
+    return 200, _ok_modal_job(call_id, 'infer_mtslstm', result)
 
 
 def _route_handlers() -> dict[str, Callable[[dict[str, Any]], dict[str, Any]]]:
@@ -351,7 +389,7 @@ def create_fastapi_app(volume_reload: Callable[[], None] | None = None, volume_c
         if not isinstance(payload, dict):
             payload = {}
         try:
-            return submit_train_mtslstm_job(payload)
+            return await submit_train_mtslstm_job_async(payload)
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail={'status': 'misconfigured', 'reason': str(exc)}) from exc
 
@@ -359,7 +397,7 @@ def create_fastapi_app(volume_reload: Callable[[], None] | None = None, volume_c
     async def train_mtslstm_result(call_id: str, request: Request) -> Any:
         _authorize_or_raise(request.headers.get('Authorization'))
         try:
-            status_code, body = poll_train_mtslstm_job(call_id)
+            status_code, body = await poll_train_mtslstm_job_async(call_id)
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail={'status': 'misconfigured', 'reason': str(exc)}) from exc
         if status_code == 202:
@@ -375,7 +413,7 @@ def create_fastapi_app(volume_reload: Callable[[], None] | None = None, volume_c
         if not isinstance(payload, dict):
             payload = {}
         try:
-            return submit_infer_mtslstm_job(payload)
+            return await submit_infer_mtslstm_job_async(payload)
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail={'status': 'misconfigured', 'reason': str(exc)}) from exc
 
@@ -383,7 +421,7 @@ def create_fastapi_app(volume_reload: Callable[[], None] | None = None, volume_c
     async def infer_mtslstm_result(call_id: str, request: Request) -> Any:
         _authorize_or_raise(request.headers.get('Authorization'))
         try:
-            status_code, body = poll_infer_mtslstm_job(call_id)
+            status_code, body = await poll_infer_mtslstm_job_async(call_id)
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail={'status': 'misconfigured', 'reason': str(exc)}) from exc
         if status_code == 202:
@@ -423,8 +461,9 @@ if modal is not None:  # pragma: no cover - exercised in deployment, not local t
         image=image,
         secrets=_secrets,
         volumes={VOLUME_MOUNT: _artifact_volume},
-        gpu='T4',
-        timeout=7200,
+        cpu=1.0,
+        memory=1024,
+        timeout=300,
     )
     @modal.asgi_app()
     def worker_api() -> Any:

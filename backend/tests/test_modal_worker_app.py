@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import unittest
 from pathlib import Path
@@ -18,13 +19,17 @@ from backend.modal_worker_app import (
     handle_train_mtslstm,
     normalize_model_volume_path,
     poll_infer_mtslstm_job,
+    poll_infer_mtslstm_job_async,
     poll_train_mtslstm_job,
+    poll_train_mtslstm_job_async,
     run_remote_infer_mtslstm,
     run_remote_train_mtslstm,
     seed_dem_directory,
     seed_model_volume_file,
     submit_infer_mtslstm_job,
+    submit_infer_mtslstm_job_async,
     submit_train_mtslstm_job,
+    submit_train_mtslstm_job_async,
 )
 
 
@@ -91,13 +96,20 @@ class ModalWorkerAppTests(unittest.TestCase):
         class _FakeCall:
             object_id = 'fc-123'
 
-        class _FakeFunction:
+        class _FakeSpawn:
             def __init__(self) -> None:
                 self.payload = None
 
-            def spawn(self, payload):
+            def __call__(self, payload):
                 self.payload = payload
                 return _FakeCall()
+
+            async def aio(self, payload):
+                return self(payload)
+
+        class _FakeFunction:
+            def __init__(self) -> None:
+                self.spawn = _FakeSpawn()
 
         fake_function = _FakeFunction()
         fake_modal = SimpleNamespace(
@@ -111,12 +123,52 @@ class ModalWorkerAppTests(unittest.TestCase):
 
         self.assertEqual(result['status'], 'accepted')
         self.assertEqual(result['call_id'], 'fc-123')
-        self.assertEqual(fake_function.payload, {'dataset_snapshot_id': 'latest'})
+        self.assertEqual(fake_function.spawn.payload, {'dataset_snapshot_id': 'latest'})
+
+    def test_submit_train_mtslstm_job_async_returns_call_id(self) -> None:
+        class _FakeCall:
+            object_id = 'fc-123'
+
+        class _FakeSpawn:
+            def __init__(self) -> None:
+                self.payload = None
+
+            def __call__(self, payload):
+                self.payload = payload
+                return _FakeCall()
+
+            async def aio(self, payload):
+                return self(payload)
+
+        class _FakeFunction:
+            def __init__(self) -> None:
+                self.spawn = _FakeSpawn()
+
+        fake_function = _FakeFunction()
+        fake_modal = SimpleNamespace(
+            Function=SimpleNamespace(
+                from_name=lambda app_name, fn_name: fake_function,
+            ),
+        )
+
+        with patch('backend.modal_worker_app.modal', fake_modal):
+            result = asyncio.run(submit_train_mtslstm_job_async({'dataset_snapshot_id': 'latest'}))
+
+        self.assertEqual(result['status'], 'accepted')
+        self.assertEqual(result['call_id'], 'fc-123')
+        self.assertEqual(fake_function.spawn.payload, {'dataset_snapshot_id': 'latest'})
 
     def test_poll_train_mtslstm_job_returns_pending_on_timeout(self) -> None:
-        class _FakeFunctionCall:
-            def get(self, timeout: int = 0):
+        class _FakeGet:
+            def __call__(self, timeout: int = 0):
                 raise TimeoutError()
+
+            async def aio(self, timeout: int = 0):
+                raise TimeoutError()
+
+        class _FakeFunctionCall:
+            def __init__(self) -> None:
+                self.get = _FakeGet()
 
         fake_modal = SimpleNamespace(
             FunctionCall=SimpleNamespace(from_id=lambda call_id: _FakeFunctionCall()),
@@ -129,10 +181,40 @@ class ModalWorkerAppTests(unittest.TestCase):
         self.assertEqual(status_code, 202)
         self.assertEqual(body['status'], 'pending')
 
-    def test_poll_train_mtslstm_job_returns_result_when_complete(self) -> None:
+    def test_poll_train_mtslstm_job_async_returns_pending_on_timeout(self) -> None:
+        class _FakeGet:
+            def __call__(self, timeout: int = 0):
+                raise TimeoutError()
+
+            async def aio(self, timeout: int = 0):
+                raise TimeoutError()
+
         class _FakeFunctionCall:
-            def get(self, timeout: int = 0):
+            def __init__(self) -> None:
+                self.get = _FakeGet()
+
+        fake_modal = SimpleNamespace(
+            FunctionCall=SimpleNamespace(from_id=lambda call_id: _FakeFunctionCall()),
+            exception=SimpleNamespace(OutputExpiredError=RuntimeError),
+        )
+
+        with patch('backend.modal_worker_app.modal', fake_modal):
+            status_code, body = asyncio.run(poll_train_mtslstm_job_async('fc-123'))
+
+        self.assertEqual(status_code, 202)
+        self.assertEqual(body['status'], 'pending')
+
+    def test_poll_train_mtslstm_job_returns_result_when_complete(self) -> None:
+        class _FakeGet:
+            def __call__(self, timeout: int = 0):
                 return {'status': 'ok', 'artifact_dir': '/artifacts/20260427T000000Z'}
+
+            async def aio(self, timeout: int = 0):
+                return self(timeout)
+
+        class _FakeFunctionCall:
+            def __init__(self) -> None:
+                self.get = _FakeGet()
 
         fake_modal = SimpleNamespace(
             FunctionCall=SimpleNamespace(from_id=lambda call_id: _FakeFunctionCall()),
@@ -145,17 +227,47 @@ class ModalWorkerAppTests(unittest.TestCase):
         self.assertEqual(status_code, 200)
         self.assertEqual(body['status'], 'ok')
 
+    def test_poll_train_mtslstm_job_async_returns_result_when_complete(self) -> None:
+        class _FakeGet:
+            def __call__(self, timeout: int = 0):
+                return {'status': 'ok', 'artifact_dir': '/artifacts/20260427T000000Z'}
+
+            async def aio(self, timeout: int = 0):
+                return self(timeout)
+
+        class _FakeFunctionCall:
+            def __init__(self) -> None:
+                self.get = _FakeGet()
+
+        fake_modal = SimpleNamespace(
+            FunctionCall=SimpleNamespace(from_id=lambda call_id: _FakeFunctionCall()),
+            exception=SimpleNamespace(OutputExpiredError=RuntimeError),
+        )
+
+        with patch('backend.modal_worker_app.modal', fake_modal):
+            status_code, body = asyncio.run(poll_train_mtslstm_job_async('fc-123'))
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(body['status'], 'ok')
+
     def test_submit_infer_mtslstm_job_returns_call_id(self) -> None:
         class _FakeCall:
             object_id = 'fc-456'
 
-        class _FakeFunction:
+        class _FakeSpawn:
             def __init__(self) -> None:
                 self.payload = None
 
-            def spawn(self, payload):
+            def __call__(self, payload):
                 self.payload = payload
                 return _FakeCall()
+
+            async def aio(self, payload):
+                return self(payload)
+
+        class _FakeFunction:
+            def __init__(self) -> None:
+                self.spawn = _FakeSpawn()
 
         fake_function = _FakeFunction()
         fake_modal = SimpleNamespace(
@@ -169,12 +281,52 @@ class ModalWorkerAppTests(unittest.TestCase):
 
         self.assertEqual(result['status'], 'accepted')
         self.assertEqual(result['call_id'], 'fc-456')
-        self.assertEqual(fake_function.payload, {'forecast_hours': 72, 'dry_run': True})
+        self.assertEqual(fake_function.spawn.payload, {'forecast_hours': 72, 'dry_run': True})
+
+    def test_submit_infer_mtslstm_job_async_returns_call_id(self) -> None:
+        class _FakeCall:
+            object_id = 'fc-456'
+
+        class _FakeSpawn:
+            def __init__(self) -> None:
+                self.payload = None
+
+            def __call__(self, payload):
+                self.payload = payload
+                return _FakeCall()
+
+            async def aio(self, payload):
+                return self(payload)
+
+        class _FakeFunction:
+            def __init__(self) -> None:
+                self.spawn = _FakeSpawn()
+
+        fake_function = _FakeFunction()
+        fake_modal = SimpleNamespace(
+            Function=SimpleNamespace(
+                from_name=lambda app_name, fn_name: fake_function,
+            ),
+        )
+
+        with patch('backend.modal_worker_app.modal', fake_modal):
+            result = asyncio.run(submit_infer_mtslstm_job_async({'forecast_hours': 72, 'dry_run': True}))
+
+        self.assertEqual(result['status'], 'accepted')
+        self.assertEqual(result['call_id'], 'fc-456')
+        self.assertEqual(fake_function.spawn.payload, {'forecast_hours': 72, 'dry_run': True})
 
     def test_poll_infer_mtslstm_job_returns_pending_on_timeout(self) -> None:
-        class _FakeFunctionCall:
-            def get(self, timeout: int = 0):
+        class _FakeGet:
+            def __call__(self, timeout: int = 0):
                 raise TimeoutError()
+
+            async def aio(self, timeout: int = 0):
+                raise TimeoutError()
+
+        class _FakeFunctionCall:
+            def __init__(self) -> None:
+                self.get = _FakeGet()
 
         fake_modal = SimpleNamespace(
             FunctionCall=SimpleNamespace(from_id=lambda call_id: _FakeFunctionCall()),
@@ -187,10 +339,40 @@ class ModalWorkerAppTests(unittest.TestCase):
         self.assertEqual(status_code, 202)
         self.assertEqual(body['status'], 'pending')
 
-    def test_poll_infer_mtslstm_job_returns_result_when_complete(self) -> None:
+    def test_poll_infer_mtslstm_job_async_returns_pending_on_timeout(self) -> None:
+        class _FakeGet:
+            def __call__(self, timeout: int = 0):
+                raise TimeoutError()
+
+            async def aio(self, timeout: int = 0):
+                raise TimeoutError()
+
         class _FakeFunctionCall:
-            def get(self, timeout: int = 0):
+            def __init__(self) -> None:
+                self.get = _FakeGet()
+
+        fake_modal = SimpleNamespace(
+            FunctionCall=SimpleNamespace(from_id=lambda call_id: _FakeFunctionCall()),
+            exception=SimpleNamespace(OutputExpiredError=RuntimeError),
+        )
+
+        with patch('backend.modal_worker_app.modal', fake_modal):
+            status_code, body = asyncio.run(poll_infer_mtslstm_job_async('fc-456'))
+
+        self.assertEqual(status_code, 202)
+        self.assertEqual(body['status'], 'pending')
+
+    def test_poll_infer_mtslstm_job_returns_result_when_complete(self) -> None:
+        class _FakeGet:
+            def __call__(self, timeout: int = 0):
                 return {'status': 'ok', 'cells_with_shap': 400}
+
+            async def aio(self, timeout: int = 0):
+                return self(timeout)
+
+        class _FakeFunctionCall:
+            def __init__(self) -> None:
+                self.get = _FakeGet()
 
         fake_modal = SimpleNamespace(
             FunctionCall=SimpleNamespace(from_id=lambda call_id: _FakeFunctionCall()),
@@ -199,6 +381,30 @@ class ModalWorkerAppTests(unittest.TestCase):
 
         with patch('backend.modal_worker_app.modal', fake_modal):
             status_code, body = poll_infer_mtslstm_job('fc-456')
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(body['status'], 'ok')
+        self.assertEqual(body['cells_with_shap'], 400)
+
+    def test_poll_infer_mtslstm_job_async_returns_result_when_complete(self) -> None:
+        class _FakeGet:
+            def __call__(self, timeout: int = 0):
+                return {'status': 'ok', 'cells_with_shap': 400}
+
+            async def aio(self, timeout: int = 0):
+                return self(timeout)
+
+        class _FakeFunctionCall:
+            def __init__(self) -> None:
+                self.get = _FakeGet()
+
+        fake_modal = SimpleNamespace(
+            FunctionCall=SimpleNamespace(from_id=lambda call_id: _FakeFunctionCall()),
+            exception=SimpleNamespace(OutputExpiredError=RuntimeError),
+        )
+
+        with patch('backend.modal_worker_app.modal', fake_modal):
+            status_code, body = asyncio.run(poll_infer_mtslstm_job_async('fc-456'))
 
         self.assertEqual(status_code, 200)
         self.assertEqual(body['status'], 'ok')

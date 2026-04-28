@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from backend.common.artifacts import dump_json, latest_artifact_dir, load_joblib
+from backend.common.artifacts import dump_json, load_joblib, resolve_artifact_dir
 from backend.common.config import load_settings
 from backend.common.features import FEATURE_COLUMNS, build_region_grid
 from backend.common.real_features import (
@@ -565,13 +565,18 @@ def _upsert_shap_cache(region, bundle, forecast_date: pd.Timestamp, rows: list[d
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description='Generate forecast grids for Avalanche Insight Hub')
     parser.add_argument('--artifact-root', type=Path, default=load_settings().artifact_root)
+    parser.add_argument('--artifact-dir', type=Path)
     parser.add_argument('--forecast-hours', type=int, default=load_settings().forecast_horizon_hours)
     parser.add_argument('--grid-size', type=int, default=load_settings().grid_size)
     parser.add_argument('--dry-run', action='store_true', default=load_settings().dry_run)
     args = parser.parse_args(argv)
 
     try:
-        artifact_dir = latest_artifact_dir(args.artifact_root)
+        artifact_dir = resolve_artifact_dir(
+            args.artifact_root,
+            args.artifact_dir,
+            require_model=True,
+        )
         bundle = load_joblib(artifact_dir / 'model.joblib')
         # P2.2: Detect concept drift between the artifact's baked-in feature
         # column set and the currently deployed FEATURE_COLUMNS. If the hash
@@ -597,10 +602,16 @@ def main(argv: list[str] | None = None) -> int:
                 )
         except Exception as drift_exc:  # pragma: no cover - drift check is advisory
             print(f"[daily_inference] drift check skipped: {drift_exc}", file=sys.stderr)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
     except FileNotFoundError:
         raise RuntimeError(
-            'No trained model artifact is available. Run backend.train_model first; '
-            'daily inference no longer bootstraps a synthetic fallback model.'
+            (
+                f'No usable trained model artifact is available at {args.artifact_dir}.'
+                if args.artifact_dir
+                else 'No trained model artifact is available. Run backend.train_model first; '
+                'daily inference no longer bootstraps a synthetic fallback model.'
+            )
         )
     forecast_date = pd.Timestamp(datetime.now(timezone.utc))
     regions = load_regions()
