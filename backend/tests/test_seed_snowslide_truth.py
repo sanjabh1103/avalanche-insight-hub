@@ -243,6 +243,22 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
         (scene_root / 'vv.tif').write_bytes(self._geotiff_bytes(np.ones((4, 4), dtype=np.float32)))
         (scene_root / 'vh.tif').write_bytes(self._geotiff_bytes(np.zeros((4, 4), dtype=np.float32)))
 
+    def _write_avalcd_assembled_source_dir(self, root: Path) -> None:
+        scene_root = root / 'validation' / 'livigno' / 'livigno_20210101_001'
+        scene_root.mkdir(parents=True, exist_ok=True)
+        (scene_root / 'truth_mask.tif').write_bytes(self._geotiff_bytes(np.ones((4, 4), dtype=np.float32)))
+        payload = io.BytesIO()
+        np.savez_compressed(
+            payload,
+            stack=np.stack([
+                np.ones((4, 4), dtype=np.float32) * 1.0,
+                np.ones((4, 4), dtype=np.float32) * 2.0,
+                np.ones((4, 4), dtype=np.float32) * 3.0,
+                np.ones((4, 4), dtype=np.float32) * 4.0,
+            ], axis=0),
+        )
+        (scene_root / 'stack.npz').write_bytes(payload.getvalue())
+
     @patch('backend.scripts.seed_snowslide_truth.storage_upsert_json', return_value='sar-masks/heldout/snowslide/2026-04-25/reference_sets/snowslide-v1/registry.json')
     @patch('backend.scripts.seed_snowslide_truth.storage_upload_bytes')
     @patch('backend.scripts.seed_snowslide_truth.rest_upsert')
@@ -580,6 +596,34 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
         self.assertEqual(result['scene_count'], 1)
         self.assertEqual(storage_upload_bytes_mock.call_count, 2)
 
+    @patch('backend.scripts.seed_snowslide_truth.storage_upsert_json', return_value='sar-masks/heldout/snowslide/2026-04-25/reference_sets/snowslide-v1/registry.json')
+    @patch('backend.scripts.seed_snowslide_truth.storage_upload_bytes')
+    @patch('backend.scripts.seed_snowslide_truth.rest_upsert')
+    def test_seed_snowslide_truth_accepts_assembled_avalcd_source_dir_and_preserves_four_channel_stack(
+        self,
+        rest_upsert_mock,
+        storage_upload_bytes_mock,
+        _storage_upsert_json_mock,
+    ) -> None:
+        rest_upsert_mock.side_effect = [
+            [{'id': 'set-1', 'set_key': 'snowslide-v1', 'status': 'draft'}],
+            [{'id': 'item-1'}],
+            [{'id': 'set-1', 'set_key': 'snowslide-v1', 'status': 'draft'}],
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / 'assembled_seed_dir'
+            self._write_avalcd_assembled_source_dir(source_dir)
+
+            result = seed_snowslide_truth(self._build_args(source_dir=source_dir))
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(storage_upload_bytes_mock.call_count, 2)
+        stack_upload = storage_upload_bytes_mock.call_args_list[1].kwargs
+        uploaded_stack = np.load(io.BytesIO(stack_upload['payload']))['stack']
+        self.assertEqual(uploaded_stack.shape, (4, 4, 4))
+        self.assertAlmostEqual(float(uploaded_stack[0, 0, 0]), 1.0, places=5)
+        self.assertAlmostEqual(float(uploaded_stack[3, 0, 0]), 4.0, places=5)
+
     def test_validate_only_accepts_directory_assembled_from_truth_and_sar_archives(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
@@ -669,7 +713,26 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'optical/webcam imagery|optical datasets are invalid'):
                 validate_snowslide_archive(args)
 
-    def test_validate_only_rejects_non_two_channel_stack_payloads(self) -> None:
+    def test_validate_only_accepts_four_channel_stack_payloads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            archive_path = Path(tmpdir) / 'snowslide.zip'
+            self._write_archive(
+                archive_path,
+                scenes=[{
+                    'split': 'validation',
+                    'region_key': 'colorado_rockies',
+                    'scene_id': 'S1A_001',
+                    'truth_payload': b'geotiff-bytes',
+                    'stack_array': np.ones((4, 4, 4), dtype=np.float32),
+                }],
+            )
+            args = self._build_args(source_zip=archive_path)
+
+            result = validate_snowslide_archive(args)
+
+        self.assertEqual(result['status'], 'ok')
+
+    def test_validate_only_rejects_non_two_or_four_channel_stack_payloads(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             archive_path = Path(tmpdir) / 'snowslide.zip'
             self._write_archive(
@@ -684,7 +747,7 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
             )
             args = self._build_args(source_zip=archive_path)
 
-            with self.assertRaisesRegex(ValueError, '2-channel stack'):
+            with self.assertRaisesRegex(ValueError, '2-channel or 4-channel stack'):
                 validate_snowslide_archive(args)
 
     def test_validate_only_rejects_truth_only_archives_without_sar_payload(self) -> None:

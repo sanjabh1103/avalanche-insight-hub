@@ -139,6 +139,27 @@ class SarUnetWorkerTests(unittest.TestCase):
                 'channels': np.ones((2, 4, 4), dtype=np.float32),
             })
 
+    @patch('backend.sar_unet_worker.storage_download_bytes')
+    def test_load_bitemporal_scene_inputs_reads_storage_ref_four_channel_stack(self, storage_download_bytes_mock) -> None:
+        payload = io.BytesIO()
+        np.savez(payload, stack=np.stack([
+            np.ones((4, 4), dtype=np.float32) * 1.0,
+            np.ones((4, 4), dtype=np.float32) * 2.0,
+            np.ones((4, 4), dtype=np.float32) * 3.0,
+            np.ones((4, 4), dtype=np.float32) * 4.0,
+        ], axis=0))
+        storage_download_bytes_mock.return_value = payload.getvalue()
+
+        pre_stack, post_stack = load_bitemporal_scene_inputs({
+            'scene_id': 'S1A_004',
+            'stack_ref': 'sar-masks/heldout/snowslide/2026-04-25/validation/livigno/livigno_20210101_001/stack.npz',
+        })
+
+        self.assertEqual(pre_stack.shape, (2, 4, 4))
+        self.assertEqual(post_stack.shape, (2, 4, 4))
+        self.assertAlmostEqual(float(pre_stack[0, 0, 0]), 1.0, places=5)
+        self.assertAlmostEqual(float(post_stack[1, 0, 0]), 4.0, places=5)
+
     @patch('backend.sar_unet_worker.requests.get')
     def test_load_mask_array_reads_http_npy(self, requests_get_mock) -> None:
         payload = io.BytesIO()

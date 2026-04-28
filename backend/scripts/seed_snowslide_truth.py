@@ -468,6 +468,17 @@ def _single_band_array(array: np.ndarray, *, scene: ArchivedScene, member_name: 
     )
 
 
+def _normalize_seed_stack_payload(stack: Any) -> np.ndarray:
+    array = np.asarray(stack, dtype=np.float32)
+    if array.ndim != 3:
+        raise ValueError(f'expected a 2-channel or 4-channel stack, received shape {array.shape}')
+    if array.shape[0] == 2:
+        return _normalize_stack(array)
+    if array.shape[0] == 4:
+        return np.nan_to_num(array.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+    raise ValueError(f'expected a 2-channel or 4-channel stack, received shape {array.shape}')
+
+
 def _member_name_lookup(archive: zipfile.ZipFile) -> dict[str, str]:
     return {name.lower(): name for name in archive.namelist()}
 
@@ -507,7 +518,7 @@ def _stack_raster_grid_for_vector_truth(
                 f'"{scene.stack_member}" is not a GeoTIFF; vector truth requires a georeferenced SAR raster grid',
             )
         stack, out_shape, transform, crs = _load_stack_grid_from_geotiff_member(archive, scene.stack_member)
-        _normalize_stack(stack)
+        _normalize_seed_stack_payload(stack)
         if crs is None:
             raise ValueError(
                 f'scene "{scene.external_scene_id}" stack member "{scene.stack_member}" is missing a CRS; '
@@ -742,7 +753,7 @@ def _validate_scene_is_sar_compatible(archive: zipfile.ZipFile, scene: ArchivedS
         if stack_suffix in OPTICAL_SUFFIXES:
             raise ValueError(
                 f'scene "{scene.external_scene_id}" stack member "{scene.stack_member}" is optical imagery; '
-                'a Sentinel-1 SAR archive must provide a 2-channel stack or VV/VH bands',
+                'a Sentinel-1 SAR archive must provide a 2-channel or 4-channel stack, or VV/VH bands',
             )
         if stack_suffix not in SAR_STACK_SUFFIXES:
             raise ValueError(
@@ -750,7 +761,7 @@ def _validate_scene_is_sar_compatible(archive: zipfile.ZipFile, scene: ArchivedS
                 f'"{stack_suffix}"; expected .npz, .npy, .tif, or .tiff',
             )
         stack = _load_array_from_member_payload(archive.read(scene.stack_member), stack_suffix)
-        _normalize_stack(stack)
+        _normalize_seed_stack_payload(stack)
         return
 
     if not scene.vv_member or not scene.vh_member:
@@ -818,7 +829,7 @@ def _canonical_stack_payload(archive: zipfile.ZipFile, scene: ArchivedScene) -> 
             member_name=scene.vh_member,
         )
         stack = np.stack([vv, vh], axis=0)
-    normalized = _normalize_stack(stack)
+    normalized = _normalize_seed_stack_payload(stack)
     buffer = io.BytesIO()
     np.savez_compressed(buffer, stack=normalized.astype(np.float32))
     return buffer.getvalue()

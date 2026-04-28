@@ -10,6 +10,13 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+import numpy as np
+
+try:  # pragma: no cover - optional dependency at runtime
+    import rasterio
+except Exception:  # pragma: no cover - optional dependency
+    rasterio = None
+
 
 DOCUMENT_SUFFIXES = {'.md', '.pdf', '.txt'}
 VECTOR_TRUTH_SUFFIXES = {'.shp', '.geojson', '.json'}
@@ -36,6 +43,28 @@ class RasterPair:
     vh_path: Path
 
 
+@dataclass(frozen=True)
+class AvalcdScene:
+    split: str
+    region_key: str
+    scene_id: str
+    source_stem: str
+    truth_path: Path
+    pre_vv_path: Path
+    pre_vh_path: Path
+    post_vv_path: Path
+    post_vh_path: Path
+
+
+AVALCD_ROLE_PATTERNS: dict[str, re.Pattern[str]] = {
+    'truth': re.compile(r'(?i)^(?P<stem>.+?)[_-]gt$'),
+    'pre_vv': re.compile(r'(?i)^(?P<stem>.+?)[_-]prevv$'),
+    'pre_vh': re.compile(r'(?i)^(?P<stem>.+?)[_-]prevh$'),
+    'post_vv': re.compile(r'(?i)^(?P<stem>.+?)[_-]postvv$'),
+    'post_vh': re.compile(r'(?i)^(?P<stem>.+?)[_-]postvh$'),
+}
+
+
 def _extract_year_token(value: str) -> str | None:
     match = re.search(r'(?<!\d)((?:19|20)\d{2})(?!\d)', value)
     return match.group(1) if match else None
@@ -52,6 +81,37 @@ def _infer_region_key(path: Path) -> str:
     for part in reversed(path.parts[:-1]):
         slug = _slug(part)
         if slug and slug not in {'validation', 'val', 'test', 'heldout', 'truth', 'reference', 'references'}:
+            return slug
+    return 'heldout'
+
+
+def _infer_split_key(path: Path) -> str:
+    for part in path.parts:
+        lowered = part.lower()
+        if lowered == 'val':
+            return 'validation'
+        if lowered in {'validation', 'test'}:
+            return lowered
+    return 'validation'
+
+
+def _infer_avalcd_region_key(path: Path, *, split: str, source_stem: str) -> str:
+    parts = [part for part in path.parts[:-1] if part]
+    normalized_split = 'val' if split == 'validation' else split
+    for idx, part in enumerate(parts):
+        lowered = part.lower()
+        if lowered in {split, normalized_split} and idx + 1 < len(parts):
+            slug = _slug(parts[idx + 1])
+            if slug:
+                return slug
+    if parts:
+        slug = _slug(parts[-1])
+        if slug and slug not in {split, normalized_split}:
+            return slug
+    scene_parts = re.split(r'[_-]+', source_stem.strip())
+    if scene_parts:
+        slug = _slug(scene_parts[0])
+        if slug:
             return slug
     return 'heldout'
 
@@ -94,6 +154,16 @@ def _extract_plain_archive(source_zip: Path, destination: Path) -> None:
 
 def _iter_files(root: Path) -> list[Path]:
     return sorted(path for path in root.rglob('*') if path.is_file())
+
+
+def _avalcd_role_and_stem(path: Path) -> tuple[str, str] | None:
+    lowered = path.stem.lower()
+    for role, pattern in AVALCD_ROLE_PATTERNS.items():
+        match = pattern.match(lowered)
+        if match:
+            stem = match.group('stem')
+            return role, stem
+    return None
 
 
 def _truth_stem_family(path: Path) -> str:
@@ -163,6 +233,77 @@ def _discover_truth_scenes(truth_root: Path) -> dict[str, TruthScene]:
     return scenes
 
 
+def _discover_avalcd_scene_map(
+    root: Path,
+    *,
+    roles: set[str],
+) -> dict[tuple[str, str, str], dict[str, Path | str]]:
+    scenes: dict[tuple[str, str, str], dict[str, Path | str]] = {}
+    for path in _iter_files(root):
+        if path.suffix.lower() not in RASTER_SUFFIXES:
+            continue
+        role_and_stem = _avalcd_role_and_stem(path)
+        if role_and_stem is None:
+            continue
+        role, source_stem = role_and_stem
+        if role not in roles:
+            continue
+        split = _infer_split_key(path.relative_to(root))
+        region_key = _infer_avalcd_region_key(
+            path.relative_to(root),
+            split=split,
+            source_stem=source_stem,
+        )
+        scene_id = _slug(source_stem)
+        if not scene_id:
+            raise ValueError(f'could not derive scene_id from AvalCD member "{path.name}"')
+        key = (split, region_key, scene_id)
+        entry = scenes.setdefault(key, {
+            'split': split,
+            'region_key': region_key,
+            'scene_id': scene_id,
+            'source_stem': source_stem,
+        })
+        if role in entry:
+            raise ValueError(f'duplicate AvalCD member for role "{role}" in scene "{scene_id}"')
+        entry[role] = path
+    return scenes
+
+
+def _discover_avalcd_scenes(truth_root: Path, raster_root: Path) -> list[AvalcdScene]:
+    truth_map = _discover_avalcd_scene_map(truth_root, roles={'truth'})
+    raster_map = _discover_avalcd_scene_map(raster_root, roles={'pre_vv', 'pre_vh', 'post_vv', 'post_vh'})
+    if not truth_map or not raster_map:
+        return []
+
+    scenes: list[AvalcdScene] = []
+    for key, truth_entry in sorted(truth_map.items()):
+        raster_entry = raster_map.get(key)
+        if raster_entry is None:
+            split, region_key, scene_id = key
+            raise ValueError(f'AvalCD scene "{scene_id}" in region "{region_key}" split "{split}" is missing SAR members')
+        missing_roles = [
+            role for role in ('pre_vv', 'pre_vh', 'post_vv', 'post_vh')
+            if role not in raster_entry
+        ]
+        if missing_roles:
+            raise ValueError(
+                f'AvalCD scene "{truth_entry["scene_id"]}" is missing required members: {", ".join(missing_roles)}',
+            )
+        scenes.append(AvalcdScene(
+            split=str(truth_entry['split']),
+            region_key=str(truth_entry['region_key']),
+            scene_id=str(truth_entry['scene_id']),
+            source_stem=str(truth_entry['source_stem']),
+            truth_path=Path(truth_entry['truth']),
+            pre_vv_path=Path(raster_entry['pre_vv']),
+            pre_vh_path=Path(raster_entry['pre_vh']),
+            post_vv_path=Path(raster_entry['post_vv']),
+            post_vh_path=Path(raster_entry['post_vh']),
+        ))
+    return scenes
+
+
 def _band_from_name(path: Path) -> str | None:
     lowered = path.stem.lower()
     if re.search(r'(^|[_-])vv([_.-]|$)', lowered):
@@ -206,6 +347,54 @@ def _discover_raster_pairs(raster_root: Path) -> dict[str, RasterPair]:
     return raster_pairs
 
 
+def _load_single_band_geotiff(path: Path) -> tuple[np.ndarray, tuple[int, int], object, str]:
+    if rasterio is None:
+        raise RuntimeError('rasterio is required to assemble AvalCD GeoTIFF scenes')
+    with rasterio.open(path) as dataset:
+        data = np.asarray(dataset.read(), dtype=np.float32)
+        if data.ndim == 2:
+            band = data
+        elif data.ndim == 3 and data.shape[0] == 1:
+            band = np.asarray(data[0], dtype=np.float32)
+        else:
+            raise ValueError(f'AvalCD raster "{path.name}" must be a single-band GeoTIFF')
+        crs = str(dataset.crs) if dataset.crs is not None else ''
+        if not crs:
+            raise ValueError(f'AvalCD raster "{path.name}" is missing a CRS')
+        return band, (int(dataset.height), int(dataset.width)), dataset.transform, crs
+
+
+def _assemble_avalcd_scene(scene: AvalcdScene, destination: Path) -> None:
+    truth_band, truth_shape, truth_transform, truth_crs = _load_single_band_geotiff(scene.truth_path)
+    stack_bands: list[np.ndarray] = []
+    expected_shape: tuple[int, int] | None = None
+    expected_transform = None
+    expected_crs: str | None = None
+    for raster_path in (scene.pre_vv_path, scene.pre_vh_path, scene.post_vv_path, scene.post_vh_path):
+        band, shape, transform, crs = _load_single_band_geotiff(raster_path)
+        if expected_shape is None:
+            expected_shape = shape
+            expected_transform = transform
+            expected_crs = crs
+        elif shape != expected_shape or transform != expected_transform or crs != expected_crs:
+            raise ValueError(
+                f'AvalCD scene "{scene.scene_id}" has non-aligned SAR rasters; pre/post VV/VH members must share one grid/CRS',
+            )
+        stack_bands.append(band)
+    if truth_shape != expected_shape or truth_transform != expected_transform or truth_crs != expected_crs:
+        raise ValueError(
+            f'AvalCD scene "{scene.scene_id}" truth mask grid does not align with its SAR rasters',
+        )
+    destination.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(scene.truth_path, destination / 'truth_mask.tif')
+    stack_buffer = io.BytesIO()
+    np.savez_compressed(
+        stack_buffer,
+        stack=np.stack(stack_bands, axis=0).astype(np.float32),
+    )
+    (destination / 'stack.npz').write_bytes(stack_buffer.getvalue())
+
+
 def _copy_truth_scene(scene: TruthScene, destination: Path) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     if scene.shapefile_components:
@@ -234,6 +423,28 @@ def assemble_seed_archive(args: argparse.Namespace) -> dict[str, object]:
         raster_root = temp_root / 'sar'
         _extract_truth_archive(truth_zip, truth_root)
         _extract_plain_archive(sar_zip, raster_root)
+        avalcd_scenes = _discover_avalcd_scenes(truth_root, raster_root)
+        if avalcd_scenes:
+            if output_dir.exists():
+                shutil.rmtree(output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            assembled_scenes: list[dict[str, str]] = []
+            for scene in avalcd_scenes:
+                scene_root = output_dir / scene.split / scene.region_key / scene.scene_id
+                _assemble_avalcd_scene(scene, scene_root)
+                assembled_scenes.append({
+                    'split': scene.split,
+                    'region_key': scene.region_key,
+                    'scene_id': scene.scene_id,
+                    'layout': 'avalcd_bitemporal',
+                    'source_stem': scene.source_stem,
+                })
+            return {
+                'status': 'ok',
+                'output_dir': str(output_dir),
+                'scene_count': len(assembled_scenes),
+                'scenes': assembled_scenes,
+            }
         truth_scenes = _discover_truth_scenes(truth_root)
         raster_pairs = _discover_raster_pairs(raster_root)
 

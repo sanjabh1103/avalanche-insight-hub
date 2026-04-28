@@ -21,9 +21,9 @@ The target Supabase project must also contain the held-out registry tables creat
 ## In-Repo Operator Entry Points
 
 - `.github/workflows/bootstrap_pinned_gate.yml`
-  Temporary manual GitHub Actions workflow for cloud-to-cloud SnowSlide seeding when the archive is too large for local hardware. It downloads a truth/vector archive plus a separate Sentinel-1 VV/VH raster archive into the runner’s ephemeral storage, assembles a canonical held-out directory, runs a strict `--validate-only` preflight against that assembled directory, then either performs an authoritative activation with real SAR inputs or a non-authoritative canary run that leaves the set in `draft`.
+  Temporary manual GitHub Actions workflow for cloud-to-cloud SnowSlide seeding when the archive is too large for local hardware. It downloads a truth/vector archive plus a separate Sentinel-1 VV/VH raster archive into the runner’s ephemeral storage, or reuses one bundled AvalCD-style archive when both input URLs match, assembles a canonical held-out directory, runs a strict `--validate-only` preflight against that assembled directory, then either performs an authoritative activation with real SAR inputs or a non-authoritative canary run that leaves the set in `draft`.
 - `python -m backend.scripts.assemble_seed_archive`
-  Runner-side staging CLI. It unwraps the truth archive, extracts the SAR raster archive, pairs vector truth with year-matched VV/VH GeoTIFF rasters, and emits a canonical local held-out directory for seeding.
+  Runner-side staging CLI. It unwraps the truth archive, extracts the SAR raster archive, pairs vector truth with year-matched VV/VH GeoTIFF rasters, and emits a canonical local held-out directory for seeding. In bundled AvalCD mode it detects `_GT/_preVV/_preVH/_postVV/_postVH` scene families and materializes 4-channel temporal `stack.npz` payloads ordered as `[pre_vv, pre_vh, post_vv, post_vh]`.
 - `python -m backend.scripts.bootstrap_release_gate`
   Operator bootstrap CLI for the GitHub-first rollout path. It validates `.env`, syncs secrets into GitHub/Modal/Supabase, seeds the authoritative SnowSlide held-out registry from a local zip, deploys the Modal worker, seeds the DEM volume, and then stops at `refs_ready_only` until a real `SAR_UNET_MODEL_PATH` is configured.
 - `python -m backend.scripts.seed_snowslide_truth`
@@ -56,6 +56,7 @@ Trigger:
 Inputs:
 - `DATASET_URL` required
 - `SAR_RASTER_URL` required
+  Set this equal to `DATASET_URL` only when the archive itself already bundles truth plus the required Sentinel-1 SAR rasters, such as AvalCD.
 - `REFERENCE_SET_KEY` optional, defaults to `snowslide-heldout-v1`
 - `SOURCE_VERSION` optional; if blank, the workflow uses the current UTC date
 - `BOOTSTRAP_MODE` optional, defaults to `authoritative`; allowed values are `authoritative` and `canary`
@@ -63,6 +64,7 @@ Inputs:
 Security and source restrictions:
 - `DATASET_URL` must be a direct downloadable truth/vector archive URL, not a record landing page; it may point either to the original academic record or to a trusted cloud mirror of the same authoritative truth archive
 - `SAR_RASTER_URL` must be a direct downloadable Sentinel-1 VV/VH GeoTIFF archive URL; signed GCS or S3 URLs are preferred over public-read objects when you control the mirror
+  When `SAR_RASTER_URL == DATASET_URL`, the workflow enters bundled-archive mode and validates the shared URL against the truth-host allowlist instead of the stricter SAR-host allowlist.
 - `BOOTSTRAP_MODE=authoritative` is for real SAR activation only and is the only mode allowed to target `snowslide-heldout-v1`
 - `BOOTSTRAP_MODE=canary` is for synthetic or provisional SAR plumbing validation only; it must use a non-production `REFERENCE_SET_KEY` and leaves the seeded set in `draft`
 - the workflow assembles both sources into one canonical local dataset before preflight
@@ -92,7 +94,7 @@ Security and source restrictions:
 - the workflow rejects non-`https` URLs, custom ports, embedded credentials, and non-ZIP payloads for both sources
 
 Execution sequence:
-1. download `truth_archive.zip` and `sar_rasters.zip` into the runner workspace with quoted shell input
+1. download `truth_archive.zip` and `sar_rasters.zip` into the runner workspace with quoted shell input; when both URLs match, download once and reuse the same ZIP for both inputs
 2. verify both ZIP payloads and fail if the SAR raster archive lacks `.tif/.tiff` members
 3. run `python -m backend.scripts.assemble_seed_archive --truth-zip truth_archive.zip --sar-zip sar_rasters.zip --output-dir assembled_seed_dir`
 4. run `python -m backend.scripts.seed_snowslide_truth --source-dir assembled_seed_dir --validate-only ...`
@@ -186,9 +188,9 @@ Request body:
 Accepted scene payloads:
 - `channels` as `(2, H, W)` or `(H, W, 2)`
 - `vv` + `vh`
-- `stack_ref`, `stack_path`, or `stack_url` pointing to a two-channel array
+- `stack_ref`, `stack_path`, or `stack_url` pointing to either a two-channel VV/VH array or a four-channel temporal stack ordered as `[pre_vv, pre_vh, post_vv, post_vh]`
 
-The default `resnet34_unet` path consumes the two-channel VV/VH contract above. The `swinunet_tiny_diff` family is bi-temporal and expects either explicit pre/post inputs (`pre_channels` + `post_channels`, `pre_vv`/`pre_vh` + `post_vv`/`post_vh`, `pre_stack_ref` + `post_stack_ref`) or a 4-channel temporal stack ordered as `[pre_vv, pre_vh, post_vv, post_vh]`. The currently materialized held-out `stack.npz` assets remain 2-channel VV/VH, so switching the runtime family to `swinunet_tiny_diff` before a compatible checkpoint and temporal scene contract exist will fail closed.
+The default `resnet34_unet` path consumes the two-channel VV/VH contract above. The `swinunet_tiny_diff` family is bi-temporal and expects either explicit pre/post inputs (`pre_channels` + `post_channels`, `pre_vv`/`pre_vh` + `post_vv`/`post_vh`, `pre_stack_ref` + `post_stack_ref`) or a 4-channel temporal stack ordered as `[pre_vv, pre_vh, post_vv, post_vh]`. Legacy held-out `stack.npz` assets remain 2-channel VV/VH, while bundled AvalCD seeds materialize 4-channel temporal stacks directly for the Swin path.
 
 For authoritative held-out reruns, `sar-segment` may also receive:
 

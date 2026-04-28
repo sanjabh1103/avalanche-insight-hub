@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       SAR_RASTER_URL:
-        description: 'Direct Sentinel-1 VV/VH GeoTIFF archive URL on an allowlisted cloud or EO host; must contain one co-registered VV/VH pair for every truth year discovered'
+        description: 'Direct Sentinel-1 VV/VH GeoTIFF archive URL on an allowlisted cloud or EO host; use the same URL as DATASET_URL only for a bundled AvalCD-style archive that already contains truth plus bi-temporal SAR members'
         required: true
         type: string
       REFERENCE_SET_KEY:
@@ -146,7 +146,10 @@ jobs:
               print(f'validated {env_name}: {hostname}')
 
           validate_url('DATASET_URL', exact_hosts=truth_allowed_hosts, host_suffixes=truth_allowed_suffixes)
-          validate_url('SAR_RASTER_URL', exact_hosts=raster_allowed_hosts, host_suffixes=raster_allowed_suffixes)
+          if os.environ['DATASET_URL'] == os.environ['SAR_RASTER_URL']:
+              print('bundled archive mode: DATASET_URL and SAR_RASTER_URL match; reusing truth-host validation for SAR payload')
+          else:
+              validate_url('SAR_RASTER_URL', exact_hosts=raster_allowed_hosts, host_suffixes=raster_allowed_suffixes)
           PY
 
       - name: Download truth/vector archive
@@ -157,7 +160,11 @@ jobs:
       - name: Download Sentinel-1 VV/VH raster archive
         run: |
           set -euo pipefail
-          wget "${SAR_RASTER_URL}" -O sar_rasters.zip
+          if [ "${DATASET_URL}" = "${SAR_RASTER_URL}" ]; then
+            cp truth_archive.zip sar_rasters.zip
+          else
+            wget "${SAR_RASTER_URL}" -O sar_rasters.zip
+          fi
 
       - name: Verify ZIP payloads
         run: |

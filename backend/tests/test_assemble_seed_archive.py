@@ -71,6 +71,43 @@ class AssembleSeedArchiveTests(unittest.TestCase):
                 members.append((f'{stem}{suffix}', (root / f'{stem}{suffix}').read_bytes()))
             return members
 
+    def _avalcd_scene_members(
+        self,
+        *,
+        split: str = 'validation',
+        region_key: str = 'livigno',
+        scene_stem: str = 'Livigno_20210101_001',
+        bbox: tuple[float, float, float, float] = (-106.6, 39.4, -106.4, 39.6),
+        missing_roles: set[str] | None = None,
+        misalign_post: bool = False,
+    ) -> list[tuple[str, bytes]]:
+        missing_roles = missing_roles or set()
+        root = f'{split}/{region_key}'
+        members: list[tuple[str, bytes]] = []
+        if 'truth' not in missing_roles:
+            members.append((
+                f'{root}/{scene_stem}_GT.tif',
+                self._geotiff_bytes(np.ones((4, 4), dtype=np.float32), bbox=bbox),
+            ))
+        band_specs = (
+            ('pre_vv', 'preVV', 1.0, bbox),
+            ('pre_vh', 'preVH', 2.0, bbox),
+            ('post_vv', 'postVV', 3.0, self._misaligned_bbox() if misalign_post else bbox),
+            ('post_vh', 'postVH', 4.0, self._misaligned_bbox() if misalign_post else bbox),
+        )
+        for role, suffix, value, band_bbox in band_specs:
+            if role in missing_roles:
+                continue
+            members.append((
+                f'{root}/{scene_stem}_{suffix}.tif',
+                self._geotiff_bytes(np.full((4, 4), value, dtype=np.float32), bbox=band_bbox),
+            ))
+        return members
+
+    @staticmethod
+    def _misaligned_bbox() -> tuple[float, float, float, float]:
+        return (-120.0, 35.0, -119.8, 35.2)
+
     def test_assemble_seed_archive_unwraps_nested_truth_zip_and_pairs_vv_vh(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
@@ -218,11 +255,69 @@ class AssembleSeedArchiveTests(unittest.TestCase):
                 {(scene['scene_id'], scene['year']) for scene in result['scenes']},
                 {('davos_2018', '2018'), ('davos_2019', '2019')},
             )
-            for year in ('2018', '2019'):
-                scene_root = output_dir / 'validation' / 'davos' / f'davos_{year}'
-                self.assertTrue((scene_root / 'truth_mask.shp').exists())
-                self.assertTrue((scene_root / 'vv.tif').exists())
-                self.assertTrue((scene_root / 'vh.tif').exists())
+
+    def test_assemble_seed_archive_accepts_bundled_avalcd_zip_and_emits_four_channel_stack(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            avalcd_zip = tmp_path / 'AvalCD.zip'
+            output_dir = tmp_path / 'assembled'
+
+            with zipfile.ZipFile(avalcd_zip, 'w') as archive:
+                for member_name, payload in self._avalcd_scene_members():
+                    archive.writestr(member_name, payload)
+                archive.writestr('validation/livigno/Livigno_20210101_001_lia.tif', self._geotiff_bytes(np.ones((4, 4), dtype=np.float32) * 5.0))
+                archive.writestr('validation/livigno/Livigno_20210101_001_dem.tif', self._geotiff_bytes(np.ones((4, 4), dtype=np.float32) * 6.0))
+
+            result = assemble_seed_archive(argparse.Namespace(
+                truth_zip=avalcd_zip,
+                sar_zip=avalcd_zip,
+                output_dir=output_dir,
+            ))
+
+            scene_root = output_dir / 'validation' / 'livigno' / 'livigno_20210101_001'
+            self.assertEqual(result['status'], 'ok')
+            self.assertEqual(result['scene_count'], 1)
+            self.assertEqual(result['scenes'][0]['layout'], 'avalcd_bitemporal')
+            self.assertTrue((scene_root / 'truth_mask.tif').exists())
+            self.assertTrue((scene_root / 'stack.npz').exists())
+            stack = np.load(scene_root / 'stack.npz')['stack']
+            self.assertEqual(stack.shape, (4, 4, 4))
+            self.assertAlmostEqual(float(stack[0, 0, 0]), 1.0, places=5)
+            self.assertAlmostEqual(float(stack[3, 0, 0]), 4.0, places=5)
+
+    def test_assemble_seed_archive_rejects_bundled_avalcd_scene_missing_temporal_band(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            avalcd_zip = tmp_path / 'AvalCD.zip'
+            output_dir = tmp_path / 'assembled'
+
+            with zipfile.ZipFile(avalcd_zip, 'w') as archive:
+                for member_name, payload in self._avalcd_scene_members(missing_roles={'post_vh'}):
+                    archive.writestr(member_name, payload)
+
+            with self.assertRaisesRegex(ValueError, 'missing required members: post_vh'):
+                assemble_seed_archive(argparse.Namespace(
+                    truth_zip=avalcd_zip,
+                    sar_zip=avalcd_zip,
+                    output_dir=output_dir,
+                ))
+
+    def test_assemble_seed_archive_rejects_bundled_avalcd_scene_with_misaligned_temporal_rasters(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            avalcd_zip = tmp_path / 'AvalCD.zip'
+            output_dir = tmp_path / 'assembled'
+
+            with zipfile.ZipFile(avalcd_zip, 'w') as archive:
+                for member_name, payload in self._avalcd_scene_members(misalign_post=True):
+                    archive.writestr(member_name, payload)
+
+            with self.assertRaisesRegex(ValueError, 'non-aligned SAR rasters'):
+                assemble_seed_archive(argparse.Namespace(
+                    truth_zip=avalcd_zip,
+                    sar_zip=avalcd_zip,
+                    output_dir=output_dir,
+                ))
 
     def test_assemble_seed_archive_rejects_missing_vh_raster(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

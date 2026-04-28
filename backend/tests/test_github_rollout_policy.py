@@ -61,10 +61,12 @@ class GitHubRolloutPolicyTests(unittest.TestCase):
         self.assertIn("- canary", bootstrap_gate)
         self.assertIn('Direct truth/vector held-out archive URL on an allowlisted academic or trusted cloud mirror host', bootstrap_gate)
         self.assertIn(
-            'Direct Sentinel-1 VV/VH GeoTIFF archive URL on an allowlisted cloud or EO host; must contain one co-registered VV/VH pair for every truth year discovered',
+            'Direct Sentinel-1 VV/VH GeoTIFF archive URL on an allowlisted cloud or EO host; use the same URL as DATASET_URL only for a bundled AvalCD-style archive that already contains truth plus bi-temporal SAR members',
             bootstrap_gate,
         )
         self.assertIn("wget \"${DATASET_URL}\" -O truth_archive.zip", bootstrap_gate)
+        self.assertIn('if [ "${DATASET_URL}" = "${SAR_RASTER_URL}" ]; then', bootstrap_gate)
+        self.assertIn('cp truth_archive.zip sar_rasters.zip', bootstrap_gate)
         self.assertIn("wget \"${SAR_RASTER_URL}\" -O sar_rasters.zip", bootstrap_gate)
         for host in (
             'envidat.ch',
@@ -80,6 +82,7 @@ class GitHubRolloutPolicyTests(unittest.TestCase):
         ):
             self.assertIn(host, bootstrap_gate)
         self.assertIn("validate_url('DATASET_URL', exact_hosts=truth_allowed_hosts, host_suffixes=truth_allowed_suffixes)", bootstrap_gate)
+        self.assertIn("if os.environ['DATASET_URL'] == os.environ['SAR_RASTER_URL']:", bootstrap_gate)
         self.assertIn('backend.scripts.assemble_seed_archive', bootstrap_gate)
         self.assertIn('backend.scripts.seed_snowslide_truth', bootstrap_gate)
         self.assertIn('--validate-only', bootstrap_gate)
