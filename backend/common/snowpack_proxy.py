@@ -29,6 +29,8 @@ OPEN_METEO_ARCHIVE = 'https://archive-api.open-meteo.com/v1/archive'
 OPEN_METEO_TIMEOUT = float(os.getenv('OPEN_METEO_TIMEOUT', '8'))
 OPEN_METEO_RETRIES = int(os.getenv('OPEN_METEO_RETRIES', '3'))
 OPEN_METEO_BATCH_SIZE = 50
+OPEN_METEO_MINUTE_BUDGET = int(os.getenv('OPEN_METEO_MINUTE_BUDGET', '480'))
+OPEN_METEO_WINDOW_SECONDS = 60.0
 OPEN_METEO_DAILY_VARS = (
     'temperature_2m_mean',
     'temperature_2m_min',
@@ -119,6 +121,13 @@ def _normalize_archive_batch_payload(payload: Any, *, expected_count: int) -> li
     if not all(isinstance(item, dict) for item in items):
         raise RuntimeError('Open-Meteo archive payload contains non-object entries')
     return items
+
+
+def _estimate_archive_call_units(*, location_count: int, season_start: date, as_of: datetime) -> int:
+    day_span = max(1, (as_of.date() - season_start).days + 1)
+    duration_multiplier = max(1, math.ceil(day_span / 14.0))
+    variable_multiplier = max(1.0, len(OPEN_METEO_DAILY_VARS) / 10.0)
+    return max(1, int(math.ceil(location_count * duration_multiplier * variable_multiplier)))
 
 
 def _fetch_seasonal_weather(lat: float, lng: float, season_start: date, as_of: datetime) -> dict | None:
@@ -217,14 +226,40 @@ def fetch_batched_cell_snowpack_proxies_strict(
         raise ValueError('batch_size must be positive')
 
     season_start = winter_season_start(as_of)
+    per_location_units = _estimate_archive_call_units(
+        location_count=1,
+        season_start=season_start,
+        as_of=as_of,
+    )
+    effective_batch_size = min(
+        batch_size,
+        max(1, OPEN_METEO_MINUTE_BUDGET // per_location_units),
+    )
     proxies: list[SnowpackProxy] = []
-    for offset in range(0, len(coords), batch_size):
-        batch = coords[offset:offset + batch_size]
+    window_started = time.monotonic()
+    units_used_in_window = 0
+    for offset in range(0, len(coords), effective_batch_size):
+        if time.monotonic() - window_started >= OPEN_METEO_WINDOW_SECONDS:
+            window_started = time.monotonic()
+            units_used_in_window = 0
+        batch = coords[offset:offset + effective_batch_size]
+        estimated_units = _estimate_archive_call_units(
+            location_count=len(batch),
+            season_start=season_start,
+            as_of=as_of,
+        )
+        if units_used_in_window and units_used_in_window + estimated_units > OPEN_METEO_MINUTE_BUDGET:
+            sleep_seconds = max(0.0, OPEN_METEO_WINDOW_SECONDS - (time.monotonic() - window_started))
+            if sleep_seconds > 0:
+                time.sleep(sleep_seconds)
+            window_started = time.monotonic()
+            units_used_in_window = 0
         latitudes = [float(lat) for lat, _ in batch]
         longitudes = [float(lng) for _, lng in batch]
         payload = _fetch_archive_payload(
             params=_archive_request_params(latitudes, longitudes, season_start, as_of),
         )
+        units_used_in_window += estimated_units
         items = _normalize_archive_batch_payload(payload, expected_count=len(batch))
         for batch_index, item in enumerate(items):
             daily = item.get('daily')

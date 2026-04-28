@@ -55,26 +55,29 @@ class SnowpackProxyBatchTests(unittest.TestCase):
         self.assertEqual(params['latitude'], '46.8000,46.9000')
         self.assertEqual(params['longitude'], '9.8000,9.9000')
 
-    def test_fetch_batched_cell_snowpack_proxies_strict_chunks_requests_at_fifty(self) -> None:
-        first_batch = [_daily_payload() for _ in range(50)]
-        second_batch = [_daily_payload(temp_mean=-2.0, snowfall=6.0)]
+    def test_fetch_batched_cell_snowpack_proxies_strict_respects_minute_budget(self) -> None:
+        first_batch = [_daily_payload() for _ in range(36)]
+        second_batch = [_daily_payload(temp_mean=-2.0, snowfall=6.0) for _ in range(15)]
 
-        with patch.object(
-            snowpack_proxy.requests,
-            'get',
-            side_effect=[FakeResponse(200, first_batch), FakeResponse(200, second_batch)],
-        ) as get_mock:
-            proxies = fetch_batched_cell_snowpack_proxies_strict(
-                coordinates=[(46.8 + idx * 0.001, 9.8 + idx * 0.001) for idx in range(51)],
-                as_of=datetime(2026, 4, 28, tzinfo=timezone.utc),
-            )
+        with patch.object(snowpack_proxy, 'OPEN_METEO_MINUTE_BUDGET', 480):
+            with patch.object(
+                snowpack_proxy.requests,
+                'get',
+                side_effect=[FakeResponse(200, first_batch), FakeResponse(200, second_batch)],
+            ) as get_mock:
+                with patch.object(snowpack_proxy.time, 'sleep', return_value=None) as sleep_mock:
+                    proxies = fetch_batched_cell_snowpack_proxies_strict(
+                        coordinates=[(46.8 + idx * 0.001, 9.8 + idx * 0.001) for idx in range(51)],
+                        as_of=datetime(2026, 4, 28, tzinfo=timezone.utc),
+                    )
 
         self.assertEqual(len(proxies), 51)
         self.assertEqual(get_mock.call_count, 2)
         first_params = get_mock.call_args_list[0].kwargs['params']
         second_params = get_mock.call_args_list[1].kwargs['params']
-        self.assertEqual(first_params['latitude'].count(','), 49)
-        self.assertEqual(second_params['latitude'], '46.8500')
+        self.assertEqual(first_params['latitude'].count(','), 35)
+        self.assertEqual(second_params['latitude'].count(','), 14)
+        sleep_mock.assert_called_once()
 
     def test_fetch_batched_cell_snowpack_proxies_strict_retries_rate_limits(self) -> None:
         transient = FakeResponse(429, {'error': 'rate limited'}, headers={'Retry-After': '0'})
