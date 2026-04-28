@@ -159,6 +159,24 @@ class ExtractCellTerrainTests(unittest.TestCase):
                 nodata=None,
             )
 
+    def test_find_valid_window_searches_far_enough_to_escape_large_nodata_gap(self) -> None:
+        array = np.ones((100, 100), dtype=np.float32)
+        array[40:61, 40:61] = np.nan
+
+        row, col, window, radius, adjusted = _find_valid_window(
+            array,
+            row=50,
+            col=50,
+            nodata=None,
+        )
+
+        self.assertLessEqual(row, 39)
+        self.assertLessEqual(col, 39)
+        self.assertGreaterEqual(radius, 11)
+        self.assertFalse(adjusted)
+        self.assertEqual(window.shape, (3, 3))
+        self.assertFalse(np.isnan(window).any())
+
     @unittest.skipIf(importlib.util.find_spec('rasterio') is None, 'rasterio is not installed in the active test environment')
     def test_extracts_elevation_slope_aspect_and_roughness(self) -> None:
         import rasterio

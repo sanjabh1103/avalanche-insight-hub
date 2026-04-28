@@ -360,7 +360,7 @@ def _find_valid_window(
     row: int,
     col: int,
     nodata: float | None,
-    max_radius: int = 4,
+    max_radius: int = 64,
     boundary_buffer: int = 2,
 ) -> tuple[int, int, np.ndarray, int, bool]:
     height, width = array.shape
