@@ -8,6 +8,10 @@ export interface GridCell {
   latEnd: number;
   lngEnd: number;
   riskScore: number;
+  status?: string;
+  stale?: boolean;
+  disabled?: boolean;
+  availabilityReason?: string | null;
   hazard: number;
   exposure: number;
   vulnerability: number;
@@ -123,7 +127,18 @@ function normalizeUncertaintyClass(span: number | undefined): 'low' | 'medium' |
 function normalizeCell(cell: Partial<GridCell> & Record<string, unknown>): GridCell {
   const row = Number(cell.row ?? 0);
   const col = Number(cell.col ?? 0);
-  const riskScore = Number(cell.riskScore ?? cell.risk_score ?? 1);
+  const status = typeof cell.status === 'string' ? String(cell.status) : undefined;
+  const availabilityReason = typeof cell.availabilityReason === 'string'
+    ? cell.availabilityReason
+    : (typeof cell.availability_reason === 'string' ? String(cell.availability_reason) : null);
+  const stale = typeof cell.stale === 'boolean'
+    ? cell.stale
+    : status !== undefined && status !== 'ready';
+  const disabled = typeof cell.disabled === 'boolean'
+    ? cell.disabled
+    : status === 'unavailable_terrain' || availabilityReason !== null;
+  const defaultRiskScore = disabled ? 0 : 1;
+  const riskScore = Number(cell.riskScore ?? cell.risk_score ?? defaultRiskScore);
   const probability = cell.probability !== undefined ? Number(cell.probability) : (cell.probability as number | undefined) ?? (cell['probability'] as number | undefined);
   const confidenceLower = cell.confidenceLower !== undefined
     ? Number(cell.confidenceLower)
@@ -144,7 +159,11 @@ function normalizeCell(cell: Partial<GridCell> & Record<string, unknown>): GridC
     lng: Number(cell.lng ?? 0),
     latEnd: Number(cell.latEnd ?? cell.lat_end ?? 0),
     lngEnd: Number(cell.lngEnd ?? cell.lng_end ?? 0),
-    riskScore: Number.isFinite(riskScore) ? riskScore : 1,
+    riskScore: Number.isFinite(riskScore) ? riskScore : defaultRiskScore,
+    status,
+    stale,
+    disabled,
+    availabilityReason,
     hazard: Number(cell.hazard ?? 0),
     exposure: Number(cell.exposure ?? 0),
     vulnerability: Number(cell.vulnerability ?? 0),
@@ -276,7 +295,15 @@ function normalizeSnowpackProxy(value: unknown): GridCell['snowpackProxy'] {
 
 export function forecastGridRowToCells(row: ForecastGridRowRecord): GridCell[] {
   if (!Array.isArray(row.grid_geojson)) return [];
-  return row.grid_geojson.map((cell) => normalizeCell(cell as Partial<GridCell> & Record<string, unknown>));
+  const metadata = row.model_metadata && typeof row.model_metadata === 'object' && !Array.isArray(row.model_metadata)
+    ? row.model_metadata as Record<string, unknown>
+    : {};
+  return row.grid_geojson.map((cell) => normalizeCell({
+    ...(cell as Partial<GridCell> & Record<string, unknown>),
+    dynamic_model_type: (cell as Record<string, unknown>).dynamic_model_type ?? metadata.dynamic_model_type,
+    dynamic_model_version: (cell as Record<string, unknown>).dynamic_model_version ?? metadata.dynamic_model_version,
+    surrogate_model_version: (cell as Record<string, unknown>).surrogate_model_version ?? metadata.surrogate_model_version,
+  }));
 }
 
 export function forecastGridRowToHourlyGrids(row: ForecastGridRowRecord): GridCell[][] {
@@ -390,4 +417,13 @@ export function generateForecastGrid(
 
 export function getRiskColor(score: number): string {
   return RISK_COLORS[Math.max(1, Math.min(5, Math.round(score)))] || RISK_COLORS[1];
+}
+
+export function isCellUnavailable(cell: Pick<GridCell, 'status' | 'stale' | 'disabled' | 'availabilityReason'> | null | undefined): boolean {
+  if (!cell) return false;
+  return Boolean(
+    cell.disabled
+    || cell.status === 'unavailable_terrain'
+    || cell.availabilityReason
+  );
 }

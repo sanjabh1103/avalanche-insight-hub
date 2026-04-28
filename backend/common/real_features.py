@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -20,6 +21,7 @@ OPEN_METEO_ARCHIVE = 'https://archive-api.open-meteo.com/v1/archive'
 OPEN_METEO_TIMEOUT = 20.0
 STANDARD_LAPSE_RATE_C_PER_M = -0.0065
 PRESSURE_LEVELS = ('1000hPa', '925hPa', '850hPa', '700hPa')
+DEM_MAX_SEARCH_DISTANCE_M = float(os.getenv('DEM_MAX_SEARCH_DISTANCE_M', '50'))
 
 SURFACE_HOURLY_VARS = (
     'temperature_2m',
@@ -54,6 +56,10 @@ ARCHIVE_HOURLY_VARS = (
 class HourlyWeatherSample:
     timestamp: str
     values: dict[str, float]
+
+
+class TerrainUnavailableError(ValueError):
+    """Raised when no physically defensible DEM window exists near a cell."""
 
 
 def _to_utc(dt: datetime) -> datetime:
@@ -362,15 +368,24 @@ def _find_valid_window(
     nodata: float | None,
     max_radius: int = 256,
     boundary_buffer: int = 2,
-) -> tuple[int, int, np.ndarray, int, bool]:
+    px_size_x_m: float = 1.0,
+    px_size_y_m: float = 1.0,
+    max_search_distance_m: float | None = None,
+) -> tuple[int, int, np.ndarray, int, bool, float]:
     height, width = array.shape
     if row < -boundary_buffer or row > height - 1 + boundary_buffer or col < -boundary_buffer or col > width - 1 + boundary_buffer:
         raise ValueError('Point lies too far outside the DEM coverage to clamp safely')
     clamped_row = max(1, min(height - 2, row))
     clamped_col = max(1, min(width - 2, col))
     adjusted = clamped_row != row or clamped_col != col
+    effective_max_radius = max_radius
+    if max_search_distance_m is not None:
+        min_px = min(abs(px_size_x_m), abs(px_size_y_m))
+        if min_px <= 0:
+            raise ValueError('DEM pixel size must be positive')
+        effective_max_radius = min(max_radius, max(0, int(math.ceil(max_search_distance_m / min_px))))
 
-    for radius in range(0, max_radius + 1):
+    for radius in range(0, effective_max_radius + 1):
         for d_row in range(-radius, radius + 1):
             for d_col in range(-radius, radius + 1):
                 if max(abs(d_row), abs(d_col)) != radius:
@@ -379,9 +394,12 @@ def _find_valid_window(
                 sample_col = clamped_col + d_col
                 if sample_row < 1 or sample_row >= height - 1 or sample_col < 1 or sample_col >= width - 1:
                     continue
+                distance_m = math.hypot(abs(d_col) * px_size_x_m, abs(d_row) * px_size_y_m)
+                if max_search_distance_m is not None and distance_m > max_search_distance_m:
+                    continue
                 window = array[sample_row - 1:sample_row + 2, sample_col - 1:sample_col + 2]
                 if _window_is_valid(window, nodata):
-                    return sample_row, sample_col, window, radius, adjusted
+                    return sample_row, sample_col, window, radius, adjusted, float(distance_m)
 
     raise ValueError('Unable to locate a valid 3x3 DEM window near the requested point')
 
@@ -409,20 +427,35 @@ def _cached_snowpack_proxy(
     )
 
 
-def extract_cell_terrain(dem_path: str, lat: float, lng: float) -> dict[str, float]:
+def extract_cell_terrain(
+    dem_path: str,
+    lat: float,
+    lng: float,
+    *,
+    max_search_distance_m: float | None = None,
+) -> dict[str, float]:
     cache = _dem_cache(dem_path)
     array = cache['array']
     transform = cache['transform']
     px_size_x_m = cache['px_size_x_m']
     px_size_y_m = cache['px_size_y_m']
+    strict_radius_m = DEM_MAX_SEARCH_DISTANCE_M if max_search_distance_m is None else max_search_distance_m
 
     col_f, row_f = (~transform) * (lng, lat)
-    row, col, win, search_radius, adjusted = _find_valid_window(
-        array,
-        row=int(round(row_f)),
-        col=int(round(col_f)),
-        nodata=cache['nodata'],
-    )
+    try:
+        row, col, win, search_radius, adjusted, search_distance_m = _find_valid_window(
+            array,
+            row=int(round(row_f)),
+            col=int(round(col_f)),
+            nodata=cache['nodata'],
+            px_size_x_m=px_size_x_m,
+            px_size_y_m=px_size_y_m,
+            max_search_distance_m=strict_radius_m,
+        )
+    except ValueError as exc:
+        raise TerrainUnavailableError(
+            f'No valid DEM window found within {strict_radius_m:.1f}m of ({lat:.5f}, {lng:.5f}) in {dem_path}'
+        ) from exc
     nodata = cache['nodata']
 
     dzdx = ((win[0, 2] + 2 * win[1, 2] + win[2, 2]) - (win[0, 0] + 2 * win[1, 0] + win[2, 0])) / (8.0 * px_size_x_m)
@@ -450,6 +483,8 @@ def extract_cell_terrain(dem_path: str, lat: float, lng: float) -> dict[str, flo
         'clamped_to_bounds': float(1 if adjusted else 0),
         'window_search_needed': float(1 if search_radius > 0 else 0),
         'search_radius_px': float(search_radius),
+        'search_radius_m': float(search_distance_m),
+        'max_search_radius_m': float(strict_radius_m),
     }
 
 

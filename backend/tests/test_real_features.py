@@ -13,6 +13,7 @@ import requests
 
 from backend.common import real_features
 from backend.common.real_features import (
+    TerrainUnavailableError,
     _fetch_open_meteo,
     _find_valid_window,
     compute_dynamic_lapse_profile,
@@ -135,7 +136,7 @@ class ExtractCellTerrainTests(unittest.TestCase):
     def test_find_valid_window_clamps_out_of_bounds_indices(self) -> None:
         array = np.arange(25, dtype=np.float32).reshape(5, 5)
 
-        row, col, window, radius, adjusted = _find_valid_window(
+        row, col, window, radius, adjusted, distance_m = _find_valid_window(
             array,
             row=0,
             col=0,
@@ -145,6 +146,7 @@ class ExtractCellTerrainTests(unittest.TestCase):
         self.assertEqual((row, col), (1, 1))
         self.assertEqual(radius, 0)
         self.assertTrue(adjusted)
+        self.assertEqual(distance_m, 0.0)
         self.assertEqual(window.shape, (3, 3))
         self.assertEqual(window[1, 1], 6.0)
 
@@ -163,7 +165,7 @@ class ExtractCellTerrainTests(unittest.TestCase):
         array = np.ones((100, 100), dtype=np.float32)
         array[40:61, 40:61] = np.nan
 
-        row, col, window, radius, adjusted = _find_valid_window(
+        row, col, window, radius, adjusted, distance_m = _find_valid_window(
             array,
             row=50,
             col=50,
@@ -174,8 +176,24 @@ class ExtractCellTerrainTests(unittest.TestCase):
         self.assertLessEqual(col, 39)
         self.assertGreaterEqual(radius, 11)
         self.assertFalse(adjusted)
+        self.assertGreater(distance_m, 0.0)
         self.assertEqual(window.shape, (3, 3))
         self.assertFalse(np.isnan(window).any())
+
+    def test_find_valid_window_respects_strict_max_search_distance(self) -> None:
+        array = np.ones((20, 20), dtype=np.float32)
+        array[7:14, 7:14] = np.nan
+
+        with self.assertRaises(ValueError):
+            _find_valid_window(
+                array,
+                row=10,
+                col=10,
+                nodata=None,
+                px_size_x_m=30.0,
+                px_size_y_m=30.0,
+                max_search_distance_m=50.0,
+            )
 
     @unittest.skipIf(importlib.util.find_spec('rasterio') is None, 'rasterio is not installed in the active test environment')
     def test_extracts_elevation_slope_aspect_and_roughness(self) -> None:
@@ -255,6 +273,40 @@ class ExtractCellTerrainTests(unittest.TestCase):
         self.assertEqual(terrain['clamped_to_bounds'], 1.0)
         self.assertEqual(terrain['elevation_m'], 95.0)
         self.assertGreaterEqual(terrain['slope_angle_deg'], 0.0)
+
+    @unittest.skipIf(importlib.util.find_spec('rasterio') is None, 'rasterio is not installed in the active test environment')
+    def test_extract_cell_terrain_fails_when_valid_window_is_beyond_strict_radius(self) -> None:
+        import rasterio
+        from rasterio.transform import from_origin
+
+        data = np.full((9, 9), np.nan, dtype=np.float32)
+        data[0:3, 0:3] = np.array(
+            [
+                [100, 110, 120],
+                [95, 105, 115],
+                [90, 100, 110],
+            ],
+            dtype=np.float32,
+        )
+        transform = from_origin(-122.0, 47.0, 0.00027, 0.00027)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            dem_path = Path(tmp_dir) / 'fixture_gap.tif'
+            with rasterio.open(
+                dem_path,
+                'w',
+                driver='GTiff',
+                height=9,
+                width=9,
+                count=1,
+                dtype='float32',
+                crs='EPSG:4326',
+                transform=transform,
+            ) as dataset:
+                dataset.write(data, 1)
+
+            with self.assertRaises(TerrainUnavailableError):
+                extract_cell_terrain(str(dem_path), lat=46.998785, lng=-121.998785, max_search_distance_m=50.0)
 
 
 if __name__ == '__main__':

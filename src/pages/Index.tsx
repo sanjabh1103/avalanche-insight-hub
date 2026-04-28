@@ -24,17 +24,17 @@ import HistoricalEventsToggle, { type AvalancheEvent } from '@/components/Histor
 import ExpertModePanel from '@/components/ExpertModePanel';
 import VoxelNeighborhoodModal from '@/components/VoxelNeighborhoodModal';
 import {
-  forecastGridRowToHourlyGrids,
-  forecastGridRowToRunoutPolygons,
-  forecastGridRowToSarGeometries,
-  type ForecastGridRowRecord,
-  type GridCell,
+    forecastGridRowToHourlyGrids,
+    forecastGridRowToRunoutPolygons,
+    forecastGridRowToSarGeometries,
+    isCellUnavailable,
+    type ForecastGridRowRecord,
+    type GridCell,
 } from '@/lib/gridUtils';
-import { loadShapForCell, type ShapResult } from '@/lib/shapLoader';
 import { supabase } from '@/integrations/supabase/client';
 import { useIsMobile } from '@/hooks/use-mobile';
 
-type ForecastSource = 'precomputed' | 'legacy_shared' | null;
+type ForecastSource = 'precomputed' | null;
 type ForecastAvailability = 'ready' | 'stale' | 'unavailable';
 
 export default function Index() {
@@ -54,7 +54,6 @@ export default function Index() {
   const [forecastSource, setForecastSource] = useState<ForecastSource>(null);
   const [forecastAvailability, setForecastAvailability] = useState<ForecastAvailability>('unavailable');
   const [forecastNotice, setForecastNotice] = useState<string | null>(null);
-  const [shapResult, setShapResult] = useState<ShapResult | null>(null);
   const [showEvents, setShowEvents] = useState(false);
   const [remoteEvents, setRemoteEvents] = useState<AvalancheEvent[]>([]);
   const [localEvents, setLocalEvents] = useState<AvalancheEvent[]>([]);
@@ -282,45 +281,22 @@ export default function Index() {
           if (cellParam) {
             const [row, col] = cellParam.split(',').map(Number);
             const safeHourIdx = Math.min(hourValue, grids.length - 1);
-            const gridAtHour = grids[safeHourIdx];
-            if (gridAtHour) {
-              const cell = gridAtHour.find(c => c.row === row && c.col === col);
-              if (cell) {
-                setSelectedCell(cell);
-                if (!isMobile) setSidebarOpen(true);
-              }
+              const gridAtHour = grids[safeHourIdx];
+              if (gridAtHour) {
+                const cell = gridAtHour.find(c => c.row === row && c.col === col);
+                if (cell && !isCellUnavailable(cell)) {
+                  setSelectedCell(cell);
+                  if (!isMobile) setSidebarOpen(true);
+                }
             }
           }
           toast.success('Restored shared precomputed forecast view');
           return;
         }
-
-        const legacy = await supabase.from('forecasts').select('hourly_grids, bbox').eq('id', sharedForecast).maybeSingle();
-        if (legacy.data?.hourly_grids && Array.isArray(legacy.data.hourly_grids)) {
-          setActiveForecastRow(null);
-          setHourlyGrids(legacy.data.hourly_grids as unknown as GridCell[][]);
-          setForecastId(sharedForecast);
-          const cellParam = params.get('cell');
-          if (cellParam) {
-            const [row, col] = cellParam.split(',').map(Number);
-            const safeHourIdx = Math.min(hourValue, (legacy.data.hourly_grids as unknown as GridCell[][]).length - 1);
-            const grid = (legacy.data.hourly_grids as unknown as GridCell[][])[safeHourIdx];
-            if (grid) {
-              const cell = grid.find(c => c.row === row && c.col === col);
-              if (cell) {
-                setSelectedCell(cell);
-                if (!isMobile) setSidebarOpen(true);
-              }
-            }
-          }
-          toast.success('Restored shared legacy forecast view');
-          setForecastSource('legacy_shared');
-          setForecastAvailability('stale');
-          setForecastNotice('Shared view restored from the legacy forecast table.');
-        }
+        setUnavailableForecast('This shared forecast is not available in the authoritative precomputed batch artifact.');
       })();
     }
-  }, [hydrateForecastGridRow, isMobile]);
+  }, [hydrateForecastGridRow, isMobile, setUnavailableForecast]);
 
   const grid = useMemo(() => {
     if (hourlyGrids && hourlyGrids[timeOffset]) {
@@ -332,6 +308,7 @@ export default function Index() {
   const controlInset = !isMobile && (expertPanelOpen || sidebarOpen) ? 'calc(23rem + 1rem)' : '1rem';
 
   const handleCellClick = useCallback((cell: GridCell) => {
+    if (isCellUnavailable(cell)) return;
     setSelectedCell(cell);
     if (isMobile) setSidebarOpen(true);
   }, [isMobile]);
@@ -367,24 +344,6 @@ export default function Index() {
     })();
     return () => { alive = false; };
   }, [region.name, hydrateForecastGridRow, loadLatestForecastGrid, setUnavailableForecast]);
-
-  // P1.2: Load real TreeSHAP from forecast_shap_cache whenever the user
-  // selects a different cell or a new grid is hydrated. The loader has its
-  // own 30s in-memory cache so fast hover-click sequences don't hammer the
-  // RPC, and returns null when the cache is cold — RiskDashboard then falls
-  // back to the inline heuristic (honestly labeled).
-  useEffect(() => {
-    let alive = true;
-    if (!selectedCell || !forecastId) {
-      setShapResult(null);
-      return () => { alive = false; };
-    }
-    loadShapForCell(forecastId, selectedCell.row, selectedCell.col, timeOffset).then((result) => {
-      if (!alive) return;
-      setShapResult(result);
-    });
-    return () => { alive = false; };
-  }, [forecastId, selectedCell, timeOffset]);
 
   const runForecast = useCallback(async () => {
     setForecasting(true);
@@ -482,7 +441,7 @@ export default function Index() {
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value="dashboard" className="flex-1 overflow-y-auto mt-0 px-2 pb-3">
-                  <RiskDashboard cell={selectedCell} weatherSummary={weatherSummary} shapResult={shapResult} />
+                  <RiskDashboard cell={selectedCell} weatherSummary={weatherSummary} />
                 </TabsContent>
                 <TabsContent value="admin" className="flex-1 overflow-y-auto mt-0 px-2 pb-3">
                   <AdminDashboard />
@@ -605,11 +564,7 @@ export default function Index() {
           {hourlyGrids && (
             <div className="absolute top-[11rem] right-4 z-10 md:top-[8.75rem] lg:top-[7.5rem]">
               <span className={`glass-panel rounded-full px-3 py-1 text-[10px] font-mono ${forecastAvailability === 'ready' ? 'text-emerald-400' : 'text-amber-300'}`}>
-                ● {forecastSource === 'precomputed'
-                  ? 'PRECOMPUTED GRID'
-                  : forecastSource === 'legacy_shared'
-                    ? 'LEGACY SHARED GRID'
-                      : 'FORECAST DATA'} ({hourlyGrids.length}h)
+                ● {forecastSource === 'precomputed' ? 'PRECOMPUTED GRID' : 'FORECAST DATA'} ({hourlyGrids.length}h)
               </span>
             </div>
           )}

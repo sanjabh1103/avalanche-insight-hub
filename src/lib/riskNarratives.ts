@@ -1,8 +1,7 @@
 import { RISK_LABELS } from '@/lib/constants';
-import type { GridCell } from '@/lib/gridUtils';
-import type { ShapResult } from '@/lib/shapLoader';
+import { isCellUnavailable, type GridCell } from '@/lib/gridUtils';
 
-export type ShapSource = 'treeshap' | 'heuristic';
+export type ShapSource = 'artifact' | 'unavailable';
 
 export interface RiskDriver {
   feature: string;
@@ -116,12 +115,16 @@ function describeDriver(driver: RiskDriver, direction: 'positive' | 'negative'):
     : `${driver.label} is offsetting part of the hazard`;
 }
 
-export function selectRiskDrivers(cell: GridCell, shapResult?: ShapResult | null): { shapSource: ShapSource; drivers: RiskDriver[] } {
-  const realShap = shapResult?.origin === 'forecast_shap_cache' ? shapResult.topFeatures : null;
-  if (realShap && realShap.length > 0) {
+export function selectRiskDrivers(cell: GridCell): { shapSource: ShapSource; drivers: RiskDriver[] } {
+  if (isCellUnavailable(cell)) {
+    return { shapSource: 'unavailable', drivers: [] };
+  }
+
+  const topFeatures = cell.shapContext?.topFeatures;
+  if (topFeatures && topFeatures.length > 0) {
     return {
-      shapSource: 'treeshap',
-      drivers: realShap.slice(0, 5).map((item) => ({
+      shapSource: 'artifact',
+      drivers: topFeatures.slice(0, 5).map((item) => ({
         feature: item.feature,
         label: formatFeatureLabel(item.feature),
         value: Number(item.shap_value.toFixed(3)),
@@ -130,9 +133,14 @@ export function selectRiskDrivers(cell: GridCell, shapResult?: ShapResult | null
     };
   }
 
+  const shapValues = Object.entries(cell.shapValues ?? {});
+  if (shapValues.length === 0) {
+    return { shapSource: 'unavailable', drivers: [] };
+  }
+
   return {
-    shapSource: 'heuristic',
-    drivers: Object.entries(cell.shapValues)
+    shapSource: 'artifact',
+    drivers: shapValues
       .map(([feature, value]) => ({
         feature,
         label: formatFeatureLabel(feature),
@@ -143,15 +151,22 @@ export function selectRiskDrivers(cell: GridCell, shapResult?: ShapResult | null
   };
 }
 
-export function buildRiskExplanation(cell: GridCell, shapResult?: ShapResult | null): string {
-  const { shapSource, drivers } = selectRiskDrivers(cell, shapResult);
+export function buildRiskExplanation(cell: GridCell): string {
+  if (isCellUnavailable(cell)) {
+    return 'Terrain data is unavailable for this cell within the strict DEM search radius, so the batch artifact marks it stale and no runtime forecast is synthesized.';
+  }
+
+  const { shapSource, drivers } = selectRiskDrivers(cell);
+  if (drivers.length === 0) {
+    return 'Explainability data is missing from the batch artifact for this cell, so the dashboard withholds a driver narrative.';
+  }
   const topPositive = drivers.find((driver) => driver.value > 0);
   const secondPositive = drivers.filter((driver) => driver.value > 0)[1];
   const topNegative = drivers.find((driver) => driver.value < 0);
   const riskLevel = String(RISK_LABELS[cell.riskScore] || 'Unknown').toLowerCase();
-  const intro = shapSource === 'treeshap'
-    ? 'TreeSHAP indicates'
-    : 'Fallback feature signals indicate';
+  const intro = shapSource === 'artifact'
+    ? 'Batch TreeSHAP indicates'
+    : 'Artifact explainability indicates';
 
   if (cell.riskScore >= 4) {
     const lead = topPositive

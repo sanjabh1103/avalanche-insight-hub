@@ -132,12 +132,59 @@ describe('IPA hydration and render contract', () => {
           },
         })}
         weatherSummary={null}
-        shapResult={null}
       />,
     );
 
     expect(screen.getByText('Limiting factor')).toBeTruthy();
     expect(screen.getByText('snowpack weakness • IPA 0.84')).toBeTruthy();
     expect(screen.getByText('fusion: chebyshev_ipa_v2')).toBeTruthy();
+  });
+
+  it('hydrates unavailable terrain cells and renders the disabled state', () => {
+    const row: ForecastGridRowRecord = {
+      id: 'grid-2',
+      region_name: 'Colorado Rockies',
+      forecast_date: '2026-04-23',
+      horizon_hours: 24,
+      bbox: [0, 0, 1, 1],
+      status: 'stale',
+      model_metadata: {
+        dynamic_model_version: 'mts-lstm-42',
+        surrogate_model_version: 'rf-surrogate-7',
+      },
+      grid_geojson: [
+        {
+          row: 3,
+          col: 4,
+          lat: 1,
+          lng: 2,
+          lat_end: 1.5,
+          lng_end: 2.5,
+          risk_score: 0,
+          status: 'unavailable_terrain',
+          stale: true,
+          disabled: true,
+          availability_reason: 'unavailable_terrain',
+          shap_values: {},
+        },
+      ],
+    };
+
+    const [cell] = forecastGridRowToCells(row);
+    expect(cell.status).toBe('unavailable_terrain');
+    expect(cell.disabled).toBe(true);
+    expect(cell.dynamicModelVersion).toBe('mts-lstm-42');
+    expect(cell.surrogateModelVersion).toBe('rf-surrogate-7');
+
+    render(
+      <RiskDashboard
+        cell={cell}
+        weatherSummary={null}
+      />,
+    );
+
+    expect(screen.getByText('UNAVAILABLE TERRAIN')).toBeTruthy();
+    expect(screen.getByText(/dynamic_model_version: mts-lstm-42/i)).toBeTruthy();
+    expect(screen.getByText(/surrogate_model_version: rf-surrogate-7/i)).toBeTruthy();
   });
 });

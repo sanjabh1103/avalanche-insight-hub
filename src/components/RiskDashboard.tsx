@@ -1,9 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { RISK_LABELS } from '@/lib/constants';
-import { getRiskColor, type GridCell } from '@/lib/gridUtils';
+import { getRiskColor, isCellUnavailable, type GridCell } from '@/lib/gridUtils';
 import { buildRiskExplanation, selectRiskDrivers } from '@/lib/riskNarratives';
-import type { ShapResult } from '@/lib/shapLoader';
 
 interface WeatherSummary {
   snowfall_24h: string;
@@ -16,7 +15,6 @@ interface WeatherSummary {
 interface Props {
   cell: GridCell | null;
   weatherSummary?: WeatherSummary | null;
-  shapResult?: ShapResult | null;
 }
 
 function formatCriterionName(value?: string | null): string {
@@ -24,7 +22,7 @@ function formatCriterionName(value?: string | null): string {
   return value.replace(/_/g, ' ');
 }
 
-export default function RiskDashboard({ cell, weatherSummary, shapResult }: Props) {
+export default function RiskDashboard({ cell, weatherSummary }: Props) {
   if (!cell) {
     return (
       <div className="p-4 text-center text-muted-foreground">
@@ -36,10 +34,8 @@ export default function RiskDashboard({ cell, weatherSummary, shapResult }: Prop
     );
   }
 
-  // P1.2: Prefer real TreeSHAP from forecast_shap_cache when loaded; fall
-  // back to the inline heuristic from cell.shapValues and clearly label the
-  // origin so users never see heuristic values framed as TreeSHAP.
-  const { shapSource, drivers: shapData } = selectRiskDrivers(cell, shapResult);
+  const unavailable = isCellUnavailable(cell);
+  const { drivers: shapData } = selectRiskDrivers(cell);
 
   const maxShap = Math.max(...shapData.map((d) => Math.abs(d.value)), 0.01);
   const coverageState = cell.coverageFlags?.sar_coverage_state;
@@ -49,6 +45,34 @@ export default function RiskDashboard({ cell, weatherSummary, shapResult }: Prop
   const isCoverageGood = coverageState === 'good' || coverageState === 'full_coverage';
   const isCoverageLow = coverageState === 'low' || coverageState === 'low_coverage';
   const hasCoverageState = isCoverageGood || isCoverageLow || hasResidualShadow;
+
+  if (unavailable) {
+    return (
+      <div className="space-y-3 p-4">
+        <Card className="border border-border/70 bg-card/70 backdrop-blur-xl shadow-lg shadow-black/20">
+          <CardHeader className="p-4 pb-2">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.24em]">Grid State</CardTitle>
+              <Badge className="rounded-full border-0 bg-slate-500/15 text-slate-300 text-xs">
+                UNAVAILABLE TERRAIN
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 pt-1 space-y-3">
+            <div className="text-sm text-foreground">
+              Terrain data is unavailable for grid [{cell.row},{cell.col}] within the strict DEM search radius. The cell is disabled and no forecast is synthesized.
+            </div>
+            <div className="grid grid-cols-1 gap-2 text-[11px] text-muted-foreground font-mono">
+              <div>status: {cell.status ?? 'unavailable_terrain'}</div>
+              <div>reason: {cell.availabilityReason ?? 'unavailable_terrain'}</div>
+              <div>dynamic_model_version: {cell.dynamicModelVersion ?? 'n/a'}</div>
+              <div>surrogate_model_version: {cell.surrogateModelVersion ?? 'n/a'}</div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3 p-4">
@@ -165,6 +189,19 @@ export default function RiskDashboard({ cell, weatherSummary, shapResult }: Prop
         </CardContent>
       </Card>
 
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+        <CardContent className="p-4 space-y-2">
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="text-muted-foreground uppercase tracking-[0.22em]">Dynamic Model</span>
+            <span className="font-mono text-foreground">{cell.dynamicModelVersion ?? 'n/a'}</span>
+          </div>
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="text-muted-foreground uppercase tracking-[0.22em]">Surrogate Model</span>
+            <span className="font-mono text-foreground">{cell.surrogateModelVersion ?? 'n/a'}</span>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Real Weather Values (Story #11 - Open-Meteo for all regions) */}
       {weatherSummary && (
         <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
@@ -205,56 +242,51 @@ export default function RiskDashboard({ cell, weatherSummary, shapResult }: Prop
         </Card>
       )}
 
-      {/* P1.2: SHAP bars w/ honest origin label. Real TreeSHAP uses a
-          diverging scale (red = risk-increasing, green = risk-decreasing);
-          heuristic fallback uses the original green monochrome palette. */}
       <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
         <CardHeader className="p-3 pb-1">
           <div className="flex items-center justify-between">
             <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.24em]">
-              {shapSource === 'treeshap' ? 'TreeSHAP Contributions' : 'Feature Contributions'}
+              TreeSHAP Contributions
             </CardTitle>
-            <Badge
-              className={`text-[8px] rounded-full border-0 px-1.5 py-0 ${
-                shapSource === 'treeshap'
-                  ? 'bg-emerald-500/15 text-emerald-400'
-                  : 'bg-amber-500/15 text-amber-400'
-              }`}
-            >
-              {shapSource === 'treeshap' ? '● TREESHAP' : '● HEURISTIC'}
+            <Badge className="text-[8px] rounded-full border-0 px-1.5 py-0 bg-emerald-500/15 text-emerald-400">
+              ● ARTIFACT
             </Badge>
           </div>
         </CardHeader>
         <CardContent className="p-3 pt-1 space-y-1.5">
-          {shapData.map((d) => {
-            const magnitude = Math.abs(d.value);
-            const width = `${(magnitude / maxShap) * 100}%`;
-            const positiveRisk = d.value >= 0;
-            const barColor = shapSource === 'treeshap'
-              ? (positiveRisk ? 'hsl(8, 85%, 55%)' : 'hsl(156, 70%, 45%)')
-              : 'hsl(156, 72%, 50%)';
-            return (
-              <div key={d.feature} className="flex items-center gap-2">
-                <span className="text-[9px] text-secondary-foreground w-16 text-right truncate font-mono">
-                  {d.label}
-                </span>
-                <div className="flex-1 h-4 bg-black/20 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-300"
-                    style={{ width, backgroundColor: barColor }}
-                  />
-                </div>
-                <span className="text-[9px] font-mono text-muted-foreground w-10 text-right">
-                  {d.value >= 0 ? '+' : ''}{d.value.toFixed(3)}
-                </span>
+          {shapData.length === 0 ? (
+            <div className="text-[11px] text-muted-foreground">
+              TreeSHAP contributions are missing from the batch artifact for this cell.
+            </div>
+          ) : (
+            <>
+              {shapData.map((d) => {
+                const magnitude = Math.abs(d.value);
+                const width = `${(magnitude / maxShap) * 100}%`;
+                const positiveRisk = d.value >= 0;
+                const barColor = positiveRisk ? 'hsl(8, 85%, 55%)' : 'hsl(156, 70%, 45%)';
+                return (
+                  <div key={d.feature} className="flex items-center gap-2">
+                    <span className="text-[9px] text-secondary-foreground w-16 text-right truncate font-mono">
+                      {d.label}
+                    </span>
+                    <div className="flex-1 h-4 bg-black/20 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{ width, backgroundColor: barColor }}
+                      />
+                    </div>
+                    <span className="text-[9px] font-mono text-muted-foreground w-10 text-right">
+                      {d.value >= 0 ? '+' : ''}{d.value.toFixed(3)}
+                    </span>
+                  </div>
+                );
+              })}
+              <div className="pt-1 text-[9px] text-muted-foreground/70 font-mono">
+                origin: forecast_grids.grid_geojson
               </div>
-            );
-          })}
-          <div className="pt-1 text-[9px] text-muted-foreground/70 font-mono">
-            {shapSource === 'treeshap'
-              ? `origin: forecast_shap_cache${shapResult?.modelVersion ? ` · ${shapResult.modelVersion.slice(0, 10)}` : ''}`
-              : 'origin: inline_cell_context (heuristic weighted features)'}
-          </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -266,7 +298,7 @@ export default function RiskDashboard({ cell, weatherSummary, shapResult }: Prop
           </CardTitle>
         </CardHeader>
         <CardContent className="p-3 pt-1">
-          <p className="text-sm leading-6 text-foreground/90">{buildRiskExplanation(cell, shapResult)}</p>
+          <p className="text-sm leading-6 text-foreground/90">{buildRiskExplanation(cell)}</p>
         </CardContent>
       </Card>
     </div>

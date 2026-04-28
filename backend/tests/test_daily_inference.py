@@ -283,6 +283,9 @@ class ForecastGridMetadataTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 1)
         cell = rows[0]
+        self.assertEqual(cell['status'], 'ready')
+        self.assertFalse(cell['stale'])
+        self.assertFalse(cell['disabled'])
         self.assertEqual(cell['surrogate_model_version'], 'rf_surrogate_v1')
         self.assertEqual(cell['dominant_driver_feature'], 'snowfall_24h')
         self.assertEqual(cell['shap_values']['snowfall_24h'], 0.42)
@@ -460,6 +463,76 @@ class ForecastGridMetadataTests(unittest.TestCase):
                 forecast_date=pd.Timestamp('2026-04-25T00:00:00Z'),
             )
 
+        build_feature_row_mock.assert_not_called()
+
+    @patch('backend.daily_inference._fetch_latest_sar_summary', return_value={})
+    @patch('backend.daily_inference.fetch_historical_weather_window', return_value={'samples': []})
+    @patch('backend.daily_inference.select_hourly_weather_sample', return_value={})
+    @patch('backend.daily_inference.fetch_forecast_weather_profile', return_value={'samples': []})
+    @patch('backend.daily_inference.fetch_batched_cell_snowpack_proxies_strict')
+    @patch('backend.daily_inference.build_tree_shap_explainer', return_value=object())
+    @patch('backend.daily_inference.extract_cell_terrain', side_effect=ValueError('no terrain within 50m'))
+    @patch('backend.daily_inference.build_real_feature_row')
+    @patch('backend.daily_inference.build_region_grid')
+    def test_build_cells_marks_unavailable_terrain_cells_stale(
+        self,
+        build_grid_mock,
+        build_feature_row_mock,
+        _extract_terrain_mock,
+        _build_explainer_mock,
+        fetch_snowpack_proxies_mock,
+        _forecast_weather_mock,
+        _select_hourly_mock,
+        _history_mock,
+        _sar_summary_mock,
+    ) -> None:
+        build_grid_mock.return_value = [{
+            'row': 0,
+            'col': 0,
+            'lat': 46.8,
+            'lng': 9.8,
+            'lat_end': 46.81,
+            'lng_end': 9.81,
+        }]
+        fetch_snowpack_proxies_mock.return_value = [
+            SnowpackProxy(
+                estimated_shear_strength=0.42,
+                snow_settlement_index=0.16,
+                season_start='2025-11-01',
+                method='seasonal_cumulative_v1',
+            )
+        ]
+        bundle = {
+            'selector': SimpleNamespace(transform=lambda frame: np.asarray([[0.7, 0.3]], dtype=np.float32)),
+            'calibrated_model': SimpleNamespace(predict_proba=lambda frame: np.asarray([[0.33, 0.67]], dtype=np.float32)),
+            'base_model': object(),
+            'selected_features': ['snowfall_24h', 'wind_loading'],
+            'feature_means': {'snowfall_24h': 0.2, 'wind_loading': 0.1},
+            'surrogate_model_version': 'rf_surrogate_v1',
+            'dynamic_model_type': 'mts_lstm_v1',
+            'dynamic_model_version': 'mts-lstm-42',
+            'created_at': '2026-04-25T00:00:00+00:00',
+            'calibration_method': 'isotonic_v1',
+        }
+        region = SimpleNamespace(key='davos', center=(46.8, 9.8))
+
+        rows = build_cells(
+            region=region,
+            bundle=bundle,
+            grid_size=1,
+            forecast_date=pd.Timestamp('2026-04-25T00:00:00Z'),
+        )
+
+        self.assertEqual(len(rows), 1)
+        cell = rows[0]
+        self.assertEqual(cell['status'], 'unavailable_terrain')
+        self.assertTrue(cell['stale'])
+        self.assertTrue(cell['disabled'])
+        self.assertEqual(cell['availability_reason'], 'unavailable_terrain')
+        self.assertEqual(cell['risk_score'], 0)
+        self.assertEqual(cell['surrogate_model_version'], 'rf_surrogate_v1')
+        self.assertEqual(cell['dynamic_model_version'], 'mts-lstm-42')
+        self.assertEqual(cell['shap_values'], {})
         build_feature_row_mock.assert_not_called()
 
     @patch.dict('os.environ', {'DEM_ROOT': '/artifacts/dem'}, clear=False)

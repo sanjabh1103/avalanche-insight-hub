@@ -14,6 +14,7 @@ from backend.common.artifacts import dump_json, load_joblib, resolve_artifact_di
 from backend.common.config import load_settings
 from backend.common.features import FEATURE_COLUMNS, build_region_grid
 from backend.common.real_features import (
+    TerrainUnavailableError,
     build_real_feature_row,
     extract_cell_terrain,
     fetch_forecast_weather_profile,
@@ -220,6 +221,93 @@ def _load_ipa_weights() -> dict[str, float]:
     return merged
 
 
+def _default_inference_backend(bundle: dict[str, object]) -> str:
+    lstm_head = bundle.get('lstm_head') if isinstance(bundle, dict) else None
+    if getattr(lstm_head, 'model', None) is not None:
+        return 'github_actions_mts_lstm'
+    return 'github_actions_surrogate_rf'
+
+
+def _build_unavailable_terrain_cell(
+    *,
+    cell: dict[str, object],
+    center_lat: float,
+    center_lng: float,
+    bundle: dict[str, object],
+    snowpack_proxy: object | None,
+    reason: str,
+) -> dict[str, object]:
+    proxy_payload = None
+    if snowpack_proxy is not None:
+        proxy_payload = {
+            'estimated_shear_strength': getattr(snowpack_proxy, 'estimated_shear_strength', None),
+            'snow_settlement_index': getattr(snowpack_proxy, 'snow_settlement_index', None),
+            'season_start': getattr(snowpack_proxy, 'season_start', None),
+            'method': getattr(snowpack_proxy, 'method', None),
+        }
+    return {
+        'row': int(cell['row']),
+        'col': int(cell['col']),
+        'lat': center_lat,
+        'lng': center_lng,
+        'lat_end': float(cell['lat_end']),
+        'lng_end': float(cell['lng_end']),
+        'risk_score': 0,
+        'probability_risk_score': 0,
+        'probability': None,
+        'rf_probability': None,
+        'terrain_risk_score': None,
+        'chebyshev_hazard_distance': None,
+        'chebyshev_ipa_score': None,
+        'chebyshev_ipa_risk_score': None,
+        'hazard_vector': {},
+        'ipa_weights': _load_ipa_weights(),
+        'fusion_method': 'chebyshev_ipa_v2',
+        'limiting_factor': None,
+        'lstm_context': None,
+        'confidence_lower': None,
+        'confidence_upper': None,
+        'uncertainty_span': None,
+        'uncertainty_class': 'high',
+        'hazard': 0.0,
+        'exposure': 0.0,
+        'vulnerability': 0.0,
+        'problem_type': 'Unavailable terrain',
+        'shap_values': {},
+        'shap_context': {'top_features': []},
+        'feature_values': {},
+        'explanation_summary': None,
+        'coverage_flags': {
+            'sar_coverage_state': 'not_applicable',
+            'residual_shadow': False,
+            'data_gaps': [reason],
+        },
+        'selected_features': bundle['selected_features'],
+        'weather_inputs': {},
+        'terrain_inputs': {
+            'availability_reason': reason,
+        },
+        'dominant_driver_feature': None,
+        'runout_seed': False,
+        'dynamic_model_type': bundle.get('dynamic_model_type'),
+        'dynamic_model_version': bundle.get('dynamic_model_version'),
+        'surrogate_model_version': bundle.get('surrogate_model_version'),
+        'uncertainty_method': (
+            bundle.get('lstm_head_meta', {}).get('uncertainty_method')
+            if isinstance(bundle.get('lstm_head_meta'), dict)
+            else 'tree_variance_gaussian'
+        ),
+        'inference_backend': _default_inference_backend(bundle),
+        'model_version': bundle['created_at'],
+        'calibration_profile': bundle['calibration_method'],
+        'snowpack_proxy': proxy_payload,
+        'status': reason,
+        'stale': True,
+        'disabled': True,
+        'availability_reason': reason,
+    }
+
+
 def terrain_adjusted_risk_level(
     calibrated_probability: float,
     slope_angle_deg: float,
@@ -305,7 +393,20 @@ def build_cells(
         )
 
     for cell, (center_lat, center_lng), snowpack_proxy in zip(region_grid, cell_centers, snowpack_proxies):
-        terrain = extract_cell_terrain(str(dem_path), lat=center_lat, lng=center_lng)
+        try:
+            terrain = extract_cell_terrain(str(dem_path), lat=center_lat, lng=center_lng)
+        except (TerrainUnavailableError, ValueError):
+            rows.append(
+                _build_unavailable_terrain_cell(
+                    cell=cell,
+                    center_lat=center_lat,
+                    center_lng=center_lng,
+                    bundle=bundle,
+                    snowpack_proxy=snowpack_proxy,
+                    reason='unavailable_terrain',
+                )
+            )
+            continue
         assembled = build_real_feature_row(
             weather_sample=weather_sample,
             terrain=terrain,
@@ -442,6 +543,10 @@ def build_cells(
                 'season_start': assembled['snowpack_proxy'].season_start,
                 'method': assembled['snowpack_proxy'].method,
             },
+            'status': 'ready',
+            'stale': False,
+            'disabled': False,
+            'availability_reason': None,
         })
 
     return rows
@@ -456,9 +561,21 @@ def upsert_forecast_grid(
     *,
     dry_run: bool = False,
 ):
-    weather_inputs = [row['weather_inputs'] for row in rows if isinstance(row.get('weather_inputs'), dict)]
-    terrain_inputs = [row['terrain_inputs'] for row in rows if isinstance(row.get('terrain_inputs'), dict)]
+    weather_inputs = [
+        row['weather_inputs']
+        for row in rows
+        if row.get('status') == 'ready' and isinstance(row.get('weather_inputs'), dict)
+    ]
+    terrain_inputs = [
+        row['terrain_inputs']
+        for row in rows
+        if row.get('status') == 'ready' and isinstance(row.get('terrain_inputs'), dict)
+    ]
     sar_evidence = _fetch_region_sar_evidence(region.key)
+    stale_cells = [row for row in rows if row.get('status') != 'ready']
+    unavailable_terrain_cells = [row for row in stale_cells if row.get('availability_reason') == 'unavailable_terrain']
+    ready_cell_count = len(rows) - len(stale_cells)
+    region_status = 'ready' if not stale_cells else 'stale'
     snowfall_avg = float(np.mean([item.get('snowfall_24h_cm', item.get('snowfall_24h', 0) * 40) for item in weather_inputs])) if weather_inputs else 0.0
     wind_avg = float(np.mean([item.get('windspeed_10m', item.get('wind_loading', 0) * 55) for item in weather_inputs])) if weather_inputs else 0.0
     temperature_avg = float(np.mean([item.get('downscaled_temperature_c', item.get('temperature_2m', 0)) for item in weather_inputs])) if weather_inputs else 0.0
@@ -485,6 +602,8 @@ def upsert_forecast_grid(
             'snow_depth': f'{snow_depth_proxy:.1f}',
             'generated_at': forecast_date.isoformat(),
             'cell_count': len(rows),
+            'ready_cell_count': ready_cell_count,
+            'stale_cell_count': len(stale_cells),
             'source': 'open_meteo_forecast_downscaled_v1',
         },
         'model_metadata': {
@@ -519,9 +638,12 @@ def upsert_forecast_grid(
             ),
             'sar_mask_asset_refs': sar_evidence.get('mask_asset_refs', []),
             'sar_event_geometries': sar_evidence.get('sar_event_geometries', []),
-            'stale': False,
+            'stale': bool(stale_cells),
+            'ready_cell_count': ready_cell_count,
+            'stale_cell_count': len(stale_cells),
+            'unavailable_terrain_cell_count': len(unavailable_terrain_cells),
         },
-        'status': 'ready',
+        'status': region_status,
     }
     if has_supabase_credentials() and not dry_run:
         rest_upsert('forecast_grids', [payload], on_conflict='hazard_type,region_key,forecast_date,horizon_hours')
@@ -671,6 +793,13 @@ def main(argv: list[str] | None = None) -> int:
         'artifact_dir': str(artifact_dir),
         'regions_written': len(outputs),
         'total_cells_written': sum(len(payload.get('grid_geojson') or []) for payload in outputs),
+        'stale_regions': sum(1 for payload in outputs if payload.get('status') != 'ready'),
+        'stale_cells': sum(
+            1
+            for payload in outputs
+            for cell in (payload.get('grid_geojson') or [])
+            if cell.get('status') != 'ready'
+        ),
         'dry_run': bool(args.dry_run),
         'regions': [
             {
@@ -679,6 +808,9 @@ def main(argv: list[str] | None = None) -> int:
                 'forecast_date': payload.get('forecast_date'),
                 'horizon_hours': payload.get('horizon_hours'),
                 'cell_count': len(payload.get('grid_geojson') or []),
+                'stale_cell_count': sum(
+                    1 for cell in (payload.get('grid_geojson') or []) if cell.get('status') != 'ready'
+                ),
                 'runout_method_sample': (payload.get('model_metadata') or {}).get('runout_method_sample'),
                 'training_dataset_version': (payload.get('model_metadata') or {}).get('training_dataset_version'),
             }

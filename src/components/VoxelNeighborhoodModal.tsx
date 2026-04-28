@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, RefreshCw, Loader2, Info } from 'lucide-react';
 import { RISK_COLORS, RISK_LABELS, GRID_SIZE } from '@/lib/constants';
-import { isHighUncertaintyCell, type GridCell } from '@/lib/gridUtils';
+import { isCellUnavailable, isHighUncertaintyCell, type GridCell } from '@/lib/gridUtils';
 import { Canvas, ThreeEvent, useFrame } from '@react-three/fiber';
 import { OrbitControls, Instances, Instance } from '@react-three/drei';
 import { useTheme } from 'next-themes';
@@ -45,6 +45,8 @@ interface HoveredInfo {
   lat: number;
   lng: number;
   color: string;
+  unavailable?: boolean;
+  availabilityReason?: string | null;
   problemType?: string;
   probability?: number;
   uncertaintyClass?: 'low' | 'medium' | 'high';
@@ -356,7 +358,7 @@ function VoxelScene({
     } catch (error) {
       onRenderError(error instanceof Error ? error : new Error('Failed to prepare voxel matrices'));
     }
-  }, [voxels, dummy]);
+  }, [dummy, onRenderError, onRenderReady, voxels]);
 
   // Update colors (reactively to cells changing via timeline scrub)
   useEffect(() => {
@@ -366,7 +368,9 @@ function VoxelScene({
         const baseC = getBaseColor(v.data.type);
         const cell = findRiskForPosition(v.data.lat, v.data.lng, cells);
         if (cell) {
-          if (isHighUncertainty(cell)) {
+          if (isCellUnavailable(cell)) {
+            baseC.lerp(new THREE.Color('#6b7280'), 0.78);
+          } else if (isHighUncertainty(cell)) {
             baseC.lerp(new THREE.Color('#9ca3af'), 0.72);
           } else {
             const riskC = new THREE.Color(RISK_COLORS[Math.max(1, Math.min(5, Math.round(cell.riskScore)))]);
@@ -381,7 +385,7 @@ function VoxelScene({
     } catch (error) {
       onRenderError(error instanceof Error ? error : new Error('Failed to color voxel instances'));
     }
-  }, [voxels, cells]);
+  }, [cells, onRenderError, onRenderReady, voxels]);
 
   const handlePointerMove = useCallback((e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
@@ -389,14 +393,17 @@ function VoxelScene({
       const v = voxels[e.instanceId];
       if (v) {
         const cell = findRiskForPosition(v.data.lat, v.data.lng, cells);
+        const unavailable = isCellUnavailable(cell);
         const score = Math.max(1, Math.min(5, Math.round(cell?.riskScore || 1)));
         onHover({
           type: typeName(v.data.type),
-          riskLabel: RISK_LABELS[score] ?? 'Unknown',
+          riskLabel: unavailable ? 'Unavailable' : (RISK_LABELS[score] ?? 'Unknown'),
           riskScore: score,
           lat: v.data.lat,
           lng: v.data.lng,
-          color: isHighUncertainty(cell) ? '#9ca3af' : (RISK_COLORS[score] || '#333'),
+          color: unavailable ? '#6b7280' : isHighUncertainty(cell) ? '#9ca3af' : (RISK_COLORS[score] || '#333'),
+          unavailable,
+          availabilityReason: cell?.availabilityReason ?? null,
           problemType: cell?.problemType,
           probability: cell?.probability,
           uncertaintyClass: cell?.uncertaintyClass,
@@ -461,7 +468,7 @@ function VoxelFallbackCanvas({
     for (const voxel of voxels.slice(0, 2500)) {
       const cell = findRiskForPosition(voxel.data.lat, voxel.data.lng, cells);
       const riskScore = Math.max(1, Math.min(5, Math.round(cell?.riskScore || 1)));
-      ctx.fillStyle = isHighUncertainty(cell) ? '#9ca3af' : (RISK_COLORS[riskScore] || '#334155');
+      ctx.fillStyle = isCellUnavailable(cell) ? '#6b7280' : isHighUncertainty(cell) ? '#9ca3af' : (RISK_COLORS[riskScore] || '#334155');
       const x = Math.round((voxel.x + WORLD_SIZE / 2) * scaleX);
       const y = Math.round((voxel.z + WORLD_SIZE / 2) * scaleY);
       const size = voxel.data.type === 'building' ? 3 : voxel.data.type === 'road' ? 2 : 1.5;
@@ -652,10 +659,11 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
             <div className="absolute top-3 left-3 z-20 glass-panel rounded-lg p-3 space-y-1.5 min-w-[200px] pointer-events-none">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: hovered.color }} />
-                <span className="text-xs font-semibold text-foreground">{hovered.riskLabel} Risk</span>
+                <span className="text-xs font-semibold text-foreground">{hovered.unavailable ? 'Unavailable Cell' : `${hovered.riskLabel} Risk`}</span>
               </div>
               <div className="text-[10px] text-muted-foreground space-y-0.5 mt-2">
                 <div><strong>Type:</strong> {hovered.type}</div>
+                {hovered.unavailable && <div><strong>Reason:</strong> {hovered.availabilityReason ?? 'unavailable_terrain'}</div>}
                 {hovered.problemType && <div><strong>Problem:</strong> {hovered.problemType}</div>}
                 {hovered.probability !== undefined && <div><strong>Prob:</strong> {hovered.probability.toFixed(2)}</div>}
                 {hovered.uncertaintyClass && <div><strong>Uncertainty:</strong> {hovered.uncertaintyClass}</div>}

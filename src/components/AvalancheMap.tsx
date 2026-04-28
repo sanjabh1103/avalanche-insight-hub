@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Rectangle, CircleMarker, Popup, Polygon, Tooltip, useMap } from 'react-leaflet';
 import type { LatLngBoundsExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { getRiskColor, isHighUncertaintyCell, type GridCell } from '@/lib/gridUtils';
+import { getRiskColor, isCellUnavailable, isHighUncertaintyCell, type GridCell } from '@/lib/gridUtils';
 import type { AvalancheEvent } from '@/components/HistoricalEventsToggle';
 import { useTheme } from 'next-themes';
 import ActivityHeatmap from '@/components/ActivityHeatmap';
@@ -114,6 +114,7 @@ export default function AvalancheMap({
         const bounds: LatLngBoundsExpression = [[cell.lat, cell.lng], [cell.latEnd, cell.lngEnd]];
         const isSelected = selectedCell?.row === cell.row && selectedCell?.col === cell.col;
         const isHighUncertainty = isHighUncertaintyCell(cell);
+        const isUnavailable = isCellUnavailable(cell);
         return (
           <Rectangle
             key={`${cell.row}-${cell.col}`}
@@ -121,31 +122,41 @@ export default function AvalancheMap({
             pathOptions={{
               color: isSelected ? '#ffffff' : 'transparent',
               weight: isSelected ? 2 : 0,
-              fillColor: isHighUncertainty ? '#9ca3af' : getRiskColor(cell.riskScore),
-              fillOpacity: isHighUncertainty ? 0.42 : 0.45 + cell.riskScore * 0.06,
+              fillColor: isUnavailable ? '#6b7280' : isHighUncertainty ? '#9ca3af' : getRiskColor(cell.riskScore),
+              fillOpacity: isUnavailable ? 0.3 : isHighUncertainty ? 0.42 : 0.45 + cell.riskScore * 0.06,
             }}
-            eventHandlers={{ click: () => onCellClick(cell) }}
+            eventHandlers={{ click: () => { if (!isUnavailable) onCellClick(cell); } }}
           >
             <Tooltip direction="top" opacity={0.9} className="bg-card border-border">
               <div className="text-xs space-y-1 p-1">
-                <div className="font-semibold">Risk: {cell.riskScore}/5</div>
-                <div className="text-muted-foreground">
-                  Elev: {cell.terrainInputs?.elevation_m?.toFixed(0) ?? 'N/A'}m
-                </div>
-                <div className="text-muted-foreground">
-                  Slope: {cell.terrainInputs?.slope_angle_deg?.toFixed(1) ?? 'N/A'}°
-                </div>
-                <div className="text-muted-foreground">
-                  Prob: {
-                    typeof cell.probability === 'number' && Number.isFinite(cell.probability)
-                      ? (cell.probability * 100).toFixed(1)
-                      : Number.isFinite(cell.riskScore)
-                        ? ((cell.riskScore / 5) * 100).toFixed(1)
-                        : 'N/A'
-                  }%
-                </div>
-                {cell.dominantDriverFeature && (
-                  <div className="text-emerald-400">Driver: {cell.dominantDriverFeature}</div>
+                {isUnavailable ? (
+                  <>
+                    <div className="font-semibold text-slate-200">Terrain unavailable</div>
+                    <div className="text-muted-foreground">Grid [{cell.row},{cell.col}] is disabled in the batch artifact.</div>
+                    <div className="text-muted-foreground">Reason: {cell.availabilityReason ?? cell.status ?? 'unavailable_terrain'}</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="font-semibold">Risk: {cell.riskScore}/5</div>
+                    <div className="text-muted-foreground">
+                      Elev: {cell.terrainInputs?.elevation_m?.toFixed(0) ?? 'N/A'}m
+                    </div>
+                    <div className="text-muted-foreground">
+                      Slope: {cell.terrainInputs?.slope_angle_deg?.toFixed(1) ?? 'N/A'}°
+                    </div>
+                    <div className="text-muted-foreground">
+                      Prob: {
+                        typeof cell.probability === 'number' && Number.isFinite(cell.probability)
+                          ? (cell.probability * 100).toFixed(1)
+                          : Number.isFinite(cell.riskScore)
+                            ? ((cell.riskScore / 5) * 100).toFixed(1)
+                            : 'N/A'
+                      }%
+                    </div>
+                    {cell.dominantDriverFeature && (
+                      <div className="text-emerald-400">Driver: {cell.dominantDriverFeature}</div>
+                    )}
+                  </>
                 )}
               </div>
             </Tooltip>
