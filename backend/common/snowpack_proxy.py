@@ -17,8 +17,10 @@ from __future__ import annotations
 import math
 import os
 import time
+import json
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import Any, Iterable
 
 import numpy as np
@@ -27,10 +29,11 @@ import requests
 
 OPEN_METEO_ARCHIVE = 'https://archive-api.open-meteo.com/v1/archive'
 OPEN_METEO_TIMEOUT = float(os.getenv('OPEN_METEO_TIMEOUT', '8'))
-OPEN_METEO_RETRIES = int(os.getenv('OPEN_METEO_RETRIES', '3'))
+OPEN_METEO_RETRIES = int(os.getenv('OPEN_METEO_RETRIES', '4'))
 OPEN_METEO_BATCH_SIZE = 50
 OPEN_METEO_MINUTE_BUDGET = int(os.getenv('OPEN_METEO_MINUTE_BUDGET', '480'))
 OPEN_METEO_WINDOW_SECONDS = 60.0
+OPEN_METEO_RATE_LIMIT_RETRY_SECONDS = float(os.getenv('OPEN_METEO_RATE_LIMIT_RETRY_SECONDS', '60'))
 OPEN_METEO_DAILY_VARS = (
     'temperature_2m_mean',
     'temperature_2m_min',
@@ -103,7 +106,12 @@ def _fetch_archive_payload(*, params: dict[str, str], retries: int = OPEN_METEO_
                         retry_after = float(retry_after_header)
                     except ValueError:
                         retry_after = 0.0
-            time.sleep(max(2 ** attempt, retry_after))
+            default_backoff = (
+                OPEN_METEO_RATE_LIMIT_RETRY_SECONDS * (2 ** attempt)
+                if response is not None and response.status_code == 429
+                else 2 ** attempt
+            )
+            time.sleep(max(default_backoff, retry_after))
     raise last_error or RuntimeError(f'Failed to fetch from {OPEN_METEO_ARCHIVE} after {retries} attempts')
 
 
@@ -128,6 +136,52 @@ def _estimate_archive_call_units(*, location_count: int, season_start: date, as_
     duration_multiplier = max(1, math.ceil(day_span / 14.0))
     variable_multiplier = max(1.0, len(OPEN_METEO_DAILY_VARS) / 10.0)
     return max(1, int(math.ceil(location_count * duration_multiplier * variable_multiplier)))
+
+
+def _cache_key(lat: float, lng: float, as_of: datetime) -> str:
+    return f'{lat:.4f},{lng:.4f},{as_of.date().isoformat()}'
+
+
+def _proxy_to_cache_value(proxy: SnowpackProxy) -> dict[str, Any]:
+    return {
+        'estimated_shear_strength': proxy.estimated_shear_strength,
+        'snow_settlement_index': proxy.snow_settlement_index,
+        'season_start': proxy.season_start,
+        'method': proxy.method,
+    }
+
+
+def _proxy_from_cache_value(value: Any) -> SnowpackProxy | None:
+    if not isinstance(value, dict):
+        return None
+    try:
+        return SnowpackProxy(
+            estimated_shear_strength=float(value['estimated_shear_strength']),
+            snow_settlement_index=float(value['snow_settlement_index']),
+            season_start=str(value['season_start']),
+            method=str(value['method']),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _load_proxy_cache(cache_path: Path | None) -> dict[str, Any]:
+    if cache_path is None or not cache_path.exists():
+        return {}
+    try:
+        payload = json.loads(cache_path.read_text(encoding='utf-8'))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _write_proxy_cache(cache_path: Path | None, cache_payload: dict[str, Any]) -> None:
+    if cache_path is None:
+        return
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = cache_path.with_suffix(f'{cache_path.suffix}.tmp')
+    tmp_path.write_text(json.dumps(cache_payload, sort_keys=True), encoding='utf-8')
+    tmp_path.replace(cache_path)
 
 
 def _fetch_seasonal_weather(lat: float, lng: float, season_start: date, as_of: datetime) -> dict | None:
@@ -218,6 +272,7 @@ def fetch_batched_cell_snowpack_proxies_strict(
     coordinates: Iterable[tuple[float, float]],
     as_of: datetime,
     batch_size: int = OPEN_METEO_BATCH_SIZE,
+    cache_path: Path | None = None,
 ) -> list[SnowpackProxy]:
     coords = list(coordinates)
     if not coords:
@@ -235,14 +290,23 @@ def fetch_batched_cell_snowpack_proxies_strict(
         batch_size,
         max(1, OPEN_METEO_MINUTE_BUDGET // per_location_units),
     )
-    proxies: list[SnowpackProxy] = []
+    cache_payload = _load_proxy_cache(cache_path)
+    resolved_proxies: list[SnowpackProxy | None] = [None] * len(coords)
+    missing_indices: list[int] = []
+    for index, (lat, lng) in enumerate(coords):
+        cached_proxy = _proxy_from_cache_value(cache_payload.get(_cache_key(float(lat), float(lng), as_of)))
+        if cached_proxy is not None:
+            resolved_proxies[index] = cached_proxy
+        else:
+            missing_indices.append(index)
     window_started = time.monotonic()
     units_used_in_window = 0
-    for offset in range(0, len(coords), effective_batch_size):
+    for offset in range(0, len(missing_indices), effective_batch_size):
         if time.monotonic() - window_started >= OPEN_METEO_WINDOW_SECONDS:
             window_started = time.monotonic()
             units_used_in_window = 0
-        batch = coords[offset:offset + effective_batch_size]
+        batch_indices = missing_indices[offset:offset + effective_batch_size]
+        batch = [coords[index] for index in batch_indices]
         estimated_units = _estimate_archive_call_units(
             location_count=len(batch),
             season_start=season_start,
@@ -261,26 +325,30 @@ def fetch_batched_cell_snowpack_proxies_strict(
         )
         units_used_in_window += estimated_units
         items = _normalize_archive_batch_payload(payload, expected_count=len(batch))
-        for batch_index, item in enumerate(items):
+        for resolved_index, item in zip(batch_indices, items):
             daily = item.get('daily')
             if not isinstance(daily, dict):
                 raise RuntimeError(
-                    f'Missing daily seasonal weather payload for batch cell index {offset + batch_index}'
+                    f'Missing daily seasonal weather payload for batch cell index {resolved_index}'
                 )
             proxy = _proxy_from_seasonal(daily)
             if proxy is None:
                 raise RuntimeError(
-                    f'Unable to compute seasonal snowpack proxy for batch cell index {offset + batch_index}'
+                    f'Unable to compute seasonal snowpack proxy for batch cell index {resolved_index}'
                 )
-            proxies.append(
-                SnowpackProxy(
-                    estimated_shear_strength=proxy.estimated_shear_strength,
-                    snow_settlement_index=proxy.snow_settlement_index,
-                    season_start=season_start.isoformat(),
-                    method=proxy.method,
-                )
+            strict_proxy = SnowpackProxy(
+                estimated_shear_strength=proxy.estimated_shear_strength,
+                snow_settlement_index=proxy.snow_settlement_index,
+                season_start=season_start.isoformat(),
+                method=proxy.method,
             )
-    return proxies
+            resolved_proxies[resolved_index] = strict_proxy
+            lat, lng = coords[resolved_index]
+            cache_payload[_cache_key(float(lat), float(lng), as_of)] = _proxy_to_cache_value(strict_proxy)
+        _write_proxy_cache(cache_path, cache_payload)
+    if any(proxy is None for proxy in resolved_proxies):
+        raise RuntimeError('Strict snowpack proxy fetch completed with unresolved coordinates')
+    return [proxy for proxy in resolved_proxies if proxy is not None]
 
 
 def compute_region_snowpack_proxy(

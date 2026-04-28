@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 import requests
@@ -109,6 +111,35 @@ class SnowpackProxyBatchTests(unittest.TestCase):
                     coordinates=[(46.8, 9.8)],
                     as_of=datetime(2026, 4, 28, tzinfo=timezone.utc),
                 )
+
+    def test_fetch_batched_cell_snowpack_proxies_strict_reads_cached_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cache_path = Path(tmp_dir) / 'snowpack-cache.json'
+            cache_path.write_text(
+                json.dumps(
+                    {
+                        '46.8000,9.8000,2026-04-28': {
+                            'estimated_shear_strength': 3.4,
+                            'snow_settlement_index': 0.62,
+                            'season_start': '2025-11-01',
+                            'method': 'seasonal_cumulative_v1',
+                        }
+                    }
+                ),
+                encoding='utf-8',
+            )
+
+            with patch.object(snowpack_proxy.requests, 'get') as get_mock:
+                proxies = fetch_batched_cell_snowpack_proxies_strict(
+                    coordinates=[(46.8, 9.8)],
+                    as_of=datetime(2026, 4, 28, tzinfo=timezone.utc),
+                    cache_path=cache_path,
+                )
+
+        self.assertEqual(len(proxies), 1)
+        self.assertEqual(proxies[0].estimated_shear_strength, 3.4)
+        self.assertEqual(proxies[0].method, 'seasonal_cumulative_v1')
+        get_mock.assert_not_called()
 
 
 if __name__ == '__main__':

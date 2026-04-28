@@ -257,6 +257,8 @@ def build_cells(
     bundle,
     grid_size: int,
     forecast_date: pd.Timestamp,
+    *,
+    artifact_dir: Path | None = None,
 ):
     selector = bundle['selector']
     calibrated_model = bundle['calibrated_model']
@@ -290,6 +292,11 @@ def build_cells(
     snowpack_proxies = fetch_batched_cell_snowpack_proxies_strict(
         coordinates=cell_centers,
         as_of=forecast_date.to_pydatetime(),
+        cache_path=(
+            artifact_dir / 'snowpack_proxy_cache' / f'{region.key}-{forecast_date.date().isoformat()}.json'
+            if artifact_dir is not None
+            else None
+        ),
     )
     if len(snowpack_proxies) != len(region_grid):
         raise RuntimeError(
@@ -644,6 +651,7 @@ def main(argv: list[str] | None = None) -> int:
             bundle,
             grid_size=args.grid_size,
             forecast_date=forecast_date,
+            artifact_dir=artifact_dir,
         )
         payload = upsert_forecast_grid(
             region,
