@@ -50,6 +50,13 @@ class SnowpackProxy:
     method: str
 
 
+@dataclass(frozen=True)
+class SnowpackProxyBatchResult:
+    proxy: SnowpackProxy | None
+    status: str
+    error: str | None = None
+
+
 def winter_season_start(as_of: datetime) -> date:
     """Northern-hemisphere winter season convention: Nov 1 of the current
     winter. If we're between Jan 1 and Oct 31 the season start is Nov 1 of
@@ -274,6 +281,25 @@ def fetch_batched_cell_snowpack_proxies_strict(
     batch_size: int = OPEN_METEO_BATCH_SIZE,
     cache_path: Path | None = None,
 ) -> list[SnowpackProxy]:
+    results = fetch_batched_cell_snowpack_proxies_partial(
+        coordinates=coordinates,
+        as_of=as_of,
+        batch_size=batch_size,
+        cache_path=cache_path,
+    )
+    failed = next((result for result in results if result.proxy is None), None)
+    if failed is not None:
+        raise RuntimeError(failed.error or 'Strict snowpack proxy fetch completed with unresolved coordinates')
+    return [result.proxy for result in results if result.proxy is not None]
+
+
+def fetch_batched_cell_snowpack_proxies_partial(
+    *,
+    coordinates: Iterable[tuple[float, float]],
+    as_of: datetime,
+    batch_size: int = OPEN_METEO_BATCH_SIZE,
+    cache_path: Path | None = None,
+) -> list[SnowpackProxyBatchResult]:
     coords = list(coordinates)
     if not coords:
         return []
@@ -291,12 +317,15 @@ def fetch_batched_cell_snowpack_proxies_strict(
         max(1, OPEN_METEO_MINUTE_BUDGET // per_location_units),
     )
     cache_payload = _load_proxy_cache(cache_path)
-    resolved_proxies: list[SnowpackProxy | None] = [None] * len(coords)
+    resolved_results: list[SnowpackProxyBatchResult | None] = [None] * len(coords)
     missing_indices: list[int] = []
     for index, (lat, lng) in enumerate(coords):
         cached_proxy = _proxy_from_cache_value(cache_payload.get(_cache_key(float(lat), float(lng), as_of)))
         if cached_proxy is not None:
-            resolved_proxies[index] = cached_proxy
+            resolved_results[index] = SnowpackProxyBatchResult(
+                proxy=cached_proxy,
+                status='ready',
+            )
         else:
             missing_indices.append(index)
     window_started = time.monotonic()
@@ -320,35 +349,59 @@ def fetch_batched_cell_snowpack_proxies_strict(
             units_used_in_window = 0
         latitudes = [float(lat) for lat, _ in batch]
         longitudes = [float(lng) for _, lng in batch]
-        payload = _fetch_archive_payload(
-            params=_archive_request_params(latitudes, longitudes, season_start, as_of),
-        )
+        try:
+            payload = _fetch_archive_payload(
+                params=_archive_request_params(latitudes, longitudes, season_start, as_of),
+            )
+            items = _normalize_archive_batch_payload(payload, expected_count=len(batch))
+        except Exception as exc:
+            error_text = str(exc)
+            for resolved_index in batch_indices:
+                resolved_results[resolved_index] = SnowpackProxyBatchResult(
+                    proxy=None,
+                    status='unavailable_weather',
+                    error=error_text,
+                )
+            continue
         units_used_in_window += estimated_units
-        items = _normalize_archive_batch_payload(payload, expected_count=len(batch))
         for resolved_index, item in zip(batch_indices, items):
             daily = item.get('daily')
             if not isinstance(daily, dict):
-                raise RuntimeError(
-                    f'Missing daily seasonal weather payload for batch cell index {resolved_index}'
+                resolved_results[resolved_index] = SnowpackProxyBatchResult(
+                    proxy=None,
+                    status='unavailable_weather',
+                    error=f'Missing daily seasonal weather payload for batch cell index {resolved_index}',
                 )
+                continue
             proxy = _proxy_from_seasonal(daily)
             if proxy is None:
-                raise RuntimeError(
-                    f'Unable to compute seasonal snowpack proxy for batch cell index {resolved_index}'
+                resolved_results[resolved_index] = SnowpackProxyBatchResult(
+                    proxy=None,
+                    status='unavailable_weather',
+                    error=f'Unable to compute seasonal snowpack proxy for batch cell index {resolved_index}',
                 )
+                continue
             strict_proxy = SnowpackProxy(
                 estimated_shear_strength=proxy.estimated_shear_strength,
                 snow_settlement_index=proxy.snow_settlement_index,
                 season_start=season_start.isoformat(),
                 method=proxy.method,
             )
-            resolved_proxies[resolved_index] = strict_proxy
+            resolved_results[resolved_index] = SnowpackProxyBatchResult(
+                proxy=strict_proxy,
+                status='ready',
+            )
             lat, lng = coords[resolved_index]
             cache_payload[_cache_key(float(lat), float(lng), as_of)] = _proxy_to_cache_value(strict_proxy)
         _write_proxy_cache(cache_path, cache_payload)
-    if any(proxy is None for proxy in resolved_proxies):
-        raise RuntimeError('Strict snowpack proxy fetch completed with unresolved coordinates')
-    return [proxy for proxy in resolved_proxies if proxy is not None]
+    for index, result in enumerate(resolved_results):
+        if result is None:
+            resolved_results[index] = SnowpackProxyBatchResult(
+                proxy=None,
+                status='unavailable_weather',
+                error='Strict snowpack proxy fetch completed with unresolved coordinates',
+            )
+    return [result for result in resolved_results if result is not None]
 
 
 def compute_region_snowpack_proxy(

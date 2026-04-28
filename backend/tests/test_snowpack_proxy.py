@@ -10,7 +10,10 @@ from unittest.mock import patch
 import requests
 
 from backend.common import snowpack_proxy
-from backend.common.snowpack_proxy import fetch_batched_cell_snowpack_proxies_strict
+from backend.common.snowpack_proxy import (
+    fetch_batched_cell_snowpack_proxies_partial,
+    fetch_batched_cell_snowpack_proxies_strict,
+)
 
 
 class FakeResponse:
@@ -41,6 +44,36 @@ def _daily_payload(*, temp_mean: float = -6.0, temp_min: float = -10.0, snowfall
 
 
 class SnowpackProxyBatchTests(unittest.TestCase):
+    def test_fetch_batched_cell_snowpack_proxies_partial_localizes_missing_daily_payload(self) -> None:
+        response = FakeResponse(200, [_daily_payload(), {}])
+
+        with patch.object(snowpack_proxy.requests, 'get', return_value=response):
+            results = fetch_batched_cell_snowpack_proxies_partial(
+                coordinates=[(46.8, 9.8), (46.9, 9.9)],
+                as_of=datetime(2026, 4, 28, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0].status, 'ready')
+        self.assertIsNotNone(results[0].proxy)
+        self.assertEqual(results[1].status, 'unavailable_weather')
+        self.assertIsNone(results[1].proxy)
+        self.assertIn('Missing daily seasonal weather payload', results[1].error or '')
+
+    def test_fetch_batched_cell_snowpack_proxies_partial_localizes_batch_failures(self) -> None:
+        mismatch = FakeResponse(200, [_daily_payload()])
+
+        with patch.object(snowpack_proxy.requests, 'get', return_value=mismatch):
+            results = fetch_batched_cell_snowpack_proxies_partial(
+                coordinates=[(46.8, 9.8), (46.9, 9.9)],
+                as_of=datetime(2026, 4, 28, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(len(results), 2)
+        self.assertTrue(all(result.status == 'unavailable_weather' for result in results))
+        self.assertTrue(all(result.proxy is None for result in results))
+        self.assertTrue(all('count mismatch' in (result.error or '') for result in results))
+
     def test_fetch_batched_cell_snowpack_proxies_strict_parses_multi_coordinate_payload(self) -> None:
         response = FakeResponse(200, [_daily_payload(), _daily_payload(temp_mean=-3.0, snowfall=8.0)])
 

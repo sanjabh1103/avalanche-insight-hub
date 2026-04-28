@@ -1103,9 +1103,15 @@ def _load_inference_summary(artifact_dir: Path | None) -> tuple[dict[str, Any], 
     surrogate_model_version = None
     dynamic_model_type = None
     dynamic_model_version = None
+    partial_regions = 0
+    ready_cells = 0
+    unavailable_terrain_cells = 0
+    unavailable_weather_cells = 0
     for region_payload in forecast_payload:
         if not isinstance(region_payload, dict):
             continue
+        if region_payload.get('status') == 'partial':
+            partial_regions += 1
         metadata = region_payload.get('model_metadata') if isinstance(region_payload.get('model_metadata'), dict) else {}
         surrogate_model_version = surrogate_model_version or metadata.get('surrogate_model_version')
         dynamic_model_type = dynamic_model_type or metadata.get('dynamic_model_type')
@@ -1115,6 +1121,13 @@ def _load_inference_summary(artifact_dir: Path | None) -> tuple[dict[str, Any], 
         for cell in grid_geojson:
             if not isinstance(cell, dict):
                 continue
+            cell_status = str(cell.get('status') or 'ready')
+            if cell_status == 'ready':
+                ready_cells += 1
+            elif cell_status == 'unavailable_terrain':
+                unavailable_terrain_cells += 1
+            elif cell_status == 'unavailable_weather':
+                unavailable_weather_cells += 1
             shap_context = cell.get('shap_context') if isinstance(cell.get('shap_context'), dict) else {}
             top_features = shap_context.get('top_features') if isinstance(shap_context.get('top_features'), list) else []
             has_shap = bool(cell.get('shap_values')) or bool(top_features)
@@ -1129,6 +1142,10 @@ def _load_inference_summary(artifact_dir: Path | None) -> tuple[dict[str, Any], 
         'regions_written': manifest.get('regions_written', len(forecast_payload)),
         'total_cells_written': manifest.get('total_cells_written', total_cells_written),
         'cells_with_shap': cells_with_shap,
+        'partial_regions': manifest.get('partial_regions', partial_regions),
+        'ready_cells': manifest.get('ready_cells', ready_cells),
+        'unavailable_terrain_cells': manifest.get('unavailable_terrain_cells', unavailable_terrain_cells),
+        'unavailable_weather_cells': manifest.get('unavailable_weather_cells', unavailable_weather_cells),
         'sample_dominant_driver': sample_dominant_driver,
         'surrogate_model_version': surrogate_model_version,
         'dynamic_model_type': dynamic_model_type,
@@ -1296,6 +1313,10 @@ def run_infer_mtslstm(
         'regions_written': summary.get('regions_written'),
         'total_cells_written': summary.get('total_cells_written'),
         'cells_with_shap': summary.get('cells_with_shap'),
+        'partial_regions': summary.get('partial_regions'),
+        'ready_cells': summary.get('ready_cells'),
+        'unavailable_terrain_cells': summary.get('unavailable_terrain_cells'),
+        'unavailable_weather_cells': summary.get('unavailable_weather_cells'),
         'sample_dominant_driver': summary.get('sample_dominant_driver'),
         'surrogate_model_version': summary.get('surrogate_model_version'),
         'dynamic_model_type': summary.get('dynamic_model_type'),

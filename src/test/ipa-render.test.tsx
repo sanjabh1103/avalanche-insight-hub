@@ -187,4 +187,53 @@ describe('IPA hydration and render contract', () => {
     expect(screen.getByText(/dynamic_model_version: mts-lstm-42/i)).toBeTruthy();
     expect(screen.getByText(/surrogate_model_version: rf-surrogate-7/i)).toBeTruthy();
   });
+
+  it('keeps ready cells usable when the batch status is partial', () => {
+    const row: ForecastGridRowRecord = {
+      id: 'grid-3',
+      region_name: 'Colorado Rockies',
+      forecast_date: '2026-04-23',
+      horizon_hours: 24,
+      bbox: [0, 0, 1, 1],
+      status: 'partial',
+      grid_geojson: [
+        {
+          row: 1,
+          col: 1,
+          lat: 1,
+          lng: 2,
+          lat_end: 1.5,
+          lng_end: 2.5,
+          risk_score: 4,
+          status: 'ready',
+          stale: false,
+          disabled: false,
+          shap_values: { snowfall_24h: 0.2 },
+          problem_type: 'Storm Slab',
+        },
+        {
+          row: 1,
+          col: 2,
+          lat: 1,
+          lng: 2,
+          lat_end: 1.5,
+          lng_end: 2.5,
+          risk_score: 0,
+          status: 'unavailable_terrain',
+          stale: true,
+          disabled: true,
+          availability_reason: 'unavailable_terrain',
+          shap_values: {},
+        },
+      ],
+    };
+
+    const cells = forecastGridRowToCells(row);
+
+    expect(cells).toHaveLength(2);
+    expect(cells[0].status).toBe('ready');
+    expect(cells[0].disabled).toBe(false);
+    expect(cells[1].status).toBe('unavailable_terrain');
+    expect(cells[1].disabled).toBe(true);
+  });
 });

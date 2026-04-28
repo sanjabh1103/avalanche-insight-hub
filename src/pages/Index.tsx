@@ -35,7 +35,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 type ForecastSource = 'precomputed' | null;
-type ForecastAvailability = 'ready' | 'stale' | 'unavailable';
+type ForecastAvailability = 'ready' | 'partial' | 'stale' | 'unavailable';
 
 export default function Index() {
   const isMobile = useIsMobile();
@@ -81,8 +81,19 @@ export default function Index() {
     setActiveForecastRow(row);
     setForecastId(row.id);
     setForecastSource('precomputed');
-    setForecastAvailability(row.status === 'ready' ? 'ready' : 'stale');
-    setForecastNotice(row.status === 'ready' ? null : 'Using a non-ready precomputed batch artifact.');
+    const nextAvailability: ForecastAvailability = row.status === 'ready'
+      ? 'ready'
+      : row.status === 'partial'
+        ? 'partial'
+        : 'stale';
+    setForecastAvailability(nextAvailability);
+    setForecastNotice(
+      nextAvailability === 'ready'
+        ? null
+        : nextAvailability === 'partial'
+          ? 'Using a partial precomputed batch artifact. Grey cells are unavailable in this run.'
+          : 'Using a stale precomputed batch artifact.',
+    );
     setHourlyGrids(grids);
     const summary = row.weather_summary;
     if (summary && typeof summary === 'object' && !Array.isArray(summary)) {
@@ -563,7 +574,13 @@ export default function Index() {
           {/* Data source indicator */}
           {hourlyGrids && (
             <div className="absolute top-[11rem] right-4 z-10 md:top-[8.75rem] lg:top-[7.5rem]">
-              <span className={`glass-panel rounded-full px-3 py-1 text-[10px] font-mono ${forecastAvailability === 'ready' ? 'text-emerald-400' : 'text-amber-300'}`}>
+              <span className={`glass-panel rounded-full px-3 py-1 text-[10px] font-mono ${
+                forecastAvailability === 'ready'
+                  ? 'text-emerald-400'
+                  : forecastAvailability === 'partial'
+                    ? 'text-amber-300'
+                    : 'text-rose-300'
+              }`}>
                 ● {forecastSource === 'precomputed' ? 'PRECOMPUTED GRID' : 'FORECAST DATA'} ({hourlyGrids.length}h)
               </span>
             </div>

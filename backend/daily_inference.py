@@ -30,7 +30,7 @@ from backend.common.risk_math import (
     legacy_max_risk_level,
     risk_level as ipa_risk_level,
 )
-from backend.common.snowpack_proxy import fetch_batched_cell_snowpack_proxies_strict
+from backend.common.snowpack_proxy import fetch_batched_cell_snowpack_proxies_partial
 from backend.common.supabase_io import has_supabase_credentials, patch_first_row, rest_get, rest_upsert
 from backend.common.sequence_features import build_inference_branches
 from backend.lstm_model import predict_production_probability
@@ -228,7 +228,7 @@ def _default_inference_backend(bundle: dict[str, object]) -> str:
     return 'github_actions_surrogate_rf'
 
 
-def _build_unavailable_terrain_cell(
+def _build_unavailable_cell(
     *,
     cell: dict[str, object],
     center_lat: float,
@@ -272,7 +272,7 @@ def _build_unavailable_terrain_cell(
         'hazard': 0.0,
         'exposure': 0.0,
         'vulnerability': 0.0,
-        'problem_type': 'Unavailable terrain',
+        'problem_type': 'Unavailable terrain' if reason == 'unavailable_terrain' else 'Unavailable weather',
         'shap_values': {},
         'shap_context': {'top_features': []},
         'feature_values': {},
@@ -377,7 +377,7 @@ def build_cells(
         )
         for cell in region_grid
     ]
-    snowpack_proxies = fetch_batched_cell_snowpack_proxies_strict(
+    snowpack_results = fetch_batched_cell_snowpack_proxies_partial(
         coordinates=cell_centers,
         as_of=forecast_date.to_pydatetime(),
         cache_path=(
@@ -386,24 +386,37 @@ def build_cells(
             else None
         ),
     )
-    if len(snowpack_proxies) != len(region_grid):
+    if len(snowpack_results) != len(region_grid):
         raise RuntimeError(
             f'Snowpack proxy count mismatch for {region.key}: '
-            f'expected {len(region_grid)}, received {len(snowpack_proxies)}'
+            f'expected {len(region_grid)}, received {len(snowpack_results)}'
         )
 
-    for cell, (center_lat, center_lng), snowpack_proxy in zip(region_grid, cell_centers, snowpack_proxies):
+    for cell, (center_lat, center_lng), snowpack_result in zip(region_grid, cell_centers, snowpack_results):
+        snowpack_proxy = snowpack_result.proxy
         try:
             terrain = extract_cell_terrain(str(dem_path), lat=center_lat, lng=center_lng)
         except (TerrainUnavailableError, ValueError):
             rows.append(
-                _build_unavailable_terrain_cell(
+                _build_unavailable_cell(
                     cell=cell,
                     center_lat=center_lat,
                     center_lng=center_lng,
                     bundle=bundle,
                     snowpack_proxy=snowpack_proxy,
                     reason='unavailable_terrain',
+                )
+            )
+            continue
+        if snowpack_proxy is None:
+            rows.append(
+                _build_unavailable_cell(
+                    cell=cell,
+                    center_lat=center_lat,
+                    center_lng=center_lng,
+                    bundle=bundle,
+                    snowpack_proxy=None,
+                    reason='unavailable_weather',
                 )
             )
             continue
@@ -574,8 +587,14 @@ def upsert_forecast_grid(
     sar_evidence = _fetch_region_sar_evidence(region.key)
     stale_cells = [row for row in rows if row.get('status') != 'ready']
     unavailable_terrain_cells = [row for row in stale_cells if row.get('availability_reason') == 'unavailable_terrain']
+    unavailable_weather_cells = [row for row in stale_cells if row.get('availability_reason') == 'unavailable_weather']
     ready_cell_count = len(rows) - len(stale_cells)
-    region_status = 'ready' if not stale_cells else 'stale'
+    if ready_cell_count == len(rows):
+        region_status = 'ready'
+    elif ready_cell_count > 0:
+        region_status = 'partial'
+    else:
+        region_status = 'stale'
     snowfall_avg = float(np.mean([item.get('snowfall_24h_cm', item.get('snowfall_24h', 0) * 40) for item in weather_inputs])) if weather_inputs else 0.0
     wind_avg = float(np.mean([item.get('windspeed_10m', item.get('wind_loading', 0) * 55) for item in weather_inputs])) if weather_inputs else 0.0
     temperature_avg = float(np.mean([item.get('downscaled_temperature_c', item.get('temperature_2m', 0)) for item in weather_inputs])) if weather_inputs else 0.0
@@ -604,8 +623,14 @@ def upsert_forecast_grid(
             'cell_count': len(rows),
             'ready_cell_count': ready_cell_count,
             'stale_cell_count': len(stale_cells),
+            'unavailable_terrain_cell_count': len(unavailable_terrain_cells),
+            'unavailable_weather_cell_count': len(unavailable_weather_cells),
             'source': 'open_meteo_forecast_downscaled_v1',
         },
+        'ready_cell_count': ready_cell_count,
+        'stale_cell_count': len(stale_cells),
+        'unavailable_terrain_cell_count': len(unavailable_terrain_cells),
+        'unavailable_weather_cell_count': len(unavailable_weather_cells),
         'model_metadata': {
             'model_version': bundle['created_at'],
             'dynamic_model_type': bundle.get('dynamic_model_type'),
@@ -638,10 +663,11 @@ def upsert_forecast_grid(
             ),
             'sar_mask_asset_refs': sar_evidence.get('mask_asset_refs', []),
             'sar_event_geometries': sar_evidence.get('sar_event_geometries', []),
-            'stale': bool(stale_cells),
+            'stale': ready_cell_count == 0,
             'ready_cell_count': ready_cell_count,
             'stale_cell_count': len(stale_cells),
             'unavailable_terrain_cell_count': len(unavailable_terrain_cells),
+            'unavailable_weather_cell_count': len(unavailable_weather_cells),
         },
         'status': region_status,
     }
@@ -793,13 +819,17 @@ def main(argv: list[str] | None = None) -> int:
         'artifact_dir': str(artifact_dir),
         'regions_written': len(outputs),
         'total_cells_written': sum(len(payload.get('grid_geojson') or []) for payload in outputs),
-        'stale_regions': sum(1 for payload in outputs if payload.get('status') != 'ready'),
+        'partial_regions': sum(1 for payload in outputs if payload.get('status') == 'partial'),
+        'stale_regions': sum(1 for payload in outputs if payload.get('status') == 'stale'),
+        'ready_cells': sum(int(payload.get('ready_cell_count') or 0) for payload in outputs),
         'stale_cells': sum(
             1
             for payload in outputs
             for cell in (payload.get('grid_geojson') or [])
             if cell.get('status') != 'ready'
         ),
+        'unavailable_terrain_cells': sum(int(payload.get('unavailable_terrain_cell_count') or 0) for payload in outputs),
+        'unavailable_weather_cells': sum(int(payload.get('unavailable_weather_cell_count') or 0) for payload in outputs),
         'dry_run': bool(args.dry_run),
         'regions': [
             {
@@ -807,10 +837,12 @@ def main(argv: list[str] | None = None) -> int:
                 'region_name': payload.get('region_name'),
                 'forecast_date': payload.get('forecast_date'),
                 'horizon_hours': payload.get('horizon_hours'),
+                'status': payload.get('status'),
                 'cell_count': len(payload.get('grid_geojson') or []),
-                'stale_cell_count': sum(
-                    1 for cell in (payload.get('grid_geojson') or []) if cell.get('status') != 'ready'
-                ),
+                'ready_cell_count': int(payload.get('ready_cell_count') or 0),
+                'stale_cell_count': int(payload.get('stale_cell_count') or 0),
+                'unavailable_terrain_cell_count': int(payload.get('unavailable_terrain_cell_count') or 0),
+                'unavailable_weather_cell_count': int(payload.get('unavailable_weather_cell_count') or 0),
                 'runout_method_sample': (payload.get('model_metadata') or {}).get('runout_method_sample'),
                 'training_dataset_version': (payload.get('model_metadata') or {}).get('training_dataset_version'),
             }

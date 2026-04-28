@@ -546,12 +546,13 @@ class SarUnetWorkerTests(unittest.TestCase):
             artifact_dir = artifact_root / '20260425T010000Z'
             artifact_dir.mkdir()
             (artifact_dir / 'inference_manifest.json').write_text(
-                '{"regions_written":3,"total_cells_written":5,"dry_run":true,"completed_at":"2026-04-25T01:23:45+00:00"}',
+                '{"regions_written":3,"total_cells_written":5,"partial_regions":1,"ready_cells":3,"unavailable_terrain_cells":1,"unavailable_weather_cells":1,"dry_run":true,"completed_at":"2026-04-25T01:23:45+00:00"}',
                 encoding='utf-8',
             )
             (artifact_dir / 'forecast_grids.json').write_text(
                 json.dumps([
                     {
+                        'status': 'partial',
                         'region_key': 'davos',
                         'grid_geojson': [
                             {
@@ -567,6 +568,51 @@ class SarUnetWorkerTests(unittest.TestCase):
                                 'dominant_driver_feature': 'wind_loading',
                                 'shap_values': {'wind_loading': -0.11},
                                 'shap_context': {'top_features': [{'feature': 'wind_loading', 'rank': 1}]},
+                            },
+                            {
+                                'row': 0,
+                                'col': 2,
+                                'status': 'unavailable_terrain',
+                                'availability_reason': 'unavailable_terrain',
+                                'shap_values': {},
+                                'shap_context': {'top_features': []},
+                            },
+                        ],
+                        'model_metadata': {
+                            'surrogate_model_version': 'rf_surrogate_v1',
+                            'dynamic_model_type': 'mts_lstm',
+                            'dynamic_model_version': 'mts_lstm_shadow_v1',
+                        },
+                    },
+                    {
+                        'status': 'ready',
+                        'region_key': 'andermatt',
+                        'grid_geojson': [
+                            {
+                                'row': 0,
+                                'col': 0,
+                                'dominant_driver_feature': None,
+                                'shap_values': {},
+                                'shap_context': {'top_features': []},
+                            },
+                        ],
+                        'model_metadata': {
+                            'surrogate_model_version': 'rf_surrogate_v1',
+                            'dynamic_model_type': 'mts_lstm',
+                            'dynamic_model_version': 'mts_lstm_shadow_v1',
+                        },
+                    },
+                    {
+                        'status': 'stale',
+                        'region_key': 'niseko',
+                        'grid_geojson': [
+                            {
+                                'row': 0,
+                                'col': 0,
+                                'status': 'unavailable_weather',
+                                'availability_reason': 'unavailable_weather',
+                                'shap_values': {},
+                                'shap_context': {'top_features': []},
                             },
                         ],
                         'model_metadata': {
@@ -601,6 +647,10 @@ class SarUnetWorkerTests(unittest.TestCase):
         self.assertTrue(report['dry_run'])
         self.assertEqual(report['total_cells_written'], 5)
         self.assertEqual(report['cells_with_shap'], 2)
+        self.assertEqual(report['partial_regions'], 1)
+        self.assertEqual(report['ready_cells'], 3)
+        self.assertEqual(report['unavailable_terrain_cells'], 1)
+        self.assertEqual(report['unavailable_weather_cells'], 1)
         self.assertEqual(report['sample_dominant_driver'], 'snowfall_24h')
         self.assertEqual(report['surrogate_model_version'], 'rf_surrogate_v1')
         self.assertEqual(report['dynamic_model_type'], 'mts_lstm')
