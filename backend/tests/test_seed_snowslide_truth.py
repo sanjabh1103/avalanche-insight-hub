@@ -28,6 +28,18 @@ from backend.scripts.seed_snowslide_truth import (
 
 
 class SeedSnowSlideTruthTests(unittest.TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.rest_get_patcher = patch('backend.scripts.seed_snowslide_truth.rest_get', return_value=[])
+        self.rest_delete_patcher = patch('backend.scripts.seed_snowslide_truth.rest_delete', return_value=[])
+        self.rest_get_mock = self.rest_get_patcher.start()
+        self.rest_delete_mock = self.rest_delete_patcher.start()
+
+    def tearDown(self) -> None:
+        self.rest_delete_patcher.stop()
+        self.rest_get_patcher.stop()
+        super().tearDown()
+
     @staticmethod
     def _write_archive(
         path: Path,
@@ -325,6 +337,41 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
         self.assertTrue(set_insert['authoritative'])
         self.assertTrue(set_update['authoritative'])
         self.assertTrue(result['authoritative'])
+
+    @patch('backend.scripts.seed_snowslide_truth.storage_upsert_json', return_value='sar-masks/heldout/snowslide/2026-04-25/reference_sets/snowslide-v1/registry.json')
+    @patch('backend.scripts.seed_snowslide_truth.storage_upload_bytes')
+    @patch('backend.scripts.seed_snowslide_truth.rest_upsert')
+    def test_seed_snowslide_truth_removes_stale_rows_when_reseeding_same_set_key(
+        self,
+        rest_upsert_mock,
+        storage_upload_bytes_mock,
+        _storage_upsert_json_mock,
+    ) -> None:
+        self.rest_get_mock.return_value = [
+            {'id': 'item-1', 'external_scene_id': 'S1A_001'},
+            {'id': 'item-stale', 'external_scene_id': 'S1A_999'},
+        ]
+        rest_upsert_mock.side_effect = [
+            [{'id': 'set-1', 'set_key': 'snowslide-v1', 'status': 'draft'}],
+            [{'id': 'item-1'}],
+            [{'id': 'set-1', 'set_key': 'snowslide-v1', 'status': 'draft'}],
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            archive_path = Path(tmpdir) / 'snowslide.zip'
+            self._write_archive(archive_path)
+
+            result = seed_snowslide_truth(self._build_args(source_zip=archive_path))
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(storage_upload_bytes_mock.call_count, 2)
+        self.rest_get_mock.assert_called_once()
+        self.rest_delete_mock.assert_called_once_with(
+            'sar_release_reference_items',
+            filters={
+                'reference_set_id': 'eq.set-1',
+                'id': 'in.("item-stale")',
+            },
+        )
 
     @patch('backend.scripts.seed_snowslide_truth.storage_upsert_json', return_value='sar-masks/heldout/snowslide/2026-04-25/reference_sets/snowslide-canary/registry.json')
     @patch('backend.scripts.seed_snowslide_truth.storage_upload_bytes')

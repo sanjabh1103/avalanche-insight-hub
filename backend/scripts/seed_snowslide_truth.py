@@ -30,7 +30,7 @@ from backend.common.sar_release_refs import (
     build_release_asset_ref,
 )
 from backend.common.storage_io import storage_upload_bytes, storage_upsert_json
-from backend.common.supabase_io import rest_upsert
+from backend.common.supabase_io import rest_delete, rest_get, rest_upsert
 from backend.sar_unet_worker import _normalize_stack
 
 try:  # pragma: no cover - optional dependency at runtime
@@ -158,6 +158,11 @@ def _normalize_headers(values: list[str]) -> dict[str, str]:
 
 def _slug(value: str) -> str:
     return re.sub(r'[^a-z0-9]+', '_', value.strip().lower()).strip('_')
+
+
+def _postgrest_in_filter(values: list[str]) -> str:
+    escaped = [value.replace('\\', '\\\\').replace('"', '\\"') for value in values]
+    return 'in.(' + ','.join(f'"{value}"' for value in escaped) + ')'
 
 
 def _infer_avalcd_split_from_member_name(member_name: str, *, default_split: str | None = None) -> str | None:
@@ -1288,6 +1293,22 @@ def seed_snowslide_truth(args: argparse.Namespace) -> dict[str, Any]:
         upsert_rows,
         on_conflict='reference_set_id,external_scene_id',
     )
+    current_scene_ids = {str(row['external_scene_id']) for row in upsert_rows}
+    existing_rows = rest_get('sar_release_reference_items', params={
+        'select': 'id,external_scene_id',
+        'reference_set_id': f'eq.{reference_set_id}',
+        'limit': '10000',
+    })
+    stale_row_ids = [
+        str(row['id'])
+        for row in existing_rows
+        if str(row.get('external_scene_id') or '') not in current_scene_ids
+    ]
+    if stale_row_ids:
+        rest_delete('sar_release_reference_items', filters={
+            'reference_set_id': f'eq.{reference_set_id}',
+            'id': _postgrest_in_filter(stale_row_ids),
+        })
 
     registry_payload = {
         'set_key': args.set_key,

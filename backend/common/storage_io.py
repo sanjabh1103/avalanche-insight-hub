@@ -1,11 +1,60 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 from urllib.parse import quote
 
 import requests
 
 from backend.common.supabase_io import SupabaseError, _base_url, _headers
+
+_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+_MAX_STORAGE_ATTEMPTS = 5
+
+
+def _retry_delay_seconds(*, attempt: int, response: requests.Response | None) -> float:
+    retry_after = 0.0
+    if response is not None:
+        retry_after_header = response.headers.get('Retry-After')
+        if retry_after_header:
+            try:
+                retry_after = float(retry_after_header)
+            except ValueError:
+                retry_after = 0.0
+    return max(float(2 ** attempt), retry_after)
+
+
+def _request_with_retry(
+    *,
+    operation: str,
+    request: Any,
+) -> requests.Response:
+    last_error: Exception | None = None
+    last_response: requests.Response | None = None
+    for attempt in range(_MAX_STORAGE_ATTEMPTS):
+        try:
+            response = request()
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            last_error = exc
+            last_response = None
+        else:
+            if response.ok:
+                return response
+            if response.status_code not in _RETRYABLE_STATUS_CODES:
+                raise SupabaseError(
+                    f'{operation} failed ({response.status_code}): {response.text}',
+                )
+            last_error = None
+            last_response = response
+        if attempt < _MAX_STORAGE_ATTEMPTS - 1:
+            time.sleep(_retry_delay_seconds(attempt=attempt, response=last_response))
+    if last_response is not None:
+        raise SupabaseError(
+            f'{operation} failed ({last_response.status_code}): {last_response.text}',
+        )
+    raise SupabaseError(
+        f'{operation} failed after {_MAX_STORAGE_ATTEMPTS} attempts: {last_error}',
+    )
 
 
 def storage_upload_bytes(
@@ -16,19 +65,18 @@ def storage_upload_bytes(
     content_type: str = 'application/octet-stream',
     upsert: bool = True,
 ) -> str:
-    response = requests.post(
-        f"{_base_url()}/storage/v1/object/{bucket}/{quote(object_path, safe='/')}",
-        headers={
-            **_headers(),
-            'Content-Type': content_type,
-            'x-upsert': 'true' if upsert else 'false',
-        },
-        data=payload,
-        timeout=120,
-    )
-    if not response.ok:
-        raise SupabaseError(
-            f'STORAGE UPLOAD {bucket}/{object_path} failed ({response.status_code}): {response.text}',
+    _request_with_retry(
+        operation=f'STORAGE UPLOAD {bucket}/{object_path}',
+        request=lambda: requests.post(
+            f"{_base_url()}/storage/v1/object/{bucket}/{quote(object_path, safe='/')}",
+            headers={
+                **_headers(),
+                'Content-Type': content_type,
+                'x-upsert': 'true' if upsert else 'false',
+            },
+            data=payload,
+            timeout=120,
+        ),
     )
     return f'{bucket}/{object_path}'
 
@@ -38,19 +86,18 @@ def storage_download_bytes(
     bucket: str,
     object_path: str,
 ) -> bytes:
-    response = requests.get(
-        f"{_base_url()}/storage/v1/object/authenticated/{bucket}/{quote(object_path, safe='/')}",
-        headers={
-            key: value
-            for key, value in _headers().items()
-            if key in {'apikey', 'Authorization'}
-        },
-        timeout=120,
+    response = _request_with_retry(
+        operation=f'STORAGE DOWNLOAD {bucket}/{object_path}',
+        request=lambda: requests.get(
+            f"{_base_url()}/storage/v1/object/authenticated/{bucket}/{quote(object_path, safe='/')}",
+            headers={
+                key: value
+                for key, value in _headers().items()
+                if key in {'apikey', 'Authorization'}
+            },
+            timeout=120,
+        ),
     )
-    if not response.ok:
-        raise SupabaseError(
-            f'STORAGE DOWNLOAD {bucket}/{object_path} failed ({response.status_code}): {response.text}',
-        )
     return response.content
 
 

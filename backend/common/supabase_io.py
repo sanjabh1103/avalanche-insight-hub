@@ -76,6 +76,21 @@ def rest_insert(table: str, records: list[dict[str, Any]]) -> list[dict[str, Any
     return data if isinstance(data, list) else [data]
 
 
+def rest_delete(table: str, filters: dict[str, str] | None = None) -> list[dict[str, Any]]:
+    response = requests.delete(
+        f"{_base_url()}/rest/v1/{table}",
+        headers={**_headers(), 'Prefer': 'return=representation'},
+        params=filters or {},
+        timeout=60,
+    )
+    if not response.ok:
+        raise SupabaseError(f'DELETE {table} failed ({response.status_code}): {response.text}')
+    if not response.text.strip():
+        return []
+    data = response.json()
+    return data if isinstance(data, list) else [data]
+
+
 def patch_first_row(table: str, values: dict[str, Any], filters: dict[str, str] | None = None) -> dict[str, Any] | None:
     query = {'select': 'id'}
     if filters:
