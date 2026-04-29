@@ -54,6 +54,15 @@ class RunoutPolygon:
     method: str
 
 
+def _coerce_probability(value: object, *, default: float) -> float:
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _rectangular_polygon(lat: float, lng: float, lat_end: float, lng_end: float) -> list[list[float]]:
     return [
         [lng, lat],
@@ -165,7 +174,7 @@ def runout_polygon_for_cell(
     lng = float(cell['lng'])
     lat_end = float(cell.get('lat_end', lat))
     lng_end = float(cell.get('lng_end', lng))
-    probability = float(cell.get('probability', 0.5))
+    probability = _coerce_probability(cell.get('probability'), default=0.5)
     slope_deg = float(cell.get('terrain_inputs', {}).get('slope_deg', 0.0)) or float(cell.get('slope_deg', 0.0))
     aspect_deg = float(cell.get('terrain_inputs', {}).get('aspect_deg', 0.0)) or float(cell.get('aspect_deg', 0.0))
     if slope_deg <= 0:
@@ -214,8 +223,19 @@ def build_runout_polygons(region_key: str, cells: list[dict]) -> list[dict]:
 
     Hard caps at RUNOUT_MAX_CELLS_PER_REGION to keep the scheduled run bounded.
     """
-    candidates = [c for c in cells if c.get('runout_seed') or float(c.get('probability', 0.0)) > 0.65]
-    candidates.sort(key=lambda c: float(c.get('probability', 0.0)), reverse=True)
+    candidates = [
+        cell
+        for cell in cells
+        if str(cell.get('status') or 'ready') == 'ready'
+        and (
+            cell.get('runout_seed')
+            or _coerce_probability(cell.get('probability'), default=0.0) > 0.65
+        )
+    ]
+    candidates.sort(
+        key=lambda cell: _coerce_probability(cell.get('probability'), default=0.0),
+        reverse=True,
+    )
     capped = candidates[:RUNOUT_MAX_CELLS_PER_REGION]
 
     polygons: list[dict] = []

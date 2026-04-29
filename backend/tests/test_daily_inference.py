@@ -230,6 +230,81 @@ class ForecastGridMetadataTests(unittest.TestCase):
         self.assertEqual(payload['stale_cell_count'], 2)
         self.assertTrue(payload['model_metadata']['stale'])
 
+    @patch('backend.common.runout.RUN_PHYSICS_RUNOUT', False)
+    @patch('backend.daily_inference.has_supabase_credentials', return_value=False)
+    @patch('backend.daily_inference._fetch_region_sar_evidence', return_value={'mask_asset_refs': [], 'sar_event_geometries': []})
+    def test_upsert_forecast_grid_tolerates_unavailable_cells_during_runout_generation(
+        self,
+        _fetch_sar_evidence_mock,
+        _has_creds_mock,
+    ) -> None:
+        region = SimpleNamespace(
+            key='colorado_rockies',
+            name='Colorado Rockies',
+            bbox=(38.5, -107.5, 40.5, -105.5),
+        )
+        bundle = {
+            'created_at': '2026-04-25T00:00:00+00:00',
+            'dynamic_model_type': 'mts_lstm',
+            'dynamic_model_version': 'mts_lstm_shadow_v1',
+            'surrogate_model_version': 'rf_surrogate_v1',
+            'selected_features': ['snowfall_24h', 'wind_loading'],
+            'feature_columns': ['snowfall_24h', 'wind_loading'],
+            'calibration_method': 'isotonic_v1',
+            'resampling': 'kmeanssmote',
+            'tree_variance_policy': 'gaussian_95ci',
+            'metrics': {'pss': 0.48},
+            'cv_metrics': {'folds': 5},
+            'training_dataset_version': 'real_event_join_v1',
+        }
+        rows = [
+            {
+                'row': 0,
+                'col': 0,
+                'lat': 39.10,
+                'lng': -106.10,
+                'lat_end': 39.11,
+                'lng_end': -106.09,
+                'risk_score': 4,
+                'probability': 0.72,
+                'runout_seed': True,
+                'status': 'ready',
+                'weather_inputs': {'snowfall_24h_cm': 12.0, 'windspeed_10m': 8.0, 'downscaled_temperature_c': -6.0, 'precipitation_24h_mm': 5.0},
+                'terrain_inputs': {'slope_deg': 34.0, 'aspect_deg': 180.0, 'slope': 0.5},
+                'shap_context': {'top_features': []},
+            },
+            {
+                'row': 0,
+                'col': 1,
+                'lat': 39.20,
+                'lng': -106.20,
+                'lat_end': 39.21,
+                'lng_end': -106.19,
+                'risk_score': 0,
+                'probability': None,
+                'runout_seed': False,
+                'status': 'unavailable_terrain',
+                'availability_reason': 'unavailable_terrain',
+                'weather_inputs': {},
+                'terrain_inputs': {},
+                'shap_context': {'top_features': []},
+            },
+        ]
+
+        payload = upsert_forecast_grid(
+            region,
+            bundle,
+            pd.Timestamp('2026-04-25T00:00:00Z'),
+            rows=rows,
+            horizon_hours=72,
+        )
+
+        self.assertEqual(payload['status'], 'partial')
+        self.assertEqual(payload['ready_cell_count'], 1)
+        self.assertEqual(len(payload['runout_polygons']), 1)
+        self.assertEqual(payload['runout_polygons'][0]['row'], 0)
+        self.assertEqual(payload['runout_polygons'][0]['col'], 0)
+
     @patch('backend.daily_inference.patch_first_row')
     @patch('backend.daily_inference.has_supabase_credentials', return_value=True)
     @patch('backend.daily_inference.dump_json')
