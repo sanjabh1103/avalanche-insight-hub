@@ -14,6 +14,11 @@ import shapefile
 from rasterio.io import MemoryFile
 from rasterio.transform import from_bounds
 
+from backend.common.avalcd_manifest import (
+    AVALCD_SCENE_MANIFEST_FILENAME,
+    build_avalcd_scene_manifest,
+    encode_patch_payload,
+)
 from backend.scripts.assemble_seed_archive import assemble_seed_archive
 from backend.scripts.seed_snowslide_truth import (
     main,
@@ -210,6 +215,24 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
                 members.append((f'{stem}{suffix}', (root / f'{stem}{suffix}').read_bytes()))
             return members
 
+    def _avalcd_scene_members(
+        self,
+        *,
+        split: str = 'validation',
+        region_key: str = 'livigno',
+        scene_stem: str = 'Livigno_20210101_001',
+        bbox: tuple[float, float, float, float] = (-106.6, 39.4, -106.4, 39.6),
+    ) -> list[tuple[str, bytes]]:
+        root = f'{split}/{region_key}'
+        members: list[tuple[str, bytes]] = [
+            (f'{root}/{scene_stem}_GT.tif', self._geotiff_bytes(np.ones((4, 4), dtype=np.float32), bbox=bbox)),
+            (f'{root}/{scene_stem}_preVV.tif', self._geotiff_bytes(np.ones((4, 4), dtype=np.float32) * 1.0, bbox=bbox)),
+            (f'{root}/{scene_stem}_preVH.tif', self._geotiff_bytes(np.ones((4, 4), dtype=np.float32) * 2.0, bbox=bbox)),
+            (f'{root}/{scene_stem}_postVV.tif', self._geotiff_bytes(np.ones((4, 4), dtype=np.float32) * 3.0, bbox=bbox)),
+            (f'{root}/{scene_stem}_postVH.tif', self._geotiff_bytes(np.ones((4, 4), dtype=np.float32) * 4.0, bbox=bbox)),
+        ]
+        return members
+
     @staticmethod
     def _build_args(
         *,
@@ -247,17 +270,23 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
         scene_root = root / 'validation' / 'livigno' / 'livigno_20210101_001'
         scene_root.mkdir(parents=True, exist_ok=True)
         (scene_root / 'truth_mask.tif').write_bytes(self._geotiff_bytes(np.ones((4, 4), dtype=np.float32)))
-        payload = io.BytesIO()
-        np.savez_compressed(
-            payload,
-            stack=np.stack([
+        manifest, patch_entries = build_avalcd_scene_manifest(
+            np.stack([
                 np.ones((4, 4), dtype=np.float32) * 1.0,
                 np.ones((4, 4), dtype=np.float32) * 2.0,
                 np.ones((4, 4), dtype=np.float32) * 3.0,
                 np.ones((4, 4), dtype=np.float32) * 4.0,
             ], axis=0),
+            bbox=(-106.6, 39.4, -106.4, 39.6),
         )
-        (scene_root / 'stack.npz').write_bytes(payload.getvalue())
+        (scene_root / AVALCD_SCENE_MANIFEST_FILENAME).write_text(
+            json.dumps(manifest, indent=2, sort_keys=True),
+            encoding='utf-8',
+        )
+        for patch_entry in patch_entries:
+            patch_path = scene_root / str(patch_entry['filename'])
+            patch_path.parent.mkdir(parents=True, exist_ok=True)
+            patch_path.write_bytes(encode_patch_payload(patch_entry['stack']))
 
     @patch('backend.scripts.seed_snowslide_truth.storage_upsert_json', return_value='sar-masks/heldout/snowslide/2026-04-25/reference_sets/snowslide-v1/registry.json')
     @patch('backend.scripts.seed_snowslide_truth.storage_upload_bytes')
@@ -599,7 +628,7 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
     @patch('backend.scripts.seed_snowslide_truth.storage_upsert_json', return_value='sar-masks/heldout/snowslide/2026-04-25/reference_sets/snowslide-v1/registry.json')
     @patch('backend.scripts.seed_snowslide_truth.storage_upload_bytes')
     @patch('backend.scripts.seed_snowslide_truth.rest_upsert')
-    def test_seed_snowslide_truth_accepts_assembled_avalcd_source_dir_and_preserves_four_channel_stack(
+    def test_seed_snowslide_truth_accepts_assembled_avalcd_source_dir_and_uploads_manifest_assets(
         self,
         rest_upsert_mock,
         storage_upload_bytes_mock,
@@ -617,12 +646,41 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
             result = seed_snowslide_truth(self._build_args(source_dir=source_dir))
 
         self.assertEqual(result['status'], 'ok')
-        self.assertEqual(storage_upload_bytes_mock.call_count, 2)
-        stack_upload = storage_upload_bytes_mock.call_args_list[1].kwargs
-        uploaded_stack = np.load(io.BytesIO(stack_upload['payload']))['stack']
-        self.assertEqual(uploaded_stack.shape, (4, 4, 4))
-        self.assertAlmostEqual(float(uploaded_stack[0, 0, 0]), 1.0, places=5)
-        self.assertAlmostEqual(float(uploaded_stack[3, 0, 0]), 4.0, places=5)
+        self.assertEqual(storage_upload_bytes_mock.call_count, 3)
+        patch_upload = storage_upload_bytes_mock.call_args_list[1].kwargs
+        manifest_upload = storage_upload_bytes_mock.call_args_list[2].kwargs
+        uploaded_patch = np.load(io.BytesIO(patch_upload['payload']))['stack']
+        self.assertEqual(uploaded_patch.shape, (4, 128, 128))
+        self.assertEqual(manifest_upload['content_type'], 'application/json')
+        inserted_row = rest_upsert_mock.call_args_list[1].args[1][0]
+        self.assertTrue(inserted_row['stack_asset_ref'].endswith('/stack_manifest.json'))
+
+    @patch('backend.scripts.seed_snowslide_truth.storage_upsert_json', return_value='sar-masks/heldout/snowslide/2026-04-25/reference_sets/snowslide-v1/registry.json')
+    @patch('backend.scripts.seed_snowslide_truth.storage_upload_bytes')
+    @patch('backend.scripts.seed_snowslide_truth.rest_upsert')
+    def test_seed_snowslide_truth_accepts_raw_avalcd_archive_and_uploads_manifest_assets(
+        self,
+        rest_upsert_mock,
+        storage_upload_bytes_mock,
+        _storage_upsert_json_mock,
+    ) -> None:
+        rest_upsert_mock.side_effect = [
+            [{'id': 'set-1', 'set_key': 'snowslide-v1', 'status': 'draft'}],
+            [{'id': 'item-1'}],
+            [{'id': 'set-1', 'set_key': 'snowslide-v1', 'status': 'draft'}],
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            archive_path = Path(tmpdir) / 'AvalCD.zip'
+            with zipfile.ZipFile(archive_path, 'w') as archive:
+                for member_name, payload in self._avalcd_scene_members():
+                    archive.writestr(member_name, payload)
+
+            result = seed_snowslide_truth(self._build_args(source_zip=archive_path))
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(storage_upload_bytes_mock.call_count, 3)
+        inserted_row = rest_upsert_mock.call_args_list[1].args[1][0]
+        self.assertTrue(inserted_row['stack_asset_ref'].endswith('/stack_manifest.json'))
 
     def test_validate_only_accepts_directory_assembled_from_truth_and_sar_archives(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -764,7 +822,7 @@ class SeedSnowSlideTruthTests(unittest.TestCase):
             )
             args = self._build_args(source_zip=archive_path)
 
-            with self.assertRaisesRegex(ValueError, 'stack_member or both vv_member and vh_member'):
+            with self.assertRaisesRegex(ValueError, 'stack_member, both vv_member and vh_member, or all four pre/post VV/VH members'):
                 validate_snowslide_archive(args)
 
     def test_validate_only_rejects_vector_truth_without_geotiff_sar_grid(self) -> None:

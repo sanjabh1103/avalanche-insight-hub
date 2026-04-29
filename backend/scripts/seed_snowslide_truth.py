@@ -15,6 +15,13 @@ from typing import Any
 import numpy as np
 import requests
 
+from backend.common.avalcd_manifest import (
+    AVALCD_SCENE_MANIFEST_FILENAME,
+    build_avalcd_scene_manifest,
+    encode_patch_payload,
+    is_avalcd_manifest_name,
+    load_avalcd_scene_manifest,
+)
 from backend.common.sar_release_refs import (
     SAR_RELEASE_BUCKET,
     SAR_RELEASE_PREFIX,
@@ -47,9 +54,18 @@ SUPPORTED_SPLITS = {'validation', 'val', 'test'}
 TRUTH_SUFFIXES = {'.tif', '.tiff'}
 STACK_SUFFIXES = {'.npz', '.npy'}
 SAR_STACK_SUFFIXES = STACK_SUFFIXES | TRUTH_SUFFIXES
+MANIFEST_SUFFIXES = {'.json'}
 OPTICAL_SUFFIXES = {'.jpg', '.jpeg', '.png'}
 VECTOR_TRUTH_SUFFIXES = {'.geojson', '.json', '.shp'}
 DOCUMENT_SUFFIXES = {'.md', '.pdf', '.txt'}
+
+AVALCD_ROLE_PATTERNS: dict[str, re.Pattern[str]] = {
+    'truth': re.compile(r'(?i)^(?P<stem>.+?)[_-]gt$'),
+    'pre_vv': re.compile(r'(?i)^(?P<stem>.+?)[_-]prevv$'),
+    'pre_vh': re.compile(r'(?i)^(?P<stem>.+?)[_-]prevh$'),
+    'post_vv': re.compile(r'(?i)^(?P<stem>.+?)[_-]postvv$'),
+    'post_vh': re.compile(r'(?i)^(?P<stem>.+?)[_-]postvh$'),
+}
 
 
 @dataclass(frozen=True)
@@ -61,6 +77,10 @@ class ArchivedScene:
     stack_member: str | None = None
     vv_member: str | None = None
     vh_member: str | None = None
+    pre_vv_member: str | None = None
+    pre_vh_member: str | None = None
+    post_vv_member: str | None = None
+    post_vh_member: str | None = None
     scene_time: str | None = None
     bbox: list[float] | None = None
     metadata: dict[str, Any] | None = None
@@ -134,6 +154,47 @@ def _normalize_headers(values: list[str]) -> dict[str, str]:
             raise ValueError(f'invalid --header value "{raw}" (expected "Key: Value")')
         headers[key.strip()] = value.strip()
     return headers
+
+
+def _slug(value: str) -> str:
+    return re.sub(r'[^a-z0-9]+', '_', value.strip().lower()).strip('_')
+
+
+def _infer_avalcd_split_from_member_name(member_name: str, *, default_split: str | None = None) -> str | None:
+    inferred = _infer_split_from_path(member_name)
+    if inferred:
+        return inferred
+    return _normalize_split(default_split) if default_split else None
+
+
+def _infer_avalcd_region_key(member_name: str, *, split: str, source_stem: str) -> str:
+    parts = [part for part in PurePosixPath(member_name).parts[:-1] if part]
+    normalized_split = 'val' if split == 'validation' else split
+    for idx, part in enumerate(parts):
+        lowered = part.lower()
+        if lowered in {split, normalized_split} and idx + 1 < len(parts):
+            slug = _slug(parts[idx + 1])
+            if slug:
+                return slug
+    if parts:
+        slug = _slug(parts[-1])
+        if slug and slug not in {split, normalized_split}:
+            return slug
+    scene_parts = re.split(r'[_-]+', source_stem.strip())
+    if scene_parts:
+        slug = _slug(scene_parts[0])
+        if slug:
+            return slug
+    return 'heldout'
+
+
+def _avalcd_role_and_stem(member_name: str) -> tuple[str, str] | None:
+    stem = PurePosixPath(member_name).stem.lower()
+    for role, pattern in AVALCD_ROLE_PATTERNS.items():
+        match = pattern.match(stem)
+        if match:
+            return role, match.group('stem')
+    return None
 
 
 def _download_source_archive_to_tempfile(
@@ -215,6 +276,8 @@ def _candidate_registry_members(names: list[str]) -> list[str]:
     candidates: list[str] = []
     for name in names:
         lowered = name.lower()
+        if is_avalcd_manifest_name(lowered):
+            continue
         if lowered.endswith(('.json', '.csv')) and any(token in lowered for token in ('registry', 'scene', 'manifest', 'index', 'metadata')):
             candidates.append(name)
     return candidates
@@ -300,6 +363,10 @@ def _normalize_scene_record(
     stack_member = _record_member(record, keys=('stack_member', 'stack_path', 'stack_archive_path'))
     vv_member = _record_member(record, keys=('vv_member', 'vv_path'))
     vh_member = _record_member(record, keys=('vh_member', 'vh_path'))
+    pre_vv_member = _record_member(record, keys=('pre_vv_member', 'pre_vv_path'))
+    pre_vh_member = _record_member(record, keys=('pre_vh_member', 'pre_vh_path'))
+    post_vv_member = _record_member(record, keys=('post_vv_member', 'post_vv_path'))
+    post_vh_member = _record_member(record, keys=('post_vh_member', 'post_vh_path'))
     bbox = _normalize_bbox(record.get('bbox'), scene_id=scene_id)
     metadata = dict(record)
     optical_members = tuple(
@@ -307,9 +374,12 @@ def _normalize_scene_record(
         for item in record.get('optical_members', ())
         if isinstance(item, str) and item.strip()
     )
-    if not stack_member and not (vv_member and vh_member) and not optical_members:
-        raise ValueError(f'scene "{scene_id}" must include stack_member or both vv_member and vh_member')
-    for key in ('external_scene_id', 'scene_id', 'id', 'split', 'region_key', 'region', 'truth_member', 'truth_mask_member', 'truth_mask_path', 'mask_path', 'label_path', 'stack_member', 'stack_path', 'stack_archive_path', 'vv_member', 'vv_path', 'vh_member', 'vh_path', 'bbox', 'optical_members'):
+    if not stack_member and not (vv_member and vh_member) and not all((pre_vv_member, pre_vh_member, post_vv_member, post_vh_member)) and not optical_members:
+        raise ValueError(
+            f'scene "{scene_id}" must include stack_member, both vv_member and vh_member, '
+            'or all four pre/post VV/VH members',
+        )
+    for key in ('external_scene_id', 'scene_id', 'id', 'split', 'region_key', 'region', 'truth_member', 'truth_mask_member', 'truth_mask_path', 'mask_path', 'label_path', 'stack_member', 'stack_path', 'stack_archive_path', 'vv_member', 'vv_path', 'vh_member', 'vh_path', 'pre_vv_member', 'pre_vv_path', 'pre_vh_member', 'pre_vh_path', 'post_vv_member', 'post_vv_path', 'post_vh_member', 'post_vh_path', 'bbox', 'optical_members'):
         metadata.pop(key, None)
     return ArchivedScene(
         external_scene_id=scene_id,
@@ -319,6 +389,10 @@ def _normalize_scene_record(
         stack_member=stack_member,
         vv_member=vv_member,
         vh_member=vh_member,
+        pre_vv_member=pre_vv_member,
+        pre_vh_member=pre_vh_member,
+        post_vv_member=post_vv_member,
+        post_vh_member=post_vh_member,
         scene_time=str(record.get('scene_time') or record.get('timestamp') or '').strip() or None,
         bbox=bbox,
         metadata=metadata,
@@ -337,10 +411,12 @@ def _infer_scenes_from_archive(
         info = archive.getinfo(member_name)
         if info.is_dir():
             continue
+        path = PurePosixPath(member_name)
+        if 'patches' in {part.lower() for part in path.parts}:
+            continue
         split = _infer_split_from_path(member_name) or normalized_default_split
         if split is None:
             continue
-        path = PurePosixPath(member_name)
         scene_id = _scene_id_from_path(path)
         region_key = _region_from_path(path, split)
         key = (split, region_key, scene_id)
@@ -357,6 +433,8 @@ def _infer_scenes_from_archive(
             token in lowered for token in ('truth', 'mask', 'label', 'target', 'groundtruth', 'davalmap', 'reference')
         ):
             entry['truth_member'] = member_name
+        elif suffix in MANIFEST_SUFFIXES and is_avalcd_manifest_name(path.name):
+            entry['stack_member'] = member_name
         elif suffix in SAR_STACK_SUFFIXES and 'stack' in lowered:
             entry['stack_member'] = member_name
         elif suffix in SAR_STACK_SUFFIXES and re.search(r'(^|[_-])vv([_.-]|$)', lowered):
@@ -416,6 +494,50 @@ def _infer_flat_validation_archive_scenes(
     return scenes
 
 
+def _infer_avalcd_scenes_from_archive(
+    archive: zipfile.ZipFile,
+    *,
+    default_split: str | None = None,
+) -> list[ArchivedScene]:
+    grouped: dict[tuple[str, str, str], dict[str, Any]] = {}
+    normalized_default_split = _normalize_split(default_split) if default_split else None
+    for member_name in archive.namelist():
+        if archive.getinfo(member_name).is_dir():
+            continue
+        path = PurePosixPath(member_name)
+        if 'patches' in {part.lower() for part in path.parts}:
+            continue
+        role_and_stem = _avalcd_role_and_stem(member_name)
+        if role_and_stem is None:
+            continue
+        role, source_stem = role_and_stem
+        split = _infer_avalcd_split_from_member_name(member_name, default_split=normalized_default_split)
+        if split is None:
+            continue
+        region_key = _infer_avalcd_region_key(member_name, split=split, source_stem=source_stem)
+        scene_id = _slug(source_stem)
+        if not scene_id:
+            raise ValueError(f'could not derive scene_id from AvalCD member "{member_name}"')
+        key = (split, region_key, scene_id)
+        entry = grouped.setdefault(key, {
+            'external_scene_id': scene_id,
+            'split': split,
+            'region_key': region_key,
+            'metadata': {
+                'archive_layout': 'avalcd_bitemporal',
+                'source_stem': source_stem,
+            },
+        })
+        member_field = 'truth_member' if role == 'truth' else f'{role}_member'
+        if entry.get(member_field):
+            raise ValueError(f'duplicate AvalCD member for role "{role}" in scene "{scene_id}"')
+        entry[member_field] = member_name
+
+    if not grouped:
+        return []
+    return [_normalize_scene_record(entry, default_split=normalized_default_split) for entry in grouped.values()]
+
+
 def _load_archive_scenes(
     archive: zipfile.ZipFile,
     *,
@@ -430,6 +552,9 @@ def _load_archive_scenes(
     if len(candidates) == 1:
         records = _read_registry_member(archive, candidates[0])
         return [_normalize_scene_record(record, default_split=normalized_default_split) for record in records]
+    avalcd_scenes = _infer_avalcd_scenes_from_archive(archive, default_split=normalized_default_split)
+    if avalcd_scenes:
+        return avalcd_scenes
     try:
         return _infer_scenes_from_archive(archive, default_split=normalized_default_split)
     except ValueError:
@@ -504,6 +629,85 @@ def _load_stack_grid_from_geotiff_member(
                 dataset.transform,
                 dataset.crs,
             )
+
+
+def _load_single_band_geotiff_member(
+    archive: zipfile.ZipFile,
+    member_name: str,
+) -> tuple[np.ndarray, tuple[int, int], Any, Any, list[float]]:
+    if MemoryFile is None:
+        raise RuntimeError('rasterio is required to inspect GeoTIFF SAR stack members')
+    with MemoryFile(archive.read(member_name)) as memory_file:
+        with memory_file.open() as dataset:
+            data = np.asarray(dataset.read(), dtype=np.float32)
+            if data.ndim == 2:
+                band = data
+            elif data.ndim == 3 and data.shape[0] == 1:
+                band = np.asarray(data[0], dtype=np.float32)
+            else:
+                raise ValueError(f'AvalCD member "{member_name}" must be a single-band GeoTIFF')
+            bounds = dataset.bounds
+            return (
+                band,
+                (int(dataset.height), int(dataset.width)),
+                dataset.transform,
+                dataset.crs,
+                [float(bounds.left), float(bounds.bottom), float(bounds.right), float(bounds.top)],
+            )
+
+
+def _scene_uses_avalcd_temporal_members(scene: ArchivedScene) -> bool:
+    return all((
+        scene.pre_vv_member,
+        scene.pre_vh_member,
+        scene.post_vv_member,
+        scene.post_vh_member,
+    ))
+
+
+def _scene_uses_avalcd_manifest(scene: ArchivedScene) -> bool:
+    return isinstance(scene.stack_member, str) and is_avalcd_manifest_name(scene.stack_member)
+
+
+def _avalcd_stack_and_bbox_from_members(
+    archive: zipfile.ZipFile,
+    scene: ArchivedScene,
+) -> tuple[np.ndarray, list[float]]:
+    if not _scene_uses_avalcd_temporal_members(scene):
+        raise ValueError(f'scene "{scene.external_scene_id}" is missing required AvalCD pre/post SAR members')
+    members = [
+        scene.pre_vv_member,
+        scene.pre_vh_member,
+        scene.post_vv_member,
+        scene.post_vh_member,
+    ]
+    stack_bands: list[np.ndarray] = []
+    expected_shape: tuple[int, int] | None = None
+    expected_transform = None
+    expected_crs = None
+    expected_bbox: list[float] | None = None
+    for member_name in members:
+        band, shape, transform, crs, bbox = _load_single_band_geotiff_member(archive, str(member_name))
+        if expected_shape is None:
+            expected_shape = shape
+            expected_transform = transform
+            expected_crs = crs
+            expected_bbox = bbox
+        elif shape != expected_shape or transform != expected_transform or str(crs) != str(expected_crs) or bbox != expected_bbox:
+            raise ValueError(
+                f'AvalCD scene "{scene.external_scene_id}" has non-aligned SAR rasters; pre/post VV/VH members must share one grid/CRS',
+            )
+        stack_bands.append(band)
+    return np.stack(stack_bands, axis=0).astype(np.float32), list(expected_bbox or [])
+
+
+def _manifest_patch_member_names(archive: zipfile.ZipFile, scene: ArchivedScene, manifest_member: str) -> set[str]:
+    manifest = load_avalcd_scene_manifest(archive.read(manifest_member))
+    base = PurePosixPath(manifest_member).parent
+    names: set[str] = set()
+    for patch in manifest['patches']:
+        names.add(str(base.joinpath(str(patch['asset_ref']))))
+    return names
 
 
 def _stack_raster_grid_for_vector_truth(
@@ -748,6 +952,39 @@ def _validate_scene_is_sar_compatible(archive: zipfile.ZipFile, scene: ArchivedS
             f'received "{scene.truth_member}"',
         )
 
+    if _scene_uses_avalcd_manifest(scene):
+        manifest = load_avalcd_scene_manifest(archive.read(str(scene.stack_member)))
+        patch_members = _manifest_patch_member_names(archive, scene, str(scene.stack_member))
+        missing_patch_members = sorted(member for member in patch_members if member not in archive.namelist())
+        if missing_patch_members:
+            raise ValueError(
+                f'scene "{scene.external_scene_id}" manifest is missing referenced patch members: {", ".join(missing_patch_members)}',
+            )
+        for patch_member in patch_members:
+            stack = _load_array_from_member_payload(archive.read(patch_member), Path(patch_member).suffix.lower())
+            normalized = _normalize_seed_stack_payload(stack)
+            if normalized.shape[0] != 4:
+                raise ValueError(
+                    f'scene "{scene.external_scene_id}" manifest patch "{patch_member}" must be a 4-channel AvalCD stack; '
+                    f'received shape {normalized.shape}',
+                )
+        return
+
+    if _scene_uses_avalcd_temporal_members(scene):
+        stack, bbox = _avalcd_stack_and_bbox_from_members(archive, scene)
+        _normalize_seed_stack_payload(stack)
+        truth, truth_shape, truth_transform, truth_crs, truth_bbox = _load_single_band_geotiff_member(archive, scene.truth_member)
+        del truth
+        if truth_shape != (stack.shape[1], stack.shape[2]) or truth_bbox != bbox:
+            raise ValueError(
+                f'AvalCD scene "{scene.external_scene_id}" truth mask grid does not align with its SAR rasters',
+            )
+        if str(truth_crs) != str(_load_single_band_geotiff_member(archive, scene.pre_vv_member)[3]) or truth_transform != _load_single_band_geotiff_member(archive, scene.pre_vv_member)[2]:
+            raise ValueError(
+                f'AvalCD scene "{scene.external_scene_id}" truth mask grid does not align with its SAR rasters',
+            )
+        return
+
     if scene.stack_member:
         stack_suffix = Path(scene.stack_member).suffix.lower()
         if stack_suffix in OPTICAL_SUFFIXES:
@@ -758,7 +995,7 @@ def _validate_scene_is_sar_compatible(archive: zipfile.ZipFile, scene: ArchivedS
         if stack_suffix not in SAR_STACK_SUFFIXES:
             raise ValueError(
                 f'scene "{scene.external_scene_id}" stack member "{scene.stack_member}" uses unsupported suffix '
-                f'"{stack_suffix}"; expected .npz, .npy, .tif, or .tiff',
+                f'"{stack_suffix}"; expected .npz, .npy, .tif, .tiff, or {AVALCD_SCENE_MANIFEST_FILENAME}',
             )
         stack = _load_array_from_member_payload(archive.read(scene.stack_member), stack_suffix)
         _normalize_seed_stack_payload(stack)
@@ -813,9 +1050,13 @@ def _inspect_archive(
 
 def _canonical_stack_payload(archive: zipfile.ZipFile, scene: ArchivedScene) -> bytes:
     if scene.stack_member:
+        if _scene_uses_avalcd_manifest(scene):
+            raise ValueError('manifest-backed AvalCD scenes do not use _canonical_stack_payload')
         payload = archive.read(scene.stack_member)
         stack = _load_array_from_member_payload(payload, Path(scene.stack_member).suffix.lower())
     else:
+        if _scene_uses_avalcd_temporal_members(scene):
+            raise ValueError('raw AvalCD scenes do not use _canonical_stack_payload')
         if not scene.vv_member or not scene.vh_member:
             raise ValueError(f'scene "{scene.external_scene_id}" is missing stack or vv/vh members')
         vv = _single_band_array(
@@ -833,6 +1074,43 @@ def _canonical_stack_payload(archive: zipfile.ZipFile, scene: ArchivedScene) -> 
     buffer = io.BytesIO()
     np.savez_compressed(buffer, stack=normalized.astype(np.float32))
     return buffer.getvalue()
+
+
+def _scene_bbox(archive: zipfile.ZipFile, scene: ArchivedScene) -> list[float]:
+    if scene.bbox:
+        return [float(value) for value in scene.bbox]
+    if _scene_uses_avalcd_manifest(scene):
+        manifest = load_avalcd_scene_manifest(archive.read(str(scene.stack_member)))
+        return [float(value) for value in manifest['bbox']]
+    if _scene_uses_avalcd_temporal_members(scene):
+        _stack, bbox = _avalcd_stack_and_bbox_from_members(archive, scene)
+        return bbox
+    return []
+
+
+def _manifest_patch_payloads_from_archive(
+    archive: zipfile.ZipFile,
+    scene: ArchivedScene,
+) -> tuple[dict[str, Any], list[tuple[str, bytes]]]:
+    if _scene_uses_avalcd_manifest(scene):
+        manifest_member = str(scene.stack_member)
+        manifest = load_avalcd_scene_manifest(archive.read(manifest_member))
+        base = PurePosixPath(manifest_member).parent
+        patch_payloads = [
+            (str(patch['asset_ref']), archive.read(str(base.joinpath(str(patch['asset_ref'])))))
+            for patch in manifest['patches']
+        ]
+        return manifest, patch_payloads
+
+    stack, bbox = _avalcd_stack_and_bbox_from_members(archive, scene)
+    manifest, patch_entries = build_avalcd_scene_manifest(
+        stack,
+        bbox=tuple(float(value) for value in bbox),
+    )
+    return manifest, [
+        (str(patch_entry['filename']), encode_patch_payload(patch_entry['stack']))
+        for patch_entry in patch_entries
+    ]
 
 
 def _truth_payload(archive: zipfile.ZipFile, scene: ArchivedScene) -> bytes:
@@ -873,42 +1151,82 @@ def _upload_scene_assets(
             bucket=bucket,
             prefix=SAR_RELEASE_PREFIX,
         )
-        stack_asset_ref = build_release_asset_ref(
-            dataset_version=dataset_version,
-            split=scene.split,
-            region_key=scene.region_key,
-            scene_id=scene.external_scene_id,
-            filename='stack.npz',
-            bucket=bucket,
-            prefix=SAR_RELEASE_PREFIX,
-        )
         _, truth_object_path = truth_asset_ref.split('/', 1)
-        _, stack_object_path = stack_asset_ref.split('/', 1)
         storage_upload_bytes(
             bucket=bucket,
             object_path=truth_object_path,
             payload=_truth_payload(archive, scene),
             content_type='image/tiff',
         )
-        storage_upload_bytes(
-            bucket=bucket,
-            object_path=stack_object_path,
-            payload=_canonical_stack_payload(archive, scene),
-            content_type='application/octet-stream',
-        )
+        if _scene_uses_avalcd_manifest(scene) or _scene_uses_avalcd_temporal_members(scene):
+            stack_asset_ref = build_release_asset_ref(
+                dataset_version=dataset_version,
+                split=scene.split,
+                region_key=scene.region_key,
+                scene_id=scene.external_scene_id,
+                filename=AVALCD_SCENE_MANIFEST_FILENAME,
+                bucket=bucket,
+                prefix=SAR_RELEASE_PREFIX,
+            )
+            manifest, patch_payloads = _manifest_patch_payloads_from_archive(archive, scene)
+            for patch_asset_name, patch_payload in patch_payloads:
+                patch_asset_ref = build_release_asset_ref(
+                    dataset_version=dataset_version,
+                    split=scene.split,
+                    region_key=scene.region_key,
+                    scene_id=scene.external_scene_id,
+                    filename=patch_asset_name,
+                    bucket=bucket,
+                    prefix=SAR_RELEASE_PREFIX,
+                )
+                _, patch_object_path = patch_asset_ref.split('/', 1)
+                storage_upload_bytes(
+                    bucket=bucket,
+                    object_path=patch_object_path,
+                    payload=patch_payload,
+                    content_type='application/octet-stream',
+                )
+            _, stack_object_path = stack_asset_ref.split('/', 1)
+            storage_upload_bytes(
+                bucket=bucket,
+                object_path=stack_object_path,
+                payload=json.dumps(manifest, indent=2, sort_keys=True).encode('utf-8'),
+                content_type='application/json',
+            )
+        else:
+            stack_asset_ref = build_release_asset_ref(
+                dataset_version=dataset_version,
+                split=scene.split,
+                region_key=scene.region_key,
+                scene_id=scene.external_scene_id,
+                filename='stack.npz',
+                bucket=bucket,
+                prefix=SAR_RELEASE_PREFIX,
+            )
+            _, stack_object_path = stack_asset_ref.split('/', 1)
+            storage_upload_bytes(
+                bucket=bucket,
+                object_path=stack_object_path,
+                payload=_canonical_stack_payload(archive, scene),
+                content_type='application/octet-stream',
+            )
         metadata = {
             'split': scene.split,
             'archive_truth_member': scene.truth_member,
             'archive_stack_member': scene.stack_member,
             'archive_vv_member': scene.vv_member,
             'archive_vh_member': scene.vh_member,
+            'archive_pre_vv_member': scene.pre_vv_member,
+            'archive_pre_vh_member': scene.pre_vh_member,
+            'archive_post_vv_member': scene.post_vv_member,
+            'archive_post_vh_member': scene.post_vh_member,
             **(scene.metadata or {}),
         }
         row = {
             'external_scene_id': scene.external_scene_id,
             'region_key': scene.region_key,
             'scene_time': scene.scene_time,
-            'bbox': scene.bbox or [],
+            'bbox': _scene_bbox(archive, scene),
             'stack_asset_ref': stack_asset_ref,
             'truth_mask_asset_ref': truth_asset_ref,
             'baseline_mask_asset_ref': None,
@@ -920,7 +1238,7 @@ def _upload_scene_assets(
             'split': scene.split,
             'region_key': scene.region_key,
             'scene_time': scene.scene_time,
-            'bbox': scene.bbox or [],
+            'bbox': _scene_bbox(archive, scene),
             'stack_asset_ref': stack_asset_ref,
             'truth_mask_asset_ref': truth_asset_ref,
         })

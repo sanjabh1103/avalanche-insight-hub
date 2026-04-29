@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import unittest
 from unittest.mock import patch
 
 import numpy as np
 
+from backend.common.avalcd_manifest import build_avalcd_scene_manifest, encode_patch_payload
 from backend.scripts.materialize_release_baseline_masks import materialize_baseline_masks
 
 
@@ -86,6 +88,45 @@ class MaterializeReleaseBaselineMasksTests(unittest.TestCase):
         storage_upload_bytes_mock.assert_called_once()
         rest_upsert_mock.assert_called_once()
         activate_reference_set_mock.assert_not_called()
+
+    @patch('backend.scripts.materialize_release_baseline_masks.activate_reference_set', return_value={'status': 'active'})
+    @patch('backend.scripts.materialize_release_baseline_masks.rest_upsert')
+    @patch('backend.scripts.materialize_release_baseline_masks.storage_upload_bytes')
+    @patch('backend.scripts.materialize_release_baseline_masks.encode_mask_geotiff', return_value=b'tiff-bytes')
+    @patch('backend.scripts.materialize_release_baseline_masks.load_reference_bundle')
+    @patch('backend.sar_unet_worker.storage_download_bytes')
+    def test_materialize_baseline_masks_supports_manifest_backed_avalcd_stack_refs(
+        self,
+        storage_download_bytes_mock,
+        load_reference_bundle_mock,
+        _encode_mask_geotiff_mock,
+        storage_upload_bytes_mock,
+        rest_upsert_mock,
+        _activate_reference_set_mock,
+    ) -> None:
+        set_row, items = self._reference_bundle()
+        items[0]['stack_asset_ref'] = 'sar-masks/heldout/snowslide/2026-04-25/validation/colorado_rockies/S1A_001/stack_manifest.json'
+        load_reference_bundle_mock.return_value = (set_row, items)
+        manifest, patch_entries = build_avalcd_scene_manifest(
+            np.stack([
+                np.ones((4, 4), dtype=np.float32) * -30.0,
+                np.ones((4, 4), dtype=np.float32) * -35.0,
+                np.ones((4, 4), dtype=np.float32) * -20.0,
+                np.ones((4, 4), dtype=np.float32) * -24.0,
+            ], axis=0),
+            bbox=(-106.6, 39.4, -106.4, 39.6),
+        )
+        storage_download_bytes_mock.side_effect = [
+            json.dumps(manifest, indent=2, sort_keys=True).encode('utf-8'),
+            encode_patch_payload(patch_entries[0]['stack']),
+        ]
+
+        result = materialize_baseline_masks(reference_set_key='snowslide-v1')
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(result['baseline_rows_materialized'], 1)
+        storage_upload_bytes_mock.assert_called_once()
+        rest_upsert_mock.assert_called_once()
 
 
 if __name__ == '__main__':

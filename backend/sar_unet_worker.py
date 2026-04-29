@@ -16,6 +16,13 @@ import numpy as np
 import requests
 
 from backend.common.artifacts import create_artifact_dir, dump_json, is_artifact_run_dir, latest_artifact_dir, load_joblib, load_json, resolve_artifact_dir
+from backend.common.avalcd_manifest import (
+    AVALCD_SCENE_MANIFEST_FORMAT,
+    avalcd_gaussian_sigma,
+    is_avalcd_manifest_name,
+    load_avalcd_scene_manifest,
+    resolve_manifest_relative_ref,
+)
 from backend.common.config import load_settings
 from backend.common.label_governance import materialize_label_governance
 from backend.common.sar_release_refs import load_reference_bundle, parse_storage_ref, reference_item_to_scene
@@ -155,11 +162,108 @@ def _normalize_stack(stack: Any) -> np.ndarray:
     return np.nan_to_num(array.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
 
 
+def _normalize_release_stack(stack: Any) -> np.ndarray:
+    array = np.asarray(stack, dtype=np.float32)
+    if array.ndim == 2:
+        raise ValueError(f'expected a 2-channel or 4-channel stack, received shape {array.shape}')
+    if array.ndim != 3:
+        raise ValueError(f'expected a 2-channel or 4-channel stack, received shape {array.shape}')
+    if array.shape[0] not in {2, 4} and array.shape[-1] in {2, 4}:
+        array = np.moveaxis(array, -1, 0)
+    if array.shape[0] not in {2, 4}:
+        raise ValueError(f'expected a 2-channel or 4-channel stack, received shape {array.shape}')
+    return np.nan_to_num(array.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def _load_json_from_bytes(payload: bytes) -> dict[str, Any]:
+    parsed = json.loads(payload.decode('utf-8'))
+    if not isinstance(parsed, dict):
+        raise ValueError('JSON scene payload must decode to an object')
+    return parsed
+
+
+def _load_json_from_string_ref(value: str) -> dict[str, Any]:
+    suffix = _ref_suffix(value)
+    if suffix != '.json':
+        raise ValueError(f'unsupported JSON scene reference "{value}"')
+    if _looks_like_http_url(value):
+        response = requests.get(value, timeout=120)
+        response.raise_for_status()
+        return _load_json_from_bytes(response.content)
+    if _looks_like_storage_ref(value):
+        bucket, _, object_path = value.partition('/')
+        return _load_json_from_bytes(storage_download_bytes(bucket=bucket, object_path=object_path))
+    path = Path(value)
+    if path.exists():
+        return _load_json_from_bytes(path.read_bytes())
+    raise FileNotFoundError(
+        f'JSON scene ref not found or unreadable: {value}. '
+        'Expected an absolute/relative local path, http(s) URL, or Supabase storage ref bucket/path.',
+    )
+
+
+def _scene_manifest_ref(scene: dict[str, Any]) -> str | None:
+    for key in ('stack_ref', 'stack_path', 'stack_url'):
+        value = scene.get(key)
+        if isinstance(value, str) and value.strip() and is_avalcd_manifest_name(value.strip()):
+            return value.strip()
+    return None
+
+
+def _load_avalcd_manifest_from_string_ref(value: str) -> dict[str, Any]:
+    manifest = load_avalcd_scene_manifest(_load_json_from_string_ref(value))
+    if manifest.get('format') != AVALCD_SCENE_MANIFEST_FORMAT:
+        raise ValueError(f'unsupported AvalCD scene manifest format "{manifest.get("format")}"')
+    return manifest
+
+
+def _resolve_manifest_patch_ref(manifest_ref: str, patch_ref: str) -> str:
+    return resolve_manifest_relative_ref(manifest_ref, patch_ref)
+
+
+def _reconstruct_avalcd_stack_from_manifest(
+    manifest_ref: str,
+    *,
+    channel_slice: slice | tuple[int, ...] | None = None,
+) -> np.ndarray:
+    manifest = _load_avalcd_manifest_from_string_ref(manifest_ref)
+    height, width = [int(value) for value in manifest['full_shape']]
+    channels = 4 if channel_slice is None else len(range(*channel_slice.indices(4))) if isinstance(channel_slice, slice) else len(channel_slice)
+    accum = np.zeros((channels, height, width), dtype=np.float32)
+    counts = np.zeros((height, width), dtype=np.float32)
+    for patch in manifest['patches']:
+        patch_ref = _resolve_manifest_patch_ref(manifest_ref, str(patch['asset_ref']))
+        patch_stack = _normalize_release_stack(_load_stack_array_from_string_ref(patch_ref))
+        if patch_stack.shape[0] != 4:
+            raise ValueError(
+                f'manifest patch "{patch_ref}" must contain a 4-channel AvalCD stack, received {patch_stack.shape}',
+            )
+        selected = patch_stack[channel_slice] if channel_slice is not None else patch_stack
+        row = int(patch['row'])
+        col = int(patch['col'])
+        row0, col0, row1, col1 = [int(value) for value in patch['valid_window']]
+        if row0 < 0 or col0 < 0 or row1 <= row0 or col1 <= col0:
+            raise ValueError(f'manifest patch "{patch_ref}" has invalid valid_window {patch["valid_window"]}')
+        dest_row1 = row + row1
+        dest_col1 = col + col1
+        if dest_row1 > height or dest_col1 > width:
+            raise ValueError(f'manifest patch "{patch_ref}" extends beyond full_shape {manifest["full_shape"]}')
+        accum[:, row + row0:dest_row1, col + col0:dest_col1] += selected[:, row0:row1, col0:col1]
+        counts[row + row0:dest_row1, col + col0:dest_col1] += 1.0
+    if not np.all(counts > 0):
+        raise ValueError(f'AvalCD manifest "{manifest_ref}" does not fully cover its declared full_shape')
+    return accum / counts[np.newaxis, ...]
+
+
 def load_scene_stack(scene: dict[str, Any]) -> np.ndarray:
     if scene.get('channels') is not None:
         return _normalize_stack(scene['channels'])
     if scene.get('vv') is not None and scene.get('vh') is not None:
         return _normalize_stack(np.stack([scene['vv'], scene['vh']], axis=0))
+
+    manifest_ref = _scene_manifest_ref(scene)
+    if manifest_ref:
+        return _normalize_stack(_reconstruct_avalcd_stack_from_manifest(manifest_ref, channel_slice=slice(2, 4)))
 
     stack_ref = scene.get('stack_ref')
     if isinstance(stack_ref, str) and stack_ref.strip():
@@ -227,6 +331,10 @@ def load_bitemporal_scene_inputs(scene: dict[str, Any]) -> tuple[np.ndarray, np.
     for candidate in four_channel_candidates:
         if candidate is not None:
             return _normalize_bitemporal_stack(candidate)
+    manifest_ref = _scene_manifest_ref(scene)
+    if manifest_ref:
+        stack = _reconstruct_avalcd_stack_from_manifest(manifest_ref)
+        return _normalize_bitemporal_stack(stack)
     for key in ('stack_ref', 'stack_path', 'stack_url'):
         value = scene.get(key)
         if isinstance(value, str) and value.strip():
@@ -417,7 +525,64 @@ def predict_bitemporal_probability_mask(model: Any, pre_stack: np.ndarray, post_
     return np.asarray(probabilities[0, 0], dtype=np.float32)
 
 
+def _gaussian_patch_weights(*, patch_size: int, sigma: float) -> np.ndarray:
+    axis = np.arange(patch_size, dtype=np.float32) - ((patch_size - 1) / 2.0)
+    gaussian = np.exp(-(axis ** 2) / max(2.0 * (sigma ** 2), 1e-6))
+    weights = np.outer(gaussian, gaussian).astype(np.float32)
+    max_weight = float(np.max(weights))
+    if max_weight <= 0.0:
+        return np.ones((patch_size, patch_size), dtype=np.float32)
+    return weights / max_weight
+
+
+def _predict_manifest_probability_mask(
+    loaded_model: LoadedUnetModel,
+    *,
+    manifest_ref: str,
+    device: str,
+) -> np.ndarray:
+    manifest = _load_avalcd_manifest_from_string_ref(manifest_ref)
+    height, width = [int(value) for value in manifest['full_shape']]
+    patch_size = int(manifest.get('patch_size') or 128)
+    sigma = float(manifest.get('gaussian_sigma') or avalcd_gaussian_sigma(patch_size=patch_size))
+    numerator = np.zeros((height, width), dtype=np.float32)
+    weights = np.zeros((height, width), dtype=np.float32)
+    patch_weights = _gaussian_patch_weights(patch_size=patch_size, sigma=sigma)
+    for patch in manifest['patches']:
+        patch_ref = _resolve_manifest_patch_ref(manifest_ref, str(patch['asset_ref']))
+        stack = _normalize_release_stack(_load_stack_array_from_string_ref(patch_ref))
+        if stack.shape[0] != 4:
+            raise ValueError(
+                f'manifest patch "{patch_ref}" must contain a 4-channel AvalCD stack, received {stack.shape}',
+            )
+        if stack.shape[1] != patch_size or stack.shape[2] != patch_size:
+            raise ValueError(
+                f'manifest patch "{patch_ref}" must match patch_size={patch_size}, received {stack.shape}',
+            )
+        probability_patch = predict_bitemporal_probability_mask(
+            loaded_model.model,
+            stack[:2],
+            stack[2:],
+            device=device,
+        )
+        row = int(patch['row'])
+        col = int(patch['col'])
+        row0, col0, row1, col1 = [int(value) for value in patch['valid_window']]
+        dest_row1 = row + row1
+        dest_col1 = col + col1
+        cropped_probabilities = probability_patch[row0:row1, col0:col1]
+        cropped_weights = patch_weights[row0:row1, col0:col1]
+        numerator[row + row0:dest_row1, col + col0:dest_col1] += cropped_probabilities * cropped_weights
+        weights[row + row0:dest_row1, col + col0:dest_col1] += cropped_weights
+    if not np.all(weights > 0):
+        raise ValueError(f'AvalCD manifest "{manifest_ref}" does not fully cover its declared full_shape')
+    return numerator / np.maximum(weights, 1e-6)
+
+
 def predict_scene_probability_mask(loaded_model: LoadedUnetModel, scene: dict[str, Any], *, device: str) -> np.ndarray:
+    manifest_ref = _scene_manifest_ref(scene)
+    if manifest_ref and loaded_model.model_family == 'swinunet_tiny_diff':
+        return _predict_manifest_probability_mask(loaded_model, manifest_ref=manifest_ref, device=device)
     if loaded_model.model_family == 'swinunet_tiny_diff':
         pre_stack, post_stack = load_bitemporal_scene_inputs(scene)
         return predict_bitemporal_probability_mask(loaded_model.model, pre_stack, post_stack, device=device)
@@ -933,12 +1098,17 @@ def run_segmentation(
     resolved_family = _normalize_model_family(model_family)
     image_size = None
     if resolved_family == 'swinunet_tiny_diff':
-        first_pre_stack, first_post_stack = load_bitemporal_scene_inputs(scenes[0])
-        if first_pre_stack.shape != first_post_stack.shape:
-            raise ValueError('swinunet_tiny_diff requires pre/post stacks with identical shapes')
-        if first_pre_stack.shape[1] != first_pre_stack.shape[2]:
-            raise ValueError('swinunet_tiny_diff currently requires square scene patches')
-        image_size = int(first_pre_stack.shape[1])
+        first_manifest_ref = _scene_manifest_ref(scenes[0])
+        if first_manifest_ref:
+            manifest = _load_avalcd_manifest_from_string_ref(first_manifest_ref)
+            image_size = int(manifest.get('patch_size') or 128)
+        else:
+            first_pre_stack, first_post_stack = load_bitemporal_scene_inputs(scenes[0])
+            if first_pre_stack.shape != first_post_stack.shape:
+                raise ValueError('swinunet_tiny_diff requires pre/post stacks with identical shapes')
+            if first_pre_stack.shape[1] != first_pre_stack.shape[2]:
+                raise ValueError('swinunet_tiny_diff currently requires square scene patches')
+            image_size = int(first_pre_stack.shape[1])
     loaded_model = build_unet_model(
         model_path,
         device=device,

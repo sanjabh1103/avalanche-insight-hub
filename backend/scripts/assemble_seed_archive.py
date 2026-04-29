@@ -12,6 +12,12 @@ from pathlib import Path, PurePosixPath
 
 import numpy as np
 
+from backend.common.avalcd_manifest import (
+    AVALCD_SCENE_MANIFEST_FILENAME,
+    build_avalcd_scene_manifest,
+    encode_patch_payload,
+)
+
 try:  # pragma: no cover - optional dependency at runtime
     import rasterio
 except Exception:  # pragma: no cover - optional dependency
@@ -347,7 +353,7 @@ def _discover_raster_pairs(raster_root: Path) -> dict[str, RasterPair]:
     return raster_pairs
 
 
-def _load_single_band_geotiff(path: Path) -> tuple[np.ndarray, tuple[int, int], object, str]:
+def _load_single_band_geotiff(path: Path) -> tuple[np.ndarray, tuple[int, int], object, str, tuple[float, float, float, float]]:
     if rasterio is None:
         raise RuntimeError('rasterio is required to assemble AvalCD GeoTIFF scenes')
     with rasterio.open(path) as dataset:
@@ -361,38 +367,53 @@ def _load_single_band_geotiff(path: Path) -> tuple[np.ndarray, tuple[int, int], 
         crs = str(dataset.crs) if dataset.crs is not None else ''
         if not crs:
             raise ValueError(f'AvalCD raster "{path.name}" is missing a CRS')
-        return band, (int(dataset.height), int(dataset.width)), dataset.transform, crs
+        bounds = dataset.bounds
+        return (
+            band,
+            (int(dataset.height), int(dataset.width)),
+            dataset.transform,
+            crs,
+            (float(bounds.left), float(bounds.bottom), float(bounds.right), float(bounds.top)),
+        )
 
 
 def _assemble_avalcd_scene(scene: AvalcdScene, destination: Path) -> None:
-    truth_band, truth_shape, truth_transform, truth_crs = _load_single_band_geotiff(scene.truth_path)
+    truth_band, truth_shape, truth_transform, truth_crs, truth_bbox = _load_single_band_geotiff(scene.truth_path)
     stack_bands: list[np.ndarray] = []
     expected_shape: tuple[int, int] | None = None
     expected_transform = None
     expected_crs: str | None = None
+    expected_bbox: tuple[float, float, float, float] | None = None
     for raster_path in (scene.pre_vv_path, scene.pre_vh_path, scene.post_vv_path, scene.post_vh_path):
-        band, shape, transform, crs = _load_single_band_geotiff(raster_path)
+        band, shape, transform, crs, bbox = _load_single_band_geotiff(raster_path)
         if expected_shape is None:
             expected_shape = shape
             expected_transform = transform
             expected_crs = crs
-        elif shape != expected_shape or transform != expected_transform or crs != expected_crs:
+            expected_bbox = bbox
+        elif shape != expected_shape or transform != expected_transform or crs != expected_crs or bbox != expected_bbox:
             raise ValueError(
                 f'AvalCD scene "{scene.scene_id}" has non-aligned SAR rasters; pre/post VV/VH members must share one grid/CRS',
             )
         stack_bands.append(band)
-    if truth_shape != expected_shape or truth_transform != expected_transform or truth_crs != expected_crs:
+    if truth_shape != expected_shape or truth_transform != expected_transform or truth_crs != expected_crs or truth_bbox != expected_bbox:
         raise ValueError(
             f'AvalCD scene "{scene.scene_id}" truth mask grid does not align with its SAR rasters',
         )
     destination.mkdir(parents=True, exist_ok=True)
     shutil.copy2(scene.truth_path, destination / 'truth_mask.tif')
-    stack_buffer = io.BytesIO()
-    np.savez_compressed(
-        stack_buffer,
-        stack=np.stack(stack_bands, axis=0).astype(np.float32),
+    manifest, patch_entries = build_avalcd_scene_manifest(
+        np.stack(stack_bands, axis=0).astype(np.float32),
+        bbox=truth_bbox,
     )
-    (destination / 'stack.npz').write_bytes(stack_buffer.getvalue())
+    (destination / AVALCD_SCENE_MANIFEST_FILENAME).write_text(
+        json.dumps(manifest, indent=2, sort_keys=True),
+        encoding='utf-8',
+    )
+    for patch_entry in patch_entries:
+        patch_path = destination / str(patch_entry['filename'])
+        patch_path.parent.mkdir(parents=True, exist_ok=True)
+        patch_path.write_bytes(encode_patch_payload(patch_entry['stack']))
 
 
 def _copy_truth_scene(scene: TruthScene, destination: Path) -> None:

@@ -12,7 +12,9 @@ from unittest.mock import Mock, patch
 import numpy as np
 
 from backend.common.label_governance import GOVERNANCE_VERSION
+from backend.common.avalcd_manifest import build_avalcd_scene_manifest, encode_patch_payload
 from backend.sar_unet_worker import (
+    LoadedUnetModel,
     SAR_UNET_SHADOW_REASON,
     SegmentationDetection,
     _normalize_stack,
@@ -23,7 +25,9 @@ from backend.sar_unet_worker import (
     load_bitemporal_scene_inputs,
     load_scene_stack,
     polygonize_probability_mask,
+    predict_scene_probability_mask,
     persist_shadow_detections,
+    run_segmentation,
     run_infer_mtslstm,
     run_train_mtslstm,
     run_worker_request,
@@ -159,6 +163,150 @@ class SarUnetWorkerTests(unittest.TestCase):
         self.assertEqual(post_stack.shape, (2, 4, 4))
         self.assertAlmostEqual(float(pre_stack[0, 0, 0]), 1.0, places=5)
         self.assertAlmostEqual(float(post_stack[1, 0, 0]), 4.0, places=5)
+
+    @patch('backend.sar_unet_worker.storage_download_bytes')
+    def test_load_scene_stack_reads_manifest_backed_storage_ref_as_post_event_pair(self, storage_download_bytes_mock) -> None:
+        manifest, patch_entries = build_avalcd_scene_manifest(
+            np.stack([
+                np.ones((4, 4), dtype=np.float32) * 1.0,
+                np.ones((4, 4), dtype=np.float32) * 2.0,
+                np.ones((4, 4), dtype=np.float32) * 3.0,
+                np.ones((4, 4), dtype=np.float32) * 4.0,
+            ], axis=0),
+            bbox=(-106.6, 39.4, -106.4, 39.6),
+        )
+        storage_download_bytes_mock.side_effect = [
+            json.dumps(manifest, indent=2, sort_keys=True).encode('utf-8'),
+            encode_patch_payload(patch_entries[0]['stack']),
+        ]
+
+        loaded = load_scene_stack({
+            'scene_id': 'S1A_005',
+            'stack_ref': 'sar-masks/heldout/snowslide/2026-04-25/validation/livigno/livigno_20210101_001/stack_manifest.json',
+        })
+
+        self.assertEqual(loaded.shape, (2, 4, 4))
+        self.assertAlmostEqual(float(loaded[0, 0, 0]), 3.0, places=5)
+        self.assertAlmostEqual(float(loaded[1, 0, 0]), 4.0, places=5)
+
+    @patch('backend.sar_unet_worker.storage_download_bytes')
+    def test_load_bitemporal_scene_inputs_reads_manifest_backed_storage_ref(self, storage_download_bytes_mock) -> None:
+        manifest, patch_entries = build_avalcd_scene_manifest(
+            np.stack([
+                np.ones((4, 6), dtype=np.float32) * 1.0,
+                np.ones((4, 6), dtype=np.float32) * 2.0,
+                np.ones((4, 6), dtype=np.float32) * 3.0,
+                np.ones((4, 6), dtype=np.float32) * 4.0,
+            ], axis=0),
+            bbox=(-106.6, 39.4, -106.4, 39.6),
+        )
+        storage_download_bytes_mock.side_effect = [
+            json.dumps(manifest, indent=2, sort_keys=True).encode('utf-8'),
+            encode_patch_payload(patch_entries[0]['stack']),
+        ]
+
+        pre_stack, post_stack = load_bitemporal_scene_inputs({
+            'scene_id': 'S1A_006',
+            'stack_ref': 'sar-masks/heldout/snowslide/2026-04-25/validation/livigno/livigno_20210101_001/stack_manifest.json',
+        })
+
+        self.assertEqual(pre_stack.shape, (2, 4, 6))
+        self.assertEqual(post_stack.shape, (2, 4, 6))
+        self.assertAlmostEqual(float(pre_stack[0, 0, 0]), 1.0, places=5)
+        self.assertAlmostEqual(float(post_stack[1, 0, 0]), 4.0, places=5)
+
+    @patch('backend.sar_unet_worker.predict_bitemporal_probability_mask')
+    @patch('backend.sar_unet_worker.storage_download_bytes')
+    def test_predict_scene_probability_mask_reconstructs_non_square_manifest_backed_scene(
+        self,
+        storage_download_bytes_mock,
+        predict_bitemporal_probability_mask_mock,
+    ) -> None:
+        manifest, patch_entries = build_avalcd_scene_manifest(
+            np.stack([
+                np.ones((80, 176), dtype=np.float32) * 1.0,
+                np.ones((80, 176), dtype=np.float32) * 2.0,
+                np.ones((80, 176), dtype=np.float32) * 3.0,
+                np.ones((80, 176), dtype=np.float32) * 4.0,
+            ], axis=0),
+            bbox=(-106.6, 39.4, -106.4, 39.6),
+        )
+        side_effects: list[bytes] = [json.dumps(manifest, indent=2, sort_keys=True).encode('utf-8')]
+        for patch_entry in patch_entries:
+            side_effects.append(encode_patch_payload(patch_entry['stack']))
+        storage_download_bytes_mock.side_effect = side_effects
+        predict_bitemporal_probability_mask_mock.return_value = np.ones((128, 128), dtype=np.float32) * 0.9
+        loaded_model = LoadedUnetModel(model=object(), checkpoint_key_mismatch={}, model_family='swinunet_tiny_diff')
+
+        probability_mask = predict_scene_probability_mask(
+            loaded_model,
+            {
+                'scene_id': 'S1A_007',
+                'bbox': [-106.6, 39.4, -106.4, 39.6],
+                'stack_ref': 'sar-masks/heldout/snowslide/2026-04-25/validation/livigno/livigno_20210101_001/stack_manifest.json',
+            },
+            device='cpu',
+        )
+
+        self.assertEqual(probability_mask.shape, (80, 176))
+        self.assertAlmostEqual(float(probability_mask[0, 0]), 0.9, places=5)
+
+    @patch('backend.sar_unet_worker.dump_json')
+    @patch('backend.sar_unet_worker.build_unet_model')
+    @patch('backend.sar_unet_worker.storage_download_bytes')
+    @patch('backend.sar_unet_worker.predict_bitemporal_probability_mask')
+    def test_run_segmentation_supports_reference_scene_manifest_without_square_patch_error(
+        self,
+        predict_bitemporal_probability_mask_mock,
+        storage_download_bytes_mock,
+        build_unet_model_mock,
+        dump_json_mock,
+    ) -> None:
+        manifest, patch_entries = build_avalcd_scene_manifest(
+            np.stack([
+                np.ones((80, 176), dtype=np.float32) * 1.0,
+                np.ones((80, 176), dtype=np.float32) * 2.0,
+                np.ones((80, 176), dtype=np.float32) * 3.0,
+                np.ones((80, 176), dtype=np.float32) * 4.0,
+            ], axis=0),
+            bbox=(-106.6, 39.4, -106.4, 39.6),
+        )
+        side_effects: list[bytes] = [
+            json.dumps(manifest, indent=2, sort_keys=True).encode('utf-8'),
+            json.dumps(manifest, indent=2, sort_keys=True).encode('utf-8'),
+        ]
+        for patch_entry in patch_entries:
+            side_effects.append(encode_patch_payload(patch_entry['stack']))
+        storage_download_bytes_mock.side_effect = side_effects
+        predict_bitemporal_probability_mask_mock.return_value = np.ones((128, 128), dtype=np.float32) * 0.9
+        build_unet_model_mock.return_value = LoadedUnetModel(
+            model=object(),
+            checkpoint_key_mismatch={},
+            model_family='swinunet_tiny_diff',
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = Path(tmpdir) / 'dummy.ckpt'
+            model_path.write_bytes(b'checkpoint')
+            report = run_segmentation(
+                scenes=[{
+                    'scene_id': 'S1A_008',
+                    'region_key': 'livigno',
+                    'scene_time': '2026-04-25T00:00:00+00:00',
+                    'bbox': [-106.6, 39.4, -106.4, 39.6],
+                    'stack_ref': 'sar-masks/heldout/snowslide/2026-04-25/validation/livigno/livigno_20210101_001/stack_manifest.json',
+                }],
+                model_path=model_path,
+                artifact_root=Path(tmpdir),
+                device='cpu',
+                persist_events=False,
+                model_family='swinunet_tiny_diff',
+            )
+
+        self.assertEqual(report['status'], 'ok')
+        self.assertEqual(report['scene_count'], 1)
+        self.assertEqual(report['detections_count'], 1)
+        dump_json_mock.assert_called_once()
 
     @patch('backend.sar_unet_worker.requests.get')
     def test_load_mask_array_reads_http_npy(self, requests_get_mock) -> None:

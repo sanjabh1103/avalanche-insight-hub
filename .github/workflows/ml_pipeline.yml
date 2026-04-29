@@ -334,6 +334,8 @@ jobs:
         env:
           MODAL_WORKER_URL: ${{ secrets.MODAL_WORKER_URL }}
           MODAL_WORKER_TOKEN: ${{ secrets.MODAL_WORKER_TOKEN }}
+          REFERENCE_SET_KEY: ${{ github.event.inputs.reference_set_key }}
+          PREDICTION_MODEL_VERSION: ${{ github.event.inputs.prediction_model_version || 'sar_unet_resnet34_shadow_v1' }}
         run: |
           if [ -z "${MODAL_WORKER_URL}" ]; then
             echo "::error::MODAL_WORKER_URL secret is required for sar_segment"
@@ -343,7 +345,22 @@ jobs:
           if [ -n "${MODAL_WORKER_TOKEN}" ]; then
             auth_args=(-H "Authorization: Bearer ${MODAL_WORKER_TOKEN}")
           fi
-          cat > payload.json <<'JSON'
+          if [ -n "${REFERENCE_SET_KEY}" ]; then
+            cat > payload.json <<JSON
+          {
+            "hazard_type": "avalanche",
+            "requested_by": "github_actions",
+            "request_type": "sar_segment",
+            "shadow_mode": true,
+            "reference_set_key": "${REFERENCE_SET_KEY}",
+            "prediction_model_version": "${PREDICTION_MODEL_VERSION}",
+            "persist_events": false,
+            "training_eligible": false,
+            "training_eligible_reason": "heldout_release_eval"
+          }
+          JSON
+          else
+            cat > payload.json <<'JSON'
           {
             "hazard_type": "avalanche",
             "requested_by": "github_actions",
@@ -354,6 +371,7 @@ jobs:
             "training_eligible_reason": "sar_unet_shadow_mode"
           }
           JSON
+          fi
           curl -fsSL -X POST "${MODAL_WORKER_URL%/}/sar-segment" \
             -H "Content-Type: application/json" \
             "${auth_args[@]}" \

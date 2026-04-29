@@ -12,6 +12,7 @@ import shapefile
 from rasterio.io import MemoryFile
 from rasterio.transform import from_bounds
 
+from backend.common.avalcd_manifest import AVALCD_SCENE_MANIFEST_FILENAME, load_avalcd_scene_manifest
 from backend.scripts.assemble_seed_archive import assemble_seed_archive
 
 
@@ -256,7 +257,7 @@ class AssembleSeedArchiveTests(unittest.TestCase):
                 {('davos_2018', '2018'), ('davos_2019', '2019')},
             )
 
-    def test_assemble_seed_archive_accepts_bundled_avalcd_zip_and_emits_four_channel_stack(self) -> None:
+    def test_assemble_seed_archive_accepts_bundled_avalcd_zip_and_emits_manifest_and_patch_assets(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
             avalcd_zip = tmp_path / 'AvalCD.zip'
@@ -279,9 +280,17 @@ class AssembleSeedArchiveTests(unittest.TestCase):
             self.assertEqual(result['scene_count'], 1)
             self.assertEqual(result['scenes'][0]['layout'], 'avalcd_bitemporal')
             self.assertTrue((scene_root / 'truth_mask.tif').exists())
-            self.assertTrue((scene_root / 'stack.npz').exists())
-            stack = np.load(scene_root / 'stack.npz')['stack']
-            self.assertEqual(stack.shape, (4, 4, 4))
+            self.assertTrue((scene_root / AVALCD_SCENE_MANIFEST_FILENAME).exists())
+            manifest = load_avalcd_scene_manifest((scene_root / AVALCD_SCENE_MANIFEST_FILENAME).read_bytes())
+            self.assertEqual(manifest['format'], 'avalcd_scene_manifest_v1')
+            self.assertEqual(manifest['full_shape'], [4, 4])
+            self.assertEqual(manifest['patch_size'], 128)
+            self.assertEqual(len(manifest['patches']), 1)
+            patch = manifest['patches'][0]
+            patch_path = scene_root / patch['asset_ref']
+            self.assertTrue(patch_path.exists())
+            stack = np.load(patch_path)['stack']
+            self.assertEqual(stack.shape, (4, 128, 128))
             self.assertAlmostEqual(float(stack[0, 0, 0]), 1.0, places=5)
             self.assertAlmostEqual(float(stack[3, 0, 0]), 4.0, places=5)
 

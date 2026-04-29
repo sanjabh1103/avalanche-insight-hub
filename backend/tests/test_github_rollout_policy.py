@@ -41,6 +41,10 @@ class GitHubRolloutPolicyTests(unittest.TestCase):
                 rf'  {job_name}:\n(?:    .*\n)*?    environment: production\n',
             )
         self.assertIn('reference_set_key is required for the official evaluate_release gate.', ml_pipeline)
+        self.assertIn('if [ -n "${REFERENCE_SET_KEY}" ]; then', ml_pipeline)
+        self.assertIn('"reference_set_key": "${REFERENCE_SET_KEY}"', ml_pipeline)
+        self.assertIn('"prediction_model_version": "${PREDICTION_MODEL_VERSION}"', ml_pipeline)
+        self.assertIn('"persist_events": false', ml_pipeline)
         self.assertRegex(
             bootstrap_gate,
             r'jobs:\n  bootstrap:\n(?:    .*\n)*?    environment: production\n',
