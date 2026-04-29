@@ -93,6 +93,143 @@ class StorageIoTests(unittest.TestCase):
         requests_get_mock.assert_called_once()
         sleep_mock.assert_not_called()
 
+    @patch('backend.common.storage_io._headers', return_value={'apikey': 'test', 'Authorization': 'Bearer test'})
+    @patch('backend.common.storage_io._base_url', return_value='https://example.supabase.co')
+    @patch('backend.common.storage_io.time.sleep', return_value=None)
+    @patch('backend.common.storage_io.requests.get')
+    @patch('backend.common.storage_io.requests.post')
+    def test_storage_upload_treats_ambiguous_html_400_with_matching_object_as_success(
+        self,
+        requests_post_mock,
+        requests_get_mock,
+        sleep_mock,
+        _base_url_mock,
+        _headers_mock,
+    ) -> None:
+        requests_post_mock.return_value = FakeResponse(
+            400,
+            text='<html><body><h1>400 Bad Request</h1></body></html>',
+            headers={'Content-Type': 'text/html'},
+        )
+        requests_get_mock.return_value = FakeResponse(200, content=b'data')
+
+        asset_ref = storage_upload_bytes(
+            bucket='sar-masks',
+            object_path='heldout/test/payload.bin',
+            payload=b'data',
+        )
+
+        self.assertEqual(asset_ref, 'sar-masks/heldout/test/payload.bin')
+        requests_post_mock.assert_called_once()
+        requests_get_mock.assert_called_once()
+        sleep_mock.assert_not_called()
+
+    @patch('backend.common.storage_io._headers', return_value={'apikey': 'test', 'Authorization': 'Bearer test'})
+    @patch('backend.common.storage_io._base_url', return_value='https://example.supabase.co')
+    @patch('backend.common.storage_io.time.sleep', return_value=None)
+    @patch('backend.common.storage_io.requests.get')
+    @patch('backend.common.storage_io.requests.post')
+    def test_storage_upload_retries_after_ambiguous_html_400_when_object_missing(
+        self,
+        requests_post_mock,
+        requests_get_mock,
+        sleep_mock,
+        _base_url_mock,
+        _headers_mock,
+    ) -> None:
+        requests_post_mock.side_effect = [
+            FakeResponse(
+                400,
+                text='<html><body><h1>400 Bad Request</h1></body></html>',
+                headers={'Content-Type': 'text/html'},
+            ),
+            FakeResponse(200),
+        ]
+        requests_get_mock.return_value = FakeResponse(404, text='not found')
+
+        asset_ref = storage_upload_bytes(
+            bucket='sar-masks',
+            object_path='heldout/test/payload.bin',
+            payload=b'data',
+        )
+
+        self.assertEqual(asset_ref, 'sar-masks/heldout/test/payload.bin')
+        self.assertEqual(requests_post_mock.call_count, 2)
+        requests_get_mock.assert_called_once()
+        sleep_mock.assert_called_once()
+
+    @patch('backend.common.storage_io._headers', return_value={'apikey': 'test', 'Authorization': 'Bearer test'})
+    @patch('backend.common.storage_io._base_url', return_value='https://example.supabase.co')
+    @patch('backend.common.storage_io._MAX_STORAGE_ATTEMPTS', 2)
+    @patch('backend.common.storage_io.time.sleep', return_value=None)
+    @patch('backend.common.storage_io.requests.get')
+    @patch('backend.common.storage_io.requests.post')
+    def test_storage_upload_fails_when_ambiguous_html_400_persists_with_mismatched_bytes(
+        self,
+        requests_post_mock,
+        requests_get_mock,
+        sleep_mock,
+        _base_url_mock,
+        _headers_mock,
+    ) -> None:
+        requests_post_mock.side_effect = [
+            FakeResponse(
+                400,
+                text='<html><body><h1>400 Bad Request</h1></body></html>',
+                headers={'Content-Type': 'text/html'},
+            ),
+            FakeResponse(
+                400,
+                text='<html><body><h1>400 Bad Request</h1></body></html>',
+                headers={'Content-Type': 'text/html'},
+            ),
+        ]
+        requests_get_mock.side_effect = [
+            FakeResponse(200, content=b'first'),
+            FakeResponse(200, content=b'second'),
+        ]
+
+        with self.assertRaisesRegex(SupabaseError, 'uploaded object bytes differ from attempted payload'):
+            storage_upload_bytes(
+                bucket='sar-masks',
+                object_path='heldout/test/payload.bin',
+                payload=b'data',
+            )
+
+        self.assertEqual(requests_post_mock.call_count, 2)
+        self.assertEqual(requests_get_mock.call_count, 2)
+        sleep_mock.assert_called_once()
+
+    @patch('backend.common.storage_io._headers', return_value={'apikey': 'test', 'Authorization': 'Bearer test'})
+    @patch('backend.common.storage_io._base_url', return_value='https://example.supabase.co')
+    @patch('backend.common.storage_io.time.sleep', return_value=None)
+    @patch('backend.common.storage_io.requests.get')
+    @patch('backend.common.storage_io.requests.post')
+    def test_storage_upload_fails_fast_on_structured_json_400(
+        self,
+        requests_post_mock,
+        requests_get_mock,
+        sleep_mock,
+        _base_url_mock,
+        _headers_mock,
+    ) -> None:
+        requests_post_mock.return_value = FakeResponse(
+            400,
+            text='{"code":"InvalidKey","message":"bad key"}',
+            headers={'Content-Type': 'application/json'},
+        )
+
+        with self.assertRaisesRegex(SupabaseError, 'InvalidKey'):
+            storage_upload_bytes(
+                bucket='sar-masks',
+                object_path='heldout/test/payload.bin',
+                payload=b'data',
+            )
+
+        requests_post_mock.assert_called_once()
+        requests_get_mock.assert_not_called()
+        sleep_mock.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()
