@@ -29,6 +29,7 @@ from backend.sar_unet_worker import (
     persist_shadow_detections,
     run_segmentation,
     run_infer_mtslstm,
+    run_train_sar_unet,
     run_train_mtslstm,
     run_worker_request,
     _load_mask_array,
@@ -105,6 +106,24 @@ class SarUnetWorkerTests(unittest.TestCase):
     def test_load_mask_array_rejects_unsupported_format(self) -> None:
         with self.assertRaisesRegex(ValueError, 'unsupported evaluation mask reference'):
             _load_mask_array('sar-masks/heldout/mask.csv')
+
+    @patch('backend.sar_unet_worker.run_train_sar_unet', return_value={'status': 'ok', 'candidate_model_version': 'shadow-v2'})
+    def test_run_worker_request_routes_train_sar_unet_mode(self, run_train_sar_unet_mock) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = run_worker_request(
+                'train-sar-unet',
+                {'training_manifest_path': 'sar-data/train.json'},
+                artifact_root=Path(tmpdir),
+                device='cpu',
+            )
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(result['candidate_model_version'], 'shadow-v2')
+        run_train_sar_unet_mock.assert_called_once_with(
+            {'training_manifest_path': 'sar-data/train.json'},
+            artifact_root=Path(tmpdir),
+            device='cpu',
+        )
 
     @patch('backend.sar_unet_worker.storage_download_bytes')
     def test_load_scene_stack_reads_storage_ref_npz(self, storage_download_bytes_mock) -> None:
@@ -215,12 +234,12 @@ class SarUnetWorkerTests(unittest.TestCase):
         self.assertAlmostEqual(float(pre_stack[0, 0, 0]), 1.0, places=5)
         self.assertAlmostEqual(float(post_stack[1, 0, 0]), 4.0, places=5)
 
-    @patch('backend.sar_unet_worker.predict_bitemporal_probability_mask')
+    @patch('backend.sar_unet_worker.predict_bitemporal_probability_mask_batch')
     @patch('backend.sar_unet_worker.storage_download_bytes')
     def test_predict_scene_probability_mask_reconstructs_non_square_manifest_backed_scene(
         self,
         storage_download_bytes_mock,
-        predict_bitemporal_probability_mask_mock,
+        predict_bitemporal_probability_mask_batch_mock,
     ) -> None:
         manifest, patch_entries = build_avalcd_scene_manifest(
             np.stack([
@@ -235,7 +254,7 @@ class SarUnetWorkerTests(unittest.TestCase):
         for patch_entry in patch_entries:
             side_effects.append(encode_patch_payload(patch_entry['stack']))
         storage_download_bytes_mock.side_effect = side_effects
-        predict_bitemporal_probability_mask_mock.return_value = np.ones((128, 128), dtype=np.float32) * 0.9
+        predict_bitemporal_probability_mask_batch_mock.return_value = np.ones((len(patch_entries), 128, 128), dtype=np.float32) * 0.9
         loaded_model = LoadedUnetModel(model=object(), checkpoint_key_mismatch={}, model_family='swinunet_tiny_diff')
 
         probability_mask = predict_scene_probability_mask(
@@ -254,10 +273,10 @@ class SarUnetWorkerTests(unittest.TestCase):
     @patch('backend.sar_unet_worker.dump_json')
     @patch('backend.sar_unet_worker.build_unet_model')
     @patch('backend.sar_unet_worker.storage_download_bytes')
-    @patch('backend.sar_unet_worker.predict_bitemporal_probability_mask')
+    @patch('backend.sar_unet_worker.predict_bitemporal_probability_mask_batch')
     def test_run_segmentation_supports_reference_scene_manifest_without_square_patch_error(
         self,
-        predict_bitemporal_probability_mask_mock,
+        predict_bitemporal_probability_mask_batch_mock,
         storage_download_bytes_mock,
         build_unet_model_mock,
         dump_json_mock,
@@ -278,7 +297,7 @@ class SarUnetWorkerTests(unittest.TestCase):
         for patch_entry in patch_entries:
             side_effects.append(encode_patch_payload(patch_entry['stack']))
         storage_download_bytes_mock.side_effect = side_effects
-        predict_bitemporal_probability_mask_mock.return_value = np.ones((128, 128), dtype=np.float32) * 0.9
+        predict_bitemporal_probability_mask_batch_mock.return_value = np.ones((len(patch_entries), 128, 128), dtype=np.float32) * 0.9
         build_unet_model_mock.return_value = LoadedUnetModel(
             model=object(),
             checkpoint_key_mismatch={},
@@ -364,7 +383,8 @@ class SarUnetWorkerTests(unittest.TestCase):
         loaded = _load_mask_array('sar-masks/heldout/colorado_rockies/prediction_mask.tif')
 
         self.assertEqual(loaded.shape, (2, 2))
-        self.assertGreater(float(loaded[0, 1]), 200.0)
+        self.assertAlmostEqual(float(loaded[0, 1]), 1.0, places=5)
+        self.assertAlmostEqual(float(loaded[1, 0]), 0.8, places=5)
 
     @patch('backend.sar_unet_worker.SAR_UNET_PROMOTED', False)
     def test_build_unet_model_reports_checkpoint_key_mismatch_in_shadow_mode(self) -> None:
@@ -640,6 +660,39 @@ class SarUnetWorkerTests(unittest.TestCase):
         self.assertTrue(build_manifest_mock.called)
         dump_json_mock.assert_called_once()
 
+    @patch('backend.sar_unet_worker.run_segmentation')
+    def test_run_worker_request_honors_explicit_persist_events_for_direct_scene_payloads(
+        self,
+        run_segmentation_mock,
+    ) -> None:
+        run_segmentation_mock.return_value = {'status': 'ok'}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            report = run_worker_request(
+                'sar-segment',
+                {
+                    'prediction_model_version': 'swin_transformer_v2_tiny_coldstart_v1',
+                    'model_family': 'swinunet_tiny_diff',
+                    'persist_events': False,
+                    'shadow_mode': True,
+                    'scenes': [{
+                        'scene_id': 'S1A_009',
+                        'region_key': 'livigno',
+                        'scene_time': '2026-04-25T00:00:00+00:00',
+                        'bbox': [-106.6, 39.4, -106.4, 39.6],
+                        'stack_ref': 'sar-masks/heldout/snowslide/2026-04-25/validation/livigno/livigno_20210101_001/stack_manifest.json',
+                        'prediction_mask': 'sar-masks/heldout/snowslide/2026-04-25/validation/livigno/livigno_20210101_001/predictions/swin_transformer_v2_tiny_coldstart_v1/prediction_mask.tif',
+                    }],
+                },
+                artifact_root=Path(tmpdir),
+                model_path=Path('/tmp/dummy.ckpt'),
+                device='cpu',
+                dry_run=False,
+            )
+
+        self.assertEqual(report['status'], 'ok')
+        self.assertFalse(run_segmentation_mock.call_args.kwargs['persist_events'])
+
     @patch('backend.sar_unet_worker._run_python_module')
     def test_run_train_mtslstm_returns_wave4_gate_summary(self, run_python_module_mock) -> None:
         run_python_module_mock.return_value = subprocess.CompletedProcess(
@@ -715,7 +768,7 @@ class SarUnetWorkerTests(unittest.TestCase):
             artifact_dir = artifact_root / '20260425T010000Z'
             artifact_dir.mkdir()
             (artifact_dir / 'inference_manifest.json').write_text(
-                '{"regions_written":3,"total_cells_written":5,"partial_regions":1,"ready_cells":3,"unavailable_terrain_cells":1,"unavailable_weather_cells":1,"dry_run":true,"completed_at":"2026-04-25T01:23:45+00:00"}',
+                '{"regions_written":3,"total_cells_written":5,"partial_regions":1,"ready_cells":3,"unavailable_terrain_cells":1,"unavailable_weather_cells":1,"dry_run":true,"completed_at":"2026-04-25T01:23:45+00:00","compute_job_id":"job-123","forecast_run_id":"run-japan-1","forecast_run_ids":["run-japan-1"],"forecast_run_ids_by_region":{"davos":"run-japan-1"}}',
                 encoding='utf-8',
             )
             (artifact_dir / 'forecast_grids.json').write_text(
@@ -802,6 +855,7 @@ class SarUnetWorkerTests(unittest.TestCase):
                 {
                     'hazard_type': 'avalanche',
                     'request_type': 'infer_mtslstm',
+                    'compute_job_id': 'job-123',
                     'forecast_hours': 72,
                     'dry_run': True,
                     'shadow_mode': True,
@@ -824,7 +878,13 @@ class SarUnetWorkerTests(unittest.TestCase):
         self.assertEqual(report['surrogate_model_version'], 'rf_surrogate_v1')
         self.assertEqual(report['dynamic_model_type'], 'mts_lstm')
         self.assertEqual(report['dynamic_model_version'], 'mts_lstm_shadow_v1')
+        self.assertEqual(report['compute_job_id'], 'job-123')
+        self.assertEqual(report['forecast_run_id'], 'run-japan-1')
+        self.assertEqual(report['forecast_run_ids'], ['run-japan-1'])
+        self.assertEqual(report['forecast_run_ids_by_region'], {'davos': 'run-japan-1'})
         self.assertEqual(run_python_module_mock.call_args.kwargs['args'], ['--dry-run'])
+        env = run_python_module_mock.call_args.kwargs['env']
+        self.assertEqual(env['COMPUTE_JOB_ID'], 'job-123')
 
     @patch('backend.sar_unet_worker._run_python_module')
     def test_run_infer_mtslstm_honors_explicit_artifact_dir(self, run_python_module_mock) -> None:
@@ -882,6 +942,139 @@ class SarUnetWorkerTests(unittest.TestCase):
         self.assertEqual(
             run_python_module_mock.call_args.kwargs['args'],
             ['--dry-run', '--artifact-dir', str(artifact_dir.resolve())],
+        )
+
+    @patch('backend.sar_unet_worker._run_python_module')
+    def test_run_infer_mtslstm_forwards_region_keys(self, run_python_module_mock) -> None:
+        run_python_module_mock.return_value = subprocess.CompletedProcess(
+            args=['python', '-m', 'backend.daily_inference'],
+            returncode=0,
+            stdout='inference ok\n',
+            stderr='',
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_root = Path(tmpdir)
+            artifact_dir = artifact_root / '20260425T010000Z'
+            artifact_dir.mkdir()
+            (artifact_dir / 'model.joblib').write_bytes(b'joblib-placeholder')
+            (artifact_dir / 'inference_manifest.json').write_text(
+                '{"regions_written":1,"total_cells_written":2,"dry_run":false,"completed_at":"2026-04-25T01:23:45+00:00"}',
+                encoding='utf-8',
+            )
+            (artifact_dir / 'forecast_grids.json').write_text('[]', encoding='utf-8')
+
+            report = run_infer_mtslstm(
+                {
+                    'request_type': 'infer_mtslstm',
+                    'forecast_hours': 72,
+                    'shadow_mode': True,
+                    'artifact_dir': str(artifact_dir),
+                    'region_key': 'japanese_alps',
+                    'region_keys': ['cascades_wa', ''],
+                },
+                artifact_root=artifact_root,
+            )
+
+        self.assertEqual(report['status'], 'ok')
+        self.assertEqual(
+            run_python_module_mock.call_args.kwargs['args'],
+            [
+                '--artifact-dir',
+                str(artifact_dir.resolve()),
+                '--region-key',
+                'japanese_alps',
+                '--region-key',
+                'cascades_wa',
+            ],
+        )
+
+    @patch('backend.sar_unet_worker._run_python_module')
+    def test_run_infer_mtslstm_applies_lifeboat_defaults_and_forwards_proof_flags(self, run_python_module_mock) -> None:
+        run_python_module_mock.return_value = subprocess.CompletedProcess(
+            args=['python', '-m', 'backend.daily_inference'],
+            returncode=0,
+            stdout='inference ok\n',
+            stderr='',
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_root = Path(tmpdir)
+            artifact_dir = artifact_root / '20260425T010000Z'
+            artifact_dir.mkdir()
+            (artifact_dir / 'model.joblib').write_bytes(b'joblib-placeholder')
+            (artifact_dir / 'inference_manifest.json').write_text(
+                json.dumps({
+                    'regions_written': 1,
+                    'total_cells_written': 2,
+                    'dry_run': False,
+                    'completed_at': '2026-04-25T01:23:45+00:00',
+                    'stage_metrics_summary': {
+                        'lifeboat_mode': True,
+                        'lifeboat_profile': 'proof72',
+                        'region_count': 1,
+                    },
+                }),
+                encoding='utf-8',
+            )
+            (artifact_dir / 'forecast_grids.json').write_text(
+                json.dumps([
+                    {
+                        'region_key': 'japanese_alps',
+                        'grid_geojson': [
+                            {
+                                'row': 0,
+                                'col': 0,
+                                'dominant_driver_feature': None,
+                                'shap_values': {},
+                                'shap_context': {'top_features': []},
+                            },
+                        ],
+                        'model_metadata': {
+                            'surrogate_model_version': 'rf_surrogate_v1',
+                            'dynamic_model_type': 'mts_lstm',
+                            'dynamic_model_version': 'mts_lstm_shadow_v1',
+                        },
+                    },
+                ]),
+                encoding='utf-8',
+            )
+
+            report = run_infer_mtslstm(
+                {
+                    'request_type': 'infer_mtslstm',
+                    'artifact_dir': str(artifact_dir),
+                    'region_key': 'japanese_alps',
+                    'lifeboat_mode': True,
+                },
+                artifact_root=artifact_root,
+            )
+
+        self.assertEqual(report['status'], 'ok')
+        self.assertTrue(report['lifeboat_mode'])
+        self.assertEqual(report['lifeboat_profile'], 'proof72')
+        self.assertEqual(report['forecast_hours'], 72)
+        self.assertEqual(report['grid_size'], 5)
+        self.assertTrue(report['skip_tree_shap'])
+        self.assertTrue(report['skip_shap_cache'])
+        self.assertTrue(report['skip_runout_generation'])
+        self.assertTrue(report['skip_compatibility_write'])
+        self.assertTrue(report['emit_stage_metrics'])
+        self.assertEqual(report['stage_metrics_summary']['lifeboat_profile'], 'proof72')
+        self.assertEqual(
+            run_python_module_mock.call_args.kwargs['args'],
+            [
+                '--artifact-dir',
+                str(artifact_dir.resolve()),
+                '--lifeboat-mode',
+                '--lifeboat-profile',
+                'proof72',
+                '--skip-tree-shap',
+                '--skip-shap-cache',
+                '--skip-runout-generation',
+                '--skip-compatibility-write',
+                '--emit-stage-metrics',
+                '--region-key',
+                'japanese_alps',
+            ],
         )
 
     def test_run_infer_mtslstm_fails_closed_for_artifact_dir_outside_root(self) -> None:

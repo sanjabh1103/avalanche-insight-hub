@@ -16,18 +16,25 @@ from backend.modal_worker_app import (
     handle_evaluate_release,
     handle_infer_mtslstm,
     handle_sar_segment,
+    handle_train_sar_unet,
     handle_train_mtslstm,
     normalize_model_volume_path,
     poll_infer_mtslstm_job,
     poll_infer_mtslstm_job_async,
+    poll_train_sar_unet_job,
+    poll_train_sar_unet_job_async,
     poll_train_mtslstm_job,
     poll_train_mtslstm_job_async,
+    run_remote_sar_segment,
+    run_remote_train_sar_unet,
     run_remote_infer_mtslstm,
     run_remote_train_mtslstm,
     seed_dem_directory,
     seed_model_volume_file,
     submit_infer_mtslstm_job,
     submit_infer_mtslstm_job_async,
+    submit_train_sar_unet_job,
+    submit_train_sar_unet_job_async,
     submit_train_mtslstm_job,
     submit_train_mtslstm_job_async,
 )
@@ -47,6 +54,12 @@ class ModalWorkerAppTests(unittest.TestCase):
         payload = {'hazard_type': 'avalanche', 'dataset_snapshot_id': 'latest'}
         handle_train_mtslstm(payload)
         dispatch_mock.assert_called_once_with('train-mtslstm', payload)
+
+    @patch('backend.modal_worker_app._dispatch_worker_request', return_value={'status': 'accepted'})
+    def test_handle_train_sar_unet_forwards_payload(self, dispatch_mock) -> None:
+        payload = {'training_manifest_path': 'sar-data/train.json', 'candidate_model_version': 'shadow-v2'}
+        handle_train_sar_unet(payload)
+        dispatch_mock.assert_called_once_with('train-sar-unet', payload)
 
     @patch('backend.modal_worker_app._dispatch_worker_request', return_value={'status': 'ok'})
     def test_handle_infer_mtslstm_forwards_payload(self, dispatch_mock) -> None:
@@ -125,6 +138,72 @@ class ModalWorkerAppTests(unittest.TestCase):
         self.assertEqual(result['call_id'], 'fc-123')
         self.assertEqual(fake_function.spawn.payload, {'dataset_snapshot_id': 'latest'})
 
+    def test_submit_train_sar_unet_job_returns_call_id(self) -> None:
+        class _FakeCall:
+            object_id = 'fc-sar-123'
+
+        class _FakeSpawn:
+            def __init__(self) -> None:
+                self.payload = None
+
+            def __call__(self, payload):
+                self.payload = payload
+                return _FakeCall()
+
+            async def aio(self, payload):
+                return self(payload)
+
+        class _FakeFunction:
+            def __init__(self) -> None:
+                self.spawn = _FakeSpawn()
+
+        fake_function = _FakeFunction()
+        fake_modal = SimpleNamespace(
+            Function=SimpleNamespace(
+                from_name=lambda app_name, fn_name: fake_function,
+            ),
+        )
+
+        with patch('backend.modal_worker_app.modal', fake_modal):
+            result = submit_train_sar_unet_job({'training_manifest_path': 'sar-data/train.json'})
+
+        self.assertEqual(result['status'], 'accepted')
+        self.assertEqual(result['call_id'], 'fc-sar-123')
+        self.assertEqual(fake_function.spawn.payload, {'training_manifest_path': 'sar-data/train.json'})
+
+    def test_submit_train_sar_unet_job_async_returns_call_id(self) -> None:
+        class _FakeCall:
+            object_id = 'fc-sar-123'
+
+        class _FakeSpawn:
+            def __init__(self) -> None:
+                self.payload = None
+
+            def __call__(self, payload):
+                self.payload = payload
+                return _FakeCall()
+
+            async def aio(self, payload):
+                return self(payload)
+
+        class _FakeFunction:
+            def __init__(self) -> None:
+                self.spawn = _FakeSpawn()
+
+        fake_function = _FakeFunction()
+        fake_modal = SimpleNamespace(
+            Function=SimpleNamespace(
+                from_name=lambda app_name, fn_name: fake_function,
+            ),
+        )
+
+        with patch('backend.modal_worker_app.modal', fake_modal):
+            result = asyncio.run(submit_train_sar_unet_job_async({'training_manifest_path': 'sar-data/train.json'}))
+
+        self.assertEqual(result['status'], 'accepted')
+        self.assertEqual(result['call_id'], 'fc-sar-123')
+        self.assertEqual(fake_function.spawn.payload, {'training_manifest_path': 'sar-data/train.json'})
+
     def test_submit_train_mtslstm_job_async_returns_call_id(self) -> None:
         class _FakeCall:
             object_id = 'fc-123'
@@ -177,6 +256,52 @@ class ModalWorkerAppTests(unittest.TestCase):
 
         with patch('backend.modal_worker_app.modal', fake_modal):
             status_code, body = poll_train_mtslstm_job('fc-123')
+
+        self.assertEqual(status_code, 202)
+        self.assertEqual(body['status'], 'pending')
+
+    def test_poll_train_sar_unet_job_returns_pending_on_timeout(self) -> None:
+        class _FakeGet:
+            def __call__(self, timeout: int = 0):
+                raise TimeoutError()
+
+            async def aio(self, timeout: int = 0):
+                raise TimeoutError()
+
+        class _FakeFunctionCall:
+            def __init__(self) -> None:
+                self.get = _FakeGet()
+
+        fake_modal = SimpleNamespace(
+            FunctionCall=SimpleNamespace(from_id=lambda call_id: _FakeFunctionCall()),
+            exception=SimpleNamespace(OutputExpiredError=RuntimeError),
+        )
+
+        with patch('backend.modal_worker_app.modal', fake_modal):
+            status_code, body = poll_train_sar_unet_job('fc-sar-123')
+
+        self.assertEqual(status_code, 202)
+        self.assertEqual(body['status'], 'pending')
+
+    def test_poll_train_sar_unet_job_async_returns_pending_on_timeout(self) -> None:
+        class _FakeGet:
+            def __call__(self, timeout: int = 0):
+                raise TimeoutError()
+
+            async def aio(self, timeout: int = 0):
+                raise TimeoutError()
+
+        class _FakeFunctionCall:
+            def __init__(self) -> None:
+                self.get = _FakeGet()
+
+        fake_modal = SimpleNamespace(
+            FunctionCall=SimpleNamespace(from_id=lambda call_id: _FakeFunctionCall()),
+            exception=SimpleNamespace(OutputExpiredError=RuntimeError),
+        )
+
+        with patch('backend.modal_worker_app.modal', fake_modal):
+            status_code, body = asyncio.run(poll_train_sar_unet_job_async('fc-sar-123'))
 
         self.assertEqual(status_code, 202)
         self.assertEqual(body['status'], 'pending')
@@ -250,6 +375,54 @@ class ModalWorkerAppTests(unittest.TestCase):
         self.assertEqual(status_code, 200)
         self.assertEqual(body['status'], 'ok')
 
+    def test_poll_train_sar_unet_job_returns_result_when_complete(self) -> None:
+        class _FakeGet:
+            def __call__(self, timeout: int = 0):
+                return {'status': 'ok', 'candidate_model_version': 'shadow-v2'}
+
+            async def aio(self, timeout: int = 0):
+                return self(timeout)
+
+        class _FakeFunctionCall:
+            def __init__(self) -> None:
+                self.get = _FakeGet()
+
+        fake_modal = SimpleNamespace(
+            FunctionCall=SimpleNamespace(from_id=lambda call_id: _FakeFunctionCall()),
+            exception=SimpleNamespace(OutputExpiredError=RuntimeError),
+        )
+
+        with patch('backend.modal_worker_app.modal', fake_modal):
+            status_code, body = poll_train_sar_unet_job('fc-sar-123')
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(body['status'], 'ok')
+        self.assertEqual(body['candidate_model_version'], 'shadow-v2')
+
+    def test_poll_train_sar_unet_job_async_returns_result_when_complete(self) -> None:
+        class _FakeGet:
+            def __call__(self, timeout: int = 0):
+                return {'status': 'ok', 'candidate_model_version': 'shadow-v2'}
+
+            async def aio(self, timeout: int = 0):
+                return self(timeout)
+
+        class _FakeFunctionCall:
+            def __init__(self) -> None:
+                self.get = _FakeGet()
+
+        fake_modal = SimpleNamespace(
+            FunctionCall=SimpleNamespace(from_id=lambda call_id: _FakeFunctionCall()),
+            exception=SimpleNamespace(OutputExpiredError=RuntimeError),
+        )
+
+        with patch('backend.modal_worker_app.modal', fake_modal):
+            status_code, body = asyncio.run(poll_train_sar_unet_job_async('fc-sar-123'))
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(body['status'], 'ok')
+        self.assertEqual(body['candidate_model_version'], 'shadow-v2')
+
     def test_submit_infer_mtslstm_job_returns_call_id(self) -> None:
         class _FakeCall:
             object_id = 'fc-456'
@@ -277,11 +450,27 @@ class ModalWorkerAppTests(unittest.TestCase):
         )
 
         with patch('backend.modal_worker_app.modal', fake_modal):
-            result = submit_infer_mtslstm_job({'forecast_hours': 72, 'dry_run': True})
+            result = submit_infer_mtslstm_job({
+                'forecast_hours': 72,
+                'dry_run': True,
+                'compute_job_id': 'job-123',
+                'artifact_dir': '/artifacts/20260427T000000Z',
+            })
 
         self.assertEqual(result['status'], 'accepted')
         self.assertEqual(result['call_id'], 'fc-456')
-        self.assertEqual(fake_function.spawn.payload, {'forecast_hours': 72, 'dry_run': True})
+        self.assertEqual(result['modal_call_id'], 'fc-456')
+        self.assertEqual(result['compute_job_id'], 'job-123')
+        self.assertEqual(result['artifact_dir'], '/artifacts/20260427T000000Z')
+        self.assertEqual(
+            fake_function.spawn.payload,
+            {
+                'forecast_hours': 72,
+                'dry_run': True,
+                'compute_job_id': 'job-123',
+                'artifact_dir': '/artifacts/20260427T000000Z',
+            },
+        )
 
     def test_submit_infer_mtslstm_job_async_returns_call_id(self) -> None:
         class _FakeCall:
@@ -365,7 +554,13 @@ class ModalWorkerAppTests(unittest.TestCase):
     def test_poll_infer_mtslstm_job_returns_result_when_complete(self) -> None:
         class _FakeGet:
             def __call__(self, timeout: int = 0):
-                return {'status': 'ok', 'cells_with_shap': 400}
+                return {
+                    'status': 'ok',
+                    'cells_with_shap': 400,
+                    'artifact_dir': '/artifacts/20260427T000000Z',
+                    'compute_job_id': 'job-123',
+                    'forecast_run_id': 'run-123',
+                }
 
             async def aio(self, timeout: int = 0):
                 return self(timeout)
@@ -379,12 +574,17 @@ class ModalWorkerAppTests(unittest.TestCase):
             exception=SimpleNamespace(OutputExpiredError=RuntimeError),
         )
 
-        with patch('backend.modal_worker_app.modal', fake_modal):
+        with patch('backend.modal_worker_app.modal', fake_modal), \
+             patch('backend.modal_worker_app._sync_modal_job_linkage_best_effort') as sync_mock:
             status_code, body = poll_infer_mtslstm_job('fc-456')
 
         self.assertEqual(status_code, 200)
         self.assertEqual(body['status'], 'ok')
         self.assertEqual(body['cells_with_shap'], 400)
+        self.assertEqual(body['modal_call_id'], 'fc-456')
+        self.assertEqual(body['artifact_dir'], '/artifacts/20260427T000000Z')
+        self.assertEqual(body['forecast_run_id'], 'run-123')
+        sync_mock.assert_called_once()
 
     def test_poll_infer_mtslstm_job_async_returns_result_when_complete(self) -> None:
         class _FakeGet:
@@ -431,6 +631,33 @@ class ModalWorkerAppTests(unittest.TestCase):
         self.assertEqual(calls, ['reload', 'commit'])
         run_train_mock.assert_called_once_with({'dataset_snapshot_id': 'latest'}, artifact_root=Path('/artifacts'))
 
+    @patch('backend.modal_worker_app.run_train_sar_unet', return_value={'status': 'ok', 'candidate_model_version': 'shadow-v2'})
+    def test_run_remote_train_sar_unet_reloads_and_commits_volume(self, run_train_mock) -> None:
+        calls: list[str] = []
+
+        def _reload() -> None:
+            calls.append('reload')
+
+        def _commit() -> None:
+            calls.append('commit')
+
+        result = run_remote_train_sar_unet(
+            {'training_manifest_path': 'sar-data/train.json'},
+            artifact_root=Path('/artifacts'),
+            device='cuda',
+            volume_reload=_reload,
+            volume_commit=_commit,
+        )
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(result['candidate_model_version'], 'shadow-v2')
+        self.assertEqual(calls, ['reload', 'commit'])
+        run_train_mock.assert_called_once_with(
+            {'training_manifest_path': 'sar-data/train.json'},
+            artifact_root=Path('/artifacts'),
+            device='cuda',
+        )
+
     @patch('backend.modal_worker_app.handle_infer_mtslstm', return_value={'status': 'ok', 'cells_with_shap': 5})
     def test_run_remote_infer_mtslstm_reloads_and_commits_volume(self, handle_infer_mock) -> None:
         calls: list[str] = []
@@ -452,6 +679,32 @@ class ModalWorkerAppTests(unittest.TestCase):
         self.assertEqual(result['cells_with_shap'], 5)
         self.assertEqual(calls, ['reload', 'commit'])
         handle_infer_mock.assert_called_once_with({'forecast_hours': 72, 'dry_run': True})
+
+    @patch('backend.modal_worker_app.run_worker_request', return_value={'status': 'ok', 'scene_count': 7})
+    def test_run_remote_sar_segment_reloads_and_commits_volume(self, run_worker_request_mock) -> None:
+        calls: list[str] = []
+
+        def _reload() -> None:
+            calls.append('reload')
+
+        def _commit() -> None:
+            calls.append('commit')
+
+        result = run_remote_sar_segment(
+            {'reference_set_key': 'snowslide-heldout-v1', 'shadow_mode': True},
+            artifact_root=Path('/artifacts'),
+            device='cuda',
+            volume_reload=_reload,
+            volume_commit=_commit,
+        )
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(result['scene_count'], 7)
+        self.assertEqual(calls, ['reload', 'commit'])
+        run_worker_request_mock.assert_called_once()
+        self.assertEqual(run_worker_request_mock.call_args.args[0], 'sar-segment')
+        self.assertEqual(run_worker_request_mock.call_args.args[1], {'reference_set_key': 'snowslide-heldout-v1', 'shadow_mode': True})
+        self.assertEqual(run_worker_request_mock.call_args.kwargs['device'], 'cuda')
 
     def test_seed_dem_directory_copies_missing_dems_only(self) -> None:
         with TemporaryDirectory() as tmpdir:

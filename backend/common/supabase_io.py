@@ -35,6 +35,14 @@ def _headers() -> dict[str, str]:
     }
 
 
+def _json_response_payload(response: requests.Response) -> list[dict[str, Any]]:
+    text = response.text.strip()
+    if not text:
+        return []
+    data = response.json()
+    return data if isinstance(data, list) else [data]
+
+
 def rest_get(table: str, params: dict[str, str] | None = None) -> list[dict[str, Any]]:
     response = requests.get(
         f"{_base_url()}/rest/v1/{table}",
@@ -44,36 +52,45 @@ def rest_get(table: str, params: dict[str, str] | None = None) -> list[dict[str,
     )
     if not response.ok:
         raise SupabaseError(f'GET {table} failed ({response.status_code}): {response.text}')
-    data = response.json()
-    return data if isinstance(data, list) else [data]
+    return _json_response_payload(response)
 
-
-def rest_upsert(table: str, records: list[dict[str, Any]], on_conflict: str | None = None) -> list[dict[str, Any]]:
+def rest_upsert(
+    table: str,
+    records: list[dict[str, Any]],
+    on_conflict: str | None = None,
+    *,
+    returning: str = 'representation',
+    timeout_seconds: int = 60,
+) -> list[dict[str, Any]]:
     params = {'on_conflict': on_conflict} if on_conflict else None
     response = requests.post(
         f"{_base_url()}/rest/v1/{table}",
-        headers={**_headers(), 'Prefer': 'resolution=merge-duplicates,return=representation'},
+        headers={**_headers(), 'Prefer': f'resolution=merge-duplicates,return={returning}'},
         params=params,
         json=records,
-        timeout=60,
+        timeout=timeout_seconds,
     )
     if not response.ok:
         raise SupabaseError(f'UPSERT {table} failed ({response.status_code}): {response.text}')
-    data = response.json()
-    return data if isinstance(data, list) else [data]
+    return _json_response_payload(response)
 
 
-def rest_insert(table: str, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def rest_insert(
+    table: str,
+    records: list[dict[str, Any]],
+    *,
+    returning: str = 'representation',
+    timeout_seconds: int = 60,
+) -> list[dict[str, Any]]:
     response = requests.post(
         f"{_base_url()}/rest/v1/{table}",
-        headers=_headers(),
+        headers={**_headers(), 'Prefer': f'return={returning}'},
         json=records,
-        timeout=60,
+        timeout=timeout_seconds,
     )
     if not response.ok:
         raise SupabaseError(f'INSERT {table} failed ({response.status_code}): {response.text}')
-    data = response.json()
-    return data if isinstance(data, list) else [data]
+    return _json_response_payload(response)
 
 
 def rest_delete(table: str, filters: dict[str, str] | None = None) -> list[dict[str, Any]]:
@@ -85,10 +102,7 @@ def rest_delete(table: str, filters: dict[str, str] | None = None) -> list[dict[
     )
     if not response.ok:
         raise SupabaseError(f'DELETE {table} failed ({response.status_code}): {response.text}')
-    if not response.text.strip():
-        return []
-    data = response.json()
-    return data if isinstance(data, list) else [data]
+    return _json_response_payload(response)
 
 
 def patch_first_row(table: str, values: dict[str, Any], filters: dict[str, str] | None = None) -> dict[str, Any] | None:
@@ -110,5 +124,47 @@ def patch_first_row(table: str, values: dict[str, Any], filters: dict[str, str] 
     )
     if not response.ok:
         raise SupabaseError(f'PATCH {table} failed ({response.status_code}): {response.text}')
-    data = response.json()
-    return data[0] if isinstance(data, list) and data else (data if isinstance(data, dict) else None)
+    data = _json_response_payload(response)
+    return data[0] if data else None
+
+
+def patch_row_by_id(
+    table: str,
+    row_id: str,
+    values: dict[str, Any],
+    *,
+    returning: str = 'representation',
+    timeout_seconds: int = 30,
+) -> dict[str, Any] | None:
+    response = requests.patch(
+        f"{_base_url()}/rest/v1/{table}",
+        headers={**_headers(), 'Prefer': f'return={returning}'},
+        params={'id': f'eq.{row_id}'},
+        json=values,
+        timeout=timeout_seconds,
+    )
+    if not response.ok:
+        raise SupabaseError(f'PATCH {table} failed ({response.status_code}): {response.text}')
+    data = _json_response_payload(response)
+    return data[0] if data else None
+
+
+def rest_rpc(
+    function_name: str,
+    payload: dict[str, Any] | None = None,
+    *,
+    timeout_seconds: int = 60,
+) -> Any:
+    response = requests.post(
+        f"{_base_url()}/rest/v1/rpc/{function_name}",
+        headers=_headers(),
+        json=payload or {},
+        timeout=timeout_seconds,
+    )
+    if not response.ok:
+        raise SupabaseError(
+            f'RPC {function_name} failed ({response.status_code}): {response.text}',
+        )
+    if not response.text.strip():
+        return None
+    return response.json()
