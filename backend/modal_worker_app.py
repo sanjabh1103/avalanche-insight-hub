@@ -649,7 +649,7 @@ if modal is not None:  # pragma: no cover - exercised in deployment, not local t
             'DEM_ROOT': DEM_VOLUME_ROOT,
         })
         .pip_install_from_requirements('backend/requirements.txt')
-        .pip_install('modal>=0.73.82', 'fastapi[standard]>=0.115.0')
+        .pip_install('modal>=0.73.82', 'fastapi[standard]>=0.115.0', 'pyarrow>=21.0.0')
         .run_commands('pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121')
         .add_local_python_source('backend')
         .add_local_file('config/regions.json', remote_path='/root/config/regions.json')
