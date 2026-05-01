@@ -37,8 +37,8 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Modal CLI
-        run: pip install modal
+      - name: Install Modal CLI and backend deploy dependencies
+        run: pip install modal -r backend/requirements.txt
 
       - name: Deploy Modal worker app
         env:
