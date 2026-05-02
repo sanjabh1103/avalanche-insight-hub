@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Zap, Satellite, BrainCircuit, Database, TrendingUp, CloudSnow, Activity, Tag, BarChart3, FileCheck, RefreshCw, Check, Minus } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase, SUPABASE_ANON_KEY } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { DEFAULT_BBOX } from '@/lib/constants';
 
@@ -48,6 +48,23 @@ interface SatelliteDetectionStats {
   detections_inserted?: number;
   mode?: string;
   fallback_used?: boolean;
+}
+
+interface DynamicModelCandidate {
+  dynamic_model_type?: string | null;
+  dynamic_model_version?: string | null;
+  blocked_gate?: string | null;
+  ready_for_activation?: boolean | null;
+}
+
+interface AutonomousEvidenceSummary {
+  positive_count?: number | null;
+  manual_positive_count?: number | null;
+  autonomous_positive_count?: number | null;
+  promoted_sar_volume?: {
+    sar_unet_promoted_count?: number | null;
+    sar_unet_promoted_region_count?: number | null;
+  } | null;
 }
 
 interface JobRow {
@@ -113,9 +130,58 @@ interface FieldReportRow {
   training_eligible: boolean;
 }
 
+interface GroundsourceEventRow {
+  id: string;
+  timestamp: string;
+  description: string | null;
+  source: string;
+  label_confidence: number | null;
+  training_weight: number | null;
+  features: Record<string, unknown> | null;
+}
+
+interface ForecastRunRow {
+  id: string;
+  region_key: string;
+  region_name: string;
+  forecast_date: string;
+  status: string;
+  publication_status: string;
+  active: boolean;
+  manifest_storage_ref: string | null;
+  compatibility_forecast_grid_id: string | null;
+  published_at: string | null;
+  created_at: string;
+  model_metadata: Record<string, unknown> | null;
+}
+
+interface ForecastRunHourRow {
+  forecast_run_id: string;
+  forecast_hour: number;
+  ready_cell_count: number;
+  stale_cell_count: number;
+}
+
+interface ForecastPublicationEventRow {
+  id: string;
+  forecast_run_id: string;
+  stage: string;
+  status: string;
+  detail: Record<string, unknown> | null;
+  created_at: string;
+}
+
 interface ModelStatusRow {
   version: string;
-  f1_score: number;
+  f1_score: number | null;
+  pss_reported?: number | null;
+  pss_gate_passed?: boolean | null;
+  promotion_gate_passed?: boolean | null;
+  shadow_mode_active?: boolean | null;
+  active_model_type?: string | null;
+  active_model_version?: string | null;
+  dynamic_model_candidate?: DynamicModelCandidate | null;
+  autonomous_evidence_summary?: AutonomousEvidenceSummary | null;
   feature_version?: string;
   calibration_profile_version?: string;
   threshold_profile_version?: string;
@@ -155,10 +221,38 @@ export default function AdminDashboard() {
   const [evaluationMetrics, setEvaluationMetrics] = useState<EvaluationMetricRow[]>([]);
   const [forecastOutcomes, setForecastOutcomes] = useState<ForecastOutcomeRow[]>([]);
   const [fieldReports, setFieldReports] = useState<FieldReportRow[]>([]);
+  const [groundsourceEvents, setGroundsourceEvents] = useState<GroundsourceEventRow[]>([]);
+  const [forecastRuns, setForecastRuns] = useState<ForecastRunRow[]>([]);
+  const [forecastRunHours, setForecastRunHours] = useState<ForecastRunHourRow[]>([]);
+  const [forecastPublicationEvents, setForecastPublicationEvents] = useState<ForecastPublicationEventRow[]>([]);
   const activeJobs = jobs.filter((job) => job.status === 'running').length;
   const latestFineTuneJob = jobs.find((job) => job.type === 'fine_tune');
   const latestFineTuneResult = latestFineTuneJob?.result as { publish_skipped?: string } | null | undefined;
   const syntheticBootstrapSkipped = latestFineTuneResult?.publish_skipped === 'synthetic_bootstrap';
+
+  const forecastHourStats = useMemo(() => {
+    const stats = new Map<string, { hourCount: number; readyCells: number; staleCells: number; maxHour: number }>();
+    forecastRunHours.forEach((hour) => {
+      const existing = stats.get(hour.forecast_run_id) ?? { hourCount: 0, readyCells: 0, staleCells: 0, maxHour: -1 };
+      existing.hourCount += 1;
+      existing.readyCells += hour.ready_cell_count ?? 0;
+      existing.staleCells += hour.stale_cell_count ?? 0;
+      existing.maxHour = Math.max(existing.maxHour, hour.forecast_hour ?? -1);
+      stats.set(hour.forecast_run_id, existing);
+    });
+    return stats;
+  }, [forecastRunHours]);
+
+  const publicationEventsByRun = useMemo(() => {
+    const events = new Map<string, ForecastPublicationEventRow[]>();
+    forecastPublicationEvents.forEach((event) => {
+      const existing = events.get(event.forecast_run_id) ?? [];
+      existing.push(event);
+      existing.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      events.set(event.forecast_run_id, existing);
+    });
+    return events;
+  }, [forecastPublicationEvents]);
   
   // CRASH-FIX: Prevent concurrent data loading that causes ERR_INSUFFICIENT_RESOURCES
   const isLoadingRef = useRef(false);
@@ -183,6 +277,10 @@ export default function AdminDashboard() {
         evaluationMetricsRes,
         outcomesRes,
         reportsRes,
+        groundsourceEventsRes,
+        forecastRunsRes,
+        forecastRunHoursRes,
+        forecastPublicationEventsRes,
       ] = await Promise.all([
         supabase.from('compute_jobs').select('*').order('created_at', { ascending: false }).limit(10),
         supabase.from('system_config').select('*').limit(1).maybeSingle(),
@@ -192,6 +290,27 @@ export default function AdminDashboard() {
         supabase.from('evaluation_metrics').select('*').order('created_at', { ascending: false }).limit(10),
         supabase.from('forecast_outcomes').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.from('field_reports').select('id, created_at, description, review_status, training_eligible').order('created_at', { ascending: false }).limit(5),
+        supabase
+          .from('avalanche_events')
+          .select('id, timestamp, description, source, label_confidence, training_weight, features')
+          .eq('source', 'field_report')
+          .order('timestamp', { ascending: false })
+          .limit(5),
+        supabase
+          .from('forecast_runs')
+          .select('id, region_key, region_name, forecast_date, status, publication_status, active, manifest_storage_ref, compatibility_forecast_grid_id, published_at, created_at, model_metadata')
+          .order('created_at', { ascending: false })
+          .limit(6),
+        supabase
+          .from('forecast_run_hours')
+          .select('forecast_run_id, forecast_hour, ready_cell_count, stale_cell_count, created_at')
+          .order('created_at', { ascending: false })
+          .limit(432),
+        supabase
+          .from('forecast_publication_events')
+          .select('id, forecast_run_id, stage, status, detail, created_at')
+          .order('created_at', { ascending: false })
+          .limit(40),
       ]);
       if (jobsRes.data) setJobs(jobsRes.data as unknown as JobRow[]);
       if (configRes.data) setSystemConfig(configRes.data as unknown as { gemini_usage: number; gemini_spend_cap: number });
@@ -207,6 +326,12 @@ export default function AdminDashboard() {
       if (evaluationMetricsRes.data) setEvaluationMetrics(evaluationMetricsRes.data as unknown as EvaluationMetricRow[]);
       if (outcomesRes.data) setForecastOutcomes(outcomesRes.data as unknown as ForecastOutcomeRow[]);
       if (reportsRes.data) setFieldReports(reportsRes.data as unknown as FieldReportRow[]);
+      if (groundsourceEventsRes.data) setGroundsourceEvents(groundsourceEventsRes.data as unknown as GroundsourceEventRow[]);
+      if (forecastRunsRes.data) setForecastRuns(forecastRunsRes.data as unknown as ForecastRunRow[]);
+      if (forecastRunHoursRes.data) setForecastRunHours(forecastRunHoursRes.data as unknown as ForecastRunHourRow[]);
+      if (forecastPublicationEventsRes.data) {
+        setForecastPublicationEvents(forecastPublicationEventsRes.data as unknown as ForecastPublicationEventRow[]);
+      }
     } finally {
       isLoadingRef.current = false;
     }
@@ -240,6 +365,7 @@ export default function AdminDashboard() {
   useRealtimeSubscription('forecast_outcomes', () => { debouncedLoadData(); }, { persistState: true, onReconnect: () => debouncedLoadData() });
   useRealtimeSubscription('forecasts', () => { debouncedLoadData(); }, { persistState: true, onReconnect: () => debouncedLoadData() });
   useRealtimeSubscription('field_reports', () => { debouncedLoadData(); }, { persistState: true, onReconnect: () => debouncedLoadData() });
+  useRealtimeSubscription('avalanche_events', () => { debouncedLoadData(); }, { persistState: true, onReconnect: () => debouncedLoadData() });
   useRealtimeSubscription('model_status', () => { debouncedLoadData(); }, { persistState: true, onReconnect: () => debouncedLoadData() });
 
   const triggerJob = async (type: JobType) => {
@@ -255,9 +381,6 @@ export default function AdminDashboard() {
 
       const { data, error } = await supabase.functions.invoke('trigger-job', {
         body: payload,
-        headers: {
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        },
       });
       if (error) throw error;
 
@@ -297,11 +420,56 @@ export default function AdminDashboard() {
     }
   };
 
+  const publicationStatusColor = (status: string) => {
+    switch (status) {
+      case 'published':
+      case 'ready':
+      case 'ok':
+        return 'bg-emerald-500/15 text-emerald-400';
+      case 'validated':
+      case 'artifacts_written':
+      case 'building':
+      case 'pending':
+        return 'bg-sky-500/15 text-sky-300';
+      case 'failed':
+      case 'error':
+        return 'bg-red-500/20 text-red-400';
+      case 'superseded':
+        return 'bg-amber-500/15 text-amber-300';
+      default:
+        return 'bg-muted text-muted-foreground';
+    }
+  };
+
+  const asRecord = (value: unknown): Record<string, unknown> | null => (
+    value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null
+  );
+
   const capabilityMode = modelStatus?.capability_summary || modelStatus?.capabilities?.summary || 'Edge-only fallback';
+  const activeModelLabel = modelStatus?.active_model_type || modelStatus?.feature_version || 'surrogate_rf_v1';
+  const activeModelVersion = modelStatus?.active_model_version || modelStatus?.calibration_profile_version || 'n/a';
+  const candidateModelLabel = modelStatus?.dynamic_model_candidate?.dynamic_model_type || 'mts_lstm_v1';
+  const candidateModelVersion = modelStatus?.dynamic_model_candidate?.dynamic_model_version || 'n/a';
+  const candidateGate = modelStatus?.dynamic_model_candidate?.ready_for_activation
+    ? 'ready'
+    : modelStatus?.dynamic_model_candidate?.blocked_gate || 'unavailable';
+  const releaseEvidence = modelStatus?.shadow_mode_active
+    ? 'candidate shadow'
+    : modelStatus?.promotion_gate_passed
+      ? 'promotion passed'
+      : 'promotion hold';
   const optimizationSummary = modelStatus?.optimization_summary;
   const abcEnabled = optimizationSummary?.abc_enabled;
   const snowpackMetrics = modelStatus?.snowpack_metrics;
   const satelliteStats = modelStatus?.satellite_detection_stats;
+  const evidenceSummary = modelStatus?.autonomous_evidence_summary;
+  const extractLocationName = (features: Record<string, unknown> | null) => (
+    typeof features?.location_name === 'string' && features.location_name.trim().length > 0
+      ? features.location_name.trim()
+      : 'Unknown'
+  );
 
   return (
     <div className="space-y-2 p-2.5 md:p-3">
@@ -350,16 +518,111 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-between gap-2">
             <div>
               <div className="text-xs text-muted-foreground uppercase tracking-[0.24em]">Current Mode</div>
-              <div className="text-[10px] text-muted-foreground mt-0.5">Dual-mode runtime capability and fallback state</div>
+              <div className="text-[10px] text-muted-foreground mt-0.5">Precomputed delivery with gated scorer promotion</div>
             </div>
             <Badge className="bg-sky-500/15 text-sky-300 border-0 font-mono text-[10px] rounded-full">
-              {modelStatus?.inference_backend === 'gpu' ? 'GPU' : 'EDGE'}
+              {modelStatus?.inference_backend || 'batch_async'}
             </Badge>
           </div>
-          <div className="text-sm font-mono text-foreground">{capabilityMode}</div>
-          <div className="text-[10px] text-muted-foreground">
-            SAR: {modelStatus?.capabilities?.sar_enabled ? 'on' : 'fallback'} • GPU: {modelStatus?.capabilities?.gpu_enabled ? 'on' : 'fallback'}
+            <div className="text-sm font-mono text-foreground">{capabilityMode}</div>
+            <div className="text-[10px] text-muted-foreground">
+              Customer-serving scorer (active): {activeModelLabel} • Release evidence: {releaseEvidence}
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              Dynamic scorer (candidate): {candidateModelLabel} • Gate: {candidateGate}
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              Authoritative SAR: artifact-gated • Whitebox runout: artifact-gated
+            </div>
+          </CardContent>
+      </Card>
+
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+        <CardHeader className="p-2 pb-1">
+          <CardTitle className="text-xs uppercase tracking-[0.24em] text-muted-foreground flex items-center gap-1.5">
+            <Database className="h-3 w-3" />
+            Forecast Publication
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-2 pt-1.5 space-y-1.5">
+          <div className="grid grid-cols-3 gap-2 text-[10px]">
+            <div>
+              <div className="text-muted-foreground">Recent runs</div>
+              <div className="font-mono text-foreground">{forecastRuns.length}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Active</div>
+              <div className="font-mono text-foreground">{forecastRuns.filter((run) => run.active).length}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Published</div>
+              <div className="font-mono text-foreground">
+                {forecastRuns.filter((run) => run.publication_status === 'published').length}
+              </div>
+            </div>
           </div>
+          {forecastRuns.length > 0 ? (
+            <div className="space-y-1 max-h-52 overflow-y-auto pr-1">
+              {forecastRuns.map((run) => {
+                const metadata = asRecord(run.model_metadata);
+                const compatibilityWriteStatus = typeof metadata?.compatibility_write_status === 'string'
+                  ? metadata.compatibility_write_status
+                  : null;
+                const hourStats = forecastHourStats.get(run.id);
+                const timeline = publicationEventsByRun.get(run.id) ?? [];
+                const timelineStages = timeline.slice(-4).map((event) => event.stage);
+                const manifestReady = Boolean(run.manifest_storage_ref);
+                const compatibilityState = run.compatibility_forecast_grid_id
+                  ? 'attached'
+                  : compatibilityWriteStatus === 'failed'
+                    ? 'failed'
+                    : 'optional';
+
+                return (
+                  <div key={run.id} className="rounded-lg border border-border/60 bg-black/10 px-2 py-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-mono text-foreground truncate">
+                          {run.region_name} • {run.forecast_date}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground truncate">
+                          {run.id} • {run.published_at ? new Date(run.published_at).toLocaleString() : new Date(run.created_at).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-end gap-1 shrink-0">
+                        {run.active && (
+                          <Badge className="bg-emerald-500/15 text-emerald-400 border-0 text-[9px] rounded-full">active</Badge>
+                        )}
+                        <Badge className={`border-0 text-[9px] rounded-full ${publicationStatusColor(run.status)}`}>{run.status}</Badge>
+                        <Badge className={`border-0 text-[9px] rounded-full ${publicationStatusColor(run.publication_status)}`}>{run.publication_status}</Badge>
+                      </div>
+                    </div>
+                    <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
+                      <div className="text-muted-foreground">Manifest</div>
+                      <div className="font-mono text-right text-foreground">{manifestReady ? 'present' : 'missing'}</div>
+                      <div className="text-muted-foreground">Hour artifacts</div>
+                      <div className="font-mono text-right text-foreground">
+                        {hourStats ? `${hourStats.hourCount} / ${hourStats.maxHour + 1}` : '0'}
+                      </div>
+                      <div className="text-muted-foreground">Ready / stale cells</div>
+                      <div className="font-mono text-right text-foreground">
+                        {hourStats ? `${hourStats.readyCells} / ${hourStats.staleCells}` : '0 / 0'}
+                      </div>
+                      <div className="text-muted-foreground">Legacy grid link</div>
+                      <div className={`font-mono text-right ${compatibilityState === 'failed' ? 'text-red-400' : 'text-foreground'}`}>
+                        {compatibilityState}
+                      </div>
+                    </div>
+                    <div className="mt-1 text-[10px] text-muted-foreground">
+                      Stages: {timelineStages.length > 0 ? timelineStages.join(' -> ') : 'no publication events yet'}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground">No staged forecast runs visible yet</div>
+          )}
         </CardContent>
       </Card>
 
@@ -581,6 +844,49 @@ export default function AdminDashboard() {
         <CardHeader className="p-2 pb-1">
           <CardTitle className="text-xs uppercase tracking-[0.24em] text-muted-foreground flex items-center gap-1.5">
             <FileCheck className="h-3 w-3" />
+            Recent Groundsource Events
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-2 pt-1 space-y-1 max-h-60 overflow-y-auto pr-1">
+          {groundsourceEvents.length === 0 ? (
+            <div className="text-xs text-muted-foreground">No recent governed field-report events</div>
+          ) : (
+            groundsourceEvents.map((event) => (
+              <div key={event.id} className="rounded-lg border border-border/50 bg-black/10 px-2 py-1.5 text-[10px]">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-mono text-muted-foreground truncate">
+                      {new Date(event.timestamp).toLocaleString()} • {extractLocationName(asRecord(event.features))}
+                    </div>
+                    <div className="line-clamp-2 text-muted-foreground">
+                      {event.description || 'No description'}
+                    </div>
+                  </div>
+                  <Badge className="bg-sky-500/15 text-sky-300 border-0 text-[9px] rounded-full shrink-0">
+                    {event.source}
+                  </Badge>
+                </div>
+                <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
+                  <div className="text-muted-foreground">label_confidence</div>
+                  <div className="font-mono text-right text-foreground">
+                    {typeof event.label_confidence === 'number' ? event.label_confidence.toFixed(2) : 'n/a'}
+                  </div>
+                  <div className="text-muted-foreground">training_weight</div>
+                  <div className="font-mono text-right text-foreground">
+                    {typeof event.training_weight === 'number' ? event.training_weight.toFixed(3) : 'n/a'}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Field Reports */}
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+        <CardHeader className="p-2 pb-1">
+          <CardTitle className="text-xs uppercase tracking-[0.24em] text-muted-foreground flex items-center gap-1.5">
+            <FileCheck className="h-3 w-3" />
             Field Reports
           </CardTitle>
         </CardHeader>
@@ -634,11 +940,29 @@ export default function AdminDashboard() {
             <div className="flex items-center justify-between mb-1.5">
               <span className="font-mono text-sm text-foreground">{modelStatus.version}</span>
               <Badge className="bg-emerald-500/15 text-emerald-400 border-0 font-mono text-xs rounded-full">
-                F1: {modelStatus.f1_score.toFixed(3)}
+                PSS: {modelStatus.pss_reported?.toFixed(3) ?? '—'}
               </Badge>
             </div>
             <div className="text-[10px] text-muted-foreground">
-              Mode: {capabilityMode}
+              Capability summary: {capabilityMode}
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              Customer-serving scorer (active): {activeModelLabel} • Version: {activeModelVersion}
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              Dynamic scorer (candidate): {candidateModelLabel} • Version: {candidateModelVersion} • Gate: {candidateGate}
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              Promotion gate: {modelStatus.promotion_gate_passed ? 'pass' : 'hold'} • PSS gate: {modelStatus.pss_gate_passed ? 'pass' : 'hold'}
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              Authoritative SAR: unavailable until an active held-out artifact exists
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              Whitebox runout: exploratory until `runout_physics_smoke.json` passes
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              Evidence volume: auto {evidenceSummary?.autonomous_positive_count ?? 0}/{evidenceSummary?.positive_count ?? 0} • manual {evidenceSummary?.manual_positive_count ?? 0} • promoted SAR {evidenceSummary?.promoted_sar_volume?.sar_unet_promoted_count ?? 0}
             </div>
             {modelStatus.feature_version && (
               <div className="text-[10px] text-muted-foreground">
@@ -660,6 +984,9 @@ export default function AdminDashboard() {
                 Snowpack: {modelStatus.snowpack_model_version}
               </div>
             )}
+            <div className="text-[10px] text-muted-foreground">
+              Confidence proxy: F1 {modelStatus.f1_score?.toFixed(3) ?? '—'} • Backend: {modelStatus.inference_backend || 'batch_async'}
+            </div>
             {(!modelStatus.last_trained || modelStatus.version?.includes('-sim') || syntheticBootstrapSkipped || !optimizationSummary || optimizationSummary?.origin === 'hardcoded_fallback') && (
               <div className="mt-1.5 rounded-md bg-amber-500/10 border border-amber-500/30 px-2 py-1">
                 <span className="text-[10px] font-mono text-amber-300 uppercase tracking-wider">SYNTHETIC BOOTSTRAP</span>

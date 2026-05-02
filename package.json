@@ -9,6 +9,8 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test:e2e:preview": "sh -c 'PORT=${PLAYWRIGHT_PHASE6_PORT:-4176}; VITE_SUPABASE_URL=https://example.supabase.co VITE_SUPABASE_ANON_KEY=phase6-anon-key VITE_SUPABASE_PUBLISHABLE_KEY=phase6-anon-key npm run build && VITE_SUPABASE_URL=https://example.supabase.co VITE_SUPABASE_ANON_KEY=phase6-anon-key VITE_SUPABASE_PUBLISHABLE_KEY=phase6-anon-key vite preview --host 127.0.0.1 --port \"$PORT\" --strictPort'",
+    "test:browser:phase6": "playwright test --config=playwright.config.ts tests/e2e/phase6-browser-smoke.spec.ts --project=chromium",
     "test": "vitest run",
     "test:watch": "vitest",
     "jobs:snow-cover": "echo 'Trigger snow-cover refresh job - uses ingest-snow-cover edge function'",

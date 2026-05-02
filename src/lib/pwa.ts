@@ -23,6 +23,22 @@ async function flushQueuedFieldReportsOnReconnect(reason: 'startup' | 'online') 
 export async function initPwa() {
   if (typeof window === 'undefined') return;
   if (!('serviceWorker' in navigator)) return;
+  if (import.meta.env.DEV) {
+    try {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+      if ('caches' in window) {
+        const cacheKeys = await caches.keys();
+        await Promise.all(cacheKeys.map((key) => caches.delete(key)));
+      }
+      if (registrations.length > 0) {
+        console.info('[pwa] Dev mode: unregistered existing service workers and cleared caches.');
+      }
+    } catch (error) {
+      console.warn('[pwa] Dev mode cleanup failed:', error);
+    }
+    return;
+  }
 
   if (!queuedFieldReportSyncRegistered) {
     queuedFieldReportSyncRegistered = true;

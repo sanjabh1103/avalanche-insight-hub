@@ -1,62 +1,22 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { toast } from 'sonner';
+import * as turf from '@turf/turf';
+import type { Feature, Polygon } from 'geojson';
+import { fetchOverpassJson } from '@/lib/overpassClient';
 
 interface Props {
   bbox: [number, number, number, number];
   showRoads: boolean;
   showInfrastructure: boolean;
+  runoutPolygons?: Array<Record<string, unknown>>;
 }
 
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
-
-// Shared rate limiting state across ALL component instances (module-level singleton)
-let lastRequestTime = 0;
-let consecutiveFailures = 0;
-const MIN_REQUEST_INTERVAL = 5000; // 5 seconds minimum between requests
-const MAX_RETRIES = 3;
-const BASE_DELAY_MS = 2000; // Start with 2s delay
-
-async function rateLimitedFetch(url: string, options: RequestInit, retryCount = 0): Promise<Response> {
-  // Circuit breaker: if we've had many failures, add extra backoff
-  const circuitBreakerDelay = Math.min(consecutiveFailures * 3000, 15000); // Max 15s extra delay
-  
-  // Rate limiting: ensure minimum interval between requests
-  const now = Date.now();
-  const timeSinceLastRequest = now - lastRequestTime;
-  const requiredDelay = Math.max(MIN_REQUEST_INTERVAL, circuitBreakerDelay);
-  
-  if (timeSinceLastRequest < requiredDelay) {
-    await new Promise(resolve => setTimeout(resolve, requiredDelay - timeSinceLastRequest));
-  }
-  
-  lastRequestTime = Date.now();
-  
-  try {
-    const res = await fetch(url, options);
-    
-    // Handle 429 (Rate Limit) and 504 (Gateway Timeout) with exponential backoff
-    if ((res.status === 429 || res.status === 504) && retryCount < MAX_RETRIES) {
-      consecutiveFailures++;
-      // Longer delays: 3s, 6s, 12s for retries
-      const delay = Math.pow(2, retryCount) * 3000 + Math.random() * 1000; // Add jitter
-      await new Promise(resolve => setTimeout(resolve, delay));
-      return rateLimitedFetch(url, options, retryCount + 1);
-    }
-    
-    // Reset failure count on success
-    if (res.ok) {
-      consecutiveFailures = 0;
-    } else if (res.status === 429 || res.status >= 500) {
-      consecutiveFailures++;
-    }
-    
-    return res;
-  } catch (err) {
-    consecutiveFailures++;
-    throw err;
-  }
+interface OverlaySummary {
+  affectedRoads: number;
+  affectedAssets: number;
+  affectedRoadNames: string[];
+  affectedAssetNames: string[];
 }
 
 function buildQuery(bbox: [number, number, number, number], type: 'roads' | 'infra'): string {
@@ -68,128 +28,209 @@ function buildQuery(bbox: [number, number, number, number], type: 'roads' | 'inf
   return `[out:json][timeout:10];(node["aerialway"](${b});node["place"~"village|town"](${b}););out;`;
 }
 
-export default function ImpactOverlays({ bbox, showRoads, showInfrastructure }: Props) {
+function buildRunoutFeatures(runoutPolygons: Array<Record<string, unknown>>): Array<Feature<Polygon>> {
+  return runoutPolygons
+    .map((item) => item.polygon)
+    .filter((polygon): polygon is unknown[] => Array.isArray(polygon) && polygon.length >= 4)
+    .map((polygon) =>
+      turf.polygon([
+        polygon
+          .filter((point): point is [number, number] => Array.isArray(point) && point.length >= 2)
+          .map((point) => [Number(point[0]), Number(point[1])]),
+      ]),
+    )
+    .filter((feature) => feature.geometry.coordinates[0].length >= 4);
+}
+
+function intersectsRoad(
+  geometry: Array<{ lat: number; lon: number }>,
+  runoutFeatures: Array<Feature<Polygon>>,
+): boolean {
+  if (runoutFeatures.length === 0 || geometry.length < 2) return false;
+  const line = turf.lineString(geometry.map((point) => [point.lon, point.lat]));
+  return runoutFeatures.some((feature) => turf.booleanIntersects(feature, line));
+}
+
+function intersectsAsset(
+  lat: number,
+  lon: number,
+  runoutFeatures: Array<Feature<Polygon>>,
+): boolean {
+  if (runoutFeatures.length === 0) return false;
+  const point = turf.point([lon, lat]);
+  return runoutFeatures.some((feature) => turf.booleanIntersects(feature, point));
+}
+
+const EMPTY_SUMMARY: OverlaySummary = {
+  affectedRoads: 0,
+  affectedAssets: 0,
+  affectedRoadNames: [],
+  affectedAssetNames: [],
+};
+
+export default function ImpactOverlays({ bbox, showRoads, showInfrastructure, runoutPolygons = [] }: Props) {
   const map = useMap();
   const layersRef = useRef<L.Layer[]>([]);
   const [loading, setLoading] = useState(false);
+  const [summary, setSummary] = useState<OverlaySummary>(EMPTY_SUMMARY);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const runoutFeatures = useMemo(() => buildRunoutFeatures(runoutPolygons), [runoutPolygons]);
 
   useEffect(() => {
-    // Cleanup previous layers
-    layersRef.current.forEach(l => map.removeLayer(l));
+    layersRef.current.forEach((layer) => map.removeLayer(layer));
     layersRef.current = [];
+    setSummary(EMPTY_SUMMARY);
+    setStatusMessage(null);
 
     if (!showRoads && !showInfrastructure) return;
 
     let cancelled = false;
+    const nextSummary: OverlaySummary = {
+      affectedRoads: 0,
+      affectedAssets: 0,
+      affectedRoadNames: [],
+      affectedAssetNames: [],
+    };
     setLoading(true);
 
-    // Sequential fetching with rate limiting to avoid 429 errors
     const fetchPromises: Promise<void>[] = [];
 
     if (showRoads) {
       fetchPromises.push(
-        rateLimitedFetch(OVERPASS_URL, {
-          method: 'POST',
-          body: `data=${encodeURIComponent(buildQuery(bbox, 'roads'))}`,
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        fetchOverpassJson<{ elements?: Record<string, unknown>[] }>({
+          cacheKey: `overpass:roads:${bbox.join(',')}`,
+          query: buildQuery(bbox, 'roads'),
+          ttlMs: 60_000,
         })
-          .then(r => {
-            if (r.status === 429) throw new Error('Rate limit exceeded');
-            if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            return r.json();
-          })
-          .then(data => {
+          .then((result) => {
             if (cancelled) return;
+            if (!result.ok) {
+              setStatusMessage(result.message);
+              return;
+            }
+            const data = result.data;
             const elements = data.elements || [];
             let added = 0;
-            elements.forEach((el: Record<string, unknown>) => {
-              if (el.type === 'way' && Array.isArray(el.geometry)) {
-                const coords = (el.geometry as { lat: number; lon: number }[]).map(
-                  p => [p.lat, p.lon] as [number, number]
-                );
-                const line = L.polyline(coords, { color: '#f97316', weight: 2, opacity: 0.7 });
-                const tags = (el.tags || {}) as Record<string, string>;
-                line.bindPopup(`<b>${tags.name || 'Road'}</b><br/>Type: ${tags.highway || 'unknown'}`);
-                line.addTo(map);
-                layersRef.current.push(line);
-                added++;
+            elements.forEach((element: Record<string, unknown>) => {
+              if (element.type !== 'way' || !Array.isArray(element.geometry)) return;
+              const geometry = element.geometry as Array<{ lat: number; lon: number }>;
+              const affected = intersectsRoad(geometry, runoutFeatures);
+              const coords = geometry.map((point) => [point.lat, point.lon] as [number, number]);
+              const tags = (element.tags || {}) as Record<string, string>;
+              const roadName = tags.name || `${tags.highway || 'road'} ${Number(element.id ?? 0)}`;
+              const line = L.polyline(coords, {
+                color: affected ? '#ef4444' : '#f97316',
+                weight: affected ? 3 : 2,
+                opacity: affected ? 0.92 : 0.7,
+              });
+              line.bindPopup(
+                `<b>${roadName}</b><br/>Type: ${tags.highway || 'unknown'}${
+                  affected ? '<br/><span style="color:#ef4444">Runout intersection detected</span>' : ''
+                }`,
+              );
+              line.addTo(map);
+              layersRef.current.push(line);
+              added++;
+              if (affected) {
+                nextSummary.affectedRoads += 1;
+                nextSummary.affectedRoadNames.push(roadName);
               }
             });
-            // B7 fix: inform the user if overlay returns zero results (silent failure → visible feedback)
-            if (added === 0 && !cancelled) {
-              toast.info('No major roads found in this region for overlay');
-            }
-          })
-          .catch(() => {
-            if (!cancelled) toast.error('Roads overlay failed — Overpass API unavailable');
-          })
+          }),
       );
     }
 
     if (showInfrastructure) {
       fetchPromises.push(
-        rateLimitedFetch(OVERPASS_URL, {
-          method: 'POST',
-          body: `data=${encodeURIComponent(buildQuery(bbox, 'infra'))}`,
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        fetchOverpassJson<{ elements?: Record<string, unknown>[] }>({
+          cacheKey: `overpass:infra:${bbox.join(',')}`,
+          query: buildQuery(bbox, 'infra'),
+          ttlMs: 60_000,
         })
-          .then(r => {
-            if (r.status === 429) throw new Error('Rate limit exceeded');
-            if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            return r.json();
-          })
-          .then(data => {
+          .then((result) => {
             if (cancelled) return;
+            if (!result.ok) {
+              setStatusMessage(result.message);
+              return;
+            }
+            const data = result.data;
             const elements = data.elements || [];
             let added = 0;
-            elements.forEach((el: Record<string, unknown>) => {
-              if (el.type === 'node' && typeof el.lat === 'number' && typeof el.lon === 'number') {
-                const tags = (el.tags || {}) as Record<string, string>;
-                const isLift = !!tags.aerialway;
-                const marker = L.circleMarker([el.lat as number, el.lon as number], {
-                  radius: 6,
-                  color: isLift ? '#a78bfa' : '#67e8f9',
-                  fillColor: isLift ? '#a78bfa' : '#67e8f9',
-                  fillOpacity: 0.8,
-                  weight: 1,
-                });
-                marker.bindPopup(
-                  `<b>${tags.name || (isLift ? 'Ski Lift' : 'Village')}</b><br/>Type: ${tags.aerialway || tags.place || 'unknown'}`
-                );
-                marker.addTo(map);
-                layersRef.current.push(marker);
-                added++;
+            elements.forEach((element: Record<string, unknown>) => {
+              if (element.type !== 'node' || typeof element.lat !== 'number' || typeof element.lon !== 'number') return;
+              const tags = (element.tags || {}) as Record<string, string>;
+              const isLift = !!tags.aerialway;
+              const affected = intersectsAsset(element.lat as number, element.lon as number, runoutFeatures);
+              const assetName = tags.name || (isLift ? 'Ski Lift' : 'Village');
+              const marker = L.circleMarker([element.lat as number, element.lon as number], {
+                radius: affected ? 7 : 6,
+                color: affected ? '#ef4444' : isLift ? '#a78bfa' : '#67e8f9',
+                fillColor: affected ? '#ef4444' : isLift ? '#a78bfa' : '#67e8f9',
+                fillOpacity: 0.85,
+                weight: 1,
+              });
+              marker.bindPopup(
+                `<b>${assetName}</b><br/>Type: ${tags.aerialway || tags.place || 'unknown'}${
+                  affected ? '<br/><span style="color:#ef4444">Inside predicted runout zone</span>' : ''
+                }`,
+              );
+              marker.addTo(map);
+              layersRef.current.push(marker);
+              added++;
+              if (affected) {
+                nextSummary.affectedAssets += 1;
+                nextSummary.affectedAssetNames.push(assetName);
               }
             });
-            if (added === 0 && !cancelled) {
-              toast.info('No villages or ski lifts found in this region');
-            }
-          })
-          .catch((err) => {
-            if (!cancelled) {
-              if (err.message === 'Rate limit exceeded') {
-                toast.error('Overpass API rate limit — please wait a moment');
-              } else {
-                toast.error('Infrastructure overlay failed — Overpass API unavailable');
-              }
-            }
-          })
+          }),
       );
     }
 
-    // Execute all fetches (they'll be rate-limited sequentially)
     Promise.all(fetchPromises).finally(() => {
-      if (!cancelled) setLoading(false);
+      if (!cancelled) {
+        setSummary(nextSummary);
+        setLoading(false);
+      }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [bbox, showRoads, showInfrastructure, map]);
+  }, [bbox, map, runoutFeatures, showInfrastructure, showRoads]);
 
-  return loading ? (
-    <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] glass-panel rounded-full px-4 py-2 text-xs text-muted-foreground">
-      Fetching impact data…
-    </div>
-  ) : null;
+  if (loading) {
+    return (
+      <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] glass-panel rounded-full px-4 py-2 text-xs text-muted-foreground">
+        Fetching impact data…
+      </div>
+    );
+  }
+
+  if (statusMessage) {
+    return (
+      <div className="absolute top-20 left-1/2 z-[1000] max-w-[32rem] -translate-x-1/2 rounded-2xl border border-amber-500/30 bg-black/80 px-4 py-2.5 text-xs text-amber-100 shadow-xl">
+        {statusMessage}
+      </div>
+    );
+  }
+
+  if ((showRoads || showInfrastructure) && runoutFeatures.length > 0) {
+    const summaryText = summary.affectedRoads > 0 || summary.affectedAssets > 0
+      ? `Runout warnings: ${summary.affectedRoads} roads and ${summary.affectedAssets} assets intersect persisted runout polygons.`
+      : 'No fetched roads or mapped assets intersect the persisted runout polygons.';
+    const detailNames = [...summary.affectedRoadNames, ...summary.affectedAssetNames].slice(0, 3);
+    return (
+      <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] max-w-[32rem] glass-panel rounded-2xl px-4 py-2.5 text-xs text-foreground shadow-xl">
+        <div className="font-medium">{summaryText}</div>
+        {detailNames.length > 0 && (
+          <div className="mt-1 text-muted-foreground">
+            Affected: {detailNames.join(', ')}
+            {(summary.affectedRoadNames.length + summary.affectedAssetNames.length) > detailNames.length ? '…' : ''}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return null;
 }

@@ -3,11 +3,21 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, RefreshCw, Loader2, Info } from 'lucide-react';
 import { RISK_COLORS, RISK_LABELS, GRID_SIZE } from '@/lib/constants';
-import { isCellUnavailable, isHighUncertaintyCell, type GridCell } from '@/lib/gridUtils';
+import {
+  getCellMaskLabel,
+  getCellMaskReasonDescriptions,
+  getCellMaskSummary,
+  hasRenderableCellGeometry,
+  isCellMasked,
+  isCellUnavailable,
+  isHighUncertaintyCell,
+  type GridCell,
+} from '@/lib/gridUtils';
 import { Canvas, ThreeEvent, useFrame } from '@react-three/fiber';
 import { OrbitControls, Instances, Instance } from '@react-three/drei';
 import { useTheme } from 'next-themes';
 import * as THREE from 'three';
+import { fetchOverpassJson } from '@/lib/overpassClient';
 
 // ---- types ----
 interface BaseBlock {
@@ -38,6 +48,12 @@ interface VoxelCoordinate {
   data: BaseBlock;
 }
 
+interface FetchedVoxelData {
+  voxels: VoxelCoordinate[];
+  degradedMessage: string | null;
+  cacheable: boolean;
+}
+
 interface HoveredInfo {
   type: string;
   riskLabel: string;
@@ -46,7 +62,11 @@ interface HoveredInfo {
   lng: number;
   color: string;
   unavailable?: boolean;
+  masked?: boolean;
   availabilityReason?: string | null;
+  maskLabel?: string;
+  maskSummary?: string;
+  maskReasons?: string[];
   problemType?: string;
   probability?: number;
   uncertaintyClass?: 'low' | 'medium' | 'high';
@@ -57,24 +77,15 @@ interface Props {
   onClose: () => void;
   bbox: [number, number, number, number];
   gridCells: GridCell[];
-  hourlyGrids: GridCell[][] | null;
+  hourlyGrids: Array<GridCell[] | null> | null;
   timeOffset: number;
 }
 
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 const WORLD_SIZE = 60; // 60x60 strict grid
 const OVERPASS_FETCH_TIMEOUT_MS = 10000;
 
 // ---- In-memory session cache ----
 const sessionCache = new Map<string, VoxelCoordinate[]>();
-
-// ---- Rate limiting state (module-level singleton) ----
-let lastRequestTime = 0;
-let consecutiveFailures = 0;
-const MIN_REQUEST_INTERVAL = 5000; // 5 seconds minimum between requests
-const MAX_RETRIES = 3;
-const OVERPASS_FALLBACK_COOLDOWN_MS = 60_000;
-let overpassFallbackUntil = 0;
 
 function bboxToQuery(bbox: [number, number, number, number]) {
   const [latMin, lngMin, latMax, lngMax] = bbox;
@@ -85,29 +96,6 @@ function bboxToQuery(bbox: [number, number, number, number]) {
     way["landuse"~"forest|grass|meadow"](${b});
     node["aerialway"](${b});
   );out center geom;`;
-}
-
-async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController();
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-  const fetchPromise = fetch(url, {
-    ...options,
-    signal: controller.signal,
-  });
-
-  const timeoutPromise = new Promise<Response>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      controller.abort();
-      reject(new Error('Overpass request timed out'));
-    }, timeoutMs);
-  });
-
-  try {
-    return await Promise.race([fetchPromise, timeoutPromise]);
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
-  }
 }
 
 function geoToLocal(lat: number, lng: number, bbox: [number, number, number, number]): [number, number] {
@@ -204,7 +192,13 @@ function buildVoxelGridFromOSM(data: { elements?: OSMElement[] }, bbox: [number,
 }
 
 function findRiskForPosition(lat: number, lng: number, cells: GridCell[]): GridCell | undefined {
-  return cells.find(c => lat >= c.lat && lat < c.latEnd && lng >= c.lng && lng < c.lngEnd);
+  return cells.find((cell) => (
+    hasRenderableCellGeometry(cell)
+    && lat >= cell.lat
+    && lat < cell.latEnd
+    && lng >= cell.lng
+    && lng < cell.lngEnd
+  ));
 }
 
 function typeName(type: BaseBlock['type']): string {
@@ -256,72 +250,28 @@ function isHighUncertainty(cell: GridCell | undefined) {
   return isHighUncertaintyCell(cell);
 }
 
-// Store the in-progress promise for deduplication
-let pendingPromise: Promise<VoxelCoordinate[]> | null = null;
+async function fetchOSMData(bbox: [number, number, number, number]): Promise<FetchedVoxelData> {
+  const result = await fetchOverpassJson<{ elements?: OSMElement[] }>({
+    cacheKey: `overpass:voxel:${bbox.join(',')}`,
+    query: bboxToQuery(bbox),
+    ttlMs: 60_000,
+    timeoutMs: OVERPASS_FETCH_TIMEOUT_MS,
+  });
 
-async function fetchOSMData(bbox: [number, number, number, number]): Promise<VoxelCoordinate[]> {
-  // Deduplication: if a fetch is already in progress, return that promise
-  if (pendingPromise) {
-    return pendingPromise;
+  if (!result.ok) {
+    console.warn('Failed to load OSM voxel data, using terrain fallback', result.message);
+    return {
+      voxels: buildTerrainFallback(bbox),
+      degradedMessage: result.message,
+      cacheable: false,
+    };
   }
 
-  if (Date.now() < overpassFallbackUntil) {
-    console.warn('Skipping Overpass fetch during cooldown, using terrain fallback');
-    return buildTerrainFallback(bbox);
-  }
-
-  // Create and store the promise IMMEDIATELY (synchronously)
-  // This prevents race conditions where multiple calls slip through
-  pendingPromise = (async (): Promise<VoxelCoordinate[]> => {
-    try {
-      // Circuit breaker: add extra delay if we've had recent failures
-      const circuitBreakerDelay = Math.min(consecutiveFailures * 3000, 15000);
-      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        // Rate limiting: ensure minimum interval between requests
-        const now = Date.now();
-        const timeSinceLastRequest = now - lastRequestTime;
-        const requiredDelay = Math.max(MIN_REQUEST_INTERVAL, circuitBreakerDelay);
-
-        if (timeSinceLastRequest < requiredDelay) {
-          await new Promise(resolve => setTimeout(resolve, requiredDelay - timeSinceLastRequest));
-        }
-
-        const query = bboxToQuery(bbox);
-
-        lastRequestTime = Date.now();
-        const res = await fetchWithTimeout(OVERPASS_URL, {
-          method: 'POST',
-          body: `data=${encodeURIComponent(query)}`,
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        }, OVERPASS_FETCH_TIMEOUT_MS);
-
-        if (res.status === 429 || res.status === 504) {
-          consecutiveFailures++;
-          overpassFallbackUntil = Date.now() + OVERPASS_FALLBACK_COOLDOWN_MS;
-          console.warn('Overpass API unavailable after retries, using terrain fallback');
-          return buildTerrainFallback(bbox);
-        }
-
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        }
-
-        consecutiveFailures = 0;
-        overpassFallbackUntil = 0;
-        const data = await res.json();
-        return buildVoxelGridFromOSM(data, bbox);
-      }
-    } catch (err) {
-      consecutiveFailures++;
-      overpassFallbackUntil = Date.now() + OVERPASS_FALLBACK_COOLDOWN_MS;
-      console.warn('Failed to load OSM voxel data, using terrain fallback', err);
-      return buildTerrainFallback(bbox);
-    } finally {
-      pendingPromise = null;
-    }
-  })();
-  
-  return pendingPromise;
+  return {
+    voxels: buildVoxelGridFromOSM(result.data, bbox),
+    degradedMessage: null,
+    cacheable: true,
+  };
 }
 
 // ---- Three.js scene ----
@@ -370,6 +320,8 @@ function VoxelScene({
         if (cell) {
           if (isCellUnavailable(cell)) {
             baseC.lerp(new THREE.Color('#6b7280'), 0.78);
+          } else if (isCellMasked(cell)) {
+            baseC.lerp(new THREE.Color('#6b7280'), 0.72);
           } else if (isHighUncertainty(cell)) {
             baseC.lerp(new THREE.Color('#9ca3af'), 0.72);
           } else {
@@ -394,16 +346,24 @@ function VoxelScene({
       if (v) {
         const cell = findRiskForPosition(v.data.lat, v.data.lng, cells);
         const unavailable = isCellUnavailable(cell);
-        const score = Math.max(1, Math.min(5, Math.round(cell?.riskScore || 1)));
+        const masked = isCellMasked(cell) && !unavailable;
+        const maskLabel = getCellMaskLabel(cell);
+        const maskSummary = getCellMaskSummary(cell);
+        const maskReasons = getCellMaskReasonDescriptions(cell);
+        const score = masked ? 0 : Math.max(1, Math.min(5, Math.round(cell?.riskScore || 1)));
         onHover({
           type: typeName(v.data.type),
-          riskLabel: unavailable ? 'Unavailable' : (RISK_LABELS[score] ?? 'Unknown'),
+          riskLabel: unavailable ? 'Unavailable' : masked ? maskLabel : (RISK_LABELS[score] ?? 'Unknown'),
           riskScore: score,
           lat: v.data.lat,
           lng: v.data.lng,
-          color: unavailable ? '#6b7280' : isHighUncertainty(cell) ? '#9ca3af' : (RISK_COLORS[score] || '#333'),
+          color: unavailable || masked ? '#6b7280' : isHighUncertainty(cell) ? '#9ca3af' : (RISK_COLORS[score] || '#333'),
           unavailable,
+          masked,
           availabilityReason: cell?.availabilityReason ?? null,
+          maskLabel,
+          maskSummary,
+          maskReasons,
           problemType: cell?.problemType,
           probability: cell?.probability,
           uncertaintyClass: cell?.uncertaintyClass,
@@ -468,7 +428,7 @@ function VoxelFallbackCanvas({
     for (const voxel of voxels.slice(0, 2500)) {
       const cell = findRiskForPosition(voxel.data.lat, voxel.data.lng, cells);
       const riskScore = Math.max(1, Math.min(5, Math.round(cell?.riskScore || 1)));
-      ctx.fillStyle = isCellUnavailable(cell) ? '#6b7280' : isHighUncertainty(cell) ? '#9ca3af' : (RISK_COLORS[riskScore] || '#334155');
+      ctx.fillStyle = isCellUnavailable(cell) || isCellMasked(cell) ? '#6b7280' : isHighUncertainty(cell) ? '#9ca3af' : (RISK_COLORS[riskScore] || '#334155');
       const x = Math.round((voxel.x + WORLD_SIZE / 2) * scaleX);
       const y = Math.round((voxel.z + WORLD_SIZE / 2) * scaleY);
       const size = voxel.data.type === 'building' ? 3 : voxel.data.type === 'road' ? 2 : 1.5;
@@ -494,8 +454,8 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
   const canvasBg = isDark ? '#0a0a0a' : '#f1f5f9';
 
   const currentCells = useMemo(() => {
-    if (hourlyGrids && hourlyGrids[timeOffset]) return hourlyGrids[timeOffset];
-    return gridCells;
+    const sourceCells = hourlyGrids && Array.isArray(hourlyGrids[timeOffset]) ? hourlyGrids[timeOffset] : gridCells;
+    return sourceCells.filter((cell) => hasRenderableCellGeometry(cell));
   }, [hourlyGrids, timeOffset, gridCells]);
 
   const renderedBlocks = useMemo(() => {
@@ -513,7 +473,9 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
     setSparseRegion(false);
     setHovered(null);
     try {
-      const raw = await fetchOSMData(bbox);
+      const result = await fetchOSMData(bbox);
+      const raw = result.voxels;
+      setFetchError(result.degradedMessage);
       
       const structureCount = raw.filter(b => b.data.type !== 'ground').length;
       if (structureCount < 5) {
@@ -521,17 +483,12 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
       }
 
       setBlocks(raw);
-      sessionCache.set(cacheKey, raw);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('504') || msg.includes('timeout') || msg.includes('Gateway')) {
-        setFetchError('Overpass API server is overloaded (504). Please wait 30 seconds and try again.');
-      } else if (msg.includes('429')) {
-        setFetchError('Rate limit exceeded. Please wait a moment before retrying.');
-      } else {
-        setFetchError('Could not fetch OSM data — check your connection and try again.');
+      if (result.cacheable) {
+        sessionCache.set(cacheKey, raw);
       }
-      setBlocks([]);
+    } catch {
+      setFetchError('Could not fetch OSM data — using terrain fallback for this view.');
+      setBlocks(buildTerrainFallback(bbox));
     } finally {
       setLoading(false);
     }
@@ -603,6 +560,13 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
           </div>
         )}
 
+        {fetchError && !loading && hasRealData && (
+          <div className="bg-amber-500/10 px-4 py-1 flex items-center gap-2 shrink-0 border-b border-amber-500/20">
+            <Info className="h-3 w-3 shrink-0 text-amber-300" />
+            <span className="text-amber-100 text-[10px]">{fetchError}</span>
+          </div>
+        )}
+
         <div className="flex-1 relative min-h-0" style={{ background: canvasBg }}>
           {loading ? (
             <div 
@@ -611,14 +575,6 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
             >
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <span className="text-sm text-muted-foreground">Generating true voxel map… (est. 4–8s)</span>
-            </div>
-          ) : fetchError ? (
-            <div 
-              className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-foreground text-sm px-8 text-center"
-              style={{ background: canvasBg }}
-            >
-              <AlertTriangle className="h-8 w-8 text-red-400" />
-              <span className="max-w-md">{fetchError}</span>
             </div>
           ) : hasRealData && !renderError ? (
             <Canvas
@@ -659,11 +615,17 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
             <div className="absolute top-3 left-3 z-20 glass-panel rounded-lg p-3 space-y-1.5 min-w-[200px] pointer-events-none">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: hovered.color }} />
-                <span className="text-xs font-semibold text-foreground">{hovered.unavailable ? 'Unavailable Cell' : `${hovered.riskLabel} Risk`}</span>
+                <span className="text-xs font-semibold text-foreground">
+                  {hovered.unavailable ? 'Unavailable Cell' : hovered.masked ? hovered.maskLabel : `${hovered.riskLabel} Risk`}
+                </span>
               </div>
               <div className="text-[10px] text-muted-foreground space-y-0.5 mt-2">
                 <div><strong>Type:</strong> {hovered.type}</div>
                 {hovered.unavailable && <div><strong>Reason:</strong> {hovered.availabilityReason ?? 'unavailable_terrain'}</div>}
+                {hovered.masked && hovered.maskSummary && <div><strong>State:</strong> {hovered.maskSummary}</div>}
+                {hovered.masked && hovered.maskReasons?.map((reason) => (
+                  <div key={reason}><strong>Reason:</strong> {reason}</div>
+                ))}
                 {hovered.problemType && <div><strong>Problem:</strong> {hovered.problemType}</div>}
                 {hovered.probability !== undefined && <div><strong>Prob:</strong> {hovered.probability.toFixed(2)}</div>}
                 {hovered.uncertaintyClass && <div><strong>Uncertainty:</strong> {hovered.uncertaintyClass}</div>}
@@ -689,6 +651,10 @@ export default function VoxelNeighborhoodModal({ open, onClose, bbox, gridCells,
                 <span className="text-[10px] text-muted-foreground">{RISK_LABELS[level]}</span>
               </div>
             ))}
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-sm bg-slate-500" />
+              <span className="text-[10px] text-muted-foreground">Masked terrain</span>
+            </div>
           </div>
         </div>
 

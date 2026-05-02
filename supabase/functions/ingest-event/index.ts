@@ -12,6 +12,7 @@ const METERS_PER_DEG_LAT = 111_320;
 
 type EventPayload = {
   fieldReportId?: string;
+  clientReportId?: string;
   lat: number;
   lng: number;
   description?: string;
@@ -31,7 +32,15 @@ type EventPayload = {
   metadata?: Record<string, unknown>;
 };
 
+type FieldReportRow = {
+  id: string;
+  description: string | null;
+  timestamp: string | null;
+  client_report_id: string | null;
+};
+
 const GOVERNANCE_VERSION = 'autonomous_label_governance_v2';
+const EVENT_SELECT_COLUMNS = 'id, timestamp, source, description, severity, event_type, confidence, label_confidence, training_weight, location, features';
 
 type ElevationSample = {
   name: 'center' | 'north' | 'south' | 'east' | 'west';
@@ -201,6 +210,49 @@ function safeJson(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+async function findExistingEvent(
+  supabase: ReturnType<typeof createClient>,
+  args: { fieldReportId?: string; clientReportId?: string },
+) {
+  if (args.fieldReportId) {
+    const { data } = await supabase
+      .from('avalanche_events')
+      .select(EVENT_SELECT_COLUMNS)
+      .contains('features', { field_report_id: args.fieldReportId })
+      .order('timestamp', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (data?.id) return data;
+  }
+
+  if (args.clientReportId) {
+    const { data } = await supabase
+      .from('avalanche_events')
+      .select(EVENT_SELECT_COLUMNS)
+      .contains('features', { client_report_id: args.clientReportId })
+      .order('timestamp', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (data?.id) return data;
+  }
+
+  return null;
+}
+
+async function loadFieldReport(
+  supabase: ReturnType<typeof createClient>,
+  fieldReportId: string,
+): Promise<FieldReportRow | null> {
+  const { data, error } = await supabase
+    .from('field_reports')
+    .select('id, description, timestamp, client_report_id')
+    .eq('id', fieldReportId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as FieldReportRow | null;
+}
+
 // Edit 2 preserved: topo-snapping already runs above. This classifier runs AFTER topo
 // so it can optionally use the slope angle as a corroborating signal.
 // Story 21 + Challenge 14: flip training_eligible=false for deposit-zone events so they
@@ -322,6 +374,36 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
+    const source = payload.source || 'field_report';
+    const fusionSource = payload.fusion_source || source;
+    let governedFieldReport: FieldReportRow | null = null;
+
+    if (source === 'field_report' || fusionSource === 'field_report_enrichment') {
+      if (!payload.fieldReportId) {
+        return new Response(JSON.stringify({ error: 'fieldReportId is required for governed field report ingestion' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      governedFieldReport = await loadFieldReport(supabase, payload.fieldReportId);
+      if (!governedFieldReport?.id) {
+        return new Response(JSON.stringify({ error: 'Backing field report was not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (
+        payload.clientReportId
+        && governedFieldReport.client_report_id
+        && payload.clientReportId !== governedFieldReport.client_report_id
+      ) {
+        return new Response(JSON.stringify({ error: 'clientReportId does not match the backing field report' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     const { data: job, error: jobErr } = await supabase
       .from('compute_jobs')
       .insert({
@@ -341,6 +423,33 @@ serve(async (req: Request) => {
     if (!job?.id) throw new Error('Failed to create compute_job row');
     jobId = job.id;
 
+    const existingEvent = await findExistingEvent(supabase, {
+      fieldReportId: payload.fieldReportId,
+      clientReportId: payload.clientReportId,
+    });
+    if (existingEvent?.id) {
+      await supabase
+        .from('compute_jobs')
+        .update({
+          status: 'completed',
+          result: {
+            event_id: existingEvent.id,
+            deduped: true,
+            dedupe_reason: payload.clientReportId ? 'client_report_id' : 'field_report_id',
+          },
+        })
+        .eq('id', job.id);
+
+      return new Response(JSON.stringify({
+        ok: true,
+        jobId: job.id,
+        duplicate: true,
+        event: existingEvent,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     let elevationSamples: Record<string, number>;
     try {
       elevationSamples = await fetchElevations(buildSamples(lat, lng));
@@ -350,11 +459,11 @@ serve(async (req: Request) => {
     }
 
     const topo = slopeAspectFromSamples(elevationSamples, lat);
-    const description = typeof payload.description === 'string' && payload.description.trim().length > 0
-      ? payload.description.trim()
-      : 'Observed avalanche-related event';
-    const source = payload.source || 'field_report';
-    const fusionSource = payload.fusion_source || source;
+    const description = typeof governedFieldReport?.description === 'string' && governedFieldReport.description.trim().length > 0
+      ? governedFieldReport.description.trim()
+      : typeof payload.description === 'string' && payload.description.trim().length > 0
+        ? payload.description.trim()
+        : 'Observed avalanche-related event';
     const metadata = safeJson(payload.metadata);
     const hazardType = payload.hazard_type || 'avalanche';
     const eventType = payload.event_type || 'unknown';
@@ -368,11 +477,13 @@ serve(async (req: Request) => {
     const geometryType = typeof payload.geometry_type === 'string' && payload.geometry_type.trim()
       ? payload.geometry_type.trim()
       : 'point';
-    const timestampIso = typeof payload.timestamp === 'string' && payload.timestamp.trim()
-      ? payload.timestamp.trim()
-      : typeof metadata.event_date_iso === 'string' && metadata.event_date_iso
-        ? metadata.event_date_iso
-        : new Date().toISOString();
+    const timestampIso = typeof governedFieldReport?.timestamp === 'string' && governedFieldReport.timestamp.trim()
+      ? governedFieldReport.timestamp.trim()
+      : typeof payload.timestamp === 'string' && payload.timestamp.trim()
+        ? payload.timestamp.trim()
+        : typeof metadata.event_date_iso === 'string' && metadata.event_date_iso
+          ? metadata.event_date_iso
+          : new Date().toISOString();
     const trainingWeight = computeTrainingWeight({
       labelConfidence,
       source,
@@ -419,6 +530,7 @@ serve(async (req: Request) => {
           hazard_type: hazardType,
           source,
           field_report_id: payload.fieldReportId || null,
+          client_report_id: governedFieldReport?.client_report_id ?? payload.clientReportId ?? null,
           location_name: payload.location_name || null,
           metadata,
           deposit_zone_classifier: {
@@ -444,6 +556,9 @@ serve(async (req: Request) => {
           aspect_deg: topo.aspectDeg,
           hazard_type: hazardType,
           source,
+          field_report_id: payload.fieldReportId || null,
+          client_report_id: governedFieldReport?.client_report_id ?? payload.clientReportId ?? null,
+          location_name: payload.location_name || null,
           training_eligible: classification.trainingEligible,
           source_model: sourceModel,
           source_scene_ids: sourceSceneIds,
@@ -455,7 +570,7 @@ serve(async (req: Request) => {
           governed_at: governedAt,
         },
       })
-      .select('id, timestamp, source, description, severity, event_type, confidence, label_confidence, training_weight, location')
+      .select(EVENT_SELECT_COLUMNS)
       .maybeSingle();
     if (eventErr) throw eventErr;
     if (!event?.id) throw new Error('Failed to create avalanche_event row');

@@ -7,6 +7,7 @@ export interface GridCell {
   lng: number;
   latEnd: number;
   lngEnd: number;
+  geometryValid?: boolean;
   riskScore: number;
   status?: string;
   stale?: boolean;
@@ -38,6 +39,29 @@ export interface GridCell {
   dynamicModelVersion?: string;
   surrogateModelVersion?: string;
   uncertaintyMethod?: string;
+  terrainFusedRiskScore?: number;
+  aptEligible?: boolean;
+  aptProfile?: string;
+  aptMaskReason?: string | null;
+  publicEligible?: boolean;
+  publicMaskReasons?: string[];
+  publicMaskProfile?: {
+    profile?: string;
+    stage_a?: string;
+    stage_b?: string;
+  };
+  snowElevationEligible?: boolean;
+  snowElevationProfile?: string;
+  snowElevationMaskReason?: string | null;
+  snowRelevanceScore?: number;
+  snowRelevanceBasis?: string[];
+  rainOnSnowProxy?: boolean;
+  wetSnowEligible?: boolean;
+  problemSlug?: string;
+  problemConfidence?: number;
+  problemEvidence?: string[];
+  problemClassifierProfile?: string;
+  dryWetDomain?: 'dry' | 'wet' | 'mixed' | 'unknown';
   featureValues?: Record<string, number>;
   shapContext?: {
     limitingFactor?: string;
@@ -109,7 +133,9 @@ export interface ForecastGridRowRecord {
   forecast_date: string;
   horizon_hours: number;
   bbox: number[];
+  grid_size?: number | null;
   grid_geojson: unknown;
+  hourly_grids?: unknown;
   runout_polygons?: unknown;
   weather_summary?: unknown;
   model_metadata?: ForecastModelMetadata | unknown;
@@ -124,9 +150,72 @@ function normalizeUncertaintyClass(span: number | undefined): 'low' | 'medium' |
   return 'low';
 }
 
-function normalizeCell(cell: Partial<GridCell> & Record<string, unknown>): GridCell {
+export interface GridNormalizationOptions {
+  bbox?: [number, number, number, number] | number[];
+  gridSize?: number | null;
+  warnContext?: string;
+}
+
+const warnedInvalidGeometryContexts = new Set<string>();
+
+function asFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return undefined;
+}
+
+function normalizeBBox(value: unknown): [number, number, number, number] | undefined {
+  if (!Array.isArray(value) || value.length !== 4) return undefined;
+  const numbers = value.map((item) => asFiniteNumber(item));
+  if (numbers.some((item) => item === undefined)) return undefined;
+  const [latMin, lngMin, latMax, lngMax] = numbers as number[];
+  if (latMax <= latMin || lngMax <= lngMin) return undefined;
+  return [latMin, lngMin, latMax, lngMax];
+}
+
+function inferAxisStep(values: number[]): number | undefined {
+  const unique = Array.from(new Set(values.filter(Number.isFinite))).sort((left, right) => left - right);
+  let smallestPositiveDelta: number | undefined;
+  for (let index = 1; index < unique.length; index += 1) {
+    const delta = unique[index] - unique[index - 1];
+    if (delta <= 0) continue;
+    if (smallestPositiveDelta === undefined || delta < smallestPositiveDelta) {
+      smallestPositiveDelta = delta;
+    }
+  }
+  return smallestPositiveDelta;
+}
+
+function warnInvalidGeometry(context: string, invalidCount: number): void {
+  if (!import.meta.env.DEV || invalidCount <= 0 || warnedInvalidGeometryContexts.has(context)) return;
+  console.warn(`[gridUtils] skipped ${invalidCount} cells with invalid rectangle bounds (${context})`);
+  warnedInvalidGeometryContexts.add(context);
+}
+
+function normalizeCell(
+  cell: Partial<GridCell> & Record<string, unknown>,
+  geometry?: {
+    latStep?: number;
+    lngStep?: number;
+  },
+): GridCell {
   const row = Number(cell.row ?? 0);
   const col = Number(cell.col ?? 0);
+  const lat = asFiniteNumber(cell.lat);
+  const lng = asFiniteNumber(cell.lng);
+  const latEnd = asFiniteNumber(cell.latEnd) ?? asFiniteNumber(cell.lat_end)
+    ?? (lat !== undefined && geometry?.latStep !== undefined ? lat + geometry.latStep : undefined);
+  const lngEnd = asFiniteNumber(cell.lngEnd) ?? asFiniteNumber(cell.lng_end)
+    ?? (lng !== undefined && geometry?.lngStep !== undefined ? lng + geometry.lngStep : undefined);
+  const geometryValid = lat !== undefined
+    && lng !== undefined
+    && latEnd !== undefined
+    && lngEnd !== undefined
+    && latEnd > lat
+    && lngEnd > lng;
   const status = typeof cell.status === 'string' ? String(cell.status) : undefined;
   const availabilityReason = typeof cell.availabilityReason === 'string'
     ? cell.availabilityReason
@@ -155,10 +244,11 @@ function normalizeCell(cell: Partial<GridCell> & Record<string, unknown>): GridC
   return {
     row,
     col,
-    lat: Number(cell.lat ?? 0),
-    lng: Number(cell.lng ?? 0),
-    latEnd: Number(cell.latEnd ?? cell.lat_end ?? 0),
-    lngEnd: Number(cell.lngEnd ?? cell.lng_end ?? 0),
+    lat: lat ?? Number.NaN,
+    lng: lng ?? Number.NaN,
+    latEnd: latEnd ?? Number.NaN,
+    lngEnd: lngEnd ?? Number.NaN,
+    geometryValid,
     riskScore: Number.isFinite(riskScore) ? riskScore : defaultRiskScore,
     status,
     stale,
@@ -198,6 +288,67 @@ function normalizeCell(cell: Partial<GridCell> & Record<string, unknown>): GridC
     dynamicModelVersion: typeof cell.dynamicModelVersion === 'string' ? cell.dynamicModelVersion : (typeof cell.dynamic_model_version === 'string' ? String(cell.dynamic_model_version) : undefined),
     surrogateModelVersion: typeof cell.surrogateModelVersion === 'string' ? cell.surrogateModelVersion : (typeof cell.surrogate_model_version === 'string' ? String(cell.surrogate_model_version) : undefined),
     uncertaintyMethod: typeof cell.uncertaintyMethod === 'string' ? cell.uncertaintyMethod : (typeof cell.uncertainty_method === 'string' ? String(cell.uncertainty_method) : undefined),
+    terrainFusedRiskScore: cell.terrainFusedRiskScore !== undefined
+      ? Number(cell.terrainFusedRiskScore)
+      : (cell.terrain_fused_risk_score !== undefined ? Number(cell.terrain_fused_risk_score) : undefined),
+    aptEligible: typeof cell.aptEligible === 'boolean'
+      ? cell.aptEligible
+      : (typeof cell.apt_eligible === 'boolean' ? cell.apt_eligible : undefined),
+    aptProfile: typeof cell.aptProfile === 'string'
+      ? cell.aptProfile
+      : (typeof cell.apt_profile === 'string' ? String(cell.apt_profile) : undefined),
+    aptMaskReason: typeof cell.aptMaskReason === 'string'
+      ? cell.aptMaskReason
+      : (typeof cell.apt_mask_reason === 'string' ? String(cell.apt_mask_reason) : null),
+    publicEligible: typeof cell.publicEligible === 'boolean'
+      ? cell.publicEligible
+      : (typeof cell.public_eligible === 'boolean' ? cell.public_eligible : undefined),
+    publicMaskReasons: Array.isArray(cell.publicMaskReasons)
+      ? cell.publicMaskReasons.map(String)
+      : Array.isArray(cell.public_mask_reasons)
+        ? (cell.public_mask_reasons as unknown[]).map(String)
+        : undefined,
+    publicMaskProfile: normalizePublicMaskProfile(cell.publicMaskProfile ?? cell.public_mask_profile),
+    snowElevationEligible: typeof cell.snowElevationEligible === 'boolean'
+      ? cell.snowElevationEligible
+      : (typeof cell.snow_elevation_eligible === 'boolean' ? cell.snow_elevation_eligible : undefined),
+    snowElevationProfile: typeof cell.snowElevationProfile === 'string'
+      ? cell.snowElevationProfile
+      : (typeof cell.snow_elevation_profile === 'string' ? String(cell.snow_elevation_profile) : undefined),
+    snowElevationMaskReason: typeof cell.snowElevationMaskReason === 'string'
+      ? cell.snowElevationMaskReason
+      : (typeof cell.snow_elevation_mask_reason === 'string' ? String(cell.snow_elevation_mask_reason) : null),
+    snowRelevanceScore: cell.snowRelevanceScore !== undefined
+      ? Number(cell.snowRelevanceScore)
+      : (cell.snow_relevance_score !== undefined ? Number(cell.snow_relevance_score) : undefined),
+    snowRelevanceBasis: Array.isArray(cell.snowRelevanceBasis)
+      ? cell.snowRelevanceBasis.map(String)
+      : Array.isArray(cell.snow_relevance_basis)
+        ? (cell.snow_relevance_basis as unknown[]).map(String)
+        : undefined,
+    rainOnSnowProxy: typeof cell.rainOnSnowProxy === 'boolean'
+      ? cell.rainOnSnowProxy
+      : (typeof cell.rain_on_snow_proxy === 'boolean' ? cell.rain_on_snow_proxy : undefined),
+    wetSnowEligible: typeof cell.wetSnowEligible === 'boolean'
+      ? cell.wetSnowEligible
+      : (typeof cell.wet_snow_eligible === 'boolean' ? cell.wet_snow_eligible : undefined),
+    problemSlug: typeof cell.problemSlug === 'string'
+      ? cell.problemSlug
+      : (typeof cell.problem_slug === 'string' ? String(cell.problem_slug) : undefined),
+    problemConfidence: cell.problemConfidence !== undefined
+      ? Number(cell.problemConfidence)
+      : (cell.problem_confidence !== undefined ? Number(cell.problem_confidence) : undefined),
+    problemEvidence: Array.isArray(cell.problemEvidence)
+      ? cell.problemEvidence.map(String)
+      : Array.isArray(cell.problem_evidence)
+        ? (cell.problem_evidence as unknown[]).map(String)
+        : undefined,
+    problemClassifierProfile: typeof cell.problemClassifierProfile === 'string'
+      ? cell.problemClassifierProfile
+      : (typeof cell.problem_classifier_profile === 'string' ? String(cell.problem_classifier_profile) : undefined),
+    dryWetDomain: typeof cell.dryWetDomain === 'string'
+      ? cell.dryWetDomain as GridCell['dryWetDomain']
+      : (typeof cell.dry_wet_domain === 'string' ? String(cell.dry_wet_domain) as GridCell['dryWetDomain'] : undefined),
     featureValues: (cell.featureValues as Record<string, number>) || (cell.feature_values as Record<string, number>) || undefined,
     shapContext: normalizeShapContext(cell.shapContext ?? cell.shap_context),
     explanationSummary: typeof cell.explanationSummary === 'string'
@@ -206,6 +357,42 @@ function normalizeCell(cell: Partial<GridCell> & Record<string, unknown>): GridC
     coverageFlags: normalizeCoverageFlags(cell.coverageFlags ?? cell.coverage_flags),
     snowpackProxy: normalizeSnowpackProxy(cell.snowpackProxy ?? cell.snowpack_proxy),
   };
+}
+
+export function hasRenderableCellGeometry(
+  cell: Pick<GridCell, 'lat' | 'lng' | 'latEnd' | 'lngEnd' | 'geometryValid'> | null | undefined,
+): boolean {
+  if (!cell) return false;
+  if (cell.geometryValid === false) return false;
+  return Number.isFinite(cell.lat)
+    && Number.isFinite(cell.lng)
+    && Number.isFinite(cell.latEnd)
+    && Number.isFinite(cell.lngEnd)
+    && cell.latEnd > cell.lat
+    && cell.lngEnd > cell.lng;
+}
+
+export function normalizeGridCells(cells: unknown[], options: GridNormalizationOptions = {}): GridCell[] {
+  const rawCells = cells
+    .filter((cell): cell is Partial<GridCell> & Record<string, unknown> => Boolean(cell) && typeof cell === 'object');
+  const bbox = normalizeBBox(options.bbox);
+  const gridSize = asFiniteNumber(options.gridSize);
+  const latStepFromBbox = bbox && gridSize && gridSize > 0 ? (bbox[2] - bbox[0]) / gridSize : undefined;
+  const lngStepFromBbox = bbox && gridSize && gridSize > 0 ? (bbox[3] - bbox[1]) / gridSize : undefined;
+  const latStep = latStepFromBbox ?? inferAxisStep(
+    rawCells
+      .map((cell) => asFiniteNumber(cell.lat))
+      .filter((value): value is number => value !== undefined),
+  );
+  const lngStep = lngStepFromBbox ?? inferAxisStep(
+    rawCells
+      .map((cell) => asFiniteNumber(cell.lng))
+      .filter((value): value is number => value !== undefined),
+  );
+  const normalizedCells = rawCells.map((cell) => normalizeCell(cell, { latStep, lngStep }));
+  const invalidCount = normalizedCells.filter((cell) => !hasRenderableCellGeometry(cell)).length;
+  warnInvalidGeometry(options.warnContext ?? 'grid-cells', invalidCount);
+  return normalizedCells;
 }
 
 function normalizeShapContext(value: unknown): GridCell['shapContext'] {
@@ -258,6 +445,24 @@ function normalizeCoverageFlags(value: unknown): GridCell['coverageFlags'] {
   };
 }
 
+function normalizePublicMaskProfile(value: unknown): GridCell['publicMaskProfile'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const row = value as Record<string, unknown>;
+  const profile = typeof row.profile === 'string' ? row.profile : undefined;
+  const stageA = typeof row.stage_a === 'string'
+    ? row.stage_a
+    : (typeof row.stageA === 'string' ? row.stageA : undefined);
+  const stageB = typeof row.stage_b === 'string'
+    ? row.stage_b
+    : (typeof row.stageB === 'string' ? row.stageB : undefined);
+  if (!profile && !stageA && !stageB) return undefined;
+  return {
+    profile,
+    stage_a: stageA,
+    stage_b: stageB,
+  };
+}
+
 function normalizeSnowpackProxy(value: unknown): GridCell['snowpackProxy'] {
   if (!value || typeof value !== 'object') return undefined;
   const v = value as Record<string, unknown>;
@@ -298,18 +503,45 @@ export function forecastGridRowToCells(row: ForecastGridRowRecord): GridCell[] {
   const metadata = row.model_metadata && typeof row.model_metadata === 'object' && !Array.isArray(row.model_metadata)
     ? row.model_metadata as Record<string, unknown>
     : {};
-  return row.grid_geojson.map((cell) => normalizeCell({
+  return normalizeGridCells(row.grid_geojson.map((cell) => ({
     ...(cell as Partial<GridCell> & Record<string, unknown>),
     dynamic_model_type: (cell as Record<string, unknown>).dynamic_model_type ?? metadata.dynamic_model_type,
     dynamic_model_version: (cell as Record<string, unknown>).dynamic_model_version ?? metadata.dynamic_model_version,
     surrogate_model_version: (cell as Record<string, unknown>).surrogate_model_version ?? metadata.surrogate_model_version,
-  }));
+  })), {
+    bbox: row.bbox,
+    gridSize: row.grid_size,
+    warnContext: `forecast-grid:${row.id}:grid_geojson`,
+  });
 }
 
 export function forecastGridRowToHourlyGrids(row: ForecastGridRowRecord): GridCell[][] {
+  const metadata = row.model_metadata && typeof row.model_metadata === 'object' && !Array.isArray(row.model_metadata)
+    ? row.model_metadata as Record<string, unknown>
+    : {};
+  if (Array.isArray(row.hourly_grids) && row.hourly_grids.length > 0) {
+    return row.hourly_grids
+      .filter((grid): grid is unknown[] => Array.isArray(grid))
+      .map((grid, index) => normalizeGridCells(grid.map((cell) => ({
+        ...(cell as Partial<GridCell> & Record<string, unknown>),
+        dynamic_model_type: (cell as Record<string, unknown>).dynamic_model_type ?? metadata.dynamic_model_type,
+        dynamic_model_version: (cell as Record<string, unknown>).dynamic_model_version ?? metadata.dynamic_model_version,
+        surrogate_model_version: (cell as Record<string, unknown>).surrogate_model_version ?? metadata.surrogate_model_version,
+      })), {
+        bbox: row.bbox,
+        gridSize: row.grid_size,
+        warnContext: `forecast-grid:${row.id}:hour-${index}`,
+      }));
+  }
   const cells = forecastGridRowToCells(row);
-  const horizonHours = Math.max(1, Math.min(Number(row.horizon_hours || 24), 72));
-  return Array.from({ length: horizonHours }, () => cells.map((cell) => ({ ...cell })));
+  return cells.length > 0 ? [cells] : [];
+}
+
+export function forecastGridRowUsesLegacyStaticPlayback(row: ForecastGridRowRecord): boolean {
+  if (Array.isArray(row.hourly_grids) && row.hourly_grids.length > 0) {
+    return false;
+  }
+  return Array.isArray(row.grid_geojson) && row.grid_geojson.length > 0;
 }
 
 export function forecastGridRowToRunoutPolygons(row: ForecastGridRowRecord): Array<Record<string, unknown>> {
@@ -370,6 +602,7 @@ export function generateForecastGrid(
       const elevationMeters = 1200 + elevFactor * 2800;
       const slopeAngleDeg = 10 + rawRisk * 35;
       const aspectDeg = (c / GRID_SIZE) * 360;
+      const aptEligible = slopeAngleDeg >= 30 && slopeAngleDeg <= 50;
 
       const problemIdx = Math.floor(rawRisk * (PROBLEM_TYPES.length - 1));
 
@@ -380,11 +613,15 @@ export function generateForecastGrid(
         lng,
         latEnd: lat + latStep,
         lngEnd: lng + lngStep,
-        riskScore,
+        riskScore: aptEligible ? riskScore : 0,
         hazard,
         exposure,
         vulnerability,
         problemType: PROBLEM_TYPES[problemIdx],
+        terrainFusedRiskScore: riskScore,
+        aptEligible,
+        aptProfile: 'apt_30_50_v1',
+        aptMaskReason: aptEligible ? null : 'slope_outside_30_to_50_deg',
         shapValues: {
           snowfall_24h: 0.15 + stormInfluence * 0.3,
           wind_speed: 0.1 + aspectFactor * 0.25,
@@ -419,6 +656,12 @@ export function getRiskColor(score: number): string {
   return RISK_COLORS[Math.max(1, Math.min(5, Math.round(score)))] || RISK_COLORS[1];
 }
 
+export function isCellMasked(cell: Pick<GridCell, 'riskScore' | 'aptEligible' | 'publicEligible'> | null | undefined): boolean {
+  if (!cell) return false;
+  if (cell.publicEligible === false) return true;
+  return cell.aptEligible === false || Number(cell.riskScore) <= 0;
+}
+
 export function isCellUnavailable(cell: Pick<GridCell, 'status' | 'stale' | 'disabled' | 'availabilityReason'> | null | undefined): boolean {
   if (!cell) return false;
   return Boolean(
@@ -426,4 +669,45 @@ export function isCellUnavailable(cell: Pick<GridCell, 'status' | 'stale' | 'dis
     || cell.status === 'unavailable_terrain'
     || cell.availabilityReason
   );
+}
+
+function humanizeMaskReason(reason: string): string {
+  if (reason === 'slope_outside_30_to_50_deg') return 'Outside avalanche-prone terrain profile.';
+  if (reason === 'warm_low_elevation_no_snow_support') return 'No current snow/elevation relevance in this proxy forecast.';
+  return reason.replace(/_/g, ' ');
+}
+
+export function getCellMaskReasons(cell: Pick<GridCell, 'aptEligible' | 'aptMaskReason' | 'publicEligible' | 'publicMaskReasons' | 'snowElevationEligible' | 'snowElevationMaskReason'> | null | undefined): string[] {
+  if (!cell) return [];
+  const explicitReasons = Array.isArray(cell.publicMaskReasons) ? cell.publicMaskReasons.filter(Boolean).map(String) : [];
+  if (explicitReasons.length > 0) return [...new Set(explicitReasons)];
+
+  const fallbackReasons: string[] = [];
+  if (cell.aptEligible === false) {
+    fallbackReasons.push(cell.aptMaskReason || 'slope_outside_30_to_50_deg');
+  }
+  if (cell.publicEligible === false && (cell.snowElevationEligible === false || Boolean(cell.snowElevationMaskReason))) {
+    fallbackReasons.push(cell.snowElevationMaskReason || 'warm_low_elevation_no_snow_support');
+  }
+  return [...new Set(fallbackReasons)];
+}
+
+export function getCellMaskReasonDescriptions(cell: Pick<GridCell, 'aptEligible' | 'aptMaskReason' | 'publicEligible' | 'publicMaskReasons' | 'snowElevationEligible' | 'snowElevationMaskReason'> | null | undefined): string[] {
+  return getCellMaskReasons(cell).map(humanizeMaskReason);
+}
+
+export function getCellMaskLabel(cell: Pick<GridCell, 'aptEligible' | 'aptMaskReason' | 'publicEligible' | 'publicMaskReasons' | 'snowElevationEligible' | 'snowElevationMaskReason' | 'riskScore'> | null | undefined): string {
+  const reasons = getCellMaskReasons(cell);
+  if (reasons.length > 1) return 'PUBLIC MASKED';
+  if (reasons[0] === 'slope_outside_30_to_50_deg') return 'APT MASKED';
+  if (reasons.length === 1) return 'SNOW/ELEV MASKED';
+  return isCellMasked(cell) ? 'PUBLIC MASKED' : 'PUBLIC';
+}
+
+export function getCellMaskSummary(cell: Pick<GridCell, 'aptEligible' | 'aptMaskReason' | 'publicEligible' | 'publicMaskReasons' | 'snowElevationEligible' | 'snowElevationMaskReason' | 'riskScore'> | null | undefined): string {
+  const reasons = getCellMaskReasons(cell);
+  if (reasons.length > 1) return 'Masked from public avalanche warning.';
+  if (reasons[0] === 'slope_outside_30_to_50_deg') return 'Outside avalanche-prone terrain profile.';
+  if (reasons.length === 1) return 'No current snow/elevation relevance in this proxy forecast.';
+  return 'Masked from public avalanche warning.';
 }
