@@ -12,22 +12,41 @@ import AvalancheMap from '@/components/AvalancheMap';
 import RiskDashboard from '@/components/RiskDashboard';
 import TimeSlider from '@/components/TimeSlider';
 import AdminDashboard from '@/components/AdminDashboard';
+import AdminAccessGate from '@/components/AdminAccessGate';
 import FieldReportForm from '@/components/FieldReportForm';
 import ModelStatusBadge from '@/components/ModelStatusBadge';
 import RiskLegend from '@/components/RiskLegend';
+import ForecastBulletinBadge from '@/components/ForecastBulletinBadge';
 import RegionSelector, { REGIONS, type Region } from '@/components/RegionSelector';
 import DisclaimerBanner from '@/components/DisclaimerBanner';
 import ShareForecast from '@/components/ShareForecast';
 import ExportForecast from '@/components/ExportForecast';
 import ThemeToggle from '@/components/ThemeToggle';
-import HistoricalEventsToggle, { type AvalancheEvent } from '@/components/HistoricalEventsToggle';
+import HistoricalEventsToggle from '@/components/HistoricalEventsToggle';
 import ExpertModePanel from '@/components/ExpertModePanel';
 import VoxelNeighborhoodModal from '@/components/VoxelNeighborhoodModal';
+import {
+  filterAvalancheEventsByBbox,
+  mergeAvalancheEvents,
+  parseAvalancheEventRow,
+  removeAvalancheEvent,
+  type AvalancheEvent,
+} from '@/lib/avalancheEvents';
+import {
+    loadForecastHourPayload,
+    loadForecastManifest,
+    loadForecastRunouts,
+    type ForecastArtifactHour,
+    type ForecastArtifactManifest,
+} from '@/lib/forecastArtifacts';
+import { normalizeForecastBulletin, type ForecastBulletin } from '@/lib/forecastBulletins';
 import {
     forecastGridRowToHourlyGrids,
     forecastGridRowToRunoutPolygons,
     forecastGridRowToSarGeometries,
+    forecastGridRowUsesLegacyStaticPlayback,
     isCellUnavailable,
+    normalizeGridCells,
     type ForecastGridRowRecord,
     type GridCell,
 } from '@/lib/gridUtils';
@@ -36,6 +55,253 @@ import { useIsMobile } from '@/hooks/use-mobile';
 
 type ForecastSource = 'precomputed' | null;
 type ForecastAvailability = 'ready' | 'partial' | 'stale' | 'unavailable';
+
+type RunForecastResponse = {
+  ok: boolean;
+  stale: boolean;
+  status: string;
+  source: 'forecast_runs' | 'forecast_grids';
+  forecastRunId?: string | null;
+  forecastId?: string | null;
+  manifestPath?: string | null;
+  forecastBulletin?: ForecastBulletin | null;
+  regionName: string | null;
+  regionKey: string | null;
+  forecastDate: string | null;
+  hours: number | null;
+  weatherSummary: unknown;
+  modelMetadata: unknown;
+  message?: string | null;
+};
+
+const DEV_PUBLIC_MASK_FIXTURE_KEY = 'public-mask-smoke';
+
+function buildPublicMaskSmokeFixture(): {
+  region: Region;
+  row: ForecastGridRowRecord;
+  grids: Array<GridCell[] | null>;
+  bulletin: ForecastBulletin | null;
+} {
+  const region = REGIONS.find((candidate) => candidate.name === 'Colorado Rockies') ?? REGIONS[0];
+  const bbox: [number, number, number, number] = [39.4, -106.5, 39.6, -106.3];
+  const gridSize = 20;
+  const rawHour0Cells = [
+    {
+      row: 0,
+      col: 0,
+      lat: 39.4,
+      lng: -106.5,
+      latEnd: null,
+      lngEnd: null,
+      lat_end: 39.41,
+      lng_end: -106.49,
+      risk_score: 0,
+      terrain_fused_risk_score: 4,
+      probability: 0.62,
+      apt_eligible: true,
+      apt_profile: 'apt_30_50_v1',
+      public_eligible: false,
+      public_mask_reasons: ['warm_low_elevation_no_snow_support'],
+      public_mask_profile: {
+        profile: 'apt_then_snow_elevation_public_eligible_v1',
+        stage_a: 'apt_30_50_v1',
+        stage_b: 'snow_elevation_proxy_v1',
+      },
+      snow_elevation_eligible: false,
+      snow_elevation_profile: 'snow_elevation_proxy_v1',
+      snow_elevation_mask_reason: 'warm_low_elevation_no_snow_support',
+      snow_relevance_score: 0.08,
+      snow_relevance_basis: ['hard_negative_warm_low_elevation_no_snow_support'],
+      rain_on_snow_proxy: false,
+      wet_snow_eligible: false,
+      problem_type: 'Wet Snow',
+      problem_slug: 'wet_snow',
+      hazard: 0.62,
+      exposure: 0.29,
+      vulnerability: 0.22,
+      shap_values: {},
+      terrain_inputs: {
+        elevation_m: 1820,
+        slope_angle_deg: 35.2,
+      },
+    },
+    {
+      row: 0,
+      col: 1,
+      lat: 39.4,
+      lng: -106.49,
+      latEnd: null,
+      lngEnd: null,
+      lat_end: 39.41,
+      lng_end: -106.48,
+      risk_score: 3,
+      probability: 0.58,
+      apt_eligible: true,
+      public_eligible: true,
+      problem_type: 'Wind Slab',
+      problem_slug: 'wind_slab',
+      hazard: 0.58,
+      exposure: 0.31,
+      vulnerability: 0.24,
+      shap_values: {},
+      terrain_inputs: {
+        elevation_m: 2450,
+        slope_angle_deg: 37.6,
+      },
+    },
+    {
+      row: 1,
+      col: 0,
+      lat: 39.41,
+      lng: -106.5,
+      latEnd: null,
+      lngEnd: null,
+      lat_end: 39.42,
+      lng_end: -106.49,
+      risk_score: 0,
+      terrain_fused_risk_score: 2,
+      apt_eligible: false,
+      apt_mask_reason: 'slope_outside_30_to_50_deg',
+      problem_type: 'No Distinct Avalanche Problem',
+      problem_slug: 'no_distinct_avalanche_problem',
+      hazard: 0.12,
+      exposure: 0.1,
+      vulnerability: 0.08,
+      shap_values: {},
+      terrain_inputs: {
+        elevation_m: 2100,
+        slope_angle_deg: 18.5,
+      },
+    },
+  ];
+  const hour0 = normalizeGridCells(rawHour0Cells, {
+    bbox,
+    gridSize,
+    warnContext: 'fixture:public-mask-smoke:hour-0',
+  });
+  const bulletin = normalizeForecastBulletin({
+    schema_version: 'forecast-bulletin/v1',
+    standard: 'EAWS-style experimental',
+    danger_level: 3,
+    danger_label: 'Considerable',
+    primary_problem: 'wind_slab',
+    problems: ['wind_slab', 'wet_snow'],
+    critical_elevations: { min_m: 2200, max_m: 3000, band_step_m: 200 },
+    critical_aspects: ['NW', 'N', 'NE'],
+    coverage: 'ready',
+    issue_window_policy: 'daypart_v1',
+    primary_window: 'day_1_morning',
+    primary_window_policy: 'first_available_current_or_future_daypart_v1',
+    peak_window: {
+      window: 'day_1_afternoon',
+      danger_level: 4,
+      danger_label: 'High',
+      primary_problem: 'wet_snow',
+      forecast_hours: [12, 13, 14],
+      local_start: '2026-05-02T12:00:00-06:00',
+      local_end: '2026-05-02T18:00:00-06:00',
+      selected_forecast_hour: 12,
+      selected_hour_local_start: '2026-05-02T12:00:00-06:00',
+      selected_hour_local_end: '2026-05-02T13:00:00-06:00',
+    },
+    dayparts: [
+      {
+        window: 'day_1_night',
+        day_index: 1,
+        daypart: 'night',
+        danger_level: 2,
+        danger_label: 'Moderate',
+        primary_problem: 'no_distinct_avalanche_problem',
+        selected_forecast_hour: 0,
+      },
+      {
+        window: 'day_1_morning',
+        day_index: 1,
+        daypart: 'morning',
+        danger_level: 3,
+        danger_label: 'Considerable',
+        primary_problem: 'wind_slab',
+        selected_forecast_hour: 6,
+      },
+      {
+        window: 'day_1_afternoon',
+        day_index: 1,
+        daypart: 'afternoon',
+        danger_level: 4,
+        danger_label: 'High',
+        primary_problem: 'wet_snow',
+        selected_forecast_hour: 12,
+      },
+      {
+        window: 'day_1_evening',
+        day_index: 1,
+        daypart: 'evening',
+        danger_level: 3,
+        danger_label: 'Considerable',
+        primary_problem: 'wind_slab',
+        selected_forecast_hour: 18,
+      },
+    ],
+    double_map: false,
+    aggregation_notes: ['fixture_public_mask_smoke'],
+    public_mask_profile: {
+      profile: 'apt_then_snow_elevation_public_eligible_v1',
+      stage_a: 'apt_30_50_v1',
+      stage_b: 'snow_elevation_proxy_v1',
+    },
+    frequency_threshold_profile: 'local_grid_share_heuristic_v2',
+    derived_from: {
+      aggregation: 'highest_regional_level_by_cumulative_frequency',
+      source_field: 'risk_score',
+      base_metric: 'probability_risk_score',
+      terrain_filter_profile: 'apt_30_50_v1',
+      frequency_basis: 'cumulative_ge_threshold',
+      frequency_class: 'some',
+      ready_cell_count: 3,
+      eligible_cell_count: 2,
+      max_danger_cell_count: 1,
+      selected_level_cell_count: 1,
+      selected_level_cell_share: 0.33,
+      problem_counts: { wind_slab: 1, wet_snow: 1 },
+    },
+  });
+  const row: ForecastGridRowRecord = {
+    id: 'dev-fixture-public-mask-smoke',
+    region_name: region.name,
+    region_key: 'dev_public_mask_smoke',
+    forecast_date: '2026-05-02',
+    horizon_hours: 24,
+    bbox,
+    grid_size: gridSize,
+    grid_geojson: hour0,
+    hourly_grids: [hour0],
+    runout_polygons: [],
+    weather_summary: {
+      snowfall_24h: '4 cm',
+      wind_speed: '18 km/h',
+      temperature: '1 C',
+      precipitation: '6 mm',
+      snow_depth: '22 cm',
+    },
+    model_metadata: {
+      fixture: true,
+      artifact_source: DEV_PUBLIC_MASK_FIXTURE_KEY,
+    },
+    status: 'ready',
+    created_at: '2026-05-02T00:00:00Z',
+  };
+  return {
+    region: {
+      ...region,
+      bbox,
+      center: [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2],
+      zoom: 11,
+    },
+    row,
+    grids: [hour0],
+    bulletin,
+  };
+}
 
 export default function Index() {
   const isMobile = useIsMobile();
@@ -49,14 +315,16 @@ export default function Index() {
   const [forecasting, setForecasting] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [forecastId, setForecastId] = useState<string | undefined>();
-  const [hourlyGrids, setHourlyGrids] = useState<GridCell[][] | null>(null);
+  const [hourlyGrids, setHourlyGrids] = useState<Array<GridCell[] | null> | null>(null);
   const [activeForecastRow, setActiveForecastRow] = useState<ForecastGridRowRecord | null>(null);
+  const [artifactHourRefs, setArtifactHourRefs] = useState<ForecastArtifactHour[] | null>(null);
   const [forecastSource, setForecastSource] = useState<ForecastSource>(null);
   const [forecastAvailability, setForecastAvailability] = useState<ForecastAvailability>('unavailable');
   const [forecastNotice, setForecastNotice] = useState<string | null>(null);
+  const [forecastBulletin, setForecastBulletin] = useState<ForecastBulletin | null>(null);
   const [showEvents, setShowEvents] = useState(false);
-  const [remoteEvents, setRemoteEvents] = useState<AvalancheEvent[]>([]);
-  const [localEvents, setLocalEvents] = useState<AvalancheEvent[]>([]);
+  const [events, setEvents] = useState<AvalancheEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
   const [weatherSummary, setWeatherSummary] = useState<{ snowfall_24h: string; wind_speed: string; temperature: string; precipitation: string; snow_depth: string } | null>(null);
 
   // Expert mode state
@@ -68,6 +336,10 @@ export default function Index() {
   const [showVectorPolygons, setShowVectorPolygons] = useState(false);
   const [show3DModal, setShow3DModal] = useState(false);
   const [playingTimeline, setPlayingTimeline] = useState(false);
+  const fixtureKey = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return import.meta.env.DEV ? params.get('fixture') : null;
+  }, [location.search]);
 
   const maxHour = hourlyGrids ? hourlyGrids.length - 1 : 0;
 
@@ -76,24 +348,44 @@ export default function Index() {
     setActiveTab((current) => (current === nextTab ? current : nextTab));
   }, [location.pathname]);
 
-  const hydrateForecastGridRow = useCallback((row: ForecastGridRowRecord) => {
-    const grids = forecastGridRowToHourlyGrids(row);
+  const hydrateForecastGridRow = useCallback((
+    row: ForecastGridRowRecord,
+    options?: {
+      grids?: Array<GridCell[] | null>;
+      notice?: string | null;
+      bulletin?: ForecastBulletin | null;
+    },
+  ) => {
+    const grids = options?.grids ?? forecastGridRowToHourlyGrids(row);
+    const legacyStaticPlayback = options?.grids
+      ? false
+      : forecastGridRowUsesLegacyStaticPlayback(row);
     setActiveForecastRow(row);
     setForecastId(row.id);
     setForecastSource('precomputed');
+    setTimeOffset(0);
+    setPlayingTimeline(false);
     const nextAvailability: ForecastAvailability = row.status === 'ready'
       ? 'ready'
       : row.status === 'partial'
         ? 'partial'
         : 'stale';
     setForecastAvailability(nextAvailability);
-    setForecastNotice(
+    const baseNotice =
       nextAvailability === 'ready'
         ? null
         : nextAvailability === 'partial'
-          ? 'Using a partial precomputed batch artifact. Grey cells are unavailable in this run.'
-          : 'Using a stale precomputed batch artifact.',
-    );
+          ? 'Using a partial precomputed forecast artifact. Some cells are unavailable in this batch run.'
+          : 'Using a stale precomputed forecast artifact. Freshness is below the current target.';
+    const noticeParts = [
+      baseNotice,
+      options?.notice ?? null,
+      legacyStaticPlayback
+        ? 'Legacy batch artifact: only the hour-0 grid is available, so playback is static.'
+        : null,
+    ].filter(Boolean);
+    setForecastNotice(noticeParts.length > 0 ? noticeParts.join(' ') : null);
+    setForecastBulletin(options?.bulletin ?? null);
     setHourlyGrids(grids);
     const summary = row.weather_summary;
     if (summary && typeof summary === 'object' && !Array.isArray(summary)) {
@@ -122,29 +414,109 @@ export default function Index() {
     setTimeOffset(0);
     setPlayingTimeline(false);
     setWeatherSummary(null);
+    setArtifactHourRefs(null);
+    setForecastBulletin(null);
   }, []);
 
-  const loadLatestForecastGrid = useCallback(async (regionName: string) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const { data, error } = await supabase
-      .from('forecast_grids')
-      .select('id, region_name, region_key, forecast_date, horizon_hours, bbox, grid_geojson, runout_polygons, weather_summary, model_metadata, status, created_at')
-      .eq('hazard_type', 'avalanche')
-      .eq('region_name', regionName)
-      .eq('forecast_date', today)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+  const callRunForecast = useCallback(async (regionName: string): Promise<RunForecastResponse> => {
+    const { data, error } = await supabase.functions.invoke('run-forecast', {
+      body: { regionName },
+    });
     if (error) throw error;
-    return data as ForecastGridRowRecord | null;
+    return data as RunForecastResponse;
   }, []);
 
-  const historicalEvents = useMemo(() => {
-    const merged = [...localEvents, ...remoteEvents];
-    const deduped = new Map<string, AvalancheEvent>();
-    merged.forEach((event) => deduped.set(event.id, event));
-    return Array.from(deduped.values());
-  }, [localEvents, remoteEvents]);
+  const buildRowFromManifest = useCallback(async (
+    response: RunForecastResponse,
+    manifest: ForecastArtifactManifest,
+  ): Promise<{ row: ForecastGridRowRecord; grids: Array<GridCell[] | null> }> => {
+    const firstHour = manifest.hours[0];
+    const firstPayload = firstHour
+      ? await loadForecastHourPayload(firstHour.storageRef)
+      : { cells: [] as unknown[] };
+    const firstGrid = normalizeGridCells(firstPayload.cells, {
+      bbox: manifest.bbox,
+      gridSize: manifest.gridSize,
+      warnContext: `forecast-artifact:${manifest.forecastRunId}:hour-0`,
+    });
+    const runouts = manifest.runoutStorageRef
+      ? (await loadForecastRunouts(manifest.runoutStorageRef)).runout_polygons
+      : [];
+    const preallocated: Array<GridCell[] | null> = Array.from({ length: manifest.horizonHours }, (_, idx) => (
+      idx === 0 ? firstGrid : null
+    ));
+    const row: ForecastGridRowRecord = {
+      id: String(response.forecastId || response.forecastRunId || manifest.forecastRunId),
+      region_name: manifest.regionName,
+      region_key: manifest.regionKey,
+      forecast_date: manifest.forecastDate,
+      horizon_hours: manifest.horizonHours,
+      bbox: manifest.bbox,
+      grid_size: manifest.gridSize,
+      grid_geojson: firstGrid,
+      hourly_grids: preallocated,
+      runout_polygons: runouts,
+      weather_summary: manifest.weatherSummary,
+      model_metadata: {
+        ...manifest.modelMetadata,
+        forecast_run_id: manifest.forecastRunId,
+        manifest_storage_ref: response.manifestPath,
+        runout_storage_ref: manifest.runoutStorageRef,
+        compatibility_forecast_grid_id: response.forecastId,
+      },
+      status: response.status,
+      created_at: manifest.issueTime,
+    };
+    return {
+      row,
+      grids: preallocated,
+    };
+  }, []);
+
+  const loadLatestForecastProduct = useCallback(async (regionName: string) => {
+    const response = await callRunForecast(regionName);
+    if (!response.ok) return null;
+    if (response.source === 'forecast_runs' && response.manifestPath) {
+      const manifest = await loadForecastManifest(response.manifestPath);
+      const { row, grids } = await buildRowFromManifest(response, manifest);
+      return {
+        row,
+        grids,
+        source: response.source,
+        notice: response.message ?? null,
+        artifactHours: manifest.hours,
+        bulletin: normalizeForecastBulletin(response.forecastBulletin ?? manifest.forecastBulletin ?? null),
+      };
+    }
+    if (response.forecastId) {
+      const { data, error } = await supabase
+        .from('forecast_grids')
+        .select('id, region_name, region_key, forecast_date, horizon_hours, bbox, grid_geojson, hourly_grids, runout_polygons, weather_summary, model_metadata, status, created_at')
+        .eq('id', response.forecastId)
+        .maybeSingle();
+      if (error) throw error;
+      if (data) {
+        return {
+          row: data as ForecastGridRowRecord,
+          grids: forecastGridRowToHourlyGrids(data as ForecastGridRowRecord),
+          source: response.source,
+          notice: response.message ?? null,
+          artifactHours: null,
+          bulletin: null,
+        };
+      }
+    }
+    return null;
+  }, [buildRowFromManifest, callRunForecast]);
+
+  const regionEvents = useMemo(
+    () => filterAvalancheEventsByBbox(events, region.bbox),
+    [events, region.bbox],
+  );
+  const historicalEvents = useMemo(
+    () => (showEvents ? regionEvents : []),
+    [regionEvents, showEvents],
+  );
 
   // B8/B11 fix: Toggle expert mode — open sidebar when expert mode turns ON;
   // only RESET overlays when expert mode turns OFF (not just when sidebar closes).
@@ -162,90 +534,57 @@ export default function Index() {
     }
   }, [expertMode]);
 
-  // BUG-08 fix: Always load events from DB for export functionality, not just when heatmap is on
   useEffect(() => {
-    // BUG-08: Load events regardless of heatmap toggle so export always has data
+    let cancelled = false;
+    setEventsLoading(true);
+
     supabase
       .from('avalanche_events')
-      .select('id, location, severity, confidence, description, source, event_type, timestamp, features')
-      .limit(200)
-      .then(({ data }) => {
-        if (!data || data.length === 0) return;
-        const parsed: AvalancheEvent[] = data.map((row) => {
-          let lat = 0, lng = 0;
-          const loc = row.location;
-          if (typeof loc === 'string') {
-            const m = loc.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/);
-            if (m) { lng = parseFloat(m[1]); lat = parseFloat(m[2]); }
-          } else if (loc && typeof loc === 'object') {
-            const coords = (loc as { coordinates?: number[] }).coordinates;
-            if (coords) { lng = coords[0]; lat = coords[1]; }
-          }
-          const features = row.features as Record<string, unknown> | null;
-          return {
-            id: String(row.id || ''),
-            lat, lng,
-            severity: Number(row.severity) || 3,
-            confidence: Number(row.confidence) || 0.5,
-            description: String(row.description || ''),
-            source: String(row.source || 'unknown'),
-            event_type: String(row.event_type || 'unknown'),
-            timestamp: String(row.timestamp || ''),
-            location_name: features?.location_name ? String(features.location_name) : '',
-          };
-        });
-        setRemoteEvents(parsed);
-        toast.info(`Loaded ${parsed.length} historical events for heatmap`);
+      .select('id, location, severity, confidence, label_confidence, description, source, event_type, timestamp, features')
+      .order('timestamp', { ascending: false })
+      .limit(300)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.warn('Failed to load avalanche events:', error.message);
+          return;
+        }
+        const parsed = (data ?? [])
+          .map((row) => parseAvalancheEventRow(row as Record<string, unknown>))
+          .filter((row): row is AvalancheEvent => row !== null);
+        setEvents((current) => mergeAvalancheEvents(current, parsed));
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setEventsLoading(false);
+        }
       });
-  }, [showHeatmap]);
-
-  // Realtime subscription for avalanche_events
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
-    if (!showEvents) return;
     const channel = supabase
       .channel('avalanche-events-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'avalanche_events' },
         (payload) => {
-          if (payload.eventType === 'INSERT') {
-            const newEvent = payload.new as Record<string, unknown>;
-
-            // Parse location
-            let lat = 0, lng = 0;
-            const location = newEvent.location;
-            if (typeof location === 'string') {
-              const m = location.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/);
-              if (m) { lng = parseFloat(m[1]); lat = parseFloat(m[2]); }
-            } else if (location && typeof location === 'object') {
-              const coords = (location as { coordinates?: number[] }).coordinates;
-              if (coords) { lng = coords[0]; lat = coords[1]; }
+          if (payload.eventType === 'DELETE') {
+            const deletedId = String((payload.old as Record<string, unknown> | null)?.id ?? '');
+            if (deletedId) {
+              setEvents((current) => removeAvalancheEvent(current, deletedId));
             }
+            return;
+          }
 
-            // Extract location_name from features JSONB
-            const features = newEvent.features as Record<string, unknown> | null;
-            const locationName = features?.location_name ? String(features.location_name) : '';
+          const nextEvent = parseAvalancheEventRow(payload.new as Record<string, unknown>);
+          if (!nextEvent) return;
 
-            const event: AvalancheEvent = {
-              id: String(newEvent.id || ''),
-              lat,
-              lng,
-              severity: Number(newEvent.severity) || 3,
-              confidence: Number(newEvent.confidence) || 0.5,
-              description: String(newEvent.description || ''),
-              source: String(newEvent.source || 'unknown'),
-              event_type: String(newEvent.event_type || 'unknown'),
-              timestamp: String(newEvent.timestamp || ''),
-              location_name: locationName,
-            };
-
-            setRemoteEvents((prev) => [event, ...prev]);
-            // Only show the generic toast for human-submitted field reports.
-            // System jobs (Sentinel, NewsData, recent activity refresh) already have their own job toasts.
-            if (String(newEvent.source || '').toLowerCase().includes('field_report')) {
+          setEvents((current) => mergeAvalancheEvents(current, nextEvent));
+          if (payload.eventType === 'INSERT' && nextEvent.source.toLowerCase().includes('field_report') && showEvents) {
               toast.info('New field report added to the map');
-            }
           }
         }
       )
@@ -260,7 +599,7 @@ export default function Index() {
 
   // Load shared forecast from URL
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(location.search);
     const regionName = params.get('region');
     if (regionName) {
       const foundRegion = REGIONS.find(r => r.name === regionName);
@@ -277,44 +616,124 @@ export default function Index() {
     }
     const hourParam = params.get('hour');
     if (hourParam) { const h = parseInt(hourParam, 10); if (!isNaN(h) && h >= 0) setTimeOffset(h); }
+    const hourValue = hourParam ? parseInt(hourParam, 10) : 0;
     // B10 fix: Parse expert and 3d params from URL
     if (params.get('expert') === '1') setExpertMode(true);
     if (params.get('3d') === '1') setShow3DModal(true);
+    if (fixtureKey === DEV_PUBLIC_MASK_FIXTURE_KEY) {
+      const fixture = buildPublicMaskSmokeFixture();
+      setRegion(fixture.region);
+      setArtifactHourRefs(null);
+      const safeHourIdx = Math.max(0, Math.min(hourValue, fixture.grids.length - 1));
+      hydrateForecastGridRow(fixture.row, {
+        grids: fixture.grids,
+        notice: 'Dev fixture loaded for snow/elevation public-mask smoke testing.',
+        bulletin: fixture.bulletin,
+      });
+      setTimeOffset(safeHourIdx);
+      const cellParam = params.get('cell');
+      if (cellParam) {
+        const [rowIndex, colIndex] = cellParam.split(',').map(Number);
+        const gridAtHour = fixture.grids[safeHourIdx];
+        if (gridAtHour) {
+          const cell = gridAtHour.find((candidate) => candidate.row === rowIndex && candidate.col === colIndex);
+          if (cell && !isCellUnavailable(cell)) {
+            setSelectedCell(cell);
+            if (!isMobile) setSidebarOpen(true);
+          }
+        }
+      }
+      toast.success('Loaded public-mask smoke fixture');
+      return;
+    }
 
     const sharedForecast = params.get('forecast');
-    const hourValue = hourParam ? parseInt(hourParam, 10) : 0;
     if (sharedForecast) {
       (async () => {
-        const precomputed = await supabase.from('forecast_grids').select('id, region_name, region_key, forecast_date, horizon_hours, bbox, grid_geojson, runout_polygons, weather_summary, model_metadata, status, created_at').eq('id', sharedForecast).maybeSingle();
+        const precomputed = await supabase.from('forecast_grids').select('id, region_name, region_key, forecast_date, horizon_hours, bbox, grid_geojson, hourly_grids, runout_polygons, weather_summary, model_metadata, status, created_at').eq('id', sharedForecast).maybeSingle();
         if (precomputed.data) {
+          setArtifactHourRefs(null);
           const grids = hydrateForecastGridRow(precomputed.data as ForecastGridRowRecord);
+          const safeHourIdx = Math.max(0, Math.min(hourValue, grids.length - 1));
+          setTimeOffset(safeHourIdx);
           const cellParam = params.get('cell');
           if (cellParam) {
             const [row, col] = cellParam.split(',').map(Number);
-            const safeHourIdx = Math.min(hourValue, grids.length - 1);
-              const gridAtHour = grids[safeHourIdx];
-              if (gridAtHour) {
-                const cell = gridAtHour.find(c => c.row === row && c.col === col);
-                if (cell && !isCellUnavailable(cell)) {
-                  setSelectedCell(cell);
-                  if (!isMobile) setSidebarOpen(true);
-                }
+            const gridAtHour = grids[safeHourIdx];
+            if (gridAtHour) {
+              const cell = gridAtHour.find(c => c.row === row && c.col === col);
+              if (cell && !isCellUnavailable(cell)) {
+                setSelectedCell(cell);
+                if (!isMobile) setSidebarOpen(true);
+              }
             }
           }
           toast.success('Restored shared precomputed forecast view');
           return;
         }
+        const activeRun = await supabase
+          .from('forecast_runs')
+          .select('id, region_name, region_key, forecast_date, horizon_hours, manifest_storage_ref, compatibility_forecast_grid_id, forecast_bulletins, weather_summary, model_metadata, status, created_at')
+          .eq('id', sharedForecast)
+          .maybeSingle();
+        if (activeRun.data?.manifest_storage_ref) {
+          const response: RunForecastResponse = {
+            ok: true,
+            stale: activeRun.data.status === 'stale',
+            status: activeRun.data.status ?? 'ready',
+            source: 'forecast_runs',
+            forecastRunId: activeRun.data.id,
+            forecastId: activeRun.data.compatibility_forecast_grid_id,
+            manifestPath: activeRun.data.manifest_storage_ref,
+            forecastBulletin: normalizeForecastBulletin(activeRun.data.forecast_bulletins),
+            regionName: activeRun.data.region_name,
+            regionKey: activeRun.data.region_key,
+            forecastDate: activeRun.data.forecast_date,
+            hours: activeRun.data.horizon_hours,
+            weatherSummary: activeRun.data.weather_summary,
+            modelMetadata: activeRun.data.model_metadata,
+          };
+          const manifest = await loadForecastManifest(activeRun.data.manifest_storage_ref);
+          const { row, grids } = await buildRowFromManifest(response, manifest);
+          setArtifactHourRefs(manifest.hours);
+          hydrateForecastGridRow(row, {
+            grids,
+            bulletin: normalizeForecastBulletin(response.forecastBulletin ?? manifest.forecastBulletin ?? null),
+          });
+          const safeHourIdx = Math.max(0, Math.min(hourValue, grids.length - 1));
+          setTimeOffset(safeHourIdx);
+          const cellParam = params.get('cell');
+          if (cellParam) {
+            const [rowIndex, colIndex] = cellParam.split(',').map(Number);
+            const gridAtHour = grids[safeHourIdx];
+            if (gridAtHour) {
+              const cell = gridAtHour.find(c => c.row === rowIndex && c.col === colIndex);
+              if (cell && !isCellUnavailable(cell)) {
+                setSelectedCell(cell);
+                if (!isMobile) setSidebarOpen(true);
+              }
+            }
+          }
+          toast.success('Restored shared published forecast view');
+          return;
+        }
         setUnavailableForecast('This shared forecast is not available in the authoritative precomputed batch artifact.');
       })();
     }
-  }, [hydrateForecastGridRow, isMobile, setUnavailableForecast]);
+  }, [buildRowFromManifest, fixtureKey, hydrateForecastGridRow, isMobile, location.search, setUnavailableForecast]);
 
   const grid = useMemo(() => {
-    if (hourlyGrids && hourlyGrids[timeOffset]) {
-      return { cells: hourlyGrids[timeOffset], timestamp: new Date(Date.now() + timeOffset * 3600000).toISOString(), bbox: region.bbox };
+    const cells = hourlyGrids?.[timeOffset];
+    if (hourlyGrids && Array.isArray(cells)) {
+      const baseTimestamp = activeForecastRow?.created_at ?? `${activeForecastRow?.forecast_date ?? new Date().toISOString()}T00:00:00Z`;
+      return {
+        cells,
+        timestamp: new Date(new Date(baseTimestamp).getTime() + timeOffset * 3600000).toISOString(),
+        bbox: (activeForecastRow?.bbox as [number, number, number, number] | undefined) ?? region.bbox,
+      };
     }
     return { cells: [], timestamp: new Date().toISOString(), bbox: region.bbox };
-  }, [timeOffset, region.bbox, hourlyGrids]);
+  }, [activeForecastRow?.bbox, activeForecastRow?.created_at, activeForecastRow?.forecast_date, timeOffset, region.bbox, hourlyGrids]);
 
   const controlInset = !isMobile && (expertPanelOpen || sidebarOpen) ? 'calc(23rem + 1rem)' : '1rem';
 
@@ -333,17 +752,25 @@ export default function Index() {
     setForecastSource(null);
     setForecastAvailability('unavailable');
     setForecastNotice(null);
+    setForecastBulletin(null);
     setTimeOffset(0);
     setWeatherSummary(null);
+    setArtifactHourRefs(null);
   }, []);
 
   useEffect(() => {
+    if (fixtureKey) return;
     let alive = true;
     (async () => {
       try {
-        const latest = await loadLatestForecastGrid(region.name);
+        const latest = await loadLatestForecastProduct(region.name);
         if (alive && latest) {
-          hydrateForecastGridRow(latest);
+          setArtifactHourRefs(latest.artifactHours);
+          hydrateForecastGridRow(latest.row, {
+            grids: latest.grids,
+            notice: latest.notice,
+            bulletin: latest.bulletin,
+          });
         } else if (alive) {
           setUnavailableForecast(`No fresh precomputed forecast is available for ${region.name}.`);
         }
@@ -354,16 +781,25 @@ export default function Index() {
       }
     })();
     return () => { alive = false; };
-  }, [region.name, hydrateForecastGridRow, loadLatestForecastGrid, setUnavailableForecast]);
+  }, [fixtureKey, region.name, hydrateForecastGridRow, loadLatestForecastProduct, setUnavailableForecast]);
 
   const runForecast = useCallback(async () => {
+    if (fixtureKey) {
+      toast.info('Dev fixture is active. Remove the fixture query parameter to refresh a live forecast.');
+      return;
+    }
     setForecasting(true);
     setForecastSource(null);
     try {
       toast.info('Refreshing precomputed forecast...');
-      const latest = await loadLatestForecastGrid(region.name);
+      const latest = await loadLatestForecastProduct(region.name);
       if (latest) {
-        hydrateForecastGridRow(latest);
+        setArtifactHourRefs(latest.artifactHours);
+        hydrateForecastGridRow(latest.row, {
+          grids: latest.grids,
+          notice: latest.notice,
+          bulletin: latest.bulletin,
+        });
         toast.success(`Loaded precomputed forecast for ${region.name}`);
         return;
       }
@@ -375,7 +811,39 @@ export default function Index() {
     } finally {
       setForecasting(false);
     }
-  }, [hydrateForecastGridRow, loadLatestForecastGrid, region.name, setUnavailableForecast]);
+  }, [fixtureKey, hydrateForecastGridRow, loadLatestForecastProduct, region.name, setUnavailableForecast]);
+
+  useEffect(() => {
+    if (!artifactHourRefs || !hourlyGrids || Array.isArray(hourlyGrids[timeOffset])) {
+      return;
+    }
+    const hourRef = artifactHourRefs.find((hour) => hour.forecastHour === timeOffset);
+    if (!hourRef) return;
+    let alive = true;
+    (async () => {
+      try {
+        const payload = await loadForecastHourPayload(hourRef.storageRef);
+        if (!alive) return;
+        setHourlyGrids((current) => {
+          if (!current || Array.isArray(current[timeOffset])) {
+            return current;
+          }
+          const next = [...current];
+          next[timeOffset] = normalizeGridCells(payload.cells, {
+            bbox: activeForecastRow?.bbox ?? region.bbox,
+            gridSize: activeForecastRow?.grid_size,
+            warnContext: `forecast-artifact:${activeForecastRow?.id ?? forecastId ?? 'unknown'}:hour-${timeOffset}`,
+          });
+          return next;
+        });
+      } catch {
+        if (alive) {
+          toast.error(`Failed to load forecast hour ${timeOffset} for ${region.name}.`);
+        }
+      }
+    })();
+    return () => { alive = false; };
+  }, [activeForecastRow, artifactHourRefs, forecastId, hourlyGrids, region.bbox, region.name, timeOffset]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -455,7 +923,9 @@ export default function Index() {
                   <RiskDashboard cell={selectedCell} weatherSummary={weatherSummary} />
                 </TabsContent>
                 <TabsContent value="admin" className="flex-1 overflow-y-auto mt-0 px-2 pb-3">
-                  <AdminDashboard />
+                  <AdminAccessGate>
+                    <AdminDashboard />
+                  </AdminAccessGate>
                 </TabsContent>
               </Tabs>
             </motion.aside>
@@ -485,6 +955,13 @@ export default function Index() {
                     <RegionSelector value={region.name} onChange={handleRegionChange} />
                   </div>
                 </div>
+
+                <ForecastBulletinBadge
+                  bulletin={forecastBulletin}
+                  stale={forecastAvailability === 'stale'}
+                  timeOffset={timeOffset}
+                  onSelectForecastHour={setTimeOffset}
+                />
 
                 <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                   <div className="flex items-center gap-2 glass-panel rounded-2xl px-3 py-2.5 shadow-sm">
@@ -516,18 +993,11 @@ export default function Index() {
                   {isMobile ? 'REFRESH' : 'REFRESH BATCH'}
                 </Button>
                 <ShareForecast forecastId={forecastId} region={region} hour={timeOffset} selectedCell={selectedCell} expertMode={expertMode} show3D={show3DModal} />
-                <ExportForecast grid={grid} events={historicalEvents} regionName={region.name} hour={timeOffset} canExport={Boolean(forecastId)} />
+                <ExportForecast grid={grid} events={regionEvents} regionName={region.name} hour={timeOffset} canExport={Boolean(forecastId)} />
                 <HistoricalEventsToggle
                   visible={showEvents}
-                  onToggle={() => {
-                    setShowEvents((current) => {
-                      const next = !current;
-                      if (!next) { setRemoteEvents([]); setLocalEvents([]); }
-                      return next;
-                    });
-                  }}
-                  onEventsLoaded={setRemoteEvents}
-                  bbox={region.bbox}
+                  loading={eventsLoading}
+                  onToggle={() => setShowEvents((current) => !current)}
                 />
                 <Button variant="outline" className="h-11 text-[11px] uppercase tracking-[0.18em] font-semibold gap-2 glass-panel border-0 text-foreground hover:text-foreground touch-manipulation rounded-2xl" onClick={() => setReportOpen(true)} aria-label="Submit field report">
                   <AlertTriangle className="h-4 w-4" />
@@ -546,6 +1016,7 @@ export default function Index() {
               center={region.center}
               zoom={region.zoom}
               historicalEvents={historicalEvents}
+              heatmapEvents={regionEvents}
               showHeatmap={expertMode && showHeatmap}
               showRoads={expertMode && showRoads}
               showInfra={expertMode && showInfra}
@@ -557,7 +1028,7 @@ export default function Index() {
             {!hourlyGrids && (
               <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex justify-center">
                 <div className="max-w-xl rounded-2xl border border-amber-500/25 bg-black/65 px-4 py-3 text-center shadow-2xl shadow-black/25 backdrop-blur-xl">
-                  <div className="text-[10px] uppercase tracking-[0.24em] text-amber-300">Batch Forecast Unavailable</div>
+                  <div className="text-[10px] uppercase tracking-[0.24em] text-amber-300">Precomputed Forecast Unavailable</div>
                   <div className="mt-1 text-sm text-foreground">
                     {forecastNotice || `No fresh precomputed forecast is available for ${region.name}.`}
                   </div>
@@ -581,7 +1052,7 @@ export default function Index() {
                     ? 'text-amber-300'
                     : 'text-rose-300'
               }`}>
-                ● {forecastSource === 'precomputed' ? 'PRECOMPUTED GRID' : 'FORECAST DATA'} ({hourlyGrids.length}h)
+                ● {forecastSource === 'precomputed' ? `PRECOMPUTED BATCH • ${forecastAvailability.toUpperCase()}` : 'FORECAST DATA'} ({hourlyGrids.length}h)
               </span>
             </div>
           )}
@@ -628,10 +1099,12 @@ export default function Index() {
           open={reportOpen}
           onClose={() => setReportOpen(false)}
           onSubmitted={(event) => {
-            setLocalEvents((prev) => [event, ...prev]);
+            setEvents((current) => mergeAvalancheEvents(current, event));
             setShowEvents(true);
           }}
           regionCenter={region.center}
+          regionBbox={region.bbox}
+          regionName={region.name}
         />
       </div>
     </div>

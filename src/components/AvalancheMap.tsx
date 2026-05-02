@@ -1,9 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Rectangle, CircleMarker, Popup, Polygon, Tooltip, useMap } from 'react-leaflet';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { MapContainer, TileLayer, Rectangle, CircleMarker, Pane, Popup, Polygon, Tooltip, useMap } from 'react-leaflet';
 import type { LatLngBoundsExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { getRiskColor, isCellUnavailable, isHighUncertaintyCell, type GridCell } from '@/lib/gridUtils';
-import type { AvalancheEvent } from '@/components/HistoricalEventsToggle';
+import {
+  getCellMaskLabel,
+  getCellMaskReasonDescriptions,
+  getCellMaskSummary,
+  hasRenderableCellGeometry,
+  getRiskColor,
+  isCellMasked,
+  isCellUnavailable,
+  isHighUncertaintyCell,
+  type GridCell,
+} from '@/lib/gridUtils';
+import type { AvalancheEvent } from '@/lib/avalancheEvents';
 import { useTheme } from 'next-themes';
 import ActivityHeatmap from '@/components/ActivityHeatmap';
 import ImpactOverlays from '@/components/ImpactOverlays';
@@ -15,6 +25,7 @@ interface Props {
   center: [number, number];
   zoom: number;
   historicalEvents?: AvalancheEvent[];
+  heatmapEvents?: AvalancheEvent[];
   showHeatmap?: boolean;
   showRoads?: boolean;
   showInfra?: boolean;
@@ -46,7 +57,7 @@ function confidenceColor(confidence: number): string {
 
 export default function AvalancheMap({
   cells, selectedCell, onCellClick, center, zoom,
-  historicalEvents = [], showHeatmap = false, showRoads = false, showInfra = false,
+  historicalEvents = [], heatmapEvents = historicalEvents, showHeatmap = false, showRoads = false, showInfra = false,
   showVectorPolygons = false, runoutPolygons = [], sarEventGeometries = [], bbox,
 }: Props) {
   const { resolvedTheme } = useTheme();
@@ -57,6 +68,10 @@ export default function AvalancheMap({
 
   // Render persisted batch overlays when vector mode is on.
   const [vectorPolygons, setVectorPolygons] = useState<{key: string; positions: [number, number][][]}[]>([]);
+  const renderableCells = useMemo(
+    () => cells.filter((cell) => hasRenderableCellGeometry(cell)),
+    [cells],
+  );
 
   useEffect(() => {
     if (!showVectorPolygons) {
@@ -104,17 +119,28 @@ export default function AvalancheMap({
     setVectorPolygons(sarPolygons);
   }, [runoutPolygons, sarEventGeometries, showVectorPolygons]);
 
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const skippedCellCount = cells.length - renderableCells.length;
+    if (skippedCellCount <= 0) return;
+    console.warn(`[AvalancheMap] skipped ${skippedCellCount} cells with invalid rectangle bounds`);
+  }, [cells.length, renderableCells.length]);
+
   return (
     <MapContainer center={center} zoom={zoom} className="h-full w-full z-0 theme-aware-map" zoomControl={true} touchZoom={true} dragging={true}>
       <MapUpdater center={center} zoom={zoom} />
       <TileLayer attribution='&copy; <a href="https://carto.com/">CARTO</a>' url={tileUrl} />
 
       {/* Risk grid cells */}
-      {cells.map((cell) => {
+      {renderableCells.map((cell) => {
         const bounds: LatLngBoundsExpression = [[cell.lat, cell.lng], [cell.latEnd, cell.lngEnd]];
         const isSelected = selectedCell?.row === cell.row && selectedCell?.col === cell.col;
         const isHighUncertainty = isHighUncertaintyCell(cell);
         const isUnavailable = isCellUnavailable(cell);
+        const isMasked = isCellMasked(cell) && !isUnavailable;
+        const maskLabel = getCellMaskLabel(cell);
+        const maskSummary = getCellMaskSummary(cell);
+        const maskReasonDescriptions = getCellMaskReasonDescriptions(cell);
         return (
           <Rectangle
             key={`${cell.row}-${cell.col}`}
@@ -122,8 +148,8 @@ export default function AvalancheMap({
             pathOptions={{
               color: isSelected ? '#ffffff' : 'transparent',
               weight: isSelected ? 2 : 0,
-              fillColor: isUnavailable ? '#6b7280' : isHighUncertainty ? '#9ca3af' : getRiskColor(cell.riskScore),
-              fillOpacity: isUnavailable ? 0.3 : isHighUncertainty ? 0.42 : 0.45 + cell.riskScore * 0.06,
+              fillColor: isUnavailable || isMasked ? '#6b7280' : isHighUncertainty ? '#9ca3af' : getRiskColor(cell.riskScore),
+              fillOpacity: isUnavailable ? 0.3 : isMasked ? 0.38 : isHighUncertainty ? 0.42 : 0.45 + cell.riskScore * 0.06,
             }}
             eventHandlers={{ click: () => { if (!isUnavailable) onCellClick(cell); } }}
           >
@@ -137,7 +163,7 @@ export default function AvalancheMap({
                   </>
                 ) : (
                   <>
-                    <div className="font-semibold">Risk: {cell.riskScore}/5</div>
+                    <div className="font-semibold">{isMasked ? maskLabel : `Risk: ${cell.riskScore}/5`}</div>
                     <div className="text-muted-foreground">
                       Elev: {cell.terrainInputs?.elevation_m?.toFixed(0) ?? 'N/A'}m
                     </div>
@@ -145,14 +171,29 @@ export default function AvalancheMap({
                       Slope: {cell.terrainInputs?.slope_angle_deg?.toFixed(1) ?? 'N/A'}°
                     </div>
                     <div className="text-muted-foreground">
-                      Prob: {
-                        typeof cell.probability === 'number' && Number.isFinite(cell.probability)
-                          ? (cell.probability * 100).toFixed(1)
+                      Prob: {isMasked
+                        ? 'masked'
+                        : typeof cell.probability === 'number' && Number.isFinite(cell.probability)
+                          ? `${(cell.probability * 100).toFixed(1)}%`
                           : Number.isFinite(cell.riskScore)
-                            ? ((cell.riskScore / 5) * 100).toFixed(1)
-                            : 'N/A'
-                      }%
+                            ? `${((cell.riskScore / 5) * 100).toFixed(1)}%`
+                            : 'N/A'}
                     </div>
+                    {isMasked && (
+                      <>
+                        <div className="text-muted-foreground">{maskSummary}</div>
+                        {maskReasonDescriptions.length > 1 && maskReasonDescriptions.map((reason) => (
+                          <div key={reason} className="text-muted-foreground">
+                            Reason: {reason}
+                          </div>
+                        ))}
+                        {cell.aptEligible === false && (
+                          <div className="text-muted-foreground">
+                            Profile: {cell.aptProfile ?? 'apt_30_50_v1'}
+                          </div>
+                        )}
+                      </>
+                    )}
                     {cell.dominantDriverFeature && (
                       <div className="text-emerald-400">Driver: {cell.dominantDriverFeature}</div>
                     )}
@@ -173,39 +214,49 @@ export default function AvalancheMap({
         />
       ))}
 
-      {/* Historical event markers */}
-      {historicalEvents.map((evt) => (
-        <CircleMarker
-          key={evt.id}
-          center={[evt.lat, evt.lng]}
-          radius={8}
-          pathOptions={{ color: confidenceColor(evt.confidence), fillColor: confidenceColor(evt.confidence), fillOpacity: 0.7, weight: 2 }}
-        >
-          <Popup>
-            <div className="text-xs space-y-1" style={{ color: isDark ? '#ddd' : '#111' }}>
-              <div className="font-bold">{evt.event_type.toUpperCase()}</div>
-              <div className={isDark ? 'text-blue-300' : 'text-blue-700'}>
-                📍 {evt.location_name || `${evt.lat.toFixed(3)}°, ${evt.lng.toFixed(3)}°`}
-              </div>
-              <div>{evt.description}</div>
-              <div className={isDark ? 'text-gray-400' : 'text-gray-600'}>
-                Source: {evt.source} • Confidence: {(evt.confidence * 100).toFixed(0)}%
-              </div>
-              {evt.timestamp && (
-                <div className={isDark ? 'text-gray-500' : 'text-gray-500'}>
-                  🕐 {new Date(evt.timestamp).toLocaleString()}
+      <Pane name="events-pane" style={{ zIndex: 650 }}>
+        {historicalEvents
+          .filter((event) => Number.isFinite(event.lat) && Number.isFinite(event.lng))
+          .map((evt) => (
+            <CircleMarker
+              key={evt.id}
+              center={[evt.lat, evt.lng]}
+              radius={8}
+              pathOptions={{ color: confidenceColor(evt.confidence), fillColor: confidenceColor(evt.confidence), fillOpacity: 0.8, weight: 2 }}
+            >
+              <Popup>
+                <div className="text-xs space-y-1" style={{ color: isDark ? '#ddd' : '#111' }}>
+                  <div className="font-bold">{evt.event_type.toUpperCase()}</div>
+                  <div className={isDark ? 'text-blue-300' : 'text-blue-700'}>
+                    📍 {evt.location_name || `${evt.lat.toFixed(3)}°, ${evt.lng.toFixed(3)}°`}
+                  </div>
+                  <div>{evt.description}</div>
+                  <div className={isDark ? 'text-gray-400' : 'text-gray-600'}>
+                    Source: {evt.source} • Confidence: {(evt.confidence * 100).toFixed(0)}%
+                  </div>
+                  {evt.timestamp && (
+                    <div className={isDark ? 'text-gray-500' : 'text-gray-500'}>
+                      🕐 {new Date(evt.timestamp).toLocaleString()}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </Popup>
-        </CircleMarker>
-      ))}
+              </Popup>
+            </CircleMarker>
+          ))}
+      </Pane>
 
       {/* Activity Heatmap layer */}
-      <ActivityHeatmap events={historicalEvents} visible={showHeatmap} />
+      <ActivityHeatmap events={heatmapEvents} visible={showHeatmap} />
 
       {/* Impact overlays */}
-      {bbox && <ImpactOverlays bbox={bbox} showRoads={showRoads} showInfrastructure={showInfra} />}
+      {bbox && (
+        <ImpactOverlays
+          bbox={bbox}
+          showRoads={showRoads}
+          showInfrastructure={showInfra}
+          runoutPolygons={runoutPolygons}
+        />
+      )}
     </MapContainer>
   );
 }

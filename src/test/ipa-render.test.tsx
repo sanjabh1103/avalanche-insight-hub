@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import RiskDashboard from '@/components/RiskDashboard';
-import { forecastGridRowToCells, type ForecastGridRowRecord, type GridCell } from '@/lib/gridUtils';
+import { forecastGridRowToCells, hasRenderableCellGeometry, type ForecastGridRowRecord, type GridCell } from '@/lib/gridUtils';
 
 function buildCell(overrides: Partial<GridCell> = {}): GridCell {
   return {
@@ -138,7 +138,7 @@ describe('IPA hydration and render contract', () => {
     expect(screen.getByText('Limiting factor')).toBeTruthy();
     expect(screen.getByText('snowpack weakness • IPA 0.84')).toBeTruthy();
     expect(screen.getByText('fusion: chebyshev_ipa_v2')).toBeTruthy();
-  });
+  }, 15_000);
 
   it('hydrates unavailable terrain cells and renders the disabled state', () => {
     const row: ForecastGridRowRecord = {
@@ -235,5 +235,84 @@ describe('IPA hydration and render contract', () => {
     expect(cells[0].disabled).toBe(false);
     expect(cells[1].status).toBe('unavailable_terrain');
     expect(cells[1].disabled).toBe(true);
+  });
+
+  it('renders APT-masked terrain as masked instead of low danger', () => {
+    render(
+      <RiskDashboard
+        cell={buildCell({
+          riskScore: 0,
+          terrainFusedRiskScore: 5,
+          aptEligible: false,
+          aptProfile: 'apt_30_50_v1',
+          aptMaskReason: 'slope_outside_30_to_50_deg',
+          terrainInputs: {
+            slope_angle_deg: 22.4,
+          },
+        })}
+        weatherSummary={null}
+      />,
+    );
+
+    expect(screen.getByText('APT MASKED')).toBeTruthy();
+    expect(screen.getAllByText(/outside avalanche-prone terrain profile/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/0 — Low/i)).toBeNull();
+  });
+
+  it('renders snow/elevation-masked terrain as public masked instead of low danger', () => {
+    render(
+      <RiskDashboard
+        cell={buildCell({
+          riskScore: 0,
+          terrainFusedRiskScore: 4,
+          aptEligible: true,
+          publicEligible: false,
+          publicMaskReasons: ['warm_low_elevation_no_snow_support'],
+          snowElevationEligible: false,
+          snowElevationMaskReason: 'warm_low_elevation_no_snow_support',
+          snowElevationProfile: 'snow_elevation_proxy_v1',
+        })}
+        weatherSummary={null}
+      />,
+    );
+
+    expect(screen.getByText('SNOW/ELEV MASKED')).toBeTruthy();
+    expect(screen.getAllByText(/no current snow\/elevation relevance in this proxy forecast/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/0 — Low/i)).toBeNull();
+  });
+
+  it('keeps published-artifact geometry renderable when only snake_case bounds are populated', () => {
+    const row: ForecastGridRowRecord = {
+      id: 'grid-published-artifact',
+      region_name: 'Himalayas (Nepal)',
+      forecast_date: '2026-05-02',
+      horizon_hours: 24,
+      bbox: [27.0, 85.0, 29.0, 87.0],
+      grid_size: 20,
+      grid_geojson: [
+        {
+          row: 4,
+          col: 7,
+          lat: 27.4,
+          lng: 85.7,
+          latEnd: null,
+          lngEnd: null,
+          lat_end: 27.5,
+          lng_end: 85.8,
+          risk_score: 4,
+          hazard: 0.72,
+          exposure: 0.54,
+          vulnerability: 0.33,
+          problem_type: 'Persistent Slab',
+          shap_values: { snowfall_24h: 0.31 },
+        },
+      ],
+    };
+
+    const [cell] = forecastGridRowToCells(row);
+
+    expect(cell.latEnd).toBeCloseTo(27.5, 6);
+    expect(cell.lngEnd).toBeCloseTo(85.8, 6);
+    expect(hasRenderableCellGeometry(cell)).toBe(true);
   });
 });

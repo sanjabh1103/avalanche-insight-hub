@@ -12,7 +12,7 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { fieldReportId, lat, lng, description } = await req.json();
+    const { fieldReportId, lat, lng, description, timestamp, clientReportId, location_name } = await req.json();
     if (!fieldReportId || !Number.isFinite(lat) || !Number.isFinite(lng)) {
       return new Response(JSON.stringify({ error: 'Invalid field report payload' }), {
         status: 400,
@@ -35,31 +35,32 @@ serve(async (req: Request) => {
       .insert({
         type: 'field_report_enrichment',
         status: 'running',
-        payload: { fieldReportId, lat, lng },
+        payload: { fieldReportId, lat, lng, timestamp, clientReportId },
       })
       .select('id')
       .maybeSingle();
     if (jobErr) throw jobErr;
     if (!job?.id) throw new Error('Failed to create compute_job row');
 
-    const callerAuthorization = req.headers.get('authorization');
-    const callerApiKey = req.headers.get('apikey');
-    const fallbackApiKey = Deno.env.get('SUPABASE_ANON_KEY') ?? serviceRoleKey;
+    const publicFunctionKey = Deno.env.get('SUPABASE_ANON_KEY') ?? serviceRoleKey;
 
     const ingestResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/ingest-event`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // Forward the caller's validated auth when available so the downstream
-        // private function sees the same JWT that already authenticated this hop.
-        Authorization: callerAuthorization ?? `Bearer ${serviceRoleKey}`,
-        apikey: callerApiKey ?? fallbackApiKey,
+        // The public wrapper owns the governance for the browser-facing path.
+        // The downstream ingest function validates field_report inputs against the
+        // persisted field_reports row, so this hop does not depend on caller JWTs.
+        apikey: publicFunctionKey,
       },
       body: JSON.stringify({
         fieldReportId,
         lat,
         lng,
         description: description || 'Field report submitted',
+        timestamp: timestamp || new Date().toISOString(),
+        clientReportId: clientReportId || null,
+        location_name: location_name || null,
         source: 'field_report',
         fusion_source: 'field_report_enrichment',
         event_type: 'unknown',
@@ -73,15 +74,18 @@ serve(async (req: Request) => {
       throw new Error(`ingest-event failed (${ingestResponse.status}): ${text}`);
     }
     const ingestResult = await ingestResponse.json();
+    const createdEvent = (ingestResult as Record<string, unknown>)?.event as Record<string, unknown> | undefined;
 
     // P1.3: Auto-promote the newly-created event to verification_status='weak'
     // when a SAR or news event corroborates it within 48h and 5km. This is
     // how the training corpus gets populated with higher-quality rows than
     // the default 'unverified' citizen reports.
     let promotion: Record<string, unknown> | null = null;
-    const newEventId: string | undefined = (ingestResult as Record<string, unknown>)?.event_id as string | undefined
-      || (ingestResult as Record<string, unknown>)?.id as string | undefined
-      || (ingestResult as Record<string, unknown>)?.avalanche_event_id as string | undefined;
+    const newEventId: string | undefined = typeof createdEvent?.id === 'string'
+      ? createdEvent.id
+      : (ingestResult as Record<string, unknown>)?.event_id as string | undefined
+        || (ingestResult as Record<string, unknown>)?.id as string | undefined
+        || (ingestResult as Record<string, unknown>)?.avalanche_event_id as string | undefined;
 
     if (newEventId) {
       try {
@@ -89,7 +93,7 @@ serve(async (req: Request) => {
           p_event_id: newEventId,
           p_lat: lat,
           p_lng: lng,
-          p_timestamp: new Date().toISOString(),
+          p_timestamp: timestamp || new Date().toISOString(),
           p_radius_m: 5000,
           p_window_hours: 48,
         });
@@ -120,7 +124,7 @@ serve(async (req: Request) => {
       result: { fieldReportId, createdEvent: true, ingestResult, promotion },
     }).eq('id', job!.id);
 
-    return new Response(JSON.stringify({ ok: true, jobId: job!.id, promotion }), {
+    return new Response(JSON.stringify({ ok: true, jobId: job!.id, event: createdEvent, promotion }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {

@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.run-forecast]
 verify_jwt = false
+
+[functions.field-report-enrichment]
+verify_jwt = false
+
+[functions.ingest-event]
+verify_jwt = false

@@ -4,6 +4,9 @@ export interface QueuedFieldReport {
   lat: number;
   lng: number;
   description: string;
+  observedAt: string;
+  locationName?: string | null;
+  submittedOffline?: boolean;
   userId?: string | null;
   createdAt: string;
 }
