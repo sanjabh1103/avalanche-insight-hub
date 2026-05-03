@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,7 +18,7 @@ from backend.common.sequence_features import (
     STATIC_SEQUENCE_FEATURES,
     SequenceBranches,
 )
-from backend.data.mts_lstm_loader import build_mts_lstm_dataloaders
+from backend.data.mts_lstm_loader import build_mts_lstm_dataloaders, build_mts_lstm_dataset
 
 try:  # pragma: no cover - optional dependency at import time
     import torch
@@ -55,6 +56,7 @@ MTS_HOURLY_STEPS = int(os.getenv('MTS_HOURLY_STEPS', str(DEFAULT_HOURLY_STEPS)))
 MTS_DAILY_STEPS = int(os.getenv('MTS_DAILY_STEPS', str(DEFAULT_DAILY_STEPS)))
 MTS_LSTM_BATCH_SIZE = int(os.getenv('MTS_LSTM_BATCH_SIZE', '32'))
 MTS_RUNTIME_PROVIDER = os.getenv('MTS_RUNTIME_PROVIDER', 'local').strip() or 'local'
+MTS_MIN_CALIBRATION_ROWS = int(os.getenv('MTS_MIN_CALIBRATION_ROWS', '10'))
 MTS_SAR_RELEASE_GATE_PASSED = _flag('SAR_RELEASE_GATE_PASSED', False)
 MTS_SAR_VOLUME_MIN_EVENTS = int(os.getenv('MTS_SAR_VOLUME_MIN_EVENTS', '50'))
 MTS_SAR_VOLUME_MIN_REGIONS = int(os.getenv('MTS_SAR_VOLUME_MIN_REGIONS', '3'))
@@ -76,6 +78,8 @@ class LSTMHead:
     static_mean: np.ndarray
     static_std: np.ndarray
     metadata: dict[str, Any]
+    calibrator: Any | None = None
+    evaluation_payload: dict[str, Any] | None = None
 
     def _normalize(self, branches: SequenceBranches) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         hourly = ((branches.hourly - self.hourly_mean) / self.hourly_std).astype(np.float32)
@@ -112,10 +116,25 @@ class LSTMHead:
         self.model.eval()
         return np.asarray(outputs, dtype=np.float32)
 
-    def predict_sequence(self, branches: SequenceBranches, *, mc_samples: int | None = None) -> tuple[np.ndarray, np.ndarray]:
+    def apply_probability_calibration(self, probabilities: np.ndarray) -> np.ndarray:
+        if self.calibrator is None:
+            return np.asarray(probabilities, dtype=np.float32)
+        calibrated = self.calibrator.predict(np.asarray(probabilities, dtype=np.float32))
+        return np.clip(np.asarray(calibrated, dtype=np.float32), 0.0, 1.0)
+
+    def predict_sequence(
+        self,
+        branches: SequenceBranches,
+        *,
+        mc_samples: int | None = None,
+        apply_calibration: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray]:
         samples = max(1, int(mc_samples or 1))
         stacked = self._predict_stochastic_outputs(branches, samples=samples)
-        return stacked.mean(axis=0), stacked.std(axis=0)
+        mean_prob = stacked.mean(axis=0)
+        if apply_calibration:
+            mean_prob = self.apply_probability_calibration(mean_prob)
+        return mean_prob, stacked.std(axis=0)
 
     def predict_sequence_seeded_ensemble(
         self,
@@ -123,13 +142,85 @@ class LSTMHead:
         *,
         ensemble_samples: int,
         seed_base: int,
+        apply_calibration: bool = True,
     ) -> tuple[np.ndarray, np.ndarray]:
         stacked = self._predict_stochastic_outputs(
             branches,
             samples=max(1, int(ensemble_samples)),
             seed_base=int(seed_base),
         )
-        return stacked.mean(axis=0), stacked.std(axis=0)
+        mean_prob = stacked.mean(axis=0)
+        if apply_calibration:
+            mean_prob = self.apply_probability_calibration(mean_prob)
+        return mean_prob, stacked.std(axis=0)
+
+
+def split_validation_and_calibration_frame(
+    calib_df: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
+    if calib_df.empty:
+        return calib_df.copy(), calib_df.iloc[0:0].copy(), {
+            'calibration_applied': False,
+            'calibration_reason': 'empty_calibration_frame',
+        }
+
+    ordered = calib_df.sort_values('timestamp').reset_index(drop=True) if 'timestamp' in calib_df.columns else calib_df.reset_index(drop=True)
+    split_idx = max(1, len(ordered) // 2)
+    validation_df = ordered.iloc[:split_idx].copy()
+    calibration_df = ordered.iloc[split_idx:].copy()
+
+    def _slice_is_usable(frame: pd.DataFrame) -> bool:
+        if len(frame) < MTS_MIN_CALIBRATION_ROWS:
+            return False
+        if 'label' not in frame.columns:
+            return False
+        return len(np.unique(frame['label'].astype(int))) >= 2
+
+    if not _slice_is_usable(validation_df) or not _slice_is_usable(calibration_df):
+        return ordered.copy(), ordered.iloc[0:0].copy(), {
+            'calibration_applied': False,
+            'calibration_reason': 'insufficient_validation_or_calibration_slice',
+        }
+
+    return validation_df, calibration_df, {
+        'calibration_applied': True,
+        'calibration_reason': None,
+    }
+
+
+def fit_isotonic_probability_calibrator(
+    labels: np.ndarray,
+    raw_probabilities: np.ndarray,
+) -> tuple[Any | None, dict[str, Any]]:
+    labels_arr = np.asarray(labels).astype(int)
+    raw_prob_arr = np.asarray(raw_probabilities, dtype=np.float32)
+    if labels_arr.size < MTS_MIN_CALIBRATION_ROWS or len(np.unique(labels_arr)) < 2:
+        return None, {
+            'calibration_applied': False,
+            'calibration_method': 'unavailable',
+            'calibration_reason': 'insufficient_calibration_rows_or_classes',
+        }
+    try:
+        from sklearn.isotonic import IsotonicRegression
+
+        calibrator = IsotonicRegression(
+            y_min=0.0,
+            y_max=1.0,
+            increasing=True,
+            out_of_bounds='clip',
+        )
+        calibrator.fit(raw_prob_arr, labels_arr)
+        return calibrator, {
+            'calibration_applied': True,
+            'calibration_method': 'isotonic',
+            'calibration_reason': None,
+        }
+    except Exception as exc:  # pragma: no cover - defensive
+        return None, {
+            'calibration_applied': False,
+            'calibration_method': 'unavailable',
+            'calibration_reason': str(exc),
+        }
 
 def _sequence_norm_stats(array: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     mean = array.mean(axis=(0, 1), keepdims=True)
@@ -208,6 +299,8 @@ def assess_production_gates(
 def fit_lstm_head(
     *,
     train_df: pd.DataFrame,
+    validation_df: pd.DataFrame,
+    calibration_df: pd.DataFrame,
     test_df: pd.DataFrame,
     rf_metrics: dict[str, Any],
     seed: int,
@@ -263,7 +356,7 @@ def fit_lstm_head(
 
     train_loader, validation_loader, normalization_stats = build_mts_lstm_dataloaders(
         train_df=train_df,
-        validation_df=test_df,
+        validation_df=validation_df,
         region_centers=region_centers,
         dynamic_features=dynamic_features,
         static_features=static_features,
@@ -271,11 +364,22 @@ def fit_lstm_head(
         daily_steps=MTS_DAILY_STEPS,
         batch_size=MTS_LSTM_BATCH_SIZE,
     )
-    test_branches = SequenceBranches(
-        hourly=np.asarray(validation_loader.dataset.hourly, dtype=np.float32),
-        daily=np.asarray(validation_loader.dataset.daily, dtype=np.float32),
-        static=np.asarray(validation_loader.dataset.static, dtype=np.float32),
-    )
+
+    def _dataset_branches(frame: pd.DataFrame) -> tuple[SequenceBranches, np.ndarray]:
+        dataset = build_mts_lstm_dataset(
+            frame,
+            region_centers=region_centers,
+            dynamic_features=dynamic_features,
+            static_features=static_features,
+            hourly_steps=MTS_HOURLY_STEPS,
+            daily_steps=MTS_DAILY_STEPS,
+            normalization_stats=normalization_stats,
+        )
+        return SequenceBranches(
+            hourly=np.asarray(dataset.hourly, dtype=np.float32),
+            daily=np.asarray(dataset.daily, dtype=np.float32),
+            static=np.asarray(dataset.static, dtype=np.float32),
+        ), np.asarray(dataset.labels, dtype=np.int32)
 
     hourly_mean = normalization_stats.hourly_mean
     hourly_std = normalization_stats.hourly_std
@@ -351,8 +455,20 @@ def fit_lstm_head(
     dataset_snapshot_id = build_dataset_snapshot_id(dataset_manifest)
     effective_requested_snapshot = str(requested_dataset_snapshot_id or dataset_snapshot_id)
     runtime_provider_value = str(runtime_provider or MTS_RUNTIME_PROVIDER or 'local')
-    positive_count = int(dataset_manifest.get('positive_count', int((train_df['label'] == 1).sum() + (test_df['label'] == 1).sum()))) if isinstance(dataset_manifest, dict) else int((train_df['label'] == 1).sum() + (test_df['label'] == 1).sum())
-    negative_count = int(dataset_manifest.get('negative_count', int((train_df['label'] == 0).sum() + (test_df['label'] == 0).sum()))) if isinstance(dataset_manifest, dict) else int((train_df['label'] == 0).sum() + (test_df['label'] == 0).sum())
+    fallback_positive_count = int(
+        (train_df['label'] == 1).sum()
+        + (validation_df['label'] == 1).sum()
+        + (calibration_df['label'] == 1).sum()
+        + (test_df['label'] == 1).sum()
+    )
+    fallback_negative_count = int(
+        (train_df['label'] == 0).sum()
+        + (validation_df['label'] == 0).sum()
+        + (calibration_df['label'] == 0).sum()
+        + (test_df['label'] == 0).sum()
+    )
+    positive_count = int(dataset_manifest.get('positive_count', fallback_positive_count)) if isinstance(dataset_manifest, dict) else fallback_positive_count
+    negative_count = int(dataset_manifest.get('negative_count', fallback_negative_count)) if isinstance(dataset_manifest, dict) else fallback_negative_count
     row_count = positive_count + negative_count
     sar_stats = sar_volume_stats if isinstance(sar_volume_stats, dict) else {}
     sar_unet_shadow_count = int(sar_stats.get('sar_unet_shadow_count') or 0)
@@ -397,6 +513,9 @@ def fit_lstm_head(
             'row_count': row_count,
             'positive_count': positive_count,
             'negative_count': negative_count,
+            'validation_row_count': int(len(validation_df)),
+            'calibration_row_count': int(len(calibration_df)),
+            'test_row_count': int(len(test_df)),
             'sar_unet_shadow_count': sar_unet_shadow_count,
             'sar_unet_promoted_count': sar_unet_promoted_count,
             'sar_unet_promoted_region_count': sar_unet_promoted_region_count,
@@ -404,10 +523,37 @@ def fit_lstm_head(
         },
     )
 
-    y_test = test_df['label'].astype(int).to_numpy()
-    mean_prob, std_prob = head.predict_sequence(test_branches, mc_samples=MTS_MC_DROPOUT_SAMPLES)
-    lstm_pss, threshold = _peirce_skill_score_max(y_test, mean_prob)
-    lstm_brier = float(brier_score_loss(y_test, mean_prob))
+    calibration_metadata: dict[str, Any] = {
+        'calibration_applied': False,
+        'calibration_method': 'unavailable',
+        'calibration_reason': 'calibration_frame_missing',
+    }
+    if not calibration_df.empty:
+        calibration_branches, y_calibration = _dataset_branches(calibration_df)
+        calibration_mean_prob, _ = head.predict_sequence(
+            calibration_branches,
+            mc_samples=MTS_MC_DROPOUT_SAMPLES,
+            apply_calibration=False,
+        )
+        calibrator, calibration_metadata = fit_isotonic_probability_calibrator(
+            y_calibration,
+            calibration_mean_prob,
+        )
+        head.calibrator = calibrator
+    else:
+        head.calibrator = None
+
+    test_branches, y_test = _dataset_branches(test_df)
+    raw_mean_prob, std_prob = head.predict_sequence(
+        test_branches,
+        mc_samples=MTS_MC_DROPOUT_SAMPLES,
+        apply_calibration=False,
+    )
+    calibrated_mean_prob = head.apply_probability_calibration(raw_mean_prob)
+    lstm_pss_uncalibrated, threshold_uncalibrated = _peirce_skill_score_max(y_test, raw_mean_prob)
+    lstm_brier_uncalibrated = float(brier_score_loss(y_test, raw_mean_prob))
+    lstm_pss, threshold = _peirce_skill_score_max(y_test, calibrated_mean_prob)
+    lstm_brier = float(brier_score_loss(y_test, calibrated_mean_prob))
     rf_pss = float(rf_metrics.get('pss_holdout', 0.0) or 0.0)
     rf_brier = float(rf_metrics.get('brier_score', 1.0) or 1.0)
     gate_summary = assess_production_gates(
@@ -421,16 +567,34 @@ def fit_lstm_head(
         sar_unet_promoted_scene_date_count=sar_unet_promoted_scene_date_count,
     )
     head.metadata.update({
+        'calibration_method': calibration_metadata.get('calibration_method'),
+        'calibration_applied': bool(calibration_metadata.get('calibration_applied')),
+        'calibration_reason': calibration_metadata.get('calibration_reason'),
         'pss_holdout': lstm_pss,
         'pss_optimal_threshold': threshold,
         'brier_score': lstm_brier,
+        'pss_holdout_calibrated': lstm_pss,
+        'pss_optimal_threshold_calibrated': threshold,
+        'brier_score_calibrated': lstm_brier,
+        'pss_holdout_uncalibrated': lstm_pss_uncalibrated,
+        'pss_optimal_threshold_uncalibrated': threshold_uncalibrated,
+        'brier_score_uncalibrated': lstm_brier_uncalibrated,
         'rf_pss_holdout': rf_pss,
         'rf_brier_score': rf_brier,
         'mean_uncertainty_std': float(std_prob.mean()) if std_prob.size else 0.0,
         'uncertainty_validation_passed': bool(std_prob.size and float(std_prob.mean()) >= MTS_MIN_UNCERTAINTY_STD),
+        'calibration_improved': bool(
+            calibration_metadata.get('calibration_applied')
+            and lstm_brier < lstm_brier_uncalibrated
+        ),
         **gate_summary,
         'shadow_mode_default': not bool(gate_summary['production_eligibility_gate_passed']),
     })
+    head.evaluation_payload = {
+        'test_prob_uncalibrated': np.asarray(raw_mean_prob, dtype=np.float32),
+        'test_prob_calibrated': np.asarray(calibrated_mean_prob, dtype=np.float32),
+        'test_labels': np.asarray(y_test, dtype=np.int32),
+    }
     return head
 
 
@@ -438,53 +602,85 @@ def predict_production_probability(
     rf_probability: float,
     lstm_head: LSTMHead | None,
     branches: SequenceBranches | None,
+    *,
+    allow_dynamic_inference: bool | None = None,
 ) -> tuple[float, dict[str, Any] | None]:
     if not USE_MTS_LSTM_HEAD or lstm_head is None or getattr(lstm_head, 'model', None) is None or branches is None:
         return clamp01(rf_probability), None
 
-    mean_prob, std_prob = lstm_head.predict_sequence(
-        SequenceBranches(
-            hourly=np.asarray([branches.hourly], dtype=np.float32),
-            daily=np.asarray([branches.daily], dtype=np.float32),
-            static=np.asarray([branches.static], dtype=np.float32),
-        ),
-        mc_samples=MTS_MC_DROPOUT_SAMPLES,
+    batch_branches = SequenceBranches(
+        hourly=np.asarray([branches.hourly], dtype=np.float32),
+        daily=np.asarray([branches.daily], dtype=np.float32),
+        static=np.asarray([branches.static], dtype=np.float32),
     )
+    try:
+        mean_prob, std_prob = lstm_head.predict_sequence(
+            batch_branches,
+            mc_samples=MTS_MC_DROPOUT_SAMPLES,
+        )
+    except Exception as exc:
+        print(
+            f"[lstm_model] dynamic inference fallback to RF: {exc}",
+            file=sys.stderr,
+        )
+        return clamp01(rf_probability), {
+            'enabled': True,
+            'dynamic_model_type': 'mts_lstm_v1',
+            'dynamic_model_version': lstm_head.metadata.get('dynamic_model_version'),
+            'surrogate_model_role': 'tree_shap_surrogate',
+            'promotion_gate_passed': bool(lstm_head.metadata.get('promotion_gate_passed')),
+            'shadow_mode_active': True,
+            'dynamic_probability': None,
+            'active_probability': clamp01(rf_probability),
+            'uncertainty_method': 'tree_variance_gaussian_shadow',
+            'uncertainty_std': None,
+            'uncertainty_floor_std': MTS_MIN_UNCERTAINTY_STD,
+            'candidate_ready_for_activation': bool(lstm_head.metadata.get('production_eligibility_gate_passed')),
+            'fallback_reason': 'dynamic_inference_error',
+            'fallback_error': str(exc),
+        }
     dynamic_probability = clamp01(float(mean_prob[0]))
     uncertainty_std = float(std_prob[0]) if std_prob.size else 0.0
     uncertainty_method = 'mc_dropout_v1'
     confidence_lower = clamp01(dynamic_probability - 1.96 * uncertainty_std)
     confidence_upper = clamp01(dynamic_probability + 1.96 * uncertainty_std)
     promotion_gate_passed = bool(lstm_head.metadata.get('promotion_gate_passed'))
-    if promotion_gate_passed and uncertainty_std < MTS_MIN_UNCERTAINTY_STD:
-        ensemble_mean, ensemble_std = lstm_head.predict_sequence_seeded_ensemble(
-            SequenceBranches(
-                hourly=np.asarray([branches.hourly], dtype=np.float32),
-                daily=np.asarray([branches.daily], dtype=np.float32),
-                static=np.asarray([branches.static], dtype=np.float32),
-            ),
-            ensemble_samples=MTS_ENSEMBLE_SAMPLES,
-            seed_base=int(lstm_head.metadata.get('seed', 42)),
-        )
-        uncertainty_std = max(float(ensemble_std[0]) if ensemble_std.size else 0.0, MTS_MIN_UNCERTAINTY_STD)
-        confidence_lower = clamp01(dynamic_probability - 1.96 * uncertainty_std)
-        confidence_upper = clamp01(dynamic_probability + 1.96 * uncertainty_std)
-        uncertainty_method = 'seeded_dropout_ensemble_v1'
-    active_probability = dynamic_probability if promotion_gate_passed else clamp01(rf_probability)
+    dynamic_is_active = promotion_gate_passed if allow_dynamic_inference is None else bool(allow_dynamic_inference and promotion_gate_passed)
+    if dynamic_is_active and uncertainty_std < MTS_MIN_UNCERTAINTY_STD:
+        try:
+            ensemble_mean, ensemble_std = lstm_head.predict_sequence_seeded_ensemble(
+                batch_branches,
+                ensemble_samples=MTS_ENSEMBLE_SAMPLES,
+                seed_base=int(lstm_head.metadata.get('seed', 42)),
+            )
+            uncertainty_std = max(float(ensemble_std[0]) if ensemble_std.size else 0.0, MTS_MIN_UNCERTAINTY_STD)
+            confidence_lower = clamp01(dynamic_probability - 1.96 * uncertainty_std)
+            confidence_upper = clamp01(dynamic_probability + 1.96 * uncertainty_std)
+            uncertainty_method = 'seeded_dropout_ensemble_v1'
+        except Exception as exc:
+            print(
+                f"[lstm_model] seeded ensemble fallback failed, using uncertainty floor: {exc}",
+                file=sys.stderr,
+            )
+            uncertainty_std = MTS_MIN_UNCERTAINTY_STD
+            confidence_lower = clamp01(dynamic_probability - 1.96 * uncertainty_std)
+            confidence_upper = clamp01(dynamic_probability + 1.96 * uncertainty_std)
+    active_probability = dynamic_probability if dynamic_is_active else clamp01(rf_probability)
     context: dict[str, Any] = {
         'enabled': True,
         'dynamic_model_type': 'mts_lstm_v1',
         'dynamic_model_version': lstm_head.metadata.get('dynamic_model_version'),
         'surrogate_model_role': 'tree_shap_surrogate',
         'promotion_gate_passed': promotion_gate_passed,
-        'shadow_mode_active': not promotion_gate_passed,
+        'shadow_mode_active': not dynamic_is_active,
         'dynamic_probability': dynamic_probability,
         'active_probability': active_probability,
-        'uncertainty_method': uncertainty_method if promotion_gate_passed else 'tree_variance_gaussian_shadow',
+        'uncertainty_method': uncertainty_method if dynamic_is_active else 'tree_variance_gaussian_shadow',
         'uncertainty_std': uncertainty_std,
         'uncertainty_floor_std': MTS_MIN_UNCERTAINTY_STD,
+        'candidate_ready_for_activation': bool(lstm_head.metadata.get('production_eligibility_gate_passed')),
     }
-    if promotion_gate_passed:
+    if dynamic_is_active:
         context['confidence_lower'] = confidence_lower
         context['confidence_upper'] = confidence_upper
     return active_probability, context

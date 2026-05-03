@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Check, FileSpreadsheet, FileJson, FileSpreadsheet as CsvIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import type { GridCell } from '@/lib/gridUtils';
-import type { AvalancheEvent } from '@/components/HistoricalEventsToggle';
+import type { AvalancheEvent } from '@/lib/avalancheEvents';
 
 interface Props {
   grid?: { cells: GridCell[]; timestamp: string; bbox: [number, number, number, number] } | null;

@@ -8,9 +8,13 @@ on:
     paths:
       - 'backend/modal_worker_app.py'
       - 'backend/sar_unet_worker.py'
+      - 'backend/sar_unet_training.py'
+      - 'backend/train_sar_model.py'
       - 'backend/lstm_model.py'
       - 'backend/train_model.py'
       - 'backend/daily_inference.py'
+      - 'backend/common/sar_model_family.py'
+      - 'backend/common/sar_training_dataset.py'
       - 'backend/common/storage_io.py'
       - 'backend/common/label_governance.py'
       - 'backend/common/sequence_features.py'
@@ -37,8 +41,8 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Modal CLI
-        run: pip install modal
+      - name: Install Modal CLI and backend deploy dependencies
+        run: pip install modal -r backend/requirements.txt
 
       - name: Deploy Modal worker app
         env:
@@ -62,4 +66,4 @@ jobs:
         run: |
           echo "::notice::Worker deployed as a single ASGI app."
           echo "::notice::Set MODAL_WORKER_URL to the base URL printed by Modal for the deployed ASGI worker app."
-          echo "::notice::Expected routes: /sar-segment, /train-mtslstm, /infer-mtslstm, /evaluate-release"
+          echo "::notice::Expected routes: /sar-segment, /train-sar-unet, /train-mtslstm, /infer-mtslstm, /evaluate-release"

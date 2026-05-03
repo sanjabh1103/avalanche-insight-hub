@@ -1,11 +1,18 @@
 import { supabase } from '@/integrations/supabase/client';
 import {
+  getAvalancheEventGovernanceLabel,
   parseAvalancheEventRow,
   type AvalancheEvent,
 } from '@/lib/avalancheEvents';
 import type { QueuedFieldReport } from '@/lib/offlineFieldReports';
 
-export async function submitQueuedFieldReport(report: QueuedFieldReport): Promise<AvalancheEvent> {
+export interface FieldReportSubmissionResult {
+  event: AvalancheEvent;
+  governanceLabel: string;
+  promoted: boolean;
+}
+
+export async function submitQueuedFieldReport(report: QueuedFieldReport): Promise<FieldReportSubmissionResult> {
   const { data: { user } } = await supabase.auth.getUser();
   const { data: created, error } = await supabase.from('field_reports').insert({
     user_id: user?.id ?? report.userId,
@@ -46,5 +53,10 @@ export async function submitQueuedFieldReport(report: QueuedFieldReport): Promis
     throw new Error('Field report was accepted but did not return a durable avalanche event');
   }
 
-  return event;
+  const promotion = (enrichmentResult as Record<string, unknown> | null)?.promotion as Record<string, unknown> | null | undefined;
+  return {
+    event,
+    governanceLabel: getAvalancheEventGovernanceLabel(event),
+    promoted: Boolean(promotion?.promoted),
+  };
 }

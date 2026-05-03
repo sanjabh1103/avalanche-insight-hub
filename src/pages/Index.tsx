@@ -39,6 +39,7 @@ import {
     type ForecastArtifactHour,
     type ForecastArtifactManifest,
 } from '@/lib/forecastArtifacts';
+import { resolveSharedForecast, type SharedForecastRunRecord } from '@/lib/forecastRestore';
 import { normalizeForecastBulletin, type ForecastBulletin } from '@/lib/forecastBulletins';
 import {
     forecastGridRowToHourlyGrids,
@@ -446,7 +447,7 @@ export default function Index() {
       idx === 0 ? firstGrid : null
     ));
     const row: ForecastGridRowRecord = {
-      id: String(response.forecastId || response.forecastRunId || manifest.forecastRunId),
+      id: String(response.forecastRunId || manifest.forecastRunId || response.forecastId),
       region_name: manifest.regionName,
       region_key: manifest.regionKey,
       forecast_date: manifest.forecastDate,
@@ -540,7 +541,7 @@ export default function Index() {
 
     supabase
       .from('avalanche_events')
-      .select('id, location, severity, confidence, label_confidence, description, source, event_type, timestamp, features')
+      .select('id, location, severity, confidence, label_confidence, verification_status, description, source, event_type, timestamp, features')
       .order('timestamp', { ascending: false })
       .limit(300)
       .then(({ data, error }) => {
@@ -650,50 +651,53 @@ export default function Index() {
     const sharedForecast = params.get('forecast');
     if (sharedForecast) {
       (async () => {
-        const precomputed = await supabase.from('forecast_grids').select('id, region_name, region_key, forecast_date, horizon_hours, bbox, grid_geojson, hourly_grids, runout_polygons, weather_summary, model_metadata, status, created_at').eq('id', sharedForecast).maybeSingle();
-        if (precomputed.data) {
-          setArtifactHourRefs(null);
-          const grids = hydrateForecastGridRow(precomputed.data as ForecastGridRowRecord);
-          const safeHourIdx = Math.max(0, Math.min(hourValue, grids.length - 1));
-          setTimeOffset(safeHourIdx);
-          const cellParam = params.get('cell');
-          if (cellParam) {
-            const [row, col] = cellParam.split(',').map(Number);
-            const gridAtHour = grids[safeHourIdx];
-            if (gridAtHour) {
-              const cell = gridAtHour.find(c => c.row === row && c.col === col);
-              if (cell && !isCellUnavailable(cell)) {
-                setSelectedCell(cell);
-                if (!isMobile) setSidebarOpen(true);
-              }
-            }
-          }
-          toast.success('Restored shared precomputed forecast view');
-          return;
-        }
-        const activeRun = await supabase
-          .from('forecast_runs')
-          .select('id, region_name, region_key, forecast_date, horizon_hours, manifest_storage_ref, compatibility_forecast_grid_id, forecast_bulletins, weather_summary, model_metadata, status, created_at')
-          .eq('id', sharedForecast)
-          .maybeSingle();
-        if (activeRun.data?.manifest_storage_ref) {
+        const resolution = await resolveSharedForecast(sharedForecast, {
+          fetchRunById: async (forecastKey) => {
+            const { data } = await supabase
+              .from('forecast_runs')
+              .select('id, region_name, region_key, forecast_date, horizon_hours, manifest_storage_ref, compatibility_forecast_grid_id, forecast_bulletins, weather_summary, model_metadata, status, created_at')
+              .eq('id', forecastKey)
+              .maybeSingle();
+            return (data as SharedForecastRunRecord | null) ?? null;
+          },
+          fetchRunByCompatibilityForecastGridId: async (forecastKey) => {
+            const { data } = await supabase
+              .from('forecast_runs')
+              .select('id, region_name, region_key, forecast_date, horizon_hours, manifest_storage_ref, compatibility_forecast_grid_id, forecast_bulletins, weather_summary, model_metadata, status, created_at')
+              .eq('compatibility_forecast_grid_id', forecastKey)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            return (data as SharedForecastRunRecord | null) ?? null;
+          },
+          fetchGridById: async (forecastKey) => {
+            const { data } = await supabase
+              .from('forecast_grids')
+              .select('id, region_name, region_key, forecast_date, horizon_hours, bbox, grid_geojson, hourly_grids, runout_polygons, weather_summary, model_metadata, status, created_at')
+              .eq('id', forecastKey)
+              .maybeSingle();
+            return (data as ForecastGridRowRecord | null) ?? null;
+          },
+        });
+        if (resolution.source === 'forecast_runs') {
+          const activeRun = resolution.run;
           const response: RunForecastResponse = {
             ok: true,
-            stale: activeRun.data.status === 'stale',
-            status: activeRun.data.status ?? 'ready',
+            stale: activeRun.status === 'stale',
+            status: activeRun.status ?? 'ready',
             source: 'forecast_runs',
-            forecastRunId: activeRun.data.id,
-            forecastId: activeRun.data.compatibility_forecast_grid_id,
-            manifestPath: activeRun.data.manifest_storage_ref,
-            forecastBulletin: normalizeForecastBulletin(activeRun.data.forecast_bulletins),
-            regionName: activeRun.data.region_name,
-            regionKey: activeRun.data.region_key,
-            forecastDate: activeRun.data.forecast_date,
-            hours: activeRun.data.horizon_hours,
-            weatherSummary: activeRun.data.weather_summary,
-            modelMetadata: activeRun.data.model_metadata,
+            forecastRunId: activeRun.id,
+            forecastId: activeRun.compatibility_forecast_grid_id,
+            manifestPath: activeRun.manifest_storage_ref,
+            forecastBulletin: normalizeForecastBulletin(activeRun.forecast_bulletins),
+            regionName: activeRun.region_name,
+            regionKey: activeRun.region_key,
+            forecastDate: activeRun.forecast_date,
+            hours: activeRun.horizon_hours,
+            weatherSummary: activeRun.weather_summary,
+            modelMetadata: activeRun.model_metadata,
           };
-          const manifest = await loadForecastManifest(activeRun.data.manifest_storage_ref);
+          const manifest = await loadForecastManifest(activeRun.manifest_storage_ref!);
           const { row, grids } = await buildRowFromManifest(response, manifest);
           setArtifactHourRefs(manifest.hours);
           hydrateForecastGridRow(row, {
@@ -714,7 +718,31 @@ export default function Index() {
               }
             }
           }
-          toast.success('Restored shared published forecast view');
+          toast.success(
+            resolution.resolvedBy === 'compatibility_forecast_grid_id'
+              ? 'Restored shared published forecast view via compatibility link'
+              : 'Restored shared published forecast view',
+          );
+          return;
+        }
+        if (resolution.source === 'forecast_grids') {
+          setArtifactHourRefs(null);
+          const grids = hydrateForecastGridRow(resolution.grid);
+          const safeHourIdx = Math.max(0, Math.min(hourValue, grids.length - 1));
+          setTimeOffset(safeHourIdx);
+          const cellParam = params.get('cell');
+          if (cellParam) {
+            const [row, col] = cellParam.split(',').map(Number);
+            const gridAtHour = grids[safeHourIdx];
+            if (gridAtHour) {
+              const cell = gridAtHour.find(c => c.row === row && c.col === col);
+              if (cell && !isCellUnavailable(cell)) {
+                setSelectedCell(cell);
+                if (!isMobile) setSidebarOpen(true);
+              }
+            }
+          }
+          toast.success('Restored shared legacy forecast grid view');
           return;
         }
         setUnavailableForecast('This shared forecast is not available in the authoritative precomputed batch artifact.');

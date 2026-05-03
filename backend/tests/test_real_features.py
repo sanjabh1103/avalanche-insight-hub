@@ -16,10 +16,12 @@ from backend.common.real_features import (
     TerrainUnavailableError,
     _fetch_open_meteo,
     _find_valid_window,
+    build_real_feature_row,
     compute_dynamic_lapse_profile,
     extract_cell_terrain,
     fetch_historical_weather_window,
 )
+from backend.common.snowpack_proxy import SnowpackProxy
 
 
 class FakeResponse:
@@ -130,6 +132,52 @@ class DynamicLapseProfileTests(unittest.TestCase):
 
         self.assertAlmostEqual(lapse['lapse_rate_c_per_m'], -0.0065, places=6)
         self.assertEqual(lapse['method'], 'fallback_standard_lapse')
+
+    def test_build_real_feature_row_emits_derived_physics_features(self) -> None:
+        assembled = build_real_feature_row(
+            weather_sample={
+                'temperature_2m': 1.5,
+                'precipitation': 7.0,
+                'snowfall': 3.0,
+                'snow_depth': 0.75,
+                'windspeed_10m': 14.0,
+                'winddirection_10m': 300.0,
+                'freezing_level_height': 2600.0,
+            },
+            terrain={
+                'elevation_m': 3100.0,
+                'slope_angle_deg': 38.0,
+                'aspect_deg': 315.0,
+                'terrain_roughness': 22.0,
+                'curvature_proxy': 6.0,
+                'northness': 0.85,
+                'eastness': 0.25,
+            },
+            timestamp=datetime(2026, 4, 25, tzinfo=timezone.utc),
+            lat=46.0,
+            lng=7.0,
+            snowpack_proxy_override=SnowpackProxy(
+                estimated_shear_strength=3.0,
+                snow_settlement_index=0.2,
+                season_start='2025-11-01',
+                method='seasonal_cumulative_v1',
+            ),
+        )
+
+        feature_row = assembled['feature_row']
+        raw_inputs = assembled['raw_inputs']
+        self.assertIn('freezing_level_margin', feature_row)
+        self.assertIn('load_to_shear_ratio', feature_row)
+        self.assertIn('settlement_deficit', feature_row)
+        self.assertIn('rain_on_snow_signal', feature_row)
+        self.assertIn('wet_activation_signal', feature_row)
+        self.assertIn('elevation_precip_bias', feature_row)
+        self.assertGreater(feature_row['load_to_shear_ratio'], 0.0)
+        self.assertGreater(feature_row['settlement_deficit'], 0.0)
+        self.assertEqual(feature_row['rain_on_snow_signal'], 1.0)
+        self.assertGreater(feature_row['wet_activation_signal'], 0.0)
+        self.assertGreater(raw_inputs['elevation_adjusted_precipitation_24h_mm'], raw_inputs['precipitation_24h_mm'])
+        self.assertGreater(raw_inputs['elevation_adjusted_snowfall_24h_cm'], raw_inputs['snowfall_24h_cm'])
 
 
 class ExtractCellTerrainTests(unittest.TestCase):

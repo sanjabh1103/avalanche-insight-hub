@@ -42,6 +42,14 @@ GEE_SIMPLIFY_MAX_ERROR_M = float(os.getenv('GEE_SIMPLIFY_MAX_ERROR_M', '200'))
 GEE_MAX_PIXELS = int(float(os.getenv('GEE_MAX_PIXELS', '1e10')))
 
 
+def _sar_training_bucket(*, coverage_state: str, scene_count: int) -> tuple[str, bool, str | None, float, float]:
+    if coverage_state == 'full_coverage':
+        return ('core_training', True, None, 0.72, 0.8)
+    if scene_count >= 2:
+        return ('weak_training', True, 'sar_low_coverage_weak_training', 0.58, 0.45)
+    return ('audit_only', False, 'sar_single_pass_audit_only', 0.35, 0.15)
+
+
 def _has_credentials() -> bool:
     return bool(GEE_SERVICE_ACCOUNT_JSON and GEE_SERVICE_ACCOUNT_EMAIL)
 
@@ -95,6 +103,10 @@ def _process_region(ee, region, start_date: datetime | None = None, end_date: da
     mean_time_ms = s1.aggregate_mean('system:time_start').getInfo()
     mean_scene_time = datetime.fromtimestamp(mean_time_ms / 1000.0, tz=timezone.utc).isoformat() if mean_time_ms else None
     coverage_state = 'full_coverage' if ascending_count > 0 and descending_count > 0 else 'low_coverage'
+    training_bucket, training_eligible, training_reason, label_confidence, training_weight = _sar_training_bucket(
+        coverage_state=coverage_state,
+        scene_count=scene_count,
+    )
 
     # 2. SRTM terrain products MUST be computed first (Edit 4).
     srtm = ee.Image('USGS/SRTMGL1_003').clip(region_geom)
@@ -198,10 +210,10 @@ def _process_region(ee, region, start_date: datetime | None = None, end_date: da
             'description': f'Sentinel-1 wet-snow candidate over {region.name}',
             'severity': 3,
             'confidence': 0.55,
-            'label_confidence': 0.72 if coverage_state == 'full_coverage' else 0.48,
-            'training_weight': 0.8 if coverage_state == 'full_coverage' else 0.35,
-            'training_eligible': coverage_state == 'full_coverage',
-            'training_eligible_reason': None if coverage_state == 'full_coverage' else 'sar_low_coverage',
+            'label_confidence': label_confidence,
+            'training_weight': training_weight,
+            'training_eligible': training_eligible,
+            'training_eligible_reason': training_reason,
             'timestamp': mean_scene_time,
             'location': f'SRID=4326;POINT({avg_lng} {avg_lat})',
             'source_model': 'gee_threshold_baseline_v1',
@@ -220,6 +232,7 @@ def _process_region(ee, region, start_date: datetime | None = None, end_date: da
                 'sar_scene_time': mean_scene_time,
                 'sar_scene_ids': scene_ids,
                 'sar_coverage_state': coverage_state,
+                'training_bucket': training_bucket,
                 'shadow_mask_applied': True,
                 'fusion_method': 'quality_mosaic_latest_pixel_v1',
                 'sar_geometry': geom,
@@ -246,8 +259,20 @@ def build_region_sar_summary(
     coverage_state: str,
     events: list[dict],
 ) -> dict[str, object]:
-    low_coverage_rejects = sum(1 for event in events if event.get('training_eligible_reason') == 'sar_low_coverage')
+    low_coverage_rejects = sum(1 for event in events if str(event.get('training_eligible_reason') or '').startswith('sar_low_coverage'))
     eligible_events = sum(1 for event in events if bool(event.get('training_eligible')))
+    core_training_events = sum(
+        1 for event in events
+        if ((event.get('features') if isinstance(event.get('features'), dict) else {}) or {}).get('training_bucket') == 'core_training'
+    )
+    weak_training_events = sum(
+        1 for event in events
+        if ((event.get('features') if isinstance(event.get('features'), dict) else {}) or {}).get('training_bucket') == 'weak_training'
+    )
+    audit_only_events = sum(
+        1 for event in events
+        if ((event.get('features') if isinstance(event.get('features'), dict) else {}) or {}).get('training_bucket') == 'audit_only'
+    )
     return {
         'region': region_key,
         'ascending_scene_count': ascending_count,
@@ -255,6 +280,9 @@ def build_region_sar_summary(
         'fused_detections': len(events),
         'low_coverage_rejects': low_coverage_rejects,
         'eligible_detections': eligible_events,
+        'core_training_detections': core_training_events,
+        'weak_training_detections': weak_training_events,
+        'audit_only_detections': audit_only_events,
         'sar_coverage_state': coverage_state,
         'fusion_method': 'quality_mosaic_latest_pixel_v1',
     }

@@ -117,10 +117,11 @@ def post_evaluate_release(
     worker_url: str,
     worker_token: str,
     manifest: dict[str, Any],
+    request_type: str = 'canary_evaluate_release',
 ) -> dict[str, Any]:
     payload = {
         **manifest,
-        'request_type': 'canary_evaluate_release',
+        'request_type': request_type,
     }
     response = requests.post(
         worker_url.rstrip('/') + '/evaluate-release',

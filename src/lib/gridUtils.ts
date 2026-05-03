@@ -76,6 +76,8 @@ export interface GridCell {
   };
   dominantDriverFeature?: string | null;
   explanationSummary?: string | null;
+  explainabilityMode?: 'tree_shap' | 'heuristic_fallback' | 'unavailable';
+  explainabilityReason?: string | null;
   coverageFlags?: {
     sar_coverage_state?: string;
     residual_shadow?: boolean;
@@ -354,6 +356,14 @@ function normalizeCell(
     explanationSummary: typeof cell.explanationSummary === 'string'
       ? cell.explanationSummary
       : (typeof cell.explanation_summary === 'string' ? String(cell.explanation_summary) : null),
+    explainabilityMode: typeof cell.explainabilityMode === 'string'
+      ? cell.explainabilityMode as GridCell['explainabilityMode']
+      : (typeof cell.explainability_mode === 'string'
+        ? String(cell.explainability_mode) as GridCell['explainabilityMode']
+        : undefined),
+    explainabilityReason: typeof cell.explainabilityReason === 'string'
+      ? cell.explainabilityReason
+      : (typeof cell.explainability_reason === 'string' ? String(cell.explainability_reason) : null),
     coverageFlags: normalizeCoverageFlags(cell.coverageFlags ?? cell.coverage_flags),
     snowpackProxy: normalizeSnowpackProxy(cell.snowpackProxy ?? cell.snowpack_proxy),
   };

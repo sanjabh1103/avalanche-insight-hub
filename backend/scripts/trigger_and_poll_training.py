@@ -46,6 +46,7 @@ def build_training_payload(
         'shadow_mode': True,
         'allow_publish': False,
         'sar_release_gate_passed': False,
+        'pss_floor': 0.0,
     }
 
 

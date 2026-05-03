@@ -38,7 +38,7 @@ describe('risk narratives', () => {
 
     const { shapSource, drivers } = selectRiskDrivers(cell);
 
-    expect(shapSource).toBe('artifact');
+    expect(shapSource).toBe('tree_shap');
     expect(drivers[0].feature).toBe('shear_strength');
     expect(drivers[0].label).toBe('shear strength');
   });
@@ -46,8 +46,22 @@ describe('risk narratives', () => {
   it('falls back to artifact shap_values when shap_context is missing', () => {
     const { shapSource, drivers } = selectRiskDrivers(buildCell());
 
-    expect(shapSource).toBe('artifact');
+    expect(shapSource).toBe('heuristic_fallback');
     expect(drivers[0].feature).toBe('snowfall_24h');
+  });
+
+  it('marks shap_context rows as fallback when the batch explicitly withholds a TreeSHAP claim', () => {
+    const { shapSource } = selectRiskDrivers(buildCell({
+      shapContext: {
+        topFeatures: [
+          { feature: 'wind_loading', shap_value: 0.31, feature_value: 0.71, rank: 1 },
+        ],
+      },
+      explainabilityMode: 'heuristic_fallback',
+      explainabilityReason: 'shap_dependency_unavailable',
+    }));
+
+    expect(shapSource).toBe('heuristic_fallback');
   });
 
   it('builds a deterministic explanation from the selected SHAP source', () => {
@@ -63,6 +77,8 @@ describe('risk narratives', () => {
     expect(explanation).toContain('Batch TreeSHAP indicates');
     expect(explanation).toContain('wind transport is building lee-side loading');
     expect(explanation).toContain('terrain roughness is diffusing some hazard');
+    expect(explanation).toContain('proxy-based');
+    expect(explanation).toContain('not a direct field measurement');
   });
 
   it('renders an unavailable-terrain explanation without synthesizing drivers', () => {

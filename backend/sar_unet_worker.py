@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import BytesIO
@@ -25,10 +26,12 @@ from backend.common.avalcd_manifest import (
 )
 from backend.common.config import load_settings
 from backend.common.label_governance import materialize_label_governance
+from backend.common.run_linkage import merge_compute_job_result_linkage, merge_compute_job_terminal_result
 from backend.common.sar_release_refs import load_reference_bundle, parse_storage_ref, reference_item_to_scene
 from backend.common.sar_artifacts import persist_sar_artifacts
 from backend.common.storage_io import storage_download_bytes, storage_upload_bytes
 from backend.common.supabase_io import has_supabase_credentials, rest_insert, rest_upsert
+from backend.sar_unet_training import train_sar_unet
 
 try:  # pragma: no cover - optional dependency
     import torch
@@ -231,7 +234,8 @@ def _reconstruct_avalcd_stack_from_manifest(
     channels = 4 if channel_slice is None else len(range(*channel_slice.indices(4))) if isinstance(channel_slice, slice) else len(channel_slice)
     accum = np.zeros((channels, height, width), dtype=np.float32)
     counts = np.zeros((height, width), dtype=np.float32)
-    for patch in manifest['patches']:
+
+    def _load_manifest_patch(patch: dict[str, Any]) -> tuple[dict[str, Any], np.ndarray, str]:
         patch_ref = _resolve_manifest_patch_ref(manifest_ref, str(patch['asset_ref']))
         patch_stack = _normalize_release_stack(_load_stack_array_from_string_ref(patch_ref))
         if patch_stack.shape[0] != 4:
@@ -239,17 +243,23 @@ def _reconstruct_avalcd_stack_from_manifest(
                 f'manifest patch "{patch_ref}" must contain a 4-channel AvalCD stack, received {patch_stack.shape}',
             )
         selected = patch_stack[channel_slice] if channel_slice is not None else patch_stack
-        row = int(patch['row'])
-        col = int(patch['col'])
-        row0, col0, row1, col1 = [int(value) for value in patch['valid_window']]
-        if row0 < 0 or col0 < 0 or row1 <= row0 or col1 <= col0:
-            raise ValueError(f'manifest patch "{patch_ref}" has invalid valid_window {patch["valid_window"]}')
-        dest_row1 = row + row1
-        dest_col1 = col + col1
-        if dest_row1 > height or dest_col1 > width:
-            raise ValueError(f'manifest patch "{patch_ref}" extends beyond full_shape {manifest["full_shape"]}')
-        accum[:, row + row0:dest_row1, col + col0:dest_col1] += selected[:, row0:row1, col0:col1]
-        counts[row + row0:dest_row1, col + col0:dest_col1] += 1.0
+        return patch, selected, patch_ref
+
+    max_workers = max(1, int(os.environ.get('SAR_UNET_PATCH_DOWNLOAD_WORKERS', '16')))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        patch_iter = executor.map(_load_manifest_patch, manifest['patches'])
+        for patch, selected, patch_ref in patch_iter:
+            row = int(patch['row'])
+            col = int(patch['col'])
+            row0, col0, row1, col1 = [int(value) for value in patch['valid_window']]
+            if row0 < 0 or col0 < 0 or row1 <= row0 or col1 <= col0:
+                raise ValueError(f'manifest patch "{patch_ref}" has invalid valid_window {patch["valid_window"]}')
+            dest_row1 = row + row1
+            dest_col1 = col + col1
+            if dest_row1 > height or dest_col1 > width:
+                raise ValueError(f'manifest patch "{patch_ref}" extends beyond full_shape {manifest["full_shape"]}')
+            accum[:, row + row0:dest_row1, col + col0:dest_col1] += selected[:, row0:row1, col0:col1]
+            counts[row + row0:dest_row1, col + col0:dest_col1] += 1.0
     if not np.all(counts > 0):
         raise ValueError(f'AvalCD manifest "{manifest_ref}" does not fully cover its declared full_shape')
     return accum / counts[np.newaxis, ...]
@@ -525,6 +535,23 @@ def predict_bitemporal_probability_mask(model: Any, pre_stack: np.ndarray, post_
     return np.asarray(probabilities[0, 0], dtype=np.float32)
 
 
+def predict_bitemporal_probability_mask_batch(
+    model: Any,
+    pre_stacks: np.ndarray,
+    post_stacks: np.ndarray,
+    *,
+    device: str,
+) -> np.ndarray:
+    if torch is None:
+        raise RuntimeError('torch is required for sar_unet_worker inference')
+    pre_tensor = torch.from_numpy(pre_stacks).float().to(device)
+    post_tensor = torch.from_numpy(post_stacks).float().to(device)
+    with torch.no_grad():
+        logits = model(pre_tensor, post_tensor)
+        probabilities = torch.sigmoid(logits).detach().cpu().numpy()
+    return np.asarray(probabilities[:, 0], dtype=np.float32)
+
+
 def _gaussian_patch_weights(*, patch_size: int, sigma: float) -> np.ndarray:
     axis = np.arange(patch_size, dtype=np.float32) - ((patch_size - 1) / 2.0)
     gaussian = np.exp(-(axis ** 2) / max(2.0 * (sigma ** 2), 1e-6))
@@ -548,7 +575,8 @@ def _predict_manifest_probability_mask(
     numerator = np.zeros((height, width), dtype=np.float32)
     weights = np.zeros((height, width), dtype=np.float32)
     patch_weights = _gaussian_patch_weights(patch_size=patch_size, sigma=sigma)
-    for patch in manifest['patches']:
+
+    def _load_manifest_patch_stack(patch: dict[str, Any]) -> tuple[dict[str, Any], str, np.ndarray]:
         patch_ref = _resolve_manifest_patch_ref(manifest_ref, str(patch['asset_ref']))
         stack = _normalize_release_stack(_load_stack_array_from_string_ref(patch_ref))
         if stack.shape[0] != 4:
@@ -559,21 +587,41 @@ def _predict_manifest_probability_mask(
             raise ValueError(
                 f'manifest patch "{patch_ref}" must match patch_size={patch_size}, received {stack.shape}',
             )
-        probability_patch = predict_bitemporal_probability_mask(
+        return patch, patch_ref, stack
+
+    max_workers = max(1, int(os.environ.get('SAR_UNET_PATCH_DOWNLOAD_WORKERS', '16')))
+    batch_size = max(1, int(os.environ.get('SAR_UNET_PATCH_BATCH_SIZE', '64')))
+    patches = list(manifest['patches'])
+    total_batches = max(1, (len(patches) + batch_size - 1) // batch_size)
+    for start in range(0, len(patches), batch_size):
+        batch = patches[start:start + batch_size]
+        batch_number = (start // batch_size) + 1
+        print(
+            f'[sar_unet_worker] manifest inference {manifest_ref}: batch {batch_number}/{total_batches} '
+            f'({len(batch)} patches, workers={min(max_workers, len(batch))})',
+            file=sys.stderr,
+            flush=True,
+        )
+        with ThreadPoolExecutor(max_workers=min(max_workers, len(batch))) as executor:
+            loaded_batch = list(executor.map(_load_manifest_patch_stack, batch))
+        pre_batch = np.stack([stack[:2] for _, _, stack in loaded_batch], axis=0)
+        post_batch = np.stack([stack[2:] for _, _, stack in loaded_batch], axis=0)
+        probability_batch = predict_bitemporal_probability_mask_batch(
             loaded_model.model,
-            stack[:2],
-            stack[2:],
+            pre_batch,
+            post_batch,
             device=device,
         )
-        row = int(patch['row'])
-        col = int(patch['col'])
-        row0, col0, row1, col1 = [int(value) for value in patch['valid_window']]
-        dest_row1 = row + row1
-        dest_col1 = col + col1
-        cropped_probabilities = probability_patch[row0:row1, col0:col1]
-        cropped_weights = patch_weights[row0:row1, col0:col1]
-        numerator[row + row0:dest_row1, col + col0:dest_col1] += cropped_probabilities * cropped_weights
-        weights[row + row0:dest_row1, col + col0:dest_col1] += cropped_weights
+        for (patch, patch_ref, _stack), probability_patch in zip(loaded_batch, probability_batch):
+            row = int(patch['row'])
+            col = int(patch['col'])
+            row0, col0, row1, col1 = [int(value) for value in patch['valid_window']]
+            dest_row1 = row + row1
+            dest_col1 = col + col1
+            cropped_probabilities = probability_patch[row0:row1, col0:col1]
+            cropped_weights = patch_weights[row0:row1, col0:col1]
+            numerator[row + row0:dest_row1, col + col0:dest_col1] += cropped_probabilities * cropped_weights
+            weights[row + row0:dest_row1, col + col0:dest_col1] += cropped_weights
     if not np.all(weights > 0):
         raise ValueError(f'AvalCD manifest "{manifest_ref}" does not fully cover its declared full_shape')
     return numerator / np.maximum(weights, 1e-6)
@@ -870,7 +918,10 @@ def _load_mask_array_from_bytes(payload: bytes, *, suffix: str) -> np.ndarray:
             raise RuntimeError('rasterio is required to read GeoTIFF evaluation masks')
         with MemoryFile(payload) as memory_file:
             with memory_file.open() as dataset:
-                return np.asarray(dataset.read(1), dtype=np.float32)
+                band = np.asarray(dataset.read(1), dtype=np.float32)
+                if band.size and float(np.nanmax(band)) > 1.0:
+                    band = band / 255.0
+                return band
     raise ValueError(
         f'unsupported evaluation mask format "{suffix}". Supported: .npy, .npz, .tif, .tiff',
     )
@@ -1118,7 +1169,12 @@ def run_segmentation(
     )
     detections: list[SegmentationDetection] = []
     records: list[dict[str, Any]] = []
-    for scene in scenes:
+    for index, scene in enumerate(scenes, start=1):
+        print(
+            f'[sar_unet_worker] segmenting scene {index}/{len(scenes)}: {_scene_id(scene)}',
+            file=sys.stderr,
+            flush=True,
+        )
         probability_mask = predict_scene_probability_mask(loaded_model, scene, device=device)
         bbox = _coerce_bbox(scene.get('bbox'))
         mask_asset_ref = None
@@ -1149,9 +1205,21 @@ def run_segmentation(
             threshold=threshold,
         )
         if detection is None:
+            print(
+                f'[sar_unet_worker] completed scene {index}/{len(scenes)}: {_scene_id(scene)} '
+                '(no detection above threshold)',
+                file=sys.stderr,
+                flush=True,
+            )
             continue
         detections.append(detection)
         records.append(build_shadow_event_record(detection, hazard_type=hazard_type, promoted=promoted))
+        print(
+            f'[sar_unet_worker] completed scene {index}/{len(scenes)}: {_scene_id(scene)} '
+            f'-> mask_asset_ref={mask_asset_ref}',
+            file=sys.stderr,
+            flush=True,
+        )
 
     persistence_summary = {'persisted_events': 0, 'artifact_rows_persisted': 0}
     if persist_events and detections and model_path.exists():
@@ -1325,6 +1393,78 @@ def _load_inference_summary(artifact_dir: Path | None) -> tuple[dict[str, Any], 
     }
 
 
+def _build_inference_linkage(
+    *,
+    request: dict[str, Any],
+    artifact_dir: Path | None,
+    inference_manifest: dict[str, Any],
+) -> dict[str, Any]:
+    compute_job_id = str(
+        request.get('compute_job_id')
+        or request.get('job_id')
+        or inference_manifest.get('compute_job_id')
+        or ''
+    ).strip() or None
+    forecast_run_id = inference_manifest.get('forecast_run_id')
+    forecast_run_ids = inference_manifest.get('forecast_run_ids')
+    forecast_run_ids_by_region = inference_manifest.get('forecast_run_ids_by_region')
+    modal_call_id = str(
+        request.get('modal_call_id')
+        or os.environ.get('MODAL_CALL_ID')
+        or ''
+    ).strip() or None
+    return {
+        'compute_job_id': compute_job_id,
+        'modal_call_id': modal_call_id,
+        'artifact_dir': str(artifact_dir) if artifact_dir is not None else None,
+        'forecast_run_id': forecast_run_id,
+        'forecast_run_ids': forecast_run_ids if isinstance(forecast_run_ids, list) else [],
+        'forecast_run_ids_by_region': (
+            forecast_run_ids_by_region
+            if isinstance(forecast_run_ids_by_region, dict)
+            else {}
+        ),
+    }
+
+
+def _sync_compute_job_inference_linkage_best_effort(
+    *,
+    linkage: dict[str, Any],
+) -> None:
+    compute_job_id = linkage.get('compute_job_id')
+    if not isinstance(compute_job_id, str) or not compute_job_id.strip():
+        return
+    if not has_supabase_credentials():
+        return
+    try:
+        merge_compute_job_result_linkage(
+            compute_job_id=compute_job_id,
+            linkage=linkage,
+        )
+    except Exception:
+        pass
+
+
+def _sync_compute_job_inference_terminal_result_best_effort(
+    *,
+    linkage: dict[str, Any],
+    worker_result: dict[str, Any],
+) -> None:
+    compute_job_id = linkage.get('compute_job_id')
+    if not isinstance(compute_job_id, str) or not compute_job_id.strip():
+        return
+    if not has_supabase_credentials():
+        return
+    try:
+        merge_compute_job_terminal_result(
+            compute_job_id=compute_job_id,
+            linkage=linkage,
+            worker_result=worker_result,
+        )
+    except Exception:
+        pass
+
+
 def _resolve_requested_infer_artifact_dir(
     request: dict[str, Any],
     *,
@@ -1366,18 +1506,35 @@ def run_train_mtslstm(
     })
     completed = _run_python_module('backend.train_model', env=env)
     artifact_dir = _discover_new_artifact_dir(artifact_root, before)
+    new_artifact_created = artifact_dir is not None
+    artifact_stale_fallback_used = False
     if artifact_dir is None:
         try:
             artifact_dir = latest_artifact_dir(artifact_root)
+            artifact_stale_fallback_used = artifact_dir is not None
         except Exception:
             artifact_dir = None
     metrics, lstm_head_meta = _load_training_summary(artifact_dir)
+    phase2_summary = metrics.get('phase2_evaluation') if isinstance(metrics.get('phase2_evaluation'), dict) else {}
+    shadow_mode = _flag_from_payload(request.get('shadow_mode'), True)
+    allow_publish = _flag_from_payload(request.get('allow_publish'), False)
+    if not new_artifact_created:
+        status = 'failed_no_new_artifact'
+    elif completed.returncode == 0:
+        status = 'ok'
+    elif metrics:
+        status = 'completed_with_gate_failure'
+    else:
+        status = 'failed'
     report = {
-        'status': 'ok' if completed.returncode == 0 else ('completed_with_gate_failure' if metrics else 'failed'),
+        'status': status,
         'request_type': str(request.get('request_type') or 'train_mtslstm'),
         'runtime_provider': 'modal',
-        'shadow_mode': _flag_from_payload(request.get('shadow_mode'), True),
+        'shadow_mode': shadow_mode,
+        'allow_publish': allow_publish,
         'promotion_rule': str(request.get('promotion_rule') or 'strict_pss_gt_rf_and_brier_lte_rf'),
+        'new_artifact_created': new_artifact_created,
+        'artifact_stale_fallback_used': artifact_stale_fallback_used,
         'model_artifact_ref': str((artifact_dir / 'model.joblib')) if artifact_dir and (artifact_dir / 'model.joblib').exists() else None,
         'artifact_dir': str(artifact_dir) if artifact_dir else None,
         'dataset_snapshot_id': (
@@ -1386,9 +1543,21 @@ def run_train_mtslstm(
             or request.get('dataset_snapshot_id')
         ),
         'lstm_pss': lstm_head_meta.get('pss_holdout'),
+        'lstm_pss_uncalibrated': lstm_head_meta.get('pss_holdout_uncalibrated'),
+        'lstm_pss_calibrated': lstm_head_meta.get('pss_holdout_calibrated', lstm_head_meta.get('pss_holdout')),
         'rf_pss': lstm_head_meta.get('rf_pss_holdout'),
         'lstm_brier': lstm_head_meta.get('brier_score'),
+        'lstm_brier_uncalibrated': lstm_head_meta.get('brier_score_uncalibrated'),
+        'lstm_brier_calibrated': lstm_head_meta.get('brier_score_calibrated', lstm_head_meta.get('brier_score')),
         'rf_brier': lstm_head_meta.get('rf_brier_score'),
+        'calibration_method': lstm_head_meta.get('calibration_method'),
+        'calibration_applied': bool(lstm_head_meta.get('calibration_applied')),
+        'calibration_reason': lstm_head_meta.get('calibration_reason'),
+        'calibration_improved': bool(lstm_head_meta.get('calibration_improved')),
+        'label_snapshot_id': metrics.get('label_snapshot_id'),
+        'hindcast_run_id': metrics.get('hindcast_run_id'),
+        'calibration_report_ref': metrics.get('calibration_report_ref') or phase2_summary.get('calibration_report_ref'),
+        'calibration_report_ids': metrics.get('calibration_report_ids') or phase2_summary.get('calibration_report_ids') or [],
         'shadow_quality_gate_passed': bool(lstm_head_meta.get('shadow_quality_gate_passed')),
         'sar_release_gate_passed': bool(lstm_head_meta.get('sar_release_gate_passed')),
         'production_eligibility_gate_passed': bool(lstm_head_meta.get('production_eligibility_gate_passed')),
@@ -1413,7 +1582,17 @@ def run_infer_mtslstm(
     artifact_root.mkdir(parents=True, exist_ok=True)
     dry_run = _flag_from_payload(request.get('dry_run'), False)
     shadow_mode = _flag_from_payload(request.get('shadow_mode'), True)
-    forecast_hours = int(request.get('forecast_hours') or os.environ.get('FORECAST_HOURS') or '72')
+    lifeboat_mode = _flag_from_payload(request.get('lifeboat_mode'), False)
+    lifeboat_profile = str(request.get('lifeboat_profile') or 'proof72').strip() or 'proof72'
+    default_forecast_hours = 24 if lifeboat_mode and lifeboat_profile == 'smoke24' else 72
+    default_grid_size = 5 if lifeboat_mode else 20
+    forecast_hours = int(request.get('forecast_hours') or os.environ.get('FORECAST_HOURS') or str(default_forecast_hours))
+    grid_size = int(request.get('grid_size') or os.environ.get('GRID_SIZE') or str(default_grid_size))
+    skip_tree_shap = _flag_from_payload(request.get('skip_tree_shap'), lifeboat_mode)
+    skip_shap_cache = _flag_from_payload(request.get('skip_shap_cache'), lifeboat_mode)
+    skip_runout_generation = _flag_from_payload(request.get('skip_runout_generation'), lifeboat_mode)
+    skip_compatibility_write = _flag_from_payload(request.get('skip_compatibility_write'), lifeboat_mode)
+    emit_stage_metrics = _flag_from_payload(request.get('emit_stage_metrics'), lifeboat_mode)
     requested_artifact_dir = request.get('artifact_dir')
     try:
         resolved_artifact_dir, resolved_artifact_dir_text = _resolve_requested_infer_artifact_dir(
@@ -1425,8 +1604,10 @@ def run_infer_mtslstm(
             'status': 'failed',
             'request_type': str(request.get('request_type') or 'infer_mtslstm'),
             'runtime_provider': 'modal',
+            'compute_job_id': str(request.get('compute_job_id') or request.get('job_id') or '').strip() or None,
             'artifact_dir': str(requested_artifact_dir).strip() if requested_artifact_dir is not None else None,
             'forecast_hours': forecast_hours,
+            'grid_size': grid_size,
             'regions_written': None,
             'total_cells_written': None,
             'cells_with_shap': None,
@@ -1439,7 +1620,12 @@ def run_infer_mtslstm(
             'shadow_mode': shadow_mode,
             'shadow_mode_active': shadow_mode,
             'dry_run': dry_run,
+            'lifeboat_mode': lifeboat_mode,
+            'lifeboat_profile': lifeboat_profile if lifeboat_mode else None,
             'dataset_snapshot_id': None,
+            'forecast_run_id': None,
+            'forecast_run_ids': [],
+            'forecast_run_ids_by_region': {},
             'stdout_tail': [],
             'stderr_tail': [str(exc)],
             'subprocess_returncode': None,
@@ -1449,13 +1635,40 @@ def run_infer_mtslstm(
         'ARTIFACT_ROOT': str(artifact_root),
         'HAZARD_TYPE': str(request.get('hazard_type') or env.get('HAZARD_TYPE') or 'avalanche'),
         'FORECAST_HOURS': str(forecast_hours),
-        'GRID_SIZE': str(int(request.get('grid_size') or env.get('GRID_SIZE') or '20')),
+        'GRID_SIZE': str(grid_size),
+        'COMPUTE_JOB_ID': str(request.get('compute_job_id') or request.get('job_id') or env.get('COMPUTE_JOB_ID') or '').strip(),
+        'MODAL_CALL_ID': str(request.get('modal_call_id') or env.get('MODAL_CALL_ID') or '').strip(),
     })
+    requested_region_keys: list[str] = []
+    singular_region_key = request.get('region_key')
+    if isinstance(singular_region_key, str) and singular_region_key.strip():
+        requested_region_keys.append(singular_region_key.strip())
+    raw_region_keys = request.get('region_keys')
+    if isinstance(raw_region_keys, (list, tuple)):
+        requested_region_keys.extend(
+            str(region_key).strip()
+            for region_key in raw_region_keys
+            if str(region_key).strip()
+        )
     args: list[str] = []
     if dry_run:
         args.append('--dry-run')
     if resolved_artifact_dir_text:
         args.extend(['--artifact-dir', resolved_artifact_dir_text])
+    if lifeboat_mode:
+        args.extend(['--lifeboat-mode', '--lifeboat-profile', lifeboat_profile])
+    if skip_tree_shap:
+        args.append('--skip-tree-shap')
+    if skip_shap_cache:
+        args.append('--skip-shap-cache')
+    if skip_runout_generation:
+        args.append('--skip-runout-generation')
+    if skip_compatibility_write:
+        args.append('--skip-compatibility-write')
+    if emit_stage_metrics:
+        args.append('--emit-stage-metrics')
+    for region_key in requested_region_keys:
+        args.extend(['--region-key', region_key])
     completed = _run_python_module('backend.daily_inference', env=env, args=args)
     artifact_dir = resolved_artifact_dir
     if artifact_dir is None:
@@ -1474,12 +1687,18 @@ def run_infer_mtslstm(
             lstm_head_meta = candidate if isinstance(candidate, dict) else {}
     else:
         summary = {}
+    inference_linkage = _build_inference_linkage(
+        request=request,
+        artifact_dir=artifact_dir,
+        inference_manifest=inference_manifest,
+    )
     report = {
         'status': 'ok' if completed.returncode == 0 else 'failed',
         'request_type': str(request.get('request_type') or 'infer_mtslstm'),
         'runtime_provider': 'modal',
         'artifact_dir': str(artifact_dir) if artifact_dir else None,
         'forecast_hours': forecast_hours,
+        'grid_size': grid_size,
         'regions_written': summary.get('regions_written'),
         'total_cells_written': summary.get('total_cells_written'),
         'cells_with_shap': summary.get('cells_with_shap'),
@@ -1496,21 +1715,53 @@ def run_infer_mtslstm(
         'shadow_mode': shadow_mode,
         'shadow_mode_active': shadow_mode,
         'dry_run': dry_run,
+        'lifeboat_mode': lifeboat_mode,
+        'lifeboat_profile': lifeboat_profile if lifeboat_mode else None,
+        'skip_tree_shap': skip_tree_shap,
+        'skip_shap_cache': skip_shap_cache,
+        'skip_runout_generation': skip_runout_generation,
+        'skip_compatibility_write': skip_compatibility_write,
+        'emit_stage_metrics': emit_stage_metrics,
+        'stage_metrics_summary': inference_manifest.get('stage_metrics_summary'),
         'dataset_snapshot_id': lstm_head_meta.get('dataset_snapshot_id'),
         'stdout_tail': _tail_lines(completed.stdout),
         'stderr_tail': _tail_lines(completed.stderr),
         'subprocess_returncode': completed.returncode,
+        **inference_linkage,
     }
     if artifact_dir is not None:
         dump_json(artifact_dir / 'infer_mtslstm_manifest.json', report)
+    _sync_compute_job_inference_linkage_best_effort(linkage=inference_linkage)
+    _sync_compute_job_inference_terminal_result_best_effort(
+        linkage=inference_linkage,
+        worker_result=report,
+    )
     return report
+
+
+def run_train_sar_unet(
+    request: dict[str, Any],
+    *,
+    artifact_root: Path,
+    device: str = 'cpu',
+) -> dict[str, Any]:
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    return train_sar_unet(
+        request,
+        artifact_root=artifact_root,
+        device=device,
+    )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     settings = load_settings()
     model_path_env = os.environ.get('SAR_UNET_MODEL_PATH')
     parser = argparse.ArgumentParser(description='Shadow-mode SAR U-Net segmentation worker')
-    parser.add_argument('--mode', choices=['sar-segment', 'evaluate-release', 'train-mtslstm', 'infer-mtslstm'], default=os.environ.get('SAR_WORKER_MODE', 'sar-segment'))
+    parser.add_argument(
+        '--mode',
+        choices=['sar-segment', 'evaluate-release', 'train-sar-unet', 'train-mtslstm', 'infer-mtslstm'],
+        default=os.environ.get('SAR_WORKER_MODE', 'sar-segment'),
+    )
     parser.add_argument('--manifest', type=Path, help='JSON manifest describing scenes or evaluation inputs')
     parser.add_argument('--artifact-root', type=Path, default=settings.artifact_root)
     parser.add_argument('--model-path', type=Path, default=Path(model_path_env) if model_path_env else None)
@@ -1572,6 +1823,13 @@ def run_worker_request(
     if mode == 'infer-mtslstm':
         return run_infer_mtslstm(manifest, artifact_root=artifact_root)
 
+    if mode == 'train-sar-unet':
+        return run_train_sar_unet(
+            manifest,
+            artifact_root=artifact_root,
+            device=device,
+        )
+
     scenes = manifest.get('scenes')
     reference_set_key = manifest.get('reference_set_key')
     if not isinstance(scenes, list):
@@ -1596,9 +1854,13 @@ def run_worker_request(
     if not model_path or not str(model_path):
         return {'status': 'skipped_missing_weights', 'reason': 'SAR_UNET_MODEL_PATH not provided'}
 
-    persist_events = not dry_run
-    if isinstance(reference_set_key, str) and reference_set_key.strip():
-        persist_events = _flag_from_payload(manifest.get('persist_events'), False) and not dry_run
+    explicit_persist_events = manifest.get('persist_events')
+    if explicit_persist_events is not None:
+        persist_events = _flag_from_payload(explicit_persist_events, not dry_run) and not dry_run
+    elif isinstance(reference_set_key, str) and reference_set_key.strip():
+        persist_events = False
+    else:
+        persist_events = not dry_run
 
     return run_segmentation(
         scenes=scenes,

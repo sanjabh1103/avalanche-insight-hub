@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { GridCell } from '@/lib/gridUtils';
 
 interface Props {
-  hourlyGrids: GridCell[][] | null;
+  hourlyGrids: Array<GridCell[] | null> | null;
   selectedCell: GridCell | null;
 }
 
@@ -12,6 +12,7 @@ export default function HydrographChart({ hourlyGrids, selectedCell }: Props) {
   const data = useMemo(() => {
     if (!hourlyGrids || !selectedCell) return [];
     return hourlyGrids.map((grid, hour) => {
+      if (!grid) return null;
       const cell = grid.find(c => c.row === selectedCell.row && c.col === selectedCell.col);
       if (!cell) return null;
       return {

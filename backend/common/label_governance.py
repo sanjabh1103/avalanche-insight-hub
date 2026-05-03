@@ -13,6 +13,22 @@ RECENCY_HALF_LIFE_DAYS = 30.0
 TRAINING_WEIGHT_FLOOR = 0.1
 TRAINING_WEIGHT_CEILING = 1.5
 CORROBORATION_STEP = 0.15
+WEAK_TRAINING_REASONS = {
+    'sar_low_coverage',
+    'sar_low_coverage_weak_training',
+}
+AUDIT_ONLY_REASONS = {
+    'sar_single_pass_audit_only',
+    'sar_ambiguous_audit_only',
+    'sar_unet_shadow_mode',
+}
+TRAINING_REASON_PENALTIES: dict[str, float] = {
+    'sar_low_coverage': 0.55,
+    'sar_low_coverage_weak_training': 0.55,
+    'sar_single_pass_audit_only': 0.2,
+    'sar_ambiguous_audit_only': 0.2,
+    'sar_unet_shadow_mode': 0.2,
+}
 
 SOURCE_WEIGHTS: dict[str, float] = {
     'field_report': 1.0,
@@ -121,6 +137,19 @@ def corroboration_weight(corroboration_count: int) -> float:
     return clamp(1.0 + max(0, corroboration_count - 1) * CORROBORATION_STEP, 1.0, 1.45)
 
 
+def normalize_training_reason(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip().lower()
+    return cleaned or None
+
+
+def training_reason_penalty(reason: str | None) -> float:
+    if reason is None:
+        return 1.0
+    return TRAINING_REASON_PENALTIES.get(reason, 1.0)
+
+
 def recency_decay(timestamp: datetime | None, *, reference_time: datetime | None = None) -> float:
     if timestamp is None:
         return 1.0
@@ -147,13 +176,16 @@ def derive_label_governance(record: dict[str, Any], *, reference_time: datetime 
     corroboration_count = count_corroborating_sources(record)
     corroboration = corroboration_weight(corroboration_count)
     decay = recency_decay(parse_timestamp(record.get('timestamp')), reference_time=reference_time)
+    training_reason = normalize_training_reason(record.get('training_eligible_reason'))
     decayed_confidence = confidence_decay(label_conf, decay)
     combined_weight = clamp(
-        label_conf * weight_from_source * corroboration * decay,
+        label_conf * weight_from_source * corroboration * decay * training_reason_penalty(training_reason),
         TRAINING_WEIGHT_FLOOR,
         TRAINING_WEIGHT_CEILING,
     )
     eligible = bool(record.get('training_eligible', True)) and label_conf >= MIN_LABEL_CONFIDENCE
+    if training_reason in AUDIT_ONLY_REASONS:
+        eligible = False
     return LabelGovernance(
         label_confidence=label_conf,
         confidence_decayed=decayed_confidence,

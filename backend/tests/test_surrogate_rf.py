@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 import warnings
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -9,6 +10,7 @@ import pandas as pd
 from backend.common.features import FEATURE_COLUMNS
 from backend.models.surrogate_rf import (
     SURROGATE_CLASS_WEIGHT,
+    TreeShapUnavailableError,
     build_tree_shap_explainer,
     collect_tree_probabilities,
     compute_tree_shap,
@@ -82,6 +84,24 @@ class SurrogateRfBundleTests(unittest.TestCase):
         )
         ordered_magnitudes = [abs(float(item['shap_value'])) for item in top_features]
         self.assertEqual(ordered_magnitudes, sorted(ordered_magnitudes, reverse=True))
+
+    def test_tree_shap_unavailable_error_is_explicit(self) -> None:
+        bundle = fit_surrogate_bundle(
+            frame=_build_training_frame(),
+            feature_columns=FEATURE_COLUMNS,
+            seed=29,
+            time_series_splits=3,
+        )
+        real_import = __import__
+
+        def _missing_shap(name, *args, **kwargs):
+            if name == 'shap':
+                raise ModuleNotFoundError("No module named 'shap'")
+            return real_import(name, *args, **kwargs)
+
+        with patch('builtins.__import__', side_effect=_missing_shap):
+            with self.assertRaises(TreeShapUnavailableError):
+                build_tree_shap_explainer(bundle['base_model'])
 
     def test_collect_tree_probabilities_avoids_dataframe_feature_name_warning(self) -> None:
         frame = _build_training_frame()

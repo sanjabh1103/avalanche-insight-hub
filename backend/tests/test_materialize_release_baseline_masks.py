@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
 
-from backend.common.avalcd_manifest import build_avalcd_scene_manifest, encode_patch_payload
+from backend.common.avalcd_manifest import (
+    AVALCD_SCENE_MANIFEST_FILENAME,
+    build_avalcd_scene_manifest,
+    encode_patch_payload,
+)
 from backend.scripts.materialize_release_baseline_masks import materialize_baseline_masks
 
 
@@ -51,6 +57,28 @@ class MaterializeReleaseBaselineMasksTests(unittest.TestCase):
                 'metadata': {'split': 'validation'},
             }],
         )
+
+    @staticmethod
+    def _write_local_avalcd_scene(root: Path) -> None:
+        scene_root = root / 'validation' / 'colorado_rockies' / 'S1A_001'
+        scene_root.mkdir(parents=True, exist_ok=True)
+        manifest, patch_entries = build_avalcd_scene_manifest(
+            np.stack([
+                np.ones((4, 4), dtype=np.float32) * -30.0,
+                np.ones((4, 4), dtype=np.float32) * -35.0,
+                np.ones((4, 4), dtype=np.float32) * -20.0,
+                np.ones((4, 4), dtype=np.float32) * -24.0,
+            ], axis=0),
+            bbox=(-106.6, 39.4, -106.4, 39.6),
+        )
+        (scene_root / AVALCD_SCENE_MANIFEST_FILENAME).write_text(
+            json.dumps(manifest, indent=2, sort_keys=True),
+            encoding='utf-8',
+        )
+        for patch_entry in patch_entries:
+            patch_path = scene_root / str(patch_entry['filename'])
+            patch_path.parent.mkdir(parents=True, exist_ok=True)
+            patch_path.write_bytes(encode_patch_payload(patch_entry['stack']))
 
     @patch('backend.scripts.materialize_release_baseline_masks.activate_reference_set', return_value={'status': 'active'})
     @patch('backend.scripts.materialize_release_baseline_masks.rest_upsert')
@@ -145,6 +173,105 @@ class MaterializeReleaseBaselineMasksTests(unittest.TestCase):
         self.assertEqual(result['status'], 'ok')
         self.assertEqual(result['baseline_rows_materialized'], 1)
         storage_upload_bytes_mock.assert_called_once()
+        rest_upsert_mock.assert_called_once()
+
+    @patch('backend.scripts.materialize_release_baseline_masks.activate_reference_set', return_value={'status': 'active'})
+    @patch('backend.scripts.materialize_release_baseline_masks.rest_upsert')
+    @patch('backend.scripts.materialize_release_baseline_masks.storage_upload_bytes')
+    @patch('backend.scripts.materialize_release_baseline_masks.storage_download_bytes')
+    @patch('backend.scripts.materialize_release_baseline_masks.encode_mask_geotiff', return_value=b'tiff-bytes')
+    @patch('backend.scripts.materialize_release_baseline_masks.load_reference_bundle')
+    @patch('backend.sar_unet_worker.storage_download_bytes')
+    def test_materialize_baseline_masks_prefers_local_manifest_assets_when_source_dir_is_present(
+        self,
+        remote_storage_download_mock,
+        load_reference_bundle_mock,
+        _encode_mask_geotiff_mock,
+        _baseline_storage_download_mock,
+        storage_upload_bytes_mock,
+        rest_upsert_mock,
+        _activate_reference_set_mock,
+    ) -> None:
+        load_reference_bundle_mock.return_value = self._reference_bundle()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / 'assembled_seed_dir'
+            self._write_local_avalcd_scene(source_dir)
+
+            result = materialize_baseline_masks(
+                reference_set_key='snowslide-v1',
+                source_dir=source_dir,
+            )
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(result['baseline_rows_materialized'], 1)
+        storage_upload_bytes_mock.assert_called_once()
+        rest_upsert_mock.assert_called_once()
+        remote_storage_download_mock.assert_not_called()
+
+    @patch('backend.scripts.materialize_release_baseline_masks.activate_reference_set', return_value={'status': 'active'})
+    @patch('backend.scripts.materialize_release_baseline_masks.rest_upsert')
+    @patch('backend.scripts.materialize_release_baseline_masks.storage_upload_bytes')
+    @patch('backend.scripts.materialize_release_baseline_masks.encode_mask_geotiff', return_value=b'tiff-bytes')
+    @patch('backend.scripts.materialize_release_baseline_masks.load_scene_stack', return_value=np.array([
+        [[-20.0, -20.0], [-10.0, -10.0]],
+        [[-24.0, -24.0], [-10.0, -10.0]],
+    ], dtype=np.float32))
+    @patch('backend.scripts.materialize_release_baseline_masks.load_reference_bundle')
+    def test_materialize_baseline_masks_persists_each_scene_immediately(
+        self,
+        load_reference_bundle_mock,
+        _load_scene_stack_mock,
+        _encode_mask_geotiff_mock,
+        storage_upload_bytes_mock,
+        rest_upsert_mock,
+        _activate_reference_set_mock,
+    ) -> None:
+        set_row, items = self._reference_bundle()
+        second = dict(items[0])
+        second['id'] = 'item-2'
+        second['external_scene_id'] = 'S1A_002'
+        second['stack_asset_ref'] = 'sar-masks/heldout/snowslide/2026-04-25/validation/colorado_rockies/S1A_002/stack.npz'
+        second['truth_mask_asset_ref'] = 'sar-masks/heldout/snowslide/2026-04-25/validation/colorado_rockies/S1A_002/truth_mask.tif'
+        load_reference_bundle_mock.return_value = (set_row, [items[0], second])
+
+        result = materialize_baseline_masks(reference_set_key='snowslide-v1')
+
+        self.assertEqual(result['baseline_rows_materialized'], 2)
+        self.assertEqual(storage_upload_bytes_mock.call_count, 2)
+        self.assertEqual(rest_upsert_mock.call_count, 2)
+        first_upsert = rest_upsert_mock.call_args_list[0].args[1][0]
+        second_upsert = rest_upsert_mock.call_args_list[1].args[1][0]
+        self.assertEqual(first_upsert['external_scene_id'], 'S1A_001')
+        self.assertEqual(second_upsert['external_scene_id'], 'S1A_002')
+
+    @patch('backend.scripts.materialize_release_baseline_masks.activate_reference_set', return_value={'status': 'active'})
+    @patch('backend.scripts.materialize_release_baseline_masks.rest_upsert')
+    @patch('backend.scripts.materialize_release_baseline_masks.storage_upload_bytes')
+    @patch('backend.scripts.materialize_release_baseline_masks.storage_download_bytes', return_value=b'existing-baseline')
+    @patch('backend.scripts.materialize_release_baseline_masks.encode_mask_geotiff', return_value=b'tiff-bytes')
+    @patch('backend.scripts.materialize_release_baseline_masks.load_scene_stack')
+    @patch('backend.scripts.materialize_release_baseline_masks.load_reference_bundle')
+    def test_materialize_baseline_masks_skips_scene_with_existing_baseline_asset(
+        self,
+        load_reference_bundle_mock,
+        load_scene_stack_mock,
+        encode_mask_geotiff_mock,
+        _baseline_storage_download_mock,
+        storage_upload_bytes_mock,
+        rest_upsert_mock,
+        _activate_reference_set_mock,
+    ) -> None:
+        set_row, items = self._reference_bundle()
+        items[0]['baseline_mask_asset_ref'] = 'sar-masks/heldout/snowslide/2026-04-25/validation/colorado_rockies/S1A_001/baseline_mask.tif'
+        load_reference_bundle_mock.return_value = (set_row, items)
+
+        result = materialize_baseline_masks(reference_set_key='snowslide-v1')
+
+        self.assertEqual(result['baseline_rows_materialized'], 1)
+        load_scene_stack_mock.assert_not_called()
+        encode_mask_geotiff_mock.assert_not_called()
+        storage_upload_bytes_mock.assert_not_called()
         rest_upsert_mock.assert_called_once()
 
     @patch('backend.scripts.materialize_release_baseline_masks.activate_reference_set', return_value={'status': 'active'})

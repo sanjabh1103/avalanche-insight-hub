@@ -34,6 +34,8 @@ The target Supabase project must also contain the held-out registry tables creat
   Draft-only operator harness. It seeds zero-valued synthetic prediction masks under the standard `predictions/<model_version>/prediction_mask.tif` path for a non-authoritative reference set, builds a manual `scenes[]` manifest, and posts that manifest to the worker’s `evaluate-release` endpoint without requiring `SAR_UNET_MODEL_PATH`.
 - `python -m backend.scripts.fetch_sota_sar_weights`
   Operator ingestion helper. It downloads a signed checkpoint into `backend/data/models/`, rejects obvious HTML or empty payloads, and atomically updates local `.env` with `SAR_UNET_MODEL_PATH`. It only updates `SAR_UNET_MODEL_FAMILY` or `SAR_UNET_MODEL_VERSION` when the operator passes those flags explicitly.
+- `python -m backend.scripts.adapt_coldstart_swin_checkpoint`
+  Cold-start recovery helper. It adapts a pretrained `timm` Swin-V2 Tiny encoder into the repo's shadow-only `swinunet_tiny_diff` checkpoint layout, writes `backend/data/models/swin_transformer_v2_tiny_coldstart_v1.pt`, verifies the worker can load it in shadow mode, and updates local `.env` to point at `/artifacts/models/swin_transformer_v2_tiny_coldstart_v1.pt`.
 - `python -m backend.sar_release_manifest`
   Builds a held-out `evaluate-release` manifest either from an ad hoc JSON/CSV registry or from an authoritative SnowSlide `reference_set_key`.
 - `python -m backend.sar_release_promote`
@@ -44,6 +46,8 @@ The target Supabase project must also contain the held-out registry tables creat
   Seeds Git LFS-backed DEM assets into the persistent Modal volume at `/artifacts/dem`.
 - `modal run backend/modal_worker_app.py --source-model-path backend/data/models/swin_transformer_v2_tiny.pt --remote-model-path /models/swin_transformer_v2_tiny.pt`
   Uploads a fetched checkpoint into the existing Modal volume so the worker can read it at `/artifacts/models/swin_transformer_v2_tiny.pt` at runtime.
+- `modal volume put avalanche-artifacts backend/data/models/swin_transformer_v2_tiny_coldstart_v1.pt /models/swin_transformer_v2_tiny_coldstart_v1.pt --force`
+  Direct volume upload path for the cold-start checkpoint when `modal run` is undesirable or blocked by app-creation constraints. The worker still needs a fresh deployment or container refresh before the updated path is visible at runtime.
 
 ## Cloud Bootstrap Workflow
 
@@ -159,8 +163,8 @@ Confirm these checkpoints before moving on:
 - Modal worker is deployed on a single base URL
 - `MODAL_WORKER_URL` is present in both GitHub secrets and Supabase secrets
 
-Blocked next step until real SAR weights exist:
-- once `SAR_UNET_MODEL_PATH` points to a real checkpoint, the next slice will run held-out `sar-segment`, build the authoritative manifest, and dispatch `evaluate_release`
+Blocked next step until a supervised SAR candidate exists:
+- use `train-sar-unet` with a heldout-clean training manifest to produce a shadow checkpoint, then rerun held-out `sar-segment`, build the authoritative manifest, and dispatch `evaluate_release`
 
 ## Worker Endpoints
 
@@ -213,6 +217,42 @@ Response fields:
 - `mask_asset_refs`
 - `detections`
 - `checkpoint_key_mismatch` when warm-start loading had missing or unexpected keys
+
+### `POST /train-sar-unet`
+
+GPU-side supervised SAR fine-tuning entrypoint for the repo-native `swinunet_tiny_diff` family. This path consumes a dedicated SAR training manifest, excludes `snowslide-heldout-v1` from train/val, materializes `pre.tif` / `post.tif` / `mask.tif` patches, trains a shadow checkpoint, and writes validation metrics plus threshold-selection artifacts.
+
+Recommended request body:
+
+```json
+{
+  "hazard_type": "avalanche",
+  "training_manifest_path": "sar-training/manifests/avalcd_shadow_v1.json",
+  "model_family": "swinunet_tiny_diff",
+  "patch_size": 128,
+  "stride": 64,
+  "epochs": 8,
+  "batch_size": 8,
+  "learning_rate": 0.0001,
+  "loss": "focal_tversky",
+  "candidate_model_version": "swinunet_tiny_diff_shadow_candidate_v1"
+}
+```
+
+Required response fields:
+- `status`
+- `candidate_model_version`
+- `model_family`
+- `model_checkpoint_path`
+- `best_threshold`
+- `validation_auprc`
+- `validation_metrics`
+- `quality_gate_passed`
+- `blocked_gate`
+- `scene_gate_failures`
+- `dataset_version`
+- `train_events`
+- `val_events`
 
 ### `POST /train-mtslstm`
 
@@ -418,6 +458,11 @@ The release response should surface:
   ```
 
   After promotion, set `SAR_RELEASE_GATE_PASSED=true` as a GitHub secret and re-dispatch `train_mtslstm` with `sar_release_gate_passed=true` in the payload.
+
+For the full operator-side sequence after the pinned bootstrap rerun completes,
+including dry-run gate, execute-promotion, dynamic-model activation, and
+Whitebox smoke proof, follow the `Post-Bootstrap Promotion And Activation
+Sequence` section in [docs/OPERATOR_ROLLOUT_QA.md](docs/OPERATOR_ROLLOUT_QA.md).
 
 ## Modal Deployment
 

@@ -1,7 +1,8 @@
 import { RISK_LABELS } from '@/lib/constants';
 import { isCellUnavailable, type GridCell } from '@/lib/gridUtils';
+import { SNOWPACK_PROXY_DESCRIPTOR, SNOWPACK_PROXY_LIMITATION } from '@/lib/snowpackProxyCopy';
 
-export type ShapSource = 'artifact' | 'unavailable';
+export type ShapSource = 'tree_shap' | 'heuristic_fallback' | 'unavailable';
 
 export interface RiskDriver {
   feature: string;
@@ -58,23 +59,23 @@ const FEATURE_LEXICON: Record<string, { label: string; positive: string; negativ
   },
   snowpack: {
     label: 'snowpack state',
-    positive: 'the snowpack signal is favoring instability',
-    negative: 'the snowpack signal is offsetting instability',
+    positive: `the ${SNOWPACK_PROXY_DESCRIPTOR} is favoring instability`,
+    negative: `the ${SNOWPACK_PROXY_DESCRIPTOR} is offsetting instability`,
   },
   ram_hardness: {
     label: 'slab hardness',
-    positive: 'slab-hardness signal is pushing the forecast upward',
-    negative: 'slab-hardness signal is offsetting some hazard',
+    positive: 'the proxy-derived slab-hardness estimate is pushing the forecast upward',
+    negative: 'the proxy-derived slab-hardness estimate is offsetting some hazard',
   },
   shear_strength: {
     label: 'shear strength',
-    positive: 'shear-strength signal is pushing the forecast toward instability',
-    negative: 'shear-strength signal is providing some stability',
+    positive: 'the proxy-derived shear-strength estimate is pushing the forecast toward instability',
+    negative: 'the proxy-derived shear-strength estimate is providing some stability',
   },
   settlement_rate: {
     label: 'settlement rate',
-    positive: 'settlement behavior is not relieving the current load',
-    negative: 'settlement behavior is relieving part of the load',
+    positive: 'the proxy-derived settlement estimate is not relieving the current load',
+    negative: 'the proxy-derived settlement estimate is relieving part of the load',
   },
   aspect_loading: {
     label: 'aspect loading',
@@ -123,7 +124,7 @@ export function selectRiskDrivers(cell: GridCell): { shapSource: ShapSource; dri
   const topFeatures = cell.shapContext?.topFeatures;
   if (topFeatures && topFeatures.length > 0) {
     return {
-      shapSource: 'artifact',
+      shapSource: cell.explainabilityMode === 'heuristic_fallback' ? 'heuristic_fallback' : 'tree_shap',
       drivers: topFeatures.slice(0, 5).map((item) => ({
         feature: item.feature,
         label: formatFeatureLabel(item.feature),
@@ -139,7 +140,7 @@ export function selectRiskDrivers(cell: GridCell): { shapSource: ShapSource; dri
   }
 
   return {
-    shapSource: 'artifact',
+    shapSource: 'heuristic_fallback',
     drivers: shapValues
       .map(([feature, value]) => ({
         feature,
@@ -164,9 +165,11 @@ export function buildRiskExplanation(cell: GridCell): string {
   const secondPositive = drivers.filter((driver) => driver.value > 0)[1];
   const topNegative = drivers.find((driver) => driver.value < 0);
   const riskLevel = String(RISK_LABELS[cell.riskScore] || 'Unknown').toLowerCase();
-  const intro = shapSource === 'artifact'
+  const intro = shapSource === 'tree_shap'
     ? 'Batch TreeSHAP indicates'
-    : 'Artifact explainability indicates';
+    : shapSource === 'heuristic_fallback'
+      ? 'Fallback explainability indicates'
+      : 'Artifact explainability indicates';
 
   if (cell.riskScore >= 4) {
     const lead = topPositive
@@ -176,7 +179,7 @@ export function buildRiskExplanation(cell: GridCell): string {
     const offset = topNegative
       ? ` ${describeDriver(topNegative, 'negative')}.`
       : ' No strong stabilizing driver is offsetting the current setup.';
-    return `${intro} ${lead}.${support}${offset} Overall risk remains ${riskLevel}.`;
+    return `${intro} ${lead}.${support}${offset} Overall risk remains ${riskLevel}; snowpack terms here are proxy-based and ${SNOWPACK_PROXY_LIMITATION}.`;
   }
 
   if (cell.riskScore <= 2) {
@@ -186,7 +189,7 @@ export function buildRiskExplanation(cell: GridCell): string {
     const watch = topPositive
       ? ` Watch ${topPositive.label.toLowerCase()} because it is still the main upward signal.`
       : '';
-    return `${intro} ${stabilizer}.${watch} Overall risk is ${riskLevel}.`;
+    return `${intro} ${stabilizer}.${watch} Overall risk is ${riskLevel}; snowpack terms here are proxy-based and ${SNOWPACK_PROXY_LIMITATION}.`;
   }
 
   const driver = topPositive
@@ -195,5 +198,5 @@ export function buildRiskExplanation(cell: GridCell): string {
   const counter = topNegative
     ? ` ${describeDriver(topNegative, 'negative')}.`
     : '';
-  return `${intro} ${driver}.${counter} Overall risk is ${riskLevel}.`;
+  return `${intro} ${driver}.${counter} Overall risk is ${riskLevel}; snowpack terms here are proxy-based and ${SNOWPACK_PROXY_LIMITATION}.`;
 }

@@ -232,6 +232,7 @@ jobs:
           fi
           python -m backend.scripts.materialize_release_baseline_masks \
             --reference-set-key "${REFERENCE_SET_KEY}" \
+            --source-dir assembled_seed_dir \
             "${baseline_args[@]}" | tee baseline_result.json
 
       - name: Verify bootstrap results

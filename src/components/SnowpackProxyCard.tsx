@@ -2,6 +2,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Snowflake, HelpCircle } from 'lucide-react';
 import type { GridCell } from '@/lib/gridUtils';
+import {
+  SNOWPACK_PROXY_LIMITATION,
+  SNOWPACK_PROXY_TITLE,
+  SNOWPACK_PROXY_TOOLTIP,
+} from '@/lib/snowpackProxyCopy';
 
 interface Props {
   selectedCell: GridCell | null;
@@ -35,15 +40,13 @@ export default function SnowpackProxyCard({ selectedCell }: Props) {
     <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
       <CardHeader className="p-3 pb-1">
         <CardTitle className="text-xs uppercase tracking-[0.24em] text-muted-foreground flex items-center gap-1.5">
-          <Snowflake className="h-3 w-3" /> Simulated Snowpack
+          <Snowflake className="h-3 w-3" /> {SNOWPACK_PROXY_TITLE}
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="inline-flex items-center text-muted-foreground/80"><HelpCircle className="h-3 w-3" /></span>
             </TooltipTrigger>
             <TooltipContent side="left" className="text-xs max-w-xs">
-              HIM-STRAT Class-II proxies computed from cumulative temperature and
-              precipitation since the current winter season start. Surfaces the
-              internal stability context the ML forecaster would otherwise hide.
+              {SNOWPACK_PROXY_TOOLTIP}
             </TooltipContent>
           </Tooltip>
         </CardTitle>
@@ -51,7 +54,7 @@ export default function SnowpackProxyCard({ selectedCell }: Props) {
       <CardContent className="p-3 pt-2 space-y-3">
         {!hasData ? (
           <p className="text-xs text-muted-foreground italic">
-            Snowpack metrics unavailable for this cell. Run the daily inference job to populate HIM-STRAT proxies.
+            Snowpack proxy unavailable for this cell. Run the daily inference job to populate the seasonal-memory estimate.
           </p>
         ) : (
           <>
@@ -84,9 +87,12 @@ export default function SnowpackProxyCard({ selectedCell }: Props) {
               </div>
             </div>
             {proxy?.season_start && (
-              <div className="text-[10px] text-muted-foreground">
-                Season start: <span className="font-mono">{proxy.season_start}</span>
-                {proxy.method ? <span className="ml-2">· method: {proxy.method}</span> : null}
+              <div className="text-[10px] text-muted-foreground space-y-0.5">
+                <div>{SNOWPACK_PROXY_LIMITATION}.</div>
+                <div>
+                  Season start: <span className="font-mono">{proxy.season_start}</span>
+                  {proxy.method ? <span className="ml-2">· method: {proxy.method}</span> : null}
+                </div>
               </div>
             )}
           </>

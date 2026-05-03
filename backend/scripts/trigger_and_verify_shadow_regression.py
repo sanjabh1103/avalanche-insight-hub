@@ -30,6 +30,14 @@ def build_inference_payload(
     forecast_hours: int = DEFAULT_FORECAST_HOURS,
     grid_size: int = DEFAULT_GRID_SIZE,
     artifact_dir: str | None = None,
+    region_keys: list[str] | None = None,
+    lifeboat_mode: bool = False,
+    lifeboat_profile: str = 'proof72',
+    skip_tree_shap: bool = False,
+    skip_shap_cache: bool = False,
+    skip_runout_generation: bool = False,
+    skip_compatibility_write: bool = False,
+    emit_stage_metrics: bool = False,
 ) -> dict[str, Any]:
     payload = {
         'request_type': 'infer_mtslstm',
@@ -41,6 +49,26 @@ def build_inference_payload(
     }
     if artifact_dir:
         payload['artifact_dir'] = str(artifact_dir)
+    cleaned_region_keys = [
+        str(region_key).strip()
+        for region_key in (region_keys or [])
+        if str(region_key).strip()
+    ]
+    if cleaned_region_keys:
+        payload['region_keys'] = cleaned_region_keys
+    if lifeboat_mode:
+        payload['lifeboat_mode'] = True
+        payload['lifeboat_profile'] = str(lifeboat_profile or 'proof72').strip() or 'proof72'
+    if skip_tree_shap:
+        payload['skip_tree_shap'] = True
+    if skip_shap_cache:
+        payload['skip_shap_cache'] = True
+    if skip_runout_generation:
+        payload['skip_runout_generation'] = True
+    if skip_compatibility_write:
+        payload['skip_compatibility_write'] = True
+    if emit_stage_metrics:
+        payload['emit_stage_metrics'] = True
     return payload
 
 
@@ -119,7 +147,7 @@ def _poll_until_terminal(
 
 
 def shadow_regression_passed(training_result: dict[str, Any], inference_result: dict[str, Any]) -> bool:
-    if training_result.get('status') != 'ok':
+    if not _training_result_allows_shadow_inference(training_result):
         return False
     if inference_result.get('status') != 'ok':
         return False
@@ -132,6 +160,89 @@ def shadow_regression_passed(training_result: dict[str, Any], inference_result: 
     return True
 
 
+def _training_result_supports_shadow_proof(training_result: dict[str, Any]) -> bool:
+    status = str(training_result.get('status') or '').strip()
+    if status == 'ok':
+        return True
+    if status != 'completed_with_gate_failure':
+        return False
+    return bool(
+        str(training_result.get('model_artifact_ref') or '').strip()
+        and bool(training_result.get('shadow_mode'))
+        and not bool(training_result.get('allow_publish'))
+    )
+
+
+def _training_result_allows_shadow_inference(training_result: dict[str, Any]) -> bool:
+    status = str(training_result.get('status') or '').strip()
+    artifact_dir = str(training_result.get('artifact_dir') or '').strip()
+    if status == 'ok':
+        return bool(artifact_dir)
+    if status != 'completed_with_gate_failure':
+        return False
+    return bool(
+        artifact_dir
+        and str(training_result.get('model_artifact_ref') or '').strip()
+        and bool(training_result.get('shadow_mode'))
+        and not bool(training_result.get('allow_publish'))
+    )
+
+
+def calibration_expectation_passed(
+    training_result: dict[str, Any],
+    *,
+    require_improvement: bool = False,
+) -> dict[str, Any]:
+    calibration_applied = bool(training_result.get('calibration_applied'))
+    calibration_reason = str(training_result.get('calibration_reason') or '').strip()
+    calibration_method = str(training_result.get('calibration_method') or '').strip()
+    try:
+        raw_brier = float(training_result.get('lstm_brier_uncalibrated'))
+        calibrated_brier = float(training_result.get('lstm_brier_calibrated'))
+        float(training_result.get('lstm_pss_uncalibrated'))
+        float(training_result.get('lstm_pss_calibrated'))
+        calibration_metrics_present = True
+    except (TypeError, ValueError):
+        calibration_metrics_present = False
+        raw_brier = 0.0
+        calibrated_brier = 0.0
+
+    calibration_improved = bool(calibration_metrics_present and calibrated_brier < raw_brier)
+    calibration_status_present = bool(calibration_method) if calibration_applied else bool(calibration_reason)
+
+    if not calibration_metrics_present:
+        return {
+            'passed': False,
+            'reason': 'missing_calibration_metrics',
+            'calibration_metrics_present': False,
+            'calibration_applied': calibration_applied,
+            'calibration_improved': calibration_improved,
+        }
+    if not calibration_status_present:
+        return {
+            'passed': False,
+            'reason': 'missing_calibration_status',
+            'calibration_metrics_present': True,
+            'calibration_applied': calibration_applied,
+            'calibration_improved': calibration_improved,
+        }
+    if require_improvement and not calibration_improved:
+        return {
+            'passed': False,
+            'reason': 'calibrated_brier_not_improved',
+            'calibration_metrics_present': True,
+            'calibration_applied': calibration_applied,
+            'calibration_improved': calibration_improved,
+        }
+    return {
+        'passed': True,
+        'reason': 'calibrated_brier_improved' if calibration_improved else 'calibration_metrics_present',
+        'calibration_metrics_present': True,
+        'calibration_applied': calibration_applied,
+        'calibration_improved': calibration_improved,
+    }
+
+
 def trigger_and_verify_shadow_regression(
     *,
     env_file: Path,
@@ -141,15 +252,17 @@ def trigger_and_verify_shadow_regression(
     grid_size: int = DEFAULT_GRID_SIZE,
     poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    require_calibration_improvement: bool = False,
 ) -> dict[str, Any]:
     env_values = apply_rollout_env(env_file)
     worker_url = env_values['modal_worker_url']
     worker_token = env_values['modal_worker_token']
+    training_payload = build_training_payload(dataset_snapshot_id=dataset_snapshot_id, epochs=epochs)
 
     training_submission = submit_training_job(
         worker_url=worker_url,
         worker_token=worker_token,
-        payload=build_training_payload(dataset_snapshot_id=dataset_snapshot_id, epochs=epochs),
+        payload=training_payload,
     )
     print(json.dumps(training_submission, indent=2, sort_keys=True))
     training_result = _poll_until_terminal(
@@ -161,17 +274,33 @@ def trigger_and_verify_shadow_regression(
         poll_interval_seconds=poll_interval_seconds,
         timeout_seconds=timeout_seconds,
     )
-    if training_result.get('status') != 'ok':
+    calibration_expectation = calibration_expectation_passed(
+        training_result,
+        require_improvement=require_calibration_improvement,
+    )
+    if not _training_result_supports_shadow_proof(training_result):
         return {
             'training': training_result,
             'inference': None,
             'shadow_regression_passed': False,
+            'calibration_expectation_passed': calibration_expectation['passed'],
+            'calibration_expectation_reason': calibration_expectation['reason'],
+            'calibration_metrics_present': calibration_expectation['calibration_metrics_present'],
+            'calibration_applied': calibration_expectation['calibration_applied'],
+            'calibration_improved': calibration_expectation['calibration_improved'],
         }
+    training_artifact_dir = str(training_result.get('artifact_dir') or '').strip()
+    if not training_artifact_dir:
+        raise RuntimeError('training artifact_dir is required for shadow inference')
 
     inference_submission = submit_inference_job(
         worker_url=worker_url,
         worker_token=worker_token,
-        payload=build_inference_payload(forecast_hours=forecast_hours, grid_size=grid_size),
+        payload=build_inference_payload(
+            forecast_hours=forecast_hours,
+            grid_size=grid_size,
+            artifact_dir=training_artifact_dir,
+        ),
     )
     print(json.dumps(inference_submission, indent=2, sort_keys=True))
     inference_result = _poll_until_terminal(
@@ -187,6 +316,11 @@ def trigger_and_verify_shadow_regression(
         'training': training_result,
         'inference': inference_result,
         'shadow_regression_passed': shadow_regression_passed(training_result, inference_result),
+        'calibration_expectation_passed': calibration_expectation['passed'],
+        'calibration_expectation_reason': calibration_expectation['reason'],
+        'calibration_metrics_present': calibration_expectation['calibration_metrics_present'],
+        'calibration_applied': calibration_expectation['calibration_applied'],
+        'calibration_improved': calibration_expectation['calibration_improved'],
     }
 
 
@@ -199,6 +333,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument('--grid-size', type=int, default=DEFAULT_GRID_SIZE)
     parser.add_argument('--poll-interval-seconds', type=int, default=DEFAULT_POLL_INTERVAL_SECONDS)
     parser.add_argument('--timeout-seconds', type=int, default=DEFAULT_TIMEOUT_SECONDS)
+    parser.add_argument('--require-calibration-improvement', action='store_true')
     return parser.parse_args(argv)
 
 
@@ -213,13 +348,14 @@ def main(argv: list[str] | None = None) -> int:
             grid_size=args.grid_size,
             poll_interval_seconds=args.poll_interval_seconds,
             timeout_seconds=args.timeout_seconds,
+            require_calibration_improvement=args.require_calibration_improvement,
         )
     except Exception as exc:
         print(str(exc), file=sys.stderr)
         return 1
 
     print(json.dumps(result, indent=2, sort_keys=True))
-    return 0 if result.get('shadow_regression_passed') else 1
+    return 0 if result.get('shadow_regression_passed') and result.get('calibration_expectation_passed') else 1
 
 
 if __name__ == '__main__':

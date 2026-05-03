@@ -74,7 +74,7 @@ serve(async (req: Request) => {
       throw new Error(`ingest-event failed (${ingestResponse.status}): ${text}`);
     }
     const ingestResult = await ingestResponse.json();
-    const createdEvent = (ingestResult as Record<string, unknown>)?.event as Record<string, unknown> | undefined;
+    let createdEvent = (ingestResult as Record<string, unknown>)?.event as Record<string, unknown> | undefined;
 
     // P1.3: Auto-promote the newly-created event to verification_status='weak'
     // when a SAR or news event corroborates it within 48h and 5km. This is
@@ -116,6 +116,19 @@ serve(async (req: Request) => {
       } catch (promoteErr) {
         // Best-effort only; a promotion failure must not fail the whole ingest.
         console.warn('auto-promotion skipped:', (promoteErr as Error).message);
+      }
+
+      try {
+        const { data: refreshedEvent } = await supabase
+          .from('avalanche_events')
+          .select('id, timestamp, source, description, severity, event_type, confidence, label_confidence, training_weight, verification_status, label_role, location, features')
+          .eq('id', newEventId)
+          .maybeSingle();
+        if (refreshedEvent) {
+          createdEvent = refreshedEvent as Record<string, unknown>;
+        }
+      } catch (refreshErr) {
+        console.warn('event refresh skipped:', (refreshErr as Error).message);
       }
     }
 

@@ -10,6 +10,78 @@ Legend: `🧑 operator action` · `🤖 automated check` · `✅ pass criterion`
 
 ---
 
+## Step 0 — Verify The Observability Contract
+
+Run this before treating a fresh train/infer cycle as scientifically reviewable.
+
+### 0.1 Test harness prerequisite
+
+Direct backend pytest runs in this repo require:
+
+```bash
+export PYTHONPATH=/Users/sanjayb/avalanche-insight-hub
+```
+
+### 0.2 Edge-function and slice-contract checks
+
+```bash
+deno test \
+  supabase/functions/label-forecast-outcomes/index.test.ts \
+  supabase/functions/run-evaluation/index.test.ts \
+  supabase/functions/_shared/evaluationMetadata.test.ts
+```
+
+✅ Outcome labeling, evaluation slices, and persisted metadata all pass.
+
+### 0.3 Operator metadata checks (Supabase SQL editor)
+
+```sql
+-- Latest forecast publication should expose source health + decision provenance
+SELECT created_at,
+       model_metadata->'source_health'        AS source_health,
+       model_metadata->'decision_provenance' AS decision_provenance
+FROM   public.forecast_runs
+ORDER  BY created_at DESC
+LIMIT  3;
+
+-- Latest model status should expose stability / drift / benchmark state
+SELECT version,
+       drift_mode_state,
+       stability_summary,
+       latest_benchmark_summary
+FROM   public.model_status
+ORDER  BY last_inference DESC NULLS LAST, last_trained DESC NULLS LAST
+LIMIT  1;
+```
+
+✅ Fresh runs show:
+- `model_metadata.source_health`
+- `model_metadata.decision_provenance`
+- `model_status.drift_mode_state`
+- `model_status.stability_summary`
+- `model_status.latest_benchmark_summary`
+
+### 0.4 Benchmark summary artifact
+
+```bash
+python3 -m backend.scripts.run_pipeline_benchmarks \
+  --training-metrics backend/artifacts/<train-artifact>/training_metrics.json \
+  --training-stage-metrics backend/artifacts/<train-artifact>/training_stage_metrics.json \
+  --inference-manifest backend/artifacts/<infer-artifact>/inference_manifest.json \
+  --output backend/artifacts/benchmark_report.json
+```
+
+✅ The output contains whichever sections are available from:
+- `training`
+- `inference_publication`
+- `release_verification`
+
+### 0.5 Governance scope reminder
+
+- `source_health` and `decision_provenance` are operator observability fields.
+- `stability_summary`, `drift_mode_state`, and `latest_benchmark_summary` are internal governance fields.
+- External interoperability is **not implemented** merely because internal lineage is present.
+
 ## Step 1 — Activate Topographic Physics (Challenges 4 & 11)
 
 Switch Alpha-Beta runout from rectangular fallback → true gravity-driven flow.
@@ -179,6 +251,275 @@ npx playwright test tests/pwa-offline.spec.ts
 ```
 If the spec doesn't exist yet, add it using the `webapp-testing` skill pattern:
 `page.context().setOffline(true)` → submit → `setOffline(false)` → assert row.
+
+---
+
+## Post-Bootstrap Promotion And Activation Sequence
+
+This is the authoritative post-bootstrap path for SAR promotion, dynamic-scorer
+activation, and Whitebox runtime proof. Use it after the pinned bootstrap rerun
+finishes. Do not reorder these steps.
+
+### 5.1 Wait for bootstrap completion
+
+Run this only after GitHub Actions run `25099893380` completes steps `15-17`
+successfully.
+
+```bash
+gh run watch 25099893380 -R sanjabh1103/avalanche-insight-hub
+```
+
+✅ Continue only when the run finishes with `completed/success`.
+
+### 5.2 Dry-run the authoritative SAR release gate
+
+```bash
+gh workflow run authoritative_release_gate.yml \
+  -R sanjabh1103/avalanche-insight-hub \
+  -f reference_set_key=snowslide-heldout-v1 \
+  -f prediction_model_version=sar_unet_resnet34_shadow_v1 \
+  -f execute_promotion=false
+```
+
+Expected artifact:
+- GitHub artifact `authoritative-release-gate`
+- file `authoritative_release_gate.json`
+
+Pass rule:
+- top-level `status = "ok"`
+- `evaluation_report.status = "ok"`
+- `evaluation_report.beats_baseline = true`
+- `decision = "promote"`
+
+Stop condition:
+- if any of the above checks fail, do not promote and do not activate the
+  dynamic scorer.
+
+Observed failure mode on 2026-04-29:
+- if the worker returns `prediction_mask.tif failed ... Object not found`, the
+  held-out reference set is active but the deployed SAR worker has not
+  materialized held-out prediction masks for the requested
+  `prediction_model_version`
+- if the worker returns `SAR U-Net weights not found`, fix the deployed
+  `SAR_UNET_MODEL_PATH` or redeploy the Modal worker with a usable checkpoint
+- if no repo-native Swin checkpoint exists yet, build the cold-start shadow
+  checkpoint first:
+  ```bash
+  ./.venv/bin/python -m backend.scripts.adapt_coldstart_swin_checkpoint --env-file .env
+  PATH="$PWD/.venv/bin:$PATH" python3 -m backend.scripts.bootstrap_release_gate \
+    sync-secrets --env-file .env --repo sanjabh1103/avalanche-insight-hub \
+    --project-ref fzheroisjhxnairglelv --apply
+  PATH="$PWD/.venv/bin:$PATH" modal volume put avalanche-artifacts \
+    backend/data/models/swin_transformer_v2_tiny_coldstart_v1.pt \
+    /models/swin_transformer_v2_tiny_coldstart_v1.pt --force
+  ```
+  before retrying this gate
+
+### 5.3 Execute authoritative promotion
+
+Only after the dry-run gate passes:
+
+```bash
+gh workflow run authoritative_release_gate.yml \
+  -R sanjabh1103/avalanche-insight-hub \
+  -f reference_set_key=snowslide-heldout-v1 \
+  -f prediction_model_version=sar_unet_resnet34_shadow_v1 \
+  -f execute_promotion=true
+```
+
+Expected artifact:
+- GitHub artifact `authoritative-release-gate`
+- file `authoritative_release_gate.json`
+
+Pass rule:
+- `decision = "promote"`
+- `promotion_result` is present
+- `promotion_event` is present or the database row exists in `promotion_events`
+
+Verification query:
+
+```sql
+SELECT event_type,
+       new_version,
+       hazard_type,
+       decision,
+       decision_reason,
+       created_at
+FROM   promotion_events
+ORDER  BY created_at DESC
+LIMIT  5;
+```
+
+✅ Continue only when the latest row shows the promoted model decision.
+
+### 5.4 Set the SAR release gate flag
+
+After successful execute-promotion, set the repo secret:
+
+```bash
+gh secret set SAR_RELEASE_GATE_PASSED \
+  -R sanjabh1103/avalanche-insight-hub \
+  -b "true"
+```
+
+✅ Continue only after `gh secret list` shows `SAR_RELEASE_GATE_PASSED`.
+
+### 5.5 Ensure an activation candidate exists
+
+Inspect the current `model_status` row:
+
+```sql
+SELECT active_model_type,
+       active_model_version,
+       shadow_mode_active,
+       promotion_gate_passed,
+       dynamic_model_candidate
+FROM   model_status
+LIMIT  1;
+```
+
+If `dynamic_model_candidate` is empty or stale, dispatch fresh MTS-LSTM
+training:
+
+```bash
+gh workflow run ml_pipeline.yml \
+  -R sanjabh1103/avalanche-insight-hub \
+  -f mode=train_mtslstm \
+  -f dataset_snapshot_id=latest \
+  -f sar_release_gate_passed=true \
+  -f pss_floor=0.45
+```
+
+Expected artifact:
+- GitHub artifact `train-mtslstm-response`
+
+Pass rule:
+- `dynamic_model_candidate` exists
+- candidate gates show the scorer is ready for activation
+
+Stop condition:
+- if candidate gates are still blocked, keep RF active and do not run activation.
+
+### 5.6 Activate the dynamic scorer
+
+Run a dry-run first if you want to inspect blockers, then run the real
+activation:
+
+```bash
+gh workflow run activate_dynamic_model.yml \
+  -R sanjabh1103/avalanche-insight-hub \
+  -f execute_activation=true
+```
+
+Optional safety pin:
+
+```bash
+gh workflow run activate_dynamic_model.yml \
+  -R sanjabh1103/avalanche-insight-hub \
+  -f execute_activation=true \
+  -f required_candidate_version=<candidate-version>
+```
+
+Expected artifact:
+- GitHub artifact `dynamic-model-activation`
+- file `dynamic_model_activation.json`
+
+Pass rule:
+- `status = "ok"`
+- either `already_active = true` or `activation_applied = true`
+- `blockers` is empty when activation is executed
+
+Verification query:
+
+```sql
+SELECT active_model_type,
+       active_model_version,
+       shadow_mode_active,
+       promotion_gate_passed
+FROM   model_status
+LIMIT  1;
+```
+
+✅ Continue only when the active scorer shows the intended candidate version.
+
+Stop condition:
+- if activation prerequisites fail, keep RF active.
+
+### 5.7 Prove Whitebox runtime execution
+
+```bash
+gh workflow run runout_physics_smoke.yml \
+  -R sanjabh1103/avalanche-insight-hub
+```
+
+Expected artifact:
+- GitHub artifact `runout-physics-smoke`
+- file `runout_physics_smoke.json`
+
+Pass rule:
+- `status = "ok"`
+- `method = "alpha_beta_whitebox"`
+
+Stop condition:
+- if the smoke check fails, keep the analytical fallback active and mark runtime
+  physics proof as pending.
+
+### 5.8 Final communication gate
+
+Only after steps `5.2` through `5.7` succeed may customer-facing wording change
+from:
+
+- `candidate`
+
+to:
+
+- `active in production`
+
+For this transition, update:
+- `docs/Customer communicatiom..md`
+- any external customer note or demo brief derived from it
+
+See also: [docs/MODAL_WORKER.md](docs/MODAL_WORKER.md) for the worker-side API
+contracts and environment prerequisites that back this rollout path.
+
+### 5.9 Release communication gate
+
+Before any customer update, sales note, or demo brief changes wording, do this
+in order:
+
+1. Identify the claim being made.
+2. Identify the artifact that proves it.
+3. Map the claim to one of the allowed states:
+   - `Exploratory`
+   - `Candidate`
+   - `Conditionally available`
+   - `Active`
+   - `Unavailable`
+4. Only then update customer wording.
+5. If the gate later fails, revert the wording to the last truthful state.
+
+Artifact map for customer-facing claims:
+
+- authoritative SAR active:
+  active held-out reference set plus successful `authoritative_release_gate.json`
+- SAR beats baseline:
+  `authoritative_release_gate.json` with `beats_baseline=true`
+- dynamic scorer ready:
+  `model_status.dynamic_model_candidate.ready_for_activation=true`
+- dynamic scorer active:
+  `model_status.active_model_type` and `active_model_version` changed
+- whitebox runout active:
+  `runout_physics_smoke.json` with `status=ok`
+- fresh forecast available:
+  latest `forecast_grids` row for the region/date is ready
+
+Do not say any of the following without the matching artifact:
+
+- `production MTS-LSTM`
+- `authoritative SAR`
+- `operational whitebox runout`
+- `zero-history learning`
+- `fully autonomous avalanche AI`
 
 ---
 

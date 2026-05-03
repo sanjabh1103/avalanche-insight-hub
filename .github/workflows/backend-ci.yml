@@ -65,7 +65,7 @@ jobs:
 
           app = create_fastapi_app()
           routes = {route.path for route in app.routes}
-          expected = {'/sar-segment', '/train-mtslstm', '/infer-mtslstm', '/evaluate-release'}
+          expected = {'/sar-segment', '/train-sar-unet', '/train-mtslstm', '/infer-mtslstm', '/evaluate-release'}
           missing = expected - routes
           if missing:
               raise SystemExit(f'missing modal worker routes: {sorted(missing)}')

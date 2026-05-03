@@ -7,6 +7,7 @@ export interface Region {
   bbox: [number, number, number, number];
   center: [number, number];
   zoom: number;
+  timezone_name?: string;
 }
 
 export const REGIONS: Region[] = regionCatalog as Region[];

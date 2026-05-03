@@ -29,6 +29,19 @@ function isActiveDaypartWindow(
   return typeof selectedForecastHour === 'number' ? selectedForecastHour === timeOffset : false;
 }
 
+function formatConfidenceReason(reason: string): string {
+  switch (reason) {
+    case 'partial_coverage':
+      return 'Coverage incomplete';
+    case 'high_uncertainty_share':
+      return 'High uncertainty remains across many eligible cells';
+    case 'low_sar_coverage_share':
+      return 'SAR support is thin across many eligible cells';
+    default:
+      return reason.replace(/_/g, ' ');
+  }
+}
+
 export default function ForecastBulletinBadge({
   bulletin,
   stale = false,
@@ -45,6 +58,14 @@ export default function ForecastBulletinBadge({
   const peakWindowCaption = bulletin.peak_window?.window && bulletin.peak_window.window !== bulletin.primary_window
     ? `Peak: ${formatBulletinWindowLabel(bulletin.peak_window.window)} • Level ${bulletin.peak_window.danger_level}`
     : null;
+  const confidenceCaption = bulletin.confidence_state === 'reduced'
+    ? [
+      bulletin.confidence_reasons?.[0] ? formatConfidenceReason(bulletin.confidence_reasons[0]) : null,
+      bulletin.uncertainty_summary && bulletin.uncertainty_summary.high_uncertainty_cell_count > 0
+        ? `High-uncertainty cells ${bulletin.uncertainty_summary.high_uncertainty_cell_count}/${bulletin.uncertainty_summary.eligible_cell_count}`
+        : null,
+    ].filter(Boolean).join(' • ')
+    : null;
 
   return (
     <div className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl border border-border/70 bg-black/20 px-3 py-2.5 shadow-sm">
@@ -56,12 +77,21 @@ export default function ForecastBulletinBadge({
           <Badge
             className="rounded-full border-0 text-[11px] font-semibold"
             style={{ backgroundColor: dangerColor, color: '#000' }}
+            data-testid="danger-badge"
           >
             {`Danger Level ${bulletin.danger_level}: ${bulletin.danger_label}`}
           </Badge>
           {stale && (
             <Badge className="rounded-full border-0 bg-slate-500/15 text-slate-300 text-[10px] uppercase tracking-[0.18em]">
               Stale
+            </Badge>
+          )}
+          {bulletin.confidence_state === 'reduced' && (
+            <Badge
+              className="rounded-full border-0 bg-amber-500/20 text-[10px] uppercase tracking-[0.18em] text-amber-200"
+              data-testid="confidence-badge"
+            >
+              Reduced Confidence
             </Badge>
           )}
         </div>
@@ -71,6 +101,11 @@ export default function ForecastBulletinBadge({
         <div className="truncate text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
           {proneLocation ? `${proneLocation} • EAWS-style experimental` : 'EAWS-style experimental'}
         </div>
+        {confidenceCaption && (
+          <div className="truncate text-[10px] uppercase tracking-[0.16em] text-amber-200/90" data-testid="confidence-caption">
+            {confidenceCaption}
+          </div>
+        )}
         {dayOneDayparts.length > 0 && (
           <div className="flex min-w-0 flex-wrap items-center gap-1.5 pt-0.5" data-testid="daypart-strip">
             {dayOneDayparts.map((daypart) => {

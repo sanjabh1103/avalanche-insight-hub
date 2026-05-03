@@ -147,7 +147,7 @@ def fetch_training_events(hazard_type: str = 'avalanche') -> list[dict[str, Any]
     rows = rest_get(
         'avalanche_events_decayed',
         params={
-            'select': 'id,location,timestamp,severity,source,fusion_source,training_eligible,label_role,verification_status,elevation_m,topo_profile,features,confidence,label_confidence,training_weight,source_model,source_scene_ids,geometry_type,mask_asset_ref,confidence_decayed,governance_version,governed_at',
+            'select': 'id,location,timestamp,severity,source,fusion_source,training_eligible,training_eligible_reason,label_role,verification_status,elevation_m,topo_profile,features,confidence,label_confidence,training_weight,source_model,source_scene_ids,geometry_type,mask_asset_ref,confidence_decayed,governance_version,governed_at',
             'hazard_type': f'eq.{hazard_type}',
             'training_eligible': 'eq.true',
             'order': 'timestamp.asc',
@@ -227,6 +227,9 @@ def build_real_training_frame(
     positives: list[dict[str, Any]] = []
     dataset_rows: list[dict[str, Any]] = []
     event_source_counts: Counter[str] = Counter()
+    source_training_weight_sums: dict[str, float] = {}
+    source_region_keys: dict[str, set[str]] = {}
+    newest_timestamp_by_source: dict[str, str] = {}
 
     # Debug diagnostics
     debug_stats = {
@@ -299,7 +302,16 @@ def build_real_training_frame(
             continue
         debug_stats['assembled_ok'] += 1
         positives.append({'lat': lat, 'lng': lng, 'timestamp': timestamp, 'region_key': region.key, 'id': row['id']})
-        event_source_counts[str(row.get('source') or 'unknown')] += 1
+        source_name = str(row.get('source') or 'unknown')
+        event_source_counts[source_name] += 1
+        source_training_weight_sums[source_name] = (
+            source_training_weight_sums.get(source_name, 0.0) + float(governance.training_weight)
+        )
+        source_region_keys.setdefault(source_name, set()).add(region.key)
+        previous_latest = newest_timestamp_by_source.get(source_name)
+        timestamp_iso = timestamp.isoformat()
+        if previous_latest is None or timestamp_iso > previous_latest:
+            newest_timestamp_by_source[source_name] = timestamp_iso
         dataset_rows.append({
             'event_id': row['id'],
             'timestamp': pd.Timestamp(timestamp),
@@ -312,6 +324,7 @@ def build_real_training_frame(
             'confidence': float(row.get('confidence') or 0.0),
             'label_confidence': governance.label_confidence,
             'training_weight': governance.training_weight,
+            'training_eligible_reason': row.get('training_eligible_reason'),
             'source_weight': governance.source_weight,
             'corroboration_weight': governance.corroboration_weight,
             'recency_decay': governance.recency_decay,
@@ -370,6 +383,7 @@ def build_real_training_frame(
                 'confidence': 0.0,
                 'label_confidence': 1.0,
                 'training_weight': NEGATIVE_TRAINING_WEIGHT,
+                'training_eligible_reason': None,
                 'source_weight': 1.0,
                 'corroboration_weight': 1.0,
                 'recency_decay': 1.0,
@@ -400,6 +414,7 @@ def build_real_training_frame(
             'confidence',
             'label_confidence',
             'training_weight',
+            'training_eligible_reason',
             'source_weight',
             'corroboration_weight',
             'recency_decay',
@@ -427,6 +442,7 @@ def build_real_training_frame(
         'training_dataset_version': 'real_event_join_v1',
         'positive_count': positives_count,
         'negative_count': negatives_count,
+        'training_row_count': len(frame),
         'filters': {
             'hazard_type': hazard_type,
             'training_eligible': True,
@@ -440,7 +456,20 @@ def build_real_training_frame(
         'oldest_timestamp': frame['timestamp'].min().isoformat() if not frame.empty else None,
         'newest_timestamp': frame['timestamp'].max().isoformat() if not frame.empty else None,
         'event_source_counts': dict(event_source_counts),
+        'source_training_weight_sums': {
+            key: round(value, 6)
+            for key, value in source_training_weight_sums.items()
+        },
+        'source_region_counts': {
+            key: len(value)
+            for key, value in source_region_keys.items()
+        },
+        'newest_timestamp_by_source': newest_timestamp_by_source,
+        'region_keys': sorted({positive['region_key'] for positive in positives}),
         'mean_training_weight': float(frame['training_weight'].mean()) if not frame.empty else None,
+        'promoted_sar_volume': {
+            'sar_unet_promoted_count': int(event_source_counts.get('sar_unet', 0)),
+        },
         'debug_stats': debug_stats,
     }
     return frame, manifest

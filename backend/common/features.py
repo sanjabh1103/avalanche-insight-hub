@@ -27,6 +27,12 @@ FEATURE_COLUMNS = [
     'curvature_proxy',
     'northness',
     'eastness',
+    'freezing_level_margin',
+    'load_to_shear_ratio',
+    'settlement_deficit',
+    'rain_on_snow_signal',
+    'wet_activation_signal',
+    'elevation_precip_bias',
 ]
 
 
@@ -66,6 +72,26 @@ def build_feature_row(context: SampleContext, rng: np.random.Generator) -> dict[
     curvature_proxy = np.clip(0.15 + abs(cos(context.lat * 0.09)) * 0.5 + rng.normal(0, 0.03), 0, 1)
     northness = np.clip((1 + cos(context.lat * np.pi / 180)) / 2, 0, 1)
     eastness = np.clip((1 + sin(context.lng * np.pi / 180)) / 2, 0, 1)
+    freezing_level_margin = np.clip(0.5 + (elevation - 2500) / 2500 + rng.normal(0, 0.05), 0, 1)
+    elevation_precip_bias = np.clip(0.2 + elevation * 0.45 + rng.normal(0, 0.05), 0, 1)
+    rain_on_snow_signal = np.clip(
+        max(0.0, precipitation_24h / 45.0 - 0.1) * max(0.0, freezing_level_proxy - 0.35) + rng.normal(0, 0.03),
+        0,
+        1,
+    )
+    wet_activation_signal = np.clip(
+        max(rain_on_snow_signal, max(0.0, 0.7 - freezing_level_margin) * max(0.0, snowpack / 60.0))
+        + rng.normal(0, 0.03),
+        0,
+        1,
+    )
+    settlement_deficit = np.clip(1.0 - settlement_rate + rng.normal(0, 0.02), 0, 1)
+    loading_signal = np.clip(
+        snowfall_24h / 40.0 + wind_loading / 55.0 + precipitation_24h / 45.0 + elevation_precip_bias * 0.3,
+        0,
+        3,
+    )
+    load_to_shear_ratio = np.clip(loading_signal / max(shear_strength + 0.05, 0.1) / 3.0, 0, 1)
 
     return {
         'snowfall_24h': float(snowfall_24h / 40),
@@ -85,6 +111,12 @@ def build_feature_row(context: SampleContext, rng: np.random.Generator) -> dict[
         'curvature_proxy': float(curvature_proxy),
         'northness': float(northness),
         'eastness': float(eastness),
+        'freezing_level_margin': float(freezing_level_margin),
+        'load_to_shear_ratio': float(load_to_shear_ratio),
+        'settlement_deficit': float(settlement_deficit),
+        'rain_on_snow_signal': float(rain_on_snow_signal),
+        'wet_activation_signal': float(wet_activation_signal),
+        'elevation_precip_bias': float(elevation_precip_bias),
     }
 
 
@@ -103,6 +135,10 @@ def compute_label(features: dict[str, float], rng: np.random.Generator) -> int:
         - 0.7 * features['ram_hardness']
         + 0.35 * features['temp_gradient']
         + 0.2 * features['freezing_level_proxy']
+        + 0.5 * features['load_to_shear_ratio']
+        + 0.35 * features['wet_activation_signal']
+        + 0.2 * features['rain_on_snow_signal']
+        + 0.15 * features['settlement_deficit']
         + rng.normal(0, 0.25)
     )
     return int(_sigmoid(score - 2.7) > 0.5)

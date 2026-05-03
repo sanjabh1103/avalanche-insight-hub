@@ -136,3 +136,4 @@ The plan below assumes these locked decisions:
   - MTS-LSTM is a branched multi-timescale sequence model, not the current pseudo-sequence LSTM,
   - standard GitHub-hosted runners are CPU-bound,
   - Google Maps geocoding is billed and quota-managed.
+==========

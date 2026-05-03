@@ -18,16 +18,23 @@ from __future__ import annotations
 
 import math
 import os
+import shutil
+import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
+
 try:  # pragma: no cover - optional deps guarded by feature flag
     import rasterio
+    from rasterio.features import shapes as raster_shapes
     from rasterio.windows import Window
     _HAS_RASTERIO = True
 except Exception:  # pragma: no cover - fallback
     rasterio = None
+    raster_shapes = None
     Window = None
     _HAS_RASTERIO = False
 
@@ -38,11 +45,19 @@ except Exception:  # pragma: no cover - fallback
     whitebox = None
     _HAS_WHITEBOX = False
 
+try:  # pragma: no cover - optional deps
+    import shapefile
+    _HAS_SHAPEFILE = True
+except Exception:  # pragma: no cover - fallback
+    shapefile = None
+    _HAS_SHAPEFILE = False
+
 
 RUN_PHYSICS_RUNOUT = os.getenv('RUN_PHYSICS_RUNOUT', 'false').lower() in ('1', 'true', 'yes')
 RUNOUT_MAX_CELLS_PER_REGION = int(os.getenv('RUNOUT_MAX_CELLS_PER_REGION', '25'))
 RUNOUT_WINDOW_KM = float(os.getenv('RUNOUT_WINDOW_KM', '5.0'))
 DEM_ROOT = Path(os.getenv('DEM_ROOT', 'backend/data/dem'))
+WHITEBOXTOOLS_BIN = os.getenv('WHITEBOXTOOLS_BIN', '').strip()
 
 
 @dataclass(frozen=True)
@@ -119,42 +134,279 @@ def _alpha_beta_elliptical(
     ]
 
 
+def _whitebox_wrapper() -> object | None:
+    if not _HAS_WHITEBOX:
+        return None
+    try:  # pragma: no cover - runtime-only wrapper setup
+        wrapper = whitebox.WhiteboxTools()
+    except Exception:
+        return None
+    try:
+        wrapper.verbose = False
+    except Exception:
+        pass
+    return wrapper
+
+
+def _whitebox_cli_bin() -> str | None:
+    candidate = WHITEBOXTOOLS_BIN
+    if candidate and Path(candidate).exists():
+        return candidate
+    binary = shutil.which('whitebox_tools')
+    if binary:
+        return binary
+    if _HAS_WHITEBOX and getattr(whitebox, '__file__', None):
+        packaged = Path(str(whitebox.__file__)).resolve().parent / 'whitebox_tools'
+        if packaged.exists():
+            return str(packaged)
+    return None
+
+
+def _write_seed_points_shapefile(path: Path, *, profile: dict, row: int, col: int) -> bool:
+    if not _HAS_SHAPEFILE:
+        return False
+    transform = profile.get('transform')
+    if transform is None:
+        return False
+    x, y = transform * (float(col) + 0.5, float(row) + 0.5)
+    with shapefile.Writer(str(path)) as writer:  # pragma: no cover - runtime-only with pyshp installed
+        writer.field('id', 'N', decimal=0)
+        writer.point(float(x), float(y))
+        writer.record(1)
+    crs = profile.get('crs')
+    if crs is not None and hasattr(crs, 'to_wkt'):
+        path.with_suffix('.prj').write_text(crs.to_wkt(), encoding='utf-8')
+    return path.exists()
+
+
+def _dilate_mask(mask: np.ndarray, *, iterations: int = 1) -> np.ndarray:
+    dilated = mask.astype(bool)
+    for _ in range(max(0, iterations)):
+        padded = np.pad(dilated, 1, mode='constant', constant_values=False)
+        next_mask = dilated.copy()
+        for row_offset in (-1, 0, 1):
+            for col_offset in (-1, 0, 1):
+                next_mask |= padded[
+                    1 + row_offset:1 + row_offset + dilated.shape[0],
+                    1 + col_offset:1 + col_offset + dilated.shape[1],
+                ]
+        dilated = next_mask
+    return dilated
+
+
+def _ring_area(points: list[list[float]]) -> float:
+    if len(points) < 4:
+        return 0.0
+    total = 0.0
+    for idx in range(len(points) - 1):
+        x1, y1 = points[idx]
+        x2, y2 = points[idx + 1]
+        total += (x1 * y2) - (x2 * y1)
+    return abs(total) / 2.0
+
+
+def _largest_polygon_from_mask(mask: np.ndarray, *, transform) -> Optional[list[list[float]]]:
+    if raster_shapes is None:
+        return None
+    best_polygon: list[list[float]] | None = None
+    best_area = 0.0
+    for geometry, value in raster_shapes(mask.astype(np.uint8), mask=mask, transform=transform):
+        if int(value) != 1:
+            continue
+        if geometry.get('type') != 'Polygon':
+            continue
+        coordinates = geometry.get('coordinates')
+        if not isinstance(coordinates, list) or not coordinates:
+            continue
+        ring = coordinates[0]
+        if not isinstance(ring, list) or len(ring) < 4:
+            continue
+        polygon = [[float(point[0]), float(point[1])] for point in ring]
+        area = _ring_area(polygon)
+        if area > best_area:
+            best_area = area
+            best_polygon = polygon
+    return best_polygon
+
+
+def _call_whitebox_wrapper(
+    *,
+    workdir: Path,
+    crop_dem: Path,
+    filled_dem: Path,
+    d8_pointer: Path,
+    seed_points: Path,
+    flowpath_raster: Path,
+) -> bool:
+    wrapper = _whitebox_wrapper()
+    if wrapper is None:
+        return False
+    try:  # pragma: no cover - runtime-only when whitebox is installed
+        if hasattr(wrapper, 'set_working_dir'):
+            wrapper.set_working_dir(str(workdir))
+        fill_depressions = getattr(wrapper, 'fill_depressions', None) or getattr(wrapper, 'FillDepressions', None)
+        d8_pointer_tool = getattr(wrapper, 'd8_pointer', None) or getattr(wrapper, 'D8Pointer', None)
+        trace_flowpaths = getattr(wrapper, 'trace_downslope_flowpaths', None) or getattr(wrapper, 'TraceDownslopeFlowpaths', None)
+        if not callable(fill_depressions) or not callable(d8_pointer_tool) or not callable(trace_flowpaths):
+            return False
+        fill_depressions(str(crop_dem), str(filled_dem), fix_flats=True)
+        d8_pointer_tool(str(filled_dem), str(d8_pointer))
+        trace_flowpaths(str(seed_points), str(d8_pointer), str(flowpath_raster), zero_background=True)
+        return flowpath_raster.exists()
+    except Exception:
+        return False
+
+
+def _run_whitebox_cli(command: list[str], *, workdir: Path) -> bool:
+    binary = _whitebox_cli_bin()
+    if binary is None:
+        return False
+    result = subprocess.run(
+        [binary, *command],
+        cwd=str(workdir),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _call_whitebox_cli(
+    *,
+    workdir: Path,
+    crop_dem: Path,
+    filled_dem: Path,
+    d8_pointer: Path,
+    seed_points: Path,
+    flowpath_raster: Path,
+) -> bool:
+    if not _run_whitebox_cli(
+        ['-r=FillDepressions', '-v', f'--wd={workdir}', f'--dem={crop_dem}', f'-o={filled_dem}', '--fix_flats'],
+        workdir=workdir,
+    ):
+        return False
+    if not _run_whitebox_cli(
+        ['-r=D8Pointer', '-v', f'--wd={workdir}', f'--dem={filled_dem}', f'-o={d8_pointer}'],
+        workdir=workdir,
+    ):
+        return False
+    trace_variants = [
+        ['-r=TraceDownslopeFlowpaths', '-v', f'--wd={workdir}', f'--seed_pts={seed_points}', f'--d8_pntr={d8_pointer}', f'-o={flowpath_raster}', '--zero_background'],
+        ['-r=TraceDownslopeFlowpaths', '-v', f'--wd={workdir}', f'--seed_pts={seed_points}', f'--flow_dir={d8_pointer}', f'--output={flowpath_raster}', '--zero_background'],
+    ]
+    for command in trace_variants:
+        if _run_whitebox_cli(command, workdir=workdir) and flowpath_raster.exists():
+            return True
+    return False
+
+
+def _execute_whitebox_flowpath(
+    *,
+    workdir: Path,
+    crop_dem: Path,
+    filled_dem: Path,
+    d8_pointer: Path,
+    seed_points: Path,
+    flowpath_raster: Path,
+) -> bool:
+    return _call_whitebox_wrapper(
+        workdir=workdir,
+        crop_dem=crop_dem,
+        filled_dem=filled_dem,
+        d8_pointer=d8_pointer,
+        seed_points=seed_points,
+        flowpath_raster=flowpath_raster,
+    ) or _call_whitebox_cli(
+        workdir=workdir,
+        crop_dem=crop_dem,
+        filled_dem=filled_dem,
+        d8_pointer=d8_pointer,
+        seed_points=seed_points,
+        flowpath_raster=flowpath_raster,
+    )
+
+
 def _whitebox_runout(
     *, dem_path: Path, lat: float, lng: float, probability: float,
 ) -> Optional[list[list[float]]]:
-    """Attempt WhiteboxTools flow path on a 5 km DEM crop.
+    """Attempt a real WhiteboxTools flow path on a bounded DEM crop.
 
     Returns None on any failure so the caller can fall back gracefully.
     """
-    if not (_HAS_RASTERIO and _HAS_WHITEBOX):
+    if not _HAS_RASTERIO:
         return None
-    try:  # pragma: no cover - heavy runtime path
+    try:  # pragma: no cover - runtime-heavy path
         with rasterio.open(dem_path) as src:
-            # Convert 5 km window into pixels.
-            pixels_per_m = 1.0 / max(src.res[0], 1e-6)
+            x_res = abs(float(src.res[0]))
+            y_res = abs(float(src.res[1]))
+            if src.crs and getattr(src.crs, 'is_geographic', False):
+                meters_per_deg_lat = 111_320.0
+                meters_per_deg_lng = max(1.0, meters_per_deg_lat * math.cos(math.radians(lat)))
+                x_res_m = x_res * meters_per_deg_lng
+                y_res_m = y_res * meters_per_deg_lat
+            else:
+                x_res_m = x_res
+                y_res_m = y_res
+            pixels_per_m = 1.0 / max(min(x_res_m, y_res_m), 1e-6)
             half_px = int(RUNOUT_WINDOW_KM * 1000.0 * pixels_per_m / 2.0)
             row, col = src.index(lng, lat)
+            row_start = max(0, row - half_px)
+            row_end = min(src.height, row + half_px + 1)
+            col_start = max(0, col - half_px)
+            col_end = min(src.width, col + half_px + 1)
             window = Window(
-                col_off=max(0, col - half_px),
-                row_off=max(0, row - half_px),
-                width=min(src.width, 2 * half_px),
-                height=min(src.height, 2 * half_px),
+                col_off=col_start,
+                row_off=row_start,
+                width=max(1, col_end - col_start),
+                height=max(1, row_end - row_start),
             )
             crop = src.read(1, window=window)
             if crop.size == 0:
                 return None
-        # We do not execute the full WhiteboxTools binary here because it
-        # requires an on-disk round-trip per cell. That's acceptable in a
-        # scheduled run but noisy in local dev; for v2.0 we use the crop
-        # *only* to refine the alpha angle from the local relief.
-        drop = float(crop.max() - crop.min()) if crop.size else 300.0
-        beta = math.degrees(math.atan(drop / (RUNOUT_WINDOW_KM * 1000.0)))
-        alpha = max(10.0, 0.96 * beta - 1.4)
-        # Feed the refined beta back into the elliptical approximation.
-        return _alpha_beta_elliptical(
-            lat=lat, lng=lng, slope_deg=beta, aspect_deg=0.0, probability=probability,
-        )
-    except Exception:  # pragma: no cover - defensive
+            transform = src.window_transform(window)
+            profile = src.profile.copy()
+            profile.update(
+                driver='GTiff',
+                count=1,
+                height=int(window.height),
+                width=int(window.width),
+                transform=transform,
+                compress='lzw',
+                tiled=False,
+            )
+        local_row = row - row_start
+        local_col = col - col_start
+        with tempfile.TemporaryDirectory(prefix='whitebox-runout-') as tmpdir:
+            workdir = Path(tmpdir)
+            crop_dem = workdir / 'crop_dem.tif'
+            filled_dem = workdir / 'filled_dem.tif'
+            d8_pointer = workdir / 'd8_pointer.tif'
+            seed_points = workdir / 'seed_points.shp'
+            flowpath_raster = workdir / 'flowpath.tif'
+
+            with rasterio.open(crop_dem, 'w', **profile) as dataset:
+                dataset.write(crop, 1)
+            if not _write_seed_points_shapefile(seed_points, profile=profile, row=local_row, col=local_col):
+                return None
+
+            if not _execute_whitebox_flowpath(
+                workdir=workdir,
+                crop_dem=crop_dem,
+                filled_dem=filled_dem,
+                d8_pointer=d8_pointer,
+                seed_points=seed_points,
+                flowpath_raster=flowpath_raster,
+            ):
+                return None
+
+            with rasterio.open(flowpath_raster) as traced:
+                flow_mask = traced.read(1) > 0
+                if not np.any(flow_mask):
+                    return None
+                dilated = _dilate_mask(flow_mask, iterations=1 + int(probability >= 0.8))
+                polygon = _largest_polygon_from_mask(dilated, transform=traced.transform)
+                return polygon
+    except Exception:
         return None
 
 
@@ -166,8 +418,8 @@ def runout_polygon_for_cell(
     """Produce a RunoutPolygon for a single high-risk cell.
 
     Method precedence:
-        1. whitebox_alpha_beta  (requires RUN_PHYSICS_RUNOUT + DEM + deps)
-        2. analytical_alpha_beta (always works when slope data is present)
+        1. alpha_beta_whitebox  (requires RUN_PHYSICS_RUNOUT + DEM + WhiteboxTools)
+        2. alpha_beta_elliptical (always works when slope data is present)
         3. rectangular_footprint (final safe fallback, preserves v1 behavior)
     """
     lat = float(cell['lat'])
@@ -175,7 +427,12 @@ def runout_polygon_for_cell(
     lat_end = float(cell.get('lat_end', lat))
     lng_end = float(cell.get('lng_end', lng))
     probability = _coerce_probability(cell.get('probability'), default=0.5)
-    slope_deg = float(cell.get('terrain_inputs', {}).get('slope_deg', 0.0)) or float(cell.get('slope_deg', 0.0))
+    slope_deg = (
+        float(cell.get('terrain_inputs', {}).get('slope_angle_deg', 0.0))
+        or float(cell.get('terrain_inputs', {}).get('slope_deg', 0.0))
+        or float(cell.get('slope_angle_deg', 0.0))
+        or float(cell.get('slope_deg', 0.0))
+    )
     aspect_deg = float(cell.get('terrain_inputs', {}).get('aspect_deg', 0.0)) or float(cell.get('aspect_deg', 0.0))
     if slope_deg <= 0:
         # If slope not supplied, derive a conservative 30° assumption so the
@@ -194,7 +451,7 @@ def runout_polygon_for_cell(
                     col=int(cell['col']),
                     risk_score=int(cell.get('risk_score', 0)),
                     polygon=whitebox_poly,
-                    method='whitebox_alpha_beta',
+                    method='alpha_beta_whitebox',
                 )
 
     try:
@@ -206,7 +463,7 @@ def runout_polygon_for_cell(
             col=int(cell['col']),
             risk_score=int(cell.get('risk_score', 0)),
             polygon=analytical_poly,
-            method='analytical_alpha_beta',
+            method='alpha_beta_elliptical',
         )
     except Exception:  # pragma: no cover - defensive
         return RunoutPolygon(
@@ -227,10 +484,7 @@ def build_runout_polygons(region_key: str, cells: list[dict]) -> list[dict]:
         cell
         for cell in cells
         if str(cell.get('status') or 'ready') == 'ready'
-        and (
-            cell.get('runout_seed')
-            or _coerce_probability(cell.get('probability'), default=0.0) > 0.65
-        )
+        and cell.get('runout_seed')
     ]
     candidates.sort(
         key=lambda cell: _coerce_probability(cell.get('probability'), default=0.0),

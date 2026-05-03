@@ -15,6 +15,7 @@ export interface AvalancheEvent {
   location_name?: string;
   fieldReportId?: string | null;
   clientReportId?: string | null;
+  verificationStatus?: string | null;
   optimistic?: boolean;
 }
 
@@ -29,8 +30,16 @@ type AvalancheEventRow = Pick<
   | 'source'
   | 'event_type'
   | 'timestamp'
+  | 'verification_status'
   | 'features'
 >;
+
+export type AvalancheEventGovernanceState =
+  | 'pending_corroboration'
+  | 'corroborated'
+  | 'verified'
+  | 'expert_verified'
+  | 'unknown';
 
 function asObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -106,6 +115,12 @@ function extractFeatureConfidence(features: Record<string, unknown> | null, key:
   return toFiniteNumber(features?.[key]);
 }
 
+function normalizeVerificationStatus(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : null;
+}
+
 export function parseAvalancheEventRow(row: Partial<AvalancheEventRow> & Record<string, unknown>): AvalancheEvent | null {
   const coordinates = parsePointLocation(row.location);
   if (!coordinates) return null;
@@ -114,6 +129,9 @@ export function parseAvalancheEventRow(row: Partial<AvalancheEventRow> & Record<
   const rawConfidence = toFiniteNumber(row.confidence);
   const labelConfidence = toFiniteNumber(row.label_confidence) ?? extractFeatureConfidence(features, 'label_confidence');
   const canonicalConfidence = labelConfidence ?? rawConfidence ?? 0.5;
+  const verificationStatus = normalizeVerificationStatus(
+    row.verification_status ?? features?.verification_status,
+  );
 
   return {
     id: String(row.id ?? ''),
@@ -130,6 +148,7 @@ export function parseAvalancheEventRow(row: Partial<AvalancheEventRow> & Record<
     location_name: extractFeatureString(features, 'location_name') ?? '',
     fieldReportId: extractFeatureString(features, 'field_report_id'),
     clientReportId: extractFeatureString(features, 'client_report_id'),
+    verificationStatus,
     optimistic: false,
   };
 }
@@ -156,8 +175,79 @@ export function buildOptimisticFieldReportEvent(args: {
     timestamp: args.timestamp,
     location_name: args.locationName ?? '',
     clientReportId: args.clientReportId,
+    verificationStatus: 'unverified',
     optimistic: true,
   };
+}
+
+export function getAvalancheEventGovernanceState(event: Pick<AvalancheEvent, 'source' | 'verificationStatus'>): AvalancheEventGovernanceState {
+  const verificationStatus = normalizeVerificationStatus(event.verificationStatus);
+  if (verificationStatus === 'expert_verified') return 'expert_verified';
+  if (verificationStatus === 'verified') return 'verified';
+  if (verificationStatus === 'weak') return 'corroborated';
+  if ((event.source || '').toLowerCase().includes('field_report') && verificationStatus === 'unverified') {
+    return 'pending_corroboration';
+  }
+  return verificationStatus === 'unverified' ? 'unknown' : 'unknown';
+}
+
+export function getAvalancheEventGovernanceLabel(event: Pick<AvalancheEvent, 'source' | 'verificationStatus'>): string {
+  const state = getAvalancheEventGovernanceState(event);
+  switch (state) {
+    case 'pending_corroboration':
+      return 'Pending corroboration';
+    case 'corroborated':
+      return 'Corroborated';
+    case 'verified':
+      return 'Verified';
+    case 'expert_verified':
+      return 'Expert verified';
+    default:
+      return 'Status unavailable';
+  }
+}
+
+export function getAvalancheEventMarkerAppearance(event: Pick<AvalancheEvent, 'source' | 'verificationStatus' | 'confidence'>): {
+  color: string;
+  fillColor: string;
+  fillOpacity: number;
+  weight: number;
+} {
+  const state = getAvalancheEventGovernanceState(event);
+  if (state === 'pending_corroboration') {
+    return {
+      color: '#94a3b8',
+      fillColor: '#f59e0b',
+      fillOpacity: 0.45,
+      weight: 1,
+    };
+  }
+  if (state === 'corroborated') {
+    return {
+      color: '#f97316',
+      fillColor: '#f97316',
+      fillOpacity: 0.72,
+      weight: 2,
+    };
+  }
+  if (state === 'verified' || state === 'expert_verified') {
+    return {
+      color: '#ef4444',
+      fillColor: '#ef4444',
+      fillOpacity: 0.82,
+      weight: 2,
+    };
+  }
+  if (event.confidence >= 0.8) {
+    return { color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.8, weight: 2 };
+  }
+  if (event.confidence >= 0.6) {
+    return { color: '#f97316', fillColor: '#f97316', fillOpacity: 0.8, weight: 2 };
+  }
+  if (event.confidence >= 0.4) {
+    return { color: '#eab308', fillColor: '#eab308', fillOpacity: 0.8, weight: 2 };
+  }
+  return { color: '#84cc16', fillColor: '#84cc16', fillOpacity: 0.8, weight: 2 };
 }
 
 function sameTimestampWindow(left: string, right: string): boolean {

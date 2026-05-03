@@ -5,7 +5,9 @@ import json
 import os
 import sys
 from datetime import datetime, timedelta, timezone
+from time import perf_counter
 from pathlib import Path
+from typing import Any
 
 import joblib
 import numpy as np
@@ -19,12 +21,19 @@ from backend.common.abc_optimizer import (
     optimize as abc_optimize,
 )
 from backend.common.artifacts import create_artifact_dir, dump_json, dump_joblib, latest_artifact_dir, load_json
+from backend.common.audit_metadata import build_latest_benchmark_summary
 from backend.common.config import load_settings
 from backend.common.features import FEATURE_COLUMNS
+from backend.common.model_status_state import (
+    build_autonomous_evidence_summary,
+    build_drift_mode_state,
+    build_dynamic_model_candidate,
+    build_stability_summary,
+)
 from backend.common.schema_drift import feature_columns_hash, label_schema_hash
-from backend.common.supabase_io import has_supabase_credentials, patch_first_row, rest_get
+from backend.common.supabase_io import has_supabase_credentials, patch_first_row, rest_get, rest_insert, rest_upsert
 from backend.common.training_dataset import load_training_frame
-from backend.models.surrogate_rf import fit_surrogate_bundle
+from backend.models.surrogate_rf import fit_surrogate_bundle, peirce_skill_score_max
 
 
 # Story 21 + Edit 3: publish the minimum Peirce Skill Score required for the
@@ -50,6 +59,10 @@ DRIFT_NEW_POSITIVE_THRESHOLD = int(os.getenv('DRIFT_NEW_POSITIVE_THRESHOLD', '10
 MTS_RUNTIME_PROVIDER = os.getenv('MTS_RUNTIME_PROVIDER', 'local').strip() or 'local'
 SAR_RELEASE_GATE_PASSED = os.getenv('SAR_RELEASE_GATE_PASSED', '').lower() in ('1', 'true', 'yes')
 REQUESTED_DATASET_SNAPSHOT_ID = os.getenv('REQUESTED_DATASET_SNAPSHOT_ID')
+MTS_SAR_VOLUME_MIN_EVENTS = int(os.getenv('MTS_SAR_VOLUME_MIN_EVENTS', '50'))
+MTS_SAR_VOLUME_MIN_REGIONS = int(os.getenv('MTS_SAR_VOLUME_MIN_REGIONS', '3'))
+MTS_SAR_VOLUME_MIN_SCENE_DATES = int(os.getenv('MTS_SAR_VOLUME_MIN_SCENE_DATES', '14'))
+STABILITY_SEED_COUNT = int(os.getenv('STABILITY_SEED_COUNT', '3'))
 
 
 def build_dataset_snapshot_id(dataset_manifest: dict[str, object] | None) -> str:
@@ -60,6 +73,335 @@ def build_dataset_snapshot_id(dataset_manifest: dict[str, object] | None) -> str
     if isinstance(newest_timestamp, str) and newest_timestamp:
         return f'{version}:{newest_timestamp}'
     return version
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, np.ndarray):
+        return [_json_safe(item) for item in value.tolist()]
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, (pd.Timestamp, datetime)):
+        return value.isoformat()
+    if isinstance(value, Path):
+        return str(value)
+    return value
+
+
+def _build_reliability_bins(labels: np.ndarray, probabilities: np.ndarray, *, bins: int = 10) -> tuple[list[dict[str, Any]], float]:
+    label_arr = np.asarray(labels).astype(int)
+    prob_arr = np.clip(np.asarray(probabilities, dtype=np.float32), 0.0, 1.0)
+    if label_arr.size == 0 or prob_arr.size == 0:
+        return [], 0.0
+    edges = np.linspace(0.0, 1.0, num=bins + 1, dtype=np.float32)
+    curve: list[dict[str, Any]] = []
+    ece = 0.0
+    total = float(label_arr.size)
+    for idx in range(bins):
+        lower = float(edges[idx])
+        upper = float(edges[idx + 1])
+        if idx == bins - 1:
+            mask = (prob_arr >= lower) & (prob_arr <= upper)
+        else:
+            mask = (prob_arr >= lower) & (prob_arr < upper)
+        sample_count = int(mask.sum())
+        if sample_count == 0:
+            curve.append({
+                'bin_index': idx,
+                'bin_start': lower,
+                'bin_end': upper,
+                'sample_count': 0,
+                'positive_count': 0,
+                'mean_predicted_probability': None,
+                'mean_observed_rate': None,
+            })
+            continue
+        bucket_probs = prob_arr[mask]
+        bucket_labels = label_arr[mask]
+        mean_pred = float(bucket_probs.mean())
+        mean_obs = float(bucket_labels.mean())
+        ece += (sample_count / total) * abs(mean_obs - mean_pred)
+        curve.append({
+            'bin_index': idx,
+            'bin_start': lower,
+            'bin_end': upper,
+            'sample_count': sample_count,
+            'positive_count': int(bucket_labels.sum()),
+            'mean_predicted_probability': mean_pred,
+            'mean_observed_rate': mean_obs,
+        })
+    return curve, float(ece)
+
+
+def _merge_reliability_curves(
+    labels: np.ndarray,
+    raw_probabilities: np.ndarray,
+    calibrated_probabilities: np.ndarray,
+) -> tuple[list[dict[str, Any]], float, float]:
+    raw_curve, raw_ece = _build_reliability_bins(labels, raw_probabilities)
+    calibrated_curve, calibrated_ece = _build_reliability_bins(labels, calibrated_probabilities)
+    merged: list[dict[str, Any]] = []
+    for idx in range(max(len(raw_curve), len(calibrated_curve))):
+        raw_bin = raw_curve[idx] if idx < len(raw_curve) else {}
+        calibrated_bin = calibrated_curve[idx] if idx < len(calibrated_curve) else {}
+        merged.append({
+            'bin_index': idx,
+            'bin_start': calibrated_bin.get('bin_start', raw_bin.get('bin_start')),
+            'bin_end': calibrated_bin.get('bin_end', raw_bin.get('bin_end')),
+            'sample_count_uncalibrated': raw_bin.get('sample_count'),
+            'positive_count_uncalibrated': raw_bin.get('positive_count'),
+            'mean_predicted_probability_uncalibrated': raw_bin.get('mean_predicted_probability'),
+            'mean_observed_rate_uncalibrated': raw_bin.get('mean_observed_rate'),
+            'sample_count_calibrated': calibrated_bin.get('sample_count'),
+            'positive_count_calibrated': calibrated_bin.get('positive_count'),
+            'mean_predicted_probability_calibrated': calibrated_bin.get('mean_predicted_probability'),
+            'mean_observed_rate_calibrated': calibrated_bin.get('mean_observed_rate'),
+        })
+    return merged, raw_ece, calibrated_ece
+
+
+def _build_phase2_label_snapshot(
+    *,
+    bundle: dict[str, object],
+    metadata: dict[str, object],
+) -> dict[str, Any]:
+    manifest = bundle.get('dataset_manifest') if isinstance(bundle.get('dataset_manifest'), dict) else {}
+    dataset_snapshot_id = str(bundle.get('dataset_snapshot_id') or build_dataset_snapshot_id(manifest))
+    snapshot_id = f'label-snapshot:{dataset_snapshot_id}'
+    return {
+        'snapshot_id': snapshot_id,
+        'hazard_type': 'avalanche',
+        'dataset_snapshot_id': dataset_snapshot_id,
+        'name': str(bundle.get('training_dataset_version') or dataset_snapshot_id),
+        'source_weights': _json_safe(manifest.get('source_training_weight_sums') or {}),
+        'source_composition': _json_safe({
+            'event_source_counts': manifest.get('event_source_counts') or {},
+            'source_region_counts': manifest.get('source_region_counts') or {},
+            'newest_timestamp_by_source': manifest.get('newest_timestamp_by_source') or {},
+        }),
+        'confidence_decay_policy': _json_safe({
+            'weight_field': 'training_weight',
+            'drift_window_days': DRIFT_WINDOW_DAYS,
+            'baseline_window_days': DRIFT_BASELINE_DAYS,
+            'drift_skip_allowed': ALLOW_DRIFT_SKIP,
+        }),
+        'coverage_summary': _json_safe({
+            'training_row_count': manifest.get('training_row_count'),
+            'positive_count': manifest.get('positive_count'),
+            'negative_count': manifest.get('negative_count'),
+            'mean_training_weight': manifest.get('mean_training_weight'),
+        }),
+        'region_coverage': _json_safe(manifest.get('region_keys') or []),
+        'season_coverage': _json_safe(manifest.get('season_coverage') or {}),
+        'provenance_notes': (
+            f"chronological_holdout_v1 generated at {metadata.get('published_at') or datetime.now(timezone.utc).isoformat()}"
+        ),
+        'status': 'active',
+    }
+
+
+def _resolve_eval_window(test_df: pd.DataFrame, *, fallback_timestamp: str | None) -> tuple[str, str]:
+    timestamps = pd.to_datetime(test_df.get('timestamp'), utc=True, errors='coerce') if 'timestamp' in test_df.columns else pd.Series(dtype='datetime64[ns, UTC]')
+    timestamps = timestamps.dropna()
+    if not timestamps.empty:
+        return timestamps.min().date().isoformat(), timestamps.max().date().isoformat()
+    fallback = pd.Timestamp(fallback_timestamp or datetime.now(timezone.utc).isoformat(), tz='UTC')
+    date_text = fallback.date().isoformat()
+    return date_text, date_text
+
+
+def persist_phase2_evaluation_plane(
+    *,
+    artifact_dir: Path,
+    bundle: dict[str, object],
+    metadata: dict[str, object],
+    test_df: pd.DataFrame,
+) -> dict[str, object]:
+    from sklearn.metrics import brier_score_loss
+
+    manifest = bundle.get('dataset_manifest') if isinstance(bundle.get('dataset_manifest'), dict) else {}
+    lstm_head_meta = bundle.get('lstm_head_meta') if isinstance(bundle.get('lstm_head_meta'), dict) else {}
+    evaluation = bundle.get('lstm_evaluation') if isinstance(bundle.get('lstm_evaluation'), dict) else {}
+    labels = np.asarray(evaluation.get('test_labels', []), dtype=np.int32)
+    raw_probabilities = np.asarray(evaluation.get('test_prob_uncalibrated', []), dtype=np.float32)
+    calibrated_probabilities = np.asarray(evaluation.get('test_prob_calibrated', []), dtype=np.float32)
+    ordered_test_df = test_df.reset_index(drop=True).copy()
+    if len(labels) != len(ordered_test_df):
+        raise ValueError(
+            f'phase2 evaluation rows misaligned: labels={len(labels)} test_df={len(ordered_test_df)}'
+        )
+
+    dataset_snapshot_id = str(bundle.get('dataset_snapshot_id') or build_dataset_snapshot_id(manifest))
+    model_version = str(
+        bundle.get('dynamic_model_version')
+        or lstm_head_meta.get('dynamic_model_version')
+        or bundle.get('surrogate_model_version')
+        or 'unknown'
+    )
+    calibration_profile_version = str(bundle.get('dynamic_model_version') or model_version)
+    start_date, end_date = _resolve_eval_window(
+        ordered_test_df,
+        fallback_timestamp=str(metadata.get('published_at') or ''),
+    )
+    label_snapshot = _build_phase2_label_snapshot(bundle=bundle, metadata=metadata)
+    artifact_ref = str(artifact_dir / 'training_metrics.json')
+    summary_metrics = {
+        'evaluation_mode': 'chronological_holdout_v1',
+        'sample_count': int(labels.size),
+        'positive_count': int(labels.sum()) if labels.size else 0,
+        'brier_score_uncalibrated': float(brier_score_loss(labels, raw_probabilities)) if labels.size else None,
+        'brier_score_calibrated': float(brier_score_loss(labels, calibrated_probabilities)) if labels.size else None,
+        'pss_uncalibrated': float(lstm_head_meta.get('pss_holdout_uncalibrated') or 0.0),
+        'pss_calibrated': float(lstm_head_meta.get('pss_holdout') or lstm_head_meta.get('pss_holdout_calibrated') or 0.0),
+        'calibration_method': str(lstm_head_meta.get('calibration_method') or 'unavailable'),
+        'calibration_applied': bool(lstm_head_meta.get('calibration_applied')),
+        'calibration_improved': bool(lstm_head_meta.get('calibration_improved')),
+        'rf_pss': float(lstm_head_meta.get('rf_pss_holdout') or 0.0),
+        'rf_brier': float(lstm_head_meta.get('rf_brier_score') or 0.0),
+        'shadow_quality_gate_passed': bool(lstm_head_meta.get('shadow_quality_gate_passed')),
+    }
+    hindcast_run = {
+        'hazard_type': 'avalanche',
+        'run_name': f'chronological-holdout-{artifact_dir.name}',
+        'model_version': model_version,
+        'label_snapshot_id': None,
+        'dataset_snapshot_id': dataset_snapshot_id,
+        'calibration_profile_version': calibration_profile_version,
+        'source_composition': _json_safe(label_snapshot.get('source_composition') or {}),
+        'region_coverage': _json_safe(label_snapshot.get('region_coverage') or []),
+        'region_keys': _json_safe(manifest.get('region_keys') or sorted(set(ordered_test_df.get('region_key', pd.Series(dtype=str)).astype(str).tolist()))),
+        'forecast_horizons': [],
+        'eval_window_start': start_date,
+        'eval_window_end': end_date,
+        'status': 'completed',
+        'summary_metrics': _json_safe(summary_metrics),
+        'artifact_manifest_ref': str(artifact_dir / 'hindcast_run.json'),
+        'completed_at': str(metadata.get('published_at') or datetime.now(timezone.utc).isoformat()),
+    }
+
+    def _build_report(region_key: str | None, row_mask: np.ndarray) -> dict[str, Any]:
+        slice_labels = labels[row_mask]
+        slice_raw_probabilities = raw_probabilities[row_mask]
+        slice_calibrated_probabilities = calibrated_probabilities[row_mask]
+        reliability_curve, raw_ece, calibrated_ece = _merge_reliability_curves(
+            slice_labels,
+            slice_raw_probabilities,
+            slice_calibrated_probabilities,
+        )
+        if slice_labels.size and len(np.unique(slice_labels)) >= 2:
+            pss_uncalibrated, _ = peirce_skill_score_max(slice_labels, slice_raw_probabilities)
+            pss_calibrated, _ = peirce_skill_score_max(slice_labels, slice_calibrated_probabilities)
+            brier_uncalibrated = float(brier_score_loss(slice_labels, slice_raw_probabilities))
+            brier_calibrated = float(brier_score_loss(slice_labels, slice_calibrated_probabilities))
+        else:
+            pss_uncalibrated = 0.0
+            pss_calibrated = 0.0
+            brier_uncalibrated = None
+            brier_calibrated = None
+        report_metrics = {
+            'sample_count': int(slice_labels.size),
+            'positive_count': int(slice_labels.sum()) if slice_labels.size else 0,
+            'brier_score_uncalibrated': brier_uncalibrated,
+            'brier_score_calibrated': brier_calibrated,
+            'ece_uncalibrated': raw_ece,
+            'ece_calibrated': calibrated_ece,
+            'pss_uncalibrated': float(pss_uncalibrated),
+            'pss_calibrated': float(pss_calibrated),
+            'rf_pss': float(lstm_head_meta.get('rf_pss_holdout') or 0.0),
+            'rf_brier': float(lstm_head_meta.get('rf_brier_score') or 0.0),
+            'calibration_method': str(lstm_head_meta.get('calibration_method') or 'unavailable'),
+            'calibration_applied': bool(lstm_head_meta.get('calibration_applied')),
+            'calibration_improved': bool(lstm_head_meta.get('calibration_improved')),
+            'calibration_reason': lstm_head_meta.get('calibration_reason'),
+        }
+        return {
+            'hindcast_run_id': None,
+            'hazard_type': 'avalanche',
+            'model_version': model_version,
+            'label_snapshot_id': None,
+            'dataset_snapshot_id': dataset_snapshot_id,
+            'calibration_profile_version': calibration_profile_version,
+            'region_key': region_key,
+            'season_window': None,
+            'forecast_horizon': None,
+            'calibration_method': str(lstm_head_meta.get('calibration_method') or 'unavailable'),
+            'metric_summary': _json_safe(report_metrics),
+            'reliability_curve': _json_safe(reliability_curve),
+            'uncertainty_coverage': _json_safe({
+                'mean_uncertainty_std': lstm_head_meta.get('mean_uncertainty_std'),
+                'uncertainty_validation_passed': lstm_head_meta.get('uncertainty_validation_passed'),
+            }),
+            'artifact_ref': str(artifact_dir / 'calibration_reports.json'),
+        }
+
+    reports = [_build_report(None, np.ones(len(ordered_test_df), dtype=bool))]
+    if 'region_key' in ordered_test_df.columns:
+        for region_key, group in ordered_test_df.groupby('region_key', sort=True):
+            row_mask = (ordered_test_df['region_key'].astype(str) == str(region_key)).to_numpy()
+            region_labels = labels[row_mask]
+            if region_labels.size < 10 or len(np.unique(region_labels)) < 2:
+                continue
+            reports.append(_build_report(str(region_key), row_mask))
+
+    dump_json(artifact_dir / 'label_snapshot.json', _json_safe(label_snapshot))
+    dump_json(artifact_dir / 'hindcast_run.json', _json_safe(hindcast_run))
+    dump_json(artifact_dir / 'calibration_reports.json', _json_safe(reports))
+
+    summary: dict[str, object] = {
+        'db_write_status': 'skipped_no_credentials',
+        'label_snapshot_snapshot_id': str(label_snapshot['snapshot_id']),
+        'label_snapshot_id': None,
+        'hindcast_run_id': None,
+        'calibration_report_ids': [],
+        'calibration_report_ref': str(artifact_dir / 'calibration_reports.json'),
+    }
+    if not has_supabase_credentials():
+        return summary
+
+    try:
+        label_rows = rest_upsert(
+            'label_snapshots',
+            [_json_safe(label_snapshot)],
+            on_conflict='snapshot_id',
+        )
+        label_snapshot_id = str((label_rows or [{}])[0].get('id') or '')
+        if not label_snapshot_id:
+            raise RuntimeError('label_snapshots upsert did not return an id')
+        hindcast_payload = _json_safe({**hindcast_run, 'label_snapshot_id': label_snapshot_id})
+        hindcast_rows = rest_insert('hindcast_runs', [hindcast_payload])
+        hindcast_run_id = str((hindcast_rows or [{}])[0].get('id') or '')
+        if not hindcast_run_id:
+            raise RuntimeError('hindcast_runs insert did not return an id')
+        calibration_payloads = [
+            _json_safe({
+                **report,
+                'label_snapshot_id': label_snapshot_id,
+                'hindcast_run_id': hindcast_run_id,
+            })
+            for report in reports
+        ]
+        calibration_rows = rest_insert('calibration_reports', calibration_payloads)
+        summary.update({
+            'db_write_status': 'ok',
+            'label_snapshot_id': label_snapshot_id,
+            'hindcast_run_id': hindcast_run_id,
+            'calibration_report_ids': [
+                str(row.get('id'))
+                for row in calibration_rows
+                if isinstance(row, dict) and row.get('id')
+            ],
+            'calibration_report_ref': str(artifact_dir / 'calibration_reports.json'),
+        })
+        return summary
+    except Exception as exc:
+        summary.update({
+            'db_write_status': 'failed',
+            'db_error': str(exc),
+        })
+        return summary
 
 
 def publish_guard_reason(*, is_synthetic: bool, allow_publish: bool) -> str | None:
@@ -127,7 +469,74 @@ def collect_sar_unet_volume_stats(dataset_manifest: dict[str, object] | None) ->
     }
 
 
-def fit_model(seed: int, frame: pd.DataFrame, dataset_manifest: dict[str, object]):
+def mts_shadow_training_ready(sar_volume_stats: dict[str, int] | None) -> bool:
+    stats = sar_volume_stats if isinstance(sar_volume_stats, dict) else {}
+    return bool(
+        SAR_RELEASE_GATE_PASSED
+        and int(stats.get('sar_unet_promoted_count') or 0) >= MTS_SAR_VOLUME_MIN_EVENTS
+        and int(stats.get('sar_unet_promoted_region_count') or 0) >= MTS_SAR_VOLUME_MIN_REGIONS
+        and int(stats.get('sar_unet_promoted_scene_date_count') or 0) >= MTS_SAR_VOLUME_MIN_SCENE_DATES
+    )
+
+
+def build_model_status_truth(
+    bundle: dict[str, object],
+    *,
+    artifact_dir: Path | None = None,
+) -> dict[str, object]:
+    metrics = bundle.get('metrics') if isinstance(bundle.get('metrics'), dict) else {}
+    dataset_manifest = bundle.get('dataset_manifest') if isinstance(bundle.get('dataset_manifest'), dict) else {}
+    lstm_meta = bundle.get('lstm_head_meta') if isinstance(bundle.get('lstm_head_meta'), dict) else {}
+    sar_volume_stats = {
+        'sar_unet_shadow_count': int(lstm_meta.get('sar_unet_shadow_count') or 0),
+        'sar_unet_promoted_count': int(lstm_meta.get('sar_unet_promoted_count') or 0),
+        'sar_unet_promoted_region_count': int(lstm_meta.get('sar_unet_promoted_region_count') or 0),
+        'sar_unet_promoted_scene_date_count': int(lstm_meta.get('sar_unet_promoted_scene_date_count') or 0),
+    }
+    evidence_summary = build_autonomous_evidence_summary(dataset_manifest, sar_volume_stats=sar_volume_stats)
+    candidate = build_dynamic_model_candidate(
+        bundle,
+        artifact_dir=artifact_dir,
+        model_status_version=f'async-{artifact_dir.name}' if artifact_dir is not None else None,
+    )
+    return {
+        'pss_reported': metrics.get('pss_reported'),
+        'pss_gate_passed': metrics.get('pss_gate_passed'),
+        'dynamic_model_candidate': candidate,
+        'autonomous_evidence_summary': evidence_summary,
+        'stability_summary': bundle.get('stability_summary') if isinstance(bundle.get('stability_summary'), dict) else {},
+        'drift_mode_state': build_drift_mode_state(candidate),
+        'latest_benchmark_summary': bundle.get('latest_benchmark_summary') if isinstance(bundle.get('latest_benchmark_summary'), dict) else {},
+    }
+
+
+def compute_seed_stability_summary(
+    *,
+    frame: pd.DataFrame,
+    base_seed: int,
+    feature_columns: list[str],
+) -> dict[str, Any]:
+    seed_runs: list[dict[str, Any]] = []
+    for offset in range(max(1, STABILITY_SEED_COUNT)):
+        seed = base_seed + offset
+        candidate_bundle = fit_surrogate_bundle(
+            frame=frame,
+            feature_columns=feature_columns,
+            seed=seed,
+            time_series_splits=TIME_SERIES_SPLITS,
+        )
+        metrics = candidate_bundle.get('metrics') if isinstance(candidate_bundle.get('metrics'), dict) else {}
+        seed_runs.append({
+            'seed': seed,
+            'pss_reported': metrics.get('pss_reported') or metrics.get('pss_holdout'),
+            'optimal_threshold': metrics.get('pss_optimal_threshold'),
+            'brier_score': metrics.get('brier_score'),
+            'selected_features': candidate_bundle.get('selected_features') or [],
+        })
+    return build_stability_summary(seed_runs, primary_seed=base_seed)
+
+
+def fit_model(seed: int, frame: pd.DataFrame, dataset_manifest: dict[str, object]) -> tuple[dict[str, object], pd.DataFrame]:
     surrogate_bundle = fit_surrogate_bundle(
         frame=frame,
         feature_columns=FEATURE_COLUMNS,
@@ -135,6 +544,7 @@ def fit_model(seed: int, frame: pd.DataFrame, dataset_manifest: dict[str, object
         time_series_splits=TIME_SERIES_SPLITS,
     )
     train_df = surrogate_bundle.pop('train_df')
+    calib_df = surrogate_bundle.pop('calib_df')
     test_df = surrogate_bundle.pop('test_df')
     metrics = surrogate_bundle['metrics']
     cv_metrics = surrogate_bundle['cv_metrics']
@@ -154,9 +564,13 @@ def fit_model(seed: int, frame: pd.DataFrame, dataset_manifest: dict[str, object
         **sar_volume_stats,
     }
     try:
-        from backend.lstm_model import fit_lstm_head
+        from backend.lstm_model import fit_lstm_head, split_validation_and_calibration_frame
+
+        validation_df, calibration_df, calibration_split_meta = split_validation_and_calibration_frame(calib_df)
         lstm_head = fit_lstm_head(
             train_df=train_df,
+            validation_df=validation_df,
+            calibration_df=calibration_df,
             test_df=test_df,
             rf_metrics=metrics,
             seed=seed,
@@ -169,6 +583,7 @@ def fit_model(seed: int, frame: pd.DataFrame, dataset_manifest: dict[str, object
         )
         if lstm_head is not None:
             lstm_head_meta = getattr(lstm_head, 'metadata', lstm_head_meta)
+            lstm_head_meta.setdefault('calibration_split', calibration_split_meta)
             if getattr(lstm_head, 'model', None) is None:
                 lstm_head = None
     except Exception as exc:  # pragma: no cover - optional sibling model path
@@ -202,11 +617,18 @@ def fit_model(seed: int, frame: pd.DataFrame, dataset_manifest: dict[str, object
         'label_schema_hash': label_hash,
         'dynamic_model_type': 'mts_lstm_v1' if lstm_head is not None else 'surrogate_rf_v1',
         'dynamic_model_version': lstm_head_meta.get('dynamic_model_version') if isinstance(lstm_head_meta, dict) else None,
+        'lstm_evaluation': getattr(lstm_head, 'evaluation_payload', None) if lstm_head is not None else None,
     }
-    return bundle
+    bundle['stability_summary'] = compute_seed_stability_summary(
+        frame=frame,
+        base_seed=seed,
+        feature_columns=FEATURE_COLUMNS,
+    )
+    return bundle, test_df
 
 
 def publish_metadata(artifact_dir: Path, bundle: dict[str, object]):
+    status_truth = build_model_status_truth(bundle, artifact_dir=artifact_dir)
     metadata = {
         'selected_features': bundle['selected_features'],
         'feature_columns': bundle['feature_columns'],
@@ -224,12 +646,21 @@ def publish_metadata(artifact_dir: Path, bundle: dict[str, object]):
         'dataset_snapshot_id': bundle.get('dataset_snapshot_id'),
         'artifact_dir': str(artifact_dir),
         'published_at': datetime.now(timezone.utc).isoformat(),
+        'dynamic_model_candidate': status_truth.get('dynamic_model_candidate'),
+        'autonomous_evidence_summary': status_truth.get('autonomous_evidence_summary'),
+        'stability_summary': status_truth.get('stability_summary'),
+        'drift_mode_state': status_truth.get('drift_mode_state'),
+        'latest_benchmark_summary': status_truth.get('latest_benchmark_summary'),
     }
     dump_json(artifact_dir / 'feature_schema.json', {
         'feature_columns': bundle['feature_columns'],
         'selected_features': bundle['selected_features'],
         'feature_means': bundle['feature_means'],
     })
+    dump_json(artifact_dir / 'dynamic_model_candidate.json', status_truth.get('dynamic_model_candidate'))
+    dump_json(artifact_dir / 'autonomous_evidence_summary.json', status_truth.get('autonomous_evidence_summary'))
+    dump_json(artifact_dir / 'stability_summary.json', status_truth.get('stability_summary'))
+    dump_json(artifact_dir / 'latest_benchmark_summary.json', status_truth.get('latest_benchmark_summary'))
     dump_json(artifact_dir / 'training_metrics.json', metadata)
     dump_joblib(artifact_dir / 'model.joblib', bundle)
     return metadata
@@ -347,20 +778,30 @@ def main() -> int:
     if not SKIP_EVENT_PRECHECK:
         eligible = _count_eligible_events()
         if eligible is not None and eligible < MIN_EVENTS_FOR_TRAINING:
+            sar_volume_stats = collect_sar_unet_volume_stats(None)
+            if not mts_shadow_training_ready(sar_volume_stats):
+                print(
+                    f'[train_model] precheck: only {eligible} eligible severe events '
+                    f'(need >= {MIN_EVENTS_FOR_TRAINING}). '
+                    'Insufficient events for KMeansSMOTE. Waiting for more data.'
+                )
+                return 0
             print(
-                f'[train_model] precheck: only {eligible} eligible severe events '
-                f'(need >= {MIN_EVENTS_FOR_TRAINING}). '
-                'Insufficient events for KMeansSMOTE. Waiting for more data.'
+                f'[train_model] precheck override: eligible severe events={eligible} '
+                f'but promoted SAR volume + release gate permit shadow MTS training.',
+                file=sys.stderr,
             )
-            return 0
 
     settings = load_settings()
+    stage_breakdown_seconds: dict[str, float] = {}
+    dataset_started_at = perf_counter()
     frame, dataset_manifest = load_training_frame(
         seed=args.seed,
         samples_per_region=args.samples_per_region,
         grid_size=settings.grid_size,
         allow_synthetic_bootstrap=ALLOW_SYNTHETIC_BOOTSTRAP,
     )
+    stage_breakdown_seconds['dataset_load_seconds'] = round(perf_counter() - dataset_started_at, 3)
     is_bootstrap = dataset_manifest.get('training_dataset_version') == 'synthetic_bootstrap_v1'
     previous_manifest = load_previous_dataset_manifest(args.artifact_root)
     new_positive_events = count_new_positive_events(frame, previous_manifest)
@@ -400,7 +841,9 @@ def main() -> int:
 
     args.artifact_root.mkdir(parents=True, exist_ok=True)
     artifact_dir = create_artifact_dir(args.artifact_root)
-    bundle = fit_model(seed=args.seed, frame=frame, dataset_manifest=dataset_manifest)
+    fit_started_at = perf_counter()
+    bundle, test_df = fit_model(seed=args.seed, frame=frame, dataset_manifest=dataset_manifest)
+    stage_breakdown_seconds['fit_model_seconds'] = round(perf_counter() - fit_started_at, 3)
     bundle['drift_stats'] = drift_stats
 
     # Edit 3 Story 21: PSS > PSS_FLOOR artifact gate. Use the higher of the
@@ -420,11 +863,33 @@ def main() -> int:
     bundle['metrics']['pss_reported'] = pss_reported
     bundle['metrics']['pss_gate_passed'] = gate_passed
 
+    metadata_publish_started_at = perf_counter()
     metadata = publish_metadata(artifact_dir, bundle)
+    stage_breakdown_seconds['artifact_publish_seconds'] = round(perf_counter() - metadata_publish_started_at, 3)
     metadata['pss_reported'] = pss_reported
     metadata['pss_gate_passed'] = gate_passed
     metadata['pss_gate_floor'] = PSS_FLOOR
     metadata['drift_stats'] = drift_stats
+    phase2_started_at = perf_counter()
+    phase2_summary = persist_phase2_evaluation_plane(
+        artifact_dir=artifact_dir,
+        bundle=bundle,
+        metadata=metadata,
+        test_df=test_df,
+    )
+    stage_breakdown_seconds['phase2_evaluation_seconds'] = round(perf_counter() - phase2_started_at, 3)
+    metadata['phase2_evaluation'] = phase2_summary
+    metadata['db_write_status'] = phase2_summary.get('db_write_status')
+    if phase2_summary.get('label_snapshot_id'):
+        metadata['label_snapshot_id'] = phase2_summary.get('label_snapshot_id')
+    if phase2_summary.get('hindcast_run_id'):
+        metadata['hindcast_run_id'] = phase2_summary.get('hindcast_run_id')
+    if phase2_summary.get('calibration_report_ids'):
+        metadata['calibration_report_ids'] = phase2_summary.get('calibration_report_ids')
+    if phase2_summary.get('calibration_report_ref'):
+        metadata['calibration_report_ref'] = phase2_summary.get('calibration_report_ref')
+    if phase2_summary.get('db_error'):
+        metadata['db_error'] = phase2_summary.get('db_error')
     dump_json(artifact_dir / 'training_metrics.json', metadata)
 
     if not gate_passed:
@@ -441,11 +906,13 @@ def main() -> int:
     # This replaces the hardcoded fallback weights in trigger-job/index.ts.
     abc_summary: dict[str, object] | None = None
     try:
+        abc_started_at = perf_counter()
         abc_result: ABCResult = abc_optimize(
             frame,
             feature_columns=ABC_DEFAULT_FEATURES,
             seed=args.seed,
         )
+        stage_breakdown_seconds['abc_optimizer_seconds'] = round(perf_counter() - abc_started_at, 3)
         abc_version = f"opt-abc-{artifact_dir.name}"
         abc_summary = build_optimization_summary(
             abc_result,
@@ -463,7 +930,45 @@ def main() -> int:
     except Exception as exc:  # pragma: no cover - optimizer is best-effort
         abc_summary = None
         metadata['abc_error'] = str(exc)
+        stage_breakdown_seconds['abc_optimizer_seconds'] = stage_breakdown_seconds.get('abc_optimizer_seconds', 0.0)
         print(f"[train_model] ABC optimizer skipped: {exc}", file=sys.stderr)
+
+    training_stage_metrics = {
+        'artifact_dir': str(artifact_dir),
+        'dataset_snapshot_id': bundle.get('dataset_snapshot_id'),
+        'training_row_count': int(dataset_manifest.get('training_row_count') or len(frame)),
+        'positive_count': int(dataset_manifest.get('positive_count') or int((frame['label'] == 1).sum())),
+        'negative_count': int(dataset_manifest.get('negative_count') or int((frame['label'] == 0).sum())),
+        'region_count': len(dataset_manifest.get('region_keys') or []),
+        'phase_breakdown_seconds': stage_breakdown_seconds,
+        'recorded_at': datetime.now(timezone.utc).isoformat(),
+    }
+    dump_json(artifact_dir / 'training_stage_metrics.json', training_stage_metrics)
+    latest_benchmark_summary = build_latest_benchmark_summary(
+        benchmark_kind='training',
+        phase_breakdown_seconds=stage_breakdown_seconds,
+        input_context={
+            'seed': int(args.seed),
+            'samples_per_region': int(args.samples_per_region),
+            'training_row_count': training_stage_metrics['training_row_count'],
+            'positive_count': training_stage_metrics['positive_count'],
+            'region_count': training_stage_metrics['region_count'],
+            'time_series_splits': int(TIME_SERIES_SPLITS),
+        },
+        status='ok',
+        artifact_ref=str(artifact_dir / 'training_stage_metrics.json'),
+    )
+    bundle['latest_benchmark_summary'] = latest_benchmark_summary
+    metadata['latest_benchmark_summary'] = latest_benchmark_summary
+    metadata['stability_summary'] = bundle.get('stability_summary')
+    metadata['drift_mode_state'] = build_drift_mode_state(
+        build_dynamic_model_candidate(
+            bundle,
+            artifact_dir=artifact_dir,
+            model_status_version=f'async-{artifact_dir.name}',
+        )
+    )
+    dump_json(artifact_dir / 'latest_benchmark_summary.json', latest_benchmark_summary)
 
     # P2.3: Refuse to publish to Supabase if this artifact was built from the
     # synthetic bootstrap fallback. The artifact remains on disk so the
@@ -489,6 +994,7 @@ def main() -> int:
         )
 
     if has_supabase_credentials() and not is_synthetic and ALLOW_MODEL_STATUS_PUBLISH:
+        truth_payload = build_model_status_truth(bundle, artifact_dir=artifact_dir)
         payload: dict[str, object] = {
             'version': f"async-{artifact_dir.name}",
             'last_trained': metadata['published_at'],
@@ -498,6 +1004,7 @@ def main() -> int:
             'feature_version': str(bundle.get('dynamic_model_type') or 'surrogate_rf_v1'),
             'calibration_profile_version': str(bundle.get('dynamic_model_version') or 'surrogate_rf_v1'),
             'threshold_profile_version': str(bundle.get('surrogate_model_version') or 'surrogate_rf_v1'),
+            **truth_payload,
         }
         if abc_summary is not None:
             payload['optimization_version'] = str(abc_summary['optimization_version'])

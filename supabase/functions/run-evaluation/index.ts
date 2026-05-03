@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildElevationBand } from "../_shared/evaluationMetadata.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,7 +21,7 @@ interface MetricsResult {
   riskDistribution: Record<number, number>;
 }
 
-function calculateMetrics(outcomes: any[]): MetricsResult {
+export function calculateMetrics(outcomes: any[]): MetricsResult {
   // Risk >= 3 metrics
   const risk3Predicted = outcomes.filter(o => o.predicted_risk_score >= 3);
   const risk3Events = outcomes.filter(o => o.predicted_risk_score >= 3 && o.event_observed);
@@ -103,7 +104,7 @@ function calculateMetrics(outcomes: any[]): MetricsResult {
   };
 }
 
-function getSeasonFromDate(dateStr: string): string {
+export function getSeasonFromDate(dateStr: string): string {
   const month = new Date(dateStr).getMonth();
   if (month >= 11 || month <= 1) return 'winter';
   if (month >= 2 && month <= 4) return 'spring';
@@ -111,7 +112,89 @@ function getSeasonFromDate(dateStr: string): string {
   return 'fall';
 }
 
-serve(async (req: Request) => {
+export function pushSliceMetrics(
+  sliceMetrics: Record<string, unknown>[],
+  {
+    evalRunId,
+    sliceType,
+    groupedOutcomes,
+  }: {
+    evalRunId: string;
+    sliceType: string;
+    groupedOutcomes: Record<string, any[]>;
+  },
+): void {
+  for (const [sliceValue, sliceOutcomes] of Object.entries(groupedOutcomes)) {
+    if (!sliceValue || sliceOutcomes.length === 0) continue;
+    const metrics = calculateMetrics(sliceOutcomes);
+    sliceMetrics.push({
+      evaluation_run_id: evalRunId,
+      slice_type: sliceType,
+      slice_value: sliceValue,
+      total_forecasts: [...new Set(sliceOutcomes.map((o) => o.forecast_id ?? o.forecast_grid_id ?? `${o.cell_row}-${o.cell_col}`))].length,
+      total_cells: sliceOutcomes.length,
+      observed_events: metrics.totalEvents,
+      precision_risk3: metrics.precisionRisk3,
+      recall_risk3: metrics.recallRisk3,
+      f1_risk3: metrics.f1Risk3,
+      precision_risk4: metrics.precisionRisk4,
+      recall_risk4: metrics.recallRisk4,
+      f1_risk4: metrics.f1Risk4,
+      ece: metrics.ece,
+      false_alarm_rate: metrics.falseAlarmRate,
+      false_positives: Math.floor(metrics.falseAlarmRate * sliceOutcomes.filter((o) => o.predicted_risk_score >= 3).length),
+      true_positives: sliceOutcomes.filter((o) => o.predicted_risk_score >= 3 && o.event_observed).length,
+      risk_distribution: metrics.riskDistribution,
+    });
+  }
+}
+
+export function buildOutcomeSliceGroups(outcomes: any[]): {
+  elevationBands: Record<string, any[]>;
+  sarCoverageSlices: Record<string, any[]>;
+  dryWetDomainSlices: Record<string, any[]>;
+  problemSlices: Record<string, any[]>;
+} {
+  const elevationBands: Record<string, any[]> = {};
+  const sarCoverageSlices: Record<string, any[]> = {};
+  const dryWetDomainSlices: Record<string, any[]> = {};
+  const problemSlices: Record<string, any[]> = {};
+
+  for (const outcome of outcomes) {
+    const band = buildElevationBand(
+      typeof outcome.cell_elevation_m === 'number' ? outcome.cell_elevation_m : null,
+    );
+    if (!elevationBands[band]) elevationBands[band] = [];
+    elevationBands[band].push(outcome);
+
+    const sarCoverage = typeof outcome.sar_coverage_state === 'string' && outcome.sar_coverage_state
+      ? outcome.sar_coverage_state
+      : 'unknown';
+    if (!sarCoverageSlices[sarCoverage]) sarCoverageSlices[sarCoverage] = [];
+    sarCoverageSlices[sarCoverage].push(outcome);
+
+    const dryWetDomain = typeof outcome.dry_wet_domain === 'string' && outcome.dry_wet_domain
+      ? outcome.dry_wet_domain
+      : 'unknown';
+    if (!dryWetDomainSlices[dryWetDomain]) dryWetDomainSlices[dryWetDomain] = [];
+    dryWetDomainSlices[dryWetDomain].push(outcome);
+
+    const problemSlug = typeof outcome.problem_slug === 'string' && outcome.problem_slug
+      ? outcome.problem_slug
+      : 'unknown';
+    if (!problemSlices[problemSlug]) problemSlices[problemSlug] = [];
+    problemSlices[problemSlug].push(outcome);
+  }
+
+  return {
+    elevationBands,
+    sarCoverageSlices,
+    dryWetDomainSlices,
+    problemSlices,
+  };
+}
+
+export async function handleRunEvaluation(req: Request) {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -131,14 +214,22 @@ serve(async (req: Request) => {
     });
   }
 
-  const { 
-    days_back: daysBack = 30,
-    model_version: modelVersion,
-    threshold_profile_version: thresholdVersion,
-    hazard_type: hazardType = 'avalanche',
-    regions,
-    forecast_source: forecastSource = 'async',
-  } = requestBody;
+  const daysBack = typeof requestBody.days_back === 'number' && Number.isFinite(requestBody.days_back)
+    ? requestBody.days_back
+    : 30;
+  const modelVersion = typeof requestBody.model_version === 'string' && requestBody.model_version
+    ? requestBody.model_version
+    : undefined;
+  const thresholdVersion = typeof requestBody.threshold_profile_version === 'string' && requestBody.threshold_profile_version
+    ? requestBody.threshold_profile_version
+    : undefined;
+  const hazardType = typeof requestBody.hazard_type === 'string' && requestBody.hazard_type
+    ? requestBody.hazard_type
+    : 'avalanche';
+  const regions = Array.isArray(requestBody.regions)
+    ? requestBody.regions.filter((region): region is string => typeof region === 'string' && region.length > 0)
+    : [];
+  const forecastSource = requestBody.forecast_source === 'legacy' ? 'legacy' : 'async';
 
   if (hazardType !== 'avalanche') {
     return new Response(JSON.stringify({ 
@@ -332,38 +423,18 @@ serve(async (req: Request) => {
       });
     }
 
-    // By elevation band (estimated from cell row in outcomes)
-    const elevationBands: Record<string, any[]> = {};
-    for (const o of outcomes) {
-      // Rough elevation from row position
-      const elevMin = 1000 + (o.cell_row / 20) * 3500;
-      const band = `${Math.floor(elevMin / 500) * 500}-${Math.floor(elevMin / 500) * 500 + 500}`;
-      if (!elevationBands[band]) elevationBands[band] = [];
-      elevationBands[band].push(o);
-    }
+    // By elevation band using persisted terrain elevation when available.
+    const {
+      elevationBands,
+      sarCoverageSlices,
+      dryWetDomainSlices,
+      problemSlices,
+    } = buildOutcomeSliceGroups(outcomes);
 
-    for (const [band, bandOutcomes] of Object.entries(elevationBands)) {
-      const metrics = calculateMetrics(bandOutcomes);
-      sliceMetrics.push({
-        evaluation_run_id: evalRun.id,
-        slice_type: 'elevation_band',
-        slice_value: band,
-        total_forecasts: [...new Set(bandOutcomes.map(o => o.forecast_id))].length,
-        total_cells: bandOutcomes.length,
-        observed_events: metrics.totalEvents,
-        precision_risk3: metrics.precisionRisk3,
-        recall_risk3: metrics.recallRisk3,
-        f1_risk3: metrics.f1Risk3,
-        precision_risk4: metrics.precisionRisk4,
-        recall_risk4: metrics.recallRisk4,
-        f1_risk4: metrics.f1Risk4,
-        ece: metrics.ece,
-        false_alarm_rate: metrics.falseAlarmRate,
-        false_positives: Math.floor(metrics.falseAlarmRate * bandOutcomes.filter(o => o.predicted_risk_score >= 3).length),
-        true_positives: bandOutcomes.filter(o => o.predicted_risk_score >= 3 && o.event_observed).length,
-        risk_distribution: metrics.riskDistribution,
-      });
-    }
+    pushSliceMetrics(sliceMetrics, { evalRunId: evalRun.id, sliceType: 'elevation_band', groupedOutcomes: elevationBands });
+    pushSliceMetrics(sliceMetrics, { evalRunId: evalRun.id, sliceType: 'sar_coverage_state', groupedOutcomes: sarCoverageSlices });
+    pushSliceMetrics(sliceMetrics, { evalRunId: evalRun.id, sliceType: 'dry_wet_domain', groupedOutcomes: dryWetDomainSlices });
+    pushSliceMetrics(sliceMetrics, { evalRunId: evalRun.id, sliceType: 'problem_slug', groupedOutcomes: problemSlices });
 
     // Insert slice metrics
     if (sliceMetrics.length > 0) {
@@ -389,4 +460,8 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-});
+}
+
+if (import.meta.main) {
+  serve(handleRunEvaluation);
+}

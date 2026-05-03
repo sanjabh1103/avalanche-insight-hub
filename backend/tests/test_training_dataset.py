@@ -55,6 +55,7 @@ class TrainingDatasetBuilderTests(unittest.TestCase):
                 'verification_status': 'unverified',
                 'label_confidence': 0.8,
                 'training_weight': 0.95,
+                'training_eligible_reason': 'sar_low_coverage_weak_training',
             }
         ]
         extract_cell_terrain_mock.return_value = {
@@ -121,10 +122,13 @@ class TrainingDatasetBuilderTests(unittest.TestCase):
         self.assertEqual(frame.iloc[0]['timestamp'], pd.Timestamp('2024-01-01T00:00:00Z'))
         self.assertIn('training_weight', frame.columns)
         self.assertIn('label_confidence', frame.columns)
+        self.assertIn('training_eligible_reason', frame.columns)
         self.assertLess(frame.iloc[0]['training_weight'], 0.95)
         self.assertEqual(frame.iloc[0]['governance_version'], 'autonomous_label_governance_v2')
+        self.assertEqual(frame.iloc[0]['training_eligible_reason'], 'sar_low_coverage_weak_training')
         negative_row = frame.loc[frame['label'] == 0].iloc[0]
         self.assertAlmostEqual(float(negative_row['training_weight']), NEGATIVE_TRAINING_WEIGHT, places=6)
+        self.assertTrue(pd.isna(negative_row['training_eligible_reason']))
 
 
 if __name__ == '__main__':

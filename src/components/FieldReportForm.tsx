@@ -293,9 +293,13 @@ export default function FieldReportForm({
         return;
       }
 
-      const createdEvent = await submitQueuedFieldReport(queuedReport);
-      onSubmitted?.(createdEvent);
-      toast.success('Field report submitted successfully');
+      const submission = await submitQueuedFieldReport(queuedReport);
+      onSubmitted?.(submission.event);
+      toast.success(
+        submission.promoted
+          ? 'Field report submitted and corroborated'
+          : 'Field report submitted and marked pending corroboration',
+      );
       resetForm();
       onClose();
     } catch (err: unknown) {

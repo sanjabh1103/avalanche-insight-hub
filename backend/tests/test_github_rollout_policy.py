@@ -50,6 +50,12 @@ class GitHubRolloutPolicyTests(unittest.TestCase):
             r'jobs:\n  bootstrap:\n(?:    .*\n)*?    environment: production\n',
         )
 
+    def test_ml_infer_is_manual_only_after_batch_precompute_cutover(self) -> None:
+        ml_pipeline = (WORKFLOW_ROOT / 'ml_pipeline.yml').read_text(encoding='utf-8')
+
+        self.assertNotIn("- cron: '0 2 * * *'", ml_pipeline)
+        self.assertIn("if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'infer'", ml_pipeline)
+
     def test_bootstrap_pinned_gate_is_manual_only_and_allowlisted(self) -> None:
         bootstrap_gate = (WORKFLOW_ROOT / 'bootstrap_pinned_gate.yml').read_text(encoding='utf-8')
 
@@ -106,7 +112,9 @@ class GitHubRolloutPolicyTests(unittest.TestCase):
         self.assertIn('ADMIN_USER_IDS', trigger_job)
         self.assertIn('ADMIN_USER_EMAILS', trigger_job)
         self.assertIn('ad hoc evaluation manifests require admin privileges', trigger_job)
-        self.assertIn('gate_source: evaluateReleaseContext?.evaluationManifest ? \'admin_manifest\' : \'reference_set_key\'', trigger_job)
+        self.assertIn("gate_source: evaluateReleaseContext?.evaluationManifest", trigger_job)
+        self.assertIn('"admin_manifest"', trigger_job)
+        self.assertIn('"reference_set_key"', trigger_job)
 
     def test_codeowners_covers_sensitive_release_paths(self) -> None:
         codeowners = (REPO_ROOT / 'CODEOWNERS').read_text(encoding='utf-8')

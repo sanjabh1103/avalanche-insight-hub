@@ -557,7 +557,9 @@ export type Database = {
       }
       feature_completeness_log: {
         Row: {
-          forecast_id: string
+          forecast_grid_id: string | null
+          forecast_id: string | null
+          forecast_run_id: string | null
           id: string
           logged_at: string
           missing_features: string[]
@@ -574,7 +576,9 @@ export type Database = {
           weather_source: string | null
         }
         Insert: {
-          forecast_id: string
+          forecast_grid_id?: string | null
+          forecast_id?: string | null
+          forecast_run_id?: string | null
           id?: string
           logged_at?: string
           missing_features?: string[]
@@ -591,7 +595,9 @@ export type Database = {
           weather_source?: string | null
         }
         Update: {
-          forecast_id?: string
+          forecast_grid_id?: string | null
+          forecast_id?: string | null
+          forecast_run_id?: string | null
           id?: string
           logged_at?: string
           missing_features?: string[]
@@ -609,10 +615,24 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "feature_completeness_log_forecast_grid_id_fkey"
+            columns: ["forecast_grid_id"]
+            isOneToOne: false
+            referencedRelation: "forecast_grids"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "feature_completeness_log_forecast_id_fkey"
             columns: ["forecast_id"]
             isOneToOne: false
             referencedRelation: "forecasts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feature_completeness_log_forecast_run_id_fkey"
+            columns: ["forecast_run_id"]
+            isOneToOne: false
+            referencedRelation: "forecast_runs"
             referencedColumns: ["id"]
           },
           {
@@ -1546,6 +1566,7 @@ export type Database = {
           capabilities: Json
           capability_summary: string
           data_freshness_hours: number | null
+          drift_mode_state: string | null
           dynamic_model_candidate: Json
           f1_score: number | null
           feature_version: string | null
@@ -1554,6 +1575,7 @@ export type Database = {
           inference_backend: string
           last_inference: string | null
           last_trained: string | null
+          latest_benchmark_summary: Json
           next_optimization_run: string | null
           next_run: string | null
           optimization_summary: Json
@@ -1566,6 +1588,7 @@ export type Database = {
           shadow_mode_active: boolean | null
           snowpack_metrics: Json
           snowpack_model_version: string | null
+          stability_summary: Json
           threshold_profile_version: string | null
           version: string | null
         }
@@ -1577,6 +1600,7 @@ export type Database = {
           capabilities?: Json
           capability_summary?: string
           data_freshness_hours?: number | null
+          drift_mode_state?: string | null
           dynamic_model_candidate?: Json
           f1_score?: number | null
           feature_version?: string | null
@@ -1585,6 +1609,7 @@ export type Database = {
           inference_backend?: string
           last_inference?: string | null
           last_trained?: string | null
+          latest_benchmark_summary?: Json
           next_optimization_run?: string | null
           next_run?: string | null
           optimization_summary?: Json
@@ -1597,6 +1622,7 @@ export type Database = {
           shadow_mode_active?: boolean | null
           snowpack_metrics?: Json
           snowpack_model_version?: string | null
+          stability_summary?: Json
           threshold_profile_version?: string | null
           version?: string | null
         }
@@ -1608,6 +1634,7 @@ export type Database = {
           capabilities?: Json
           capability_summary?: string
           data_freshness_hours?: number | null
+          drift_mode_state?: string | null
           dynamic_model_candidate?: Json
           f1_score?: number | null
           feature_version?: string | null
@@ -1616,6 +1643,7 @@ export type Database = {
           inference_backend?: string
           last_inference?: string | null
           last_trained?: string | null
+          latest_benchmark_summary?: Json
           next_optimization_run?: string | null
           next_run?: string | null
           optimization_summary?: Json
@@ -1628,6 +1656,7 @@ export type Database = {
           shadow_mode_active?: boolean | null
           snowpack_metrics?: Json
           snowpack_model_version?: string | null
+          stability_summary?: Json
           threshold_profile_version?: string | null
           version?: string | null
         }

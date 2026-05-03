@@ -12,6 +12,7 @@ class Region:
     bbox: tuple[float, float, float, float]
     center: tuple[float, float]
     zoom: int
+    timezone_name: str = 'UTC'
 
     @property
     def key(self) -> str:
@@ -33,6 +34,7 @@ def load_regions(path: Path | None = None) -> List[Region]:
                 bbox=tuple(entry['bbox']),
                 center=tuple(entry['center']),
                 zoom=int(entry['zoom']),
+                timezone_name=str(entry.get('timezone_name') or 'UTC'),
             )
         )
     return regions

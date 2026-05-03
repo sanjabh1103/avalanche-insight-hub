@@ -217,6 +217,29 @@ async function installCitizenScienceMocks(page: Page) {
   let avalancheEventReads = 0;
   let storedEvents: Array<Record<string, unknown>> = [];
 
+  const seedCorroboratedEvent = () => {
+    storedEvents = [{
+      id: 'event-promoted-1',
+      location: {
+        type: 'Point',
+        coordinates: [86.925, 27.9881],
+      },
+      severity: 3,
+      confidence: 0.68,
+      label_confidence: 0.84,
+      description: 'Citizen science loop e2e smoke event',
+      source: 'field_report',
+      event_type: 'unknown',
+      timestamp: '2026-05-02T04:30:00.000Z',
+      verification_status: 'weak',
+      features: {
+        field_report_id: `field-report-${Math.max(fieldReportCounter, 1)}`,
+        client_report_id: 'field-browser-promoted',
+        location_name: REGION_NAME,
+      },
+    }];
+  };
+
   await page.context().grantPermissions(['geolocation']);
   await page.context().setGeolocation({ latitude: 27.9881, longitude: 86.925 });
 
@@ -360,6 +383,7 @@ async function installCitizenScienceMocks(page: Page) {
       source: 'field_report',
       event_type: 'unknown',
       timestamp: String(payload.timestamp ?? '2026-05-02T04:30:00.000Z'),
+      verification_status: 'unverified',
       features: {
         field_report_id: `field-report-${fieldReportCounter}`,
         client_report_id: String(payload.clientReportId ?? ''),
@@ -367,17 +391,25 @@ async function installCitizenScienceMocks(page: Page) {
       },
     };
     storedEvents = [event, ...storedEvents];
+    setTimeout(() => {
+      storedEvents = storedEvents.map((existing) => (
+        existing.id === event.id
+          ? { ...existing, verification_status: 'weak' }
+          : existing
+      ));
+    }, 1200);
 
     await new Promise((resolve) => setTimeout(resolve, 700));
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ event }),
+      body: JSON.stringify({ event, promotion: { promoted: false } }),
     });
   });
 
   return {
     getAvalancheEventReadCount: () => avalancheEventReads,
+    seedCorroboratedEvent,
   };
 }
 
@@ -395,12 +427,30 @@ async function countGridPaths(page: Page) {
   return await page.evaluate(() => document.querySelectorAll('.leaflet-overlay-pane path').length);
 }
 
+async function hasMarkerStyle(
+  page: Page,
+  expected: { fill: string; stroke: string; fillOpacity: string },
+) {
+  return await page.evaluate((style) => {
+    const elements = Array.from(document.querySelectorAll('path, circle'));
+    return elements.some((element) => {
+      if (!(element instanceof SVGElement)) return false;
+      const fill = (element.getAttribute('fill') || '').toLowerCase();
+      const stroke = (element.getAttribute('stroke') || '').toLowerCase();
+      const fillOpacity = element.getAttribute('fill-opacity') || '';
+      return fill === style.fill.toLowerCase()
+        && stroke === style.stroke.toLowerCase()
+        && fillOpacity === style.fillOpacity;
+    });
+  }, expected);
+}
+
 test.describe('Citizen science loop', () => {
   test('renders the grid, submits a field report, reconciles the marker, and syncs daypart navigation', async ({ page }) => {
     const mockState = await installCitizenScienceMocks(page);
 
     await page.goto('/?region=Himalayas%20(Nepal)&hour=0', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByText('Danger Level 4: High').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId('danger-badge').first()).toContainText('Danger Level 4: High', { timeout: 15000 });
     await expect.poll(
       () => page.locator('[data-testid^="daypart-chip-"]').count(),
       { timeout: 15000 },
@@ -420,6 +470,10 @@ test.describe('Citizen science loop', () => {
     await expect.poll(() => countEventMarkers(page), { timeout: 5000 }).toBe(1);
     await expect(page.getByRole('dialog')).toBeHidden({ timeout: 15000 });
     await expect.poll(() => countEventMarkers(page), { timeout: 5000 }).toBe(1);
+    await expect.poll(
+      () => hasMarkerStyle(page, { fill: '#f59e0b', stroke: '#94a3b8', fillOpacity: '0.45' }),
+      { timeout: 5000 },
+    ).toBe(true);
 
     await page.getByTestId('daypart-chip-morning').evaluate((element) => {
       if (element instanceof HTMLButtonElement) {
@@ -437,8 +491,16 @@ test.describe('Citizen science loop', () => {
     await expect(page.getByTestId('daypart-chip-afternoon')).toHaveAttribute('data-active-daypart', 'true');
     await expect(page.getByLabel('Timeline hour offset')).toHaveAttribute('aria-valuenow', '12');
 
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.getByText('Danger Level 4: High').first()).toBeVisible({ timeout: 15000 });
-    await expect.poll(() => mockState.getAvalancheEventReadCount(), { timeout: 5000 }).toBeGreaterThan(1);
+    mockState.seedCorroboratedEvent();
+    await page.goto(`/?forecast=${FORECAST_RUN_ID}&region=${encodeURIComponent(REGION_NAME)}&hour=0`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await expect(page.getByTestId('danger-badge').first()).toContainText('Danger Level 4: High', { timeout: 15000 });
+    await expect.poll(() => mockState.getAvalancheEventReadCount(), { timeout: 15000 }).toBeGreaterThan(1);
+    await page.getByRole('button', { name: 'SHOW EVENTS' }).click();
+    await expect.poll(
+      () => hasMarkerStyle(page, { fill: '#f97316', stroke: '#f97316', fillOpacity: '0.72' }),
+      { timeout: 15000 },
+    ).toBe(true);
   }, 45_000);
 });

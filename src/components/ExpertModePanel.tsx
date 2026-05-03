@@ -24,7 +24,7 @@ interface Props {
   onToggleInfra: (v: boolean) => void;
   showVectorPolygons: boolean;
   onToggleVectorPolygons: (v: boolean) => void;
-  hourlyGrids: GridCell[][] | null;
+  hourlyGrids: Array<GridCell[] | null> | null;
   selectedCell: GridCell | null;
   regionBbox: [number, number, number, number];
   onToggle3D: () => void;
@@ -99,7 +99,7 @@ export default function ExpertModePanel({
                 <ToggleRow label="Roads & Highways" tooltip="Show primary/secondary roads from OpenStreetMap" checked={showRoads} onToggle={onToggleRoads} />
                 <ToggleRow label="Villages & Ski Lifts" tooltip="Show villages, towns, and aerial lifts" checked={showInfra} onToggle={onToggleInfra} />
                 <ToggleRow label="Activity Heatmap" tooltip="Historical avalanche event density" checked={showHeatmap} onToggle={onToggleHeatmap} />
-                <ToggleRow label="Vector Polygons" tooltip="Smooth high-risk cells into slope-path polygons (Turf.js)" checked={showVectorPolygons} onToggle={onToggleVectorPolygons} />
+                <ToggleRow label="Vector Polygons" tooltip="Show persisted runout polygons and SAR event geometries from the batch artifact" checked={showVectorPolygons} onToggle={onToggleVectorPolygons} />
                 <div className="flex items-center justify-between">
                   <Tooltip>
                     <TooltipTrigger asChild>

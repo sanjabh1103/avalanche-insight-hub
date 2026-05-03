@@ -16,6 +16,38 @@ export interface ForecastBulletinDaypart {
   window_frequency_basis?: string;
 }
 
+export interface ForecastBulletinUncertaintySummary {
+  eligible_cell_count: number;
+  high_uncertainty_cell_count: number;
+  high_uncertainty_share: number;
+  low_sar_coverage_cell_count?: number;
+  low_sar_coverage_share?: number;
+}
+
+export interface ForecastBulletinSourceHealth {
+  summary_version?: string;
+  support_status?: string;
+  overall_completeness?: number;
+  weather_freshness_hours?: number;
+  sar_coverage_mode?: string;
+  snowpack_proxy_available?: boolean;
+  missing_features?: string[];
+}
+
+export interface ForecastBulletinDecisionProvenance {
+  summary_version?: string;
+  threshold_profile?: string;
+  threshold_profile_origin?: string;
+  dominant_mapping?: string;
+  calibration_profile_version?: string | null;
+  calibration_method?: string | null;
+  frequency_threshold_profile?: string | null;
+  aggregation_policy?: string | null;
+  frequency_basis?: string | null;
+  explainability_mode?: string | null;
+  selected_feature_count?: number;
+}
+
 export interface ForecastBulletin {
   schema_version: string;
   standard: string;
@@ -30,6 +62,11 @@ export interface ForecastBulletin {
   };
   critical_aspects: string[];
   coverage: 'ready' | 'partial';
+  confidence_state?: 'normal' | 'reduced';
+  confidence_reasons?: string[];
+  uncertainty_summary?: ForecastBulletinUncertaintySummary;
+  source_health?: ForecastBulletinSourceHealth;
+  decision_provenance?: ForecastBulletinDecisionProvenance;
   issue_window_policy?: string;
   primary_window?: string;
   primary_window_policy?: string;
@@ -109,6 +146,11 @@ export function normalizeForecastBulletin(value: unknown): ForecastBulletin | nu
     },
     critical_aspects: row.critical_aspects.map(String),
     coverage: row.coverage === 'partial' ? 'partial' : 'ready',
+    confidence_state: row.confidence_state === 'reduced' ? 'reduced' : 'normal',
+    confidence_reasons: Array.isArray(row.confidence_reasons) ? row.confidence_reasons.map(String) : [],
+    uncertainty_summary: normalizeUncertaintySummary(row.uncertainty_summary),
+    source_health: normalizeSourceHealth(row.source_health),
+    decision_provenance: normalizeDecisionProvenance(row.decision_provenance),
     issue_window_policy: typeof row.issue_window_policy === 'string' ? row.issue_window_policy : undefined,
     primary_window: typeof row.primary_window === 'string' ? row.primary_window : undefined,
     primary_window_policy: typeof row.primary_window_policy === 'string' ? row.primary_window_policy : undefined,
@@ -156,6 +198,38 @@ export function normalizeForecastBulletin(value: unknown): ForecastBulletin | nu
         : undefined,
       problem_counts: normalizeProblemCounts(derived.problem_counts),
     },
+  };
+}
+
+function normalizeSourceHealth(value: unknown): ForecastBulletinSourceHealth | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const row = value as Record<string, unknown>;
+  return {
+    summary_version: typeof row.summary_version === 'string' ? row.summary_version : undefined,
+    support_status: typeof row.support_status === 'string' ? row.support_status : undefined,
+    overall_completeness: typeof row.overall_completeness === 'number' ? Number(row.overall_completeness) : undefined,
+    weather_freshness_hours: typeof row.weather_freshness_hours === 'number' ? Number(row.weather_freshness_hours) : undefined,
+    sar_coverage_mode: typeof row.sar_coverage_mode === 'string' ? row.sar_coverage_mode : undefined,
+    snowpack_proxy_available: typeof row.snowpack_proxy_available === 'boolean' ? row.snowpack_proxy_available : undefined,
+    missing_features: Array.isArray(row.missing_features) ? row.missing_features.map(String) : undefined,
+  };
+}
+
+function normalizeDecisionProvenance(value: unknown): ForecastBulletinDecisionProvenance | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const row = value as Record<string, unknown>;
+  return {
+    summary_version: typeof row.summary_version === 'string' ? row.summary_version : undefined,
+    threshold_profile: typeof row.threshold_profile === 'string' ? row.threshold_profile : undefined,
+    threshold_profile_origin: typeof row.threshold_profile_origin === 'string' ? row.threshold_profile_origin : undefined,
+    dominant_mapping: typeof row.dominant_mapping === 'string' ? row.dominant_mapping : undefined,
+    calibration_profile_version: typeof row.calibration_profile_version === 'string' ? row.calibration_profile_version : null,
+    calibration_method: typeof row.calibration_method === 'string' ? row.calibration_method : null,
+    frequency_threshold_profile: typeof row.frequency_threshold_profile === 'string' ? row.frequency_threshold_profile : null,
+    aggregation_policy: typeof row.aggregation_policy === 'string' ? row.aggregation_policy : null,
+    frequency_basis: typeof row.frequency_basis === 'string' ? row.frequency_basis : null,
+    explainability_mode: typeof row.explainability_mode === 'string' ? row.explainability_mode : null,
+    selected_feature_count: typeof row.selected_feature_count === 'number' ? Number(row.selected_feature_count) : undefined,
   };
 }
 
@@ -229,6 +303,26 @@ function normalizeProblemCounts(value: unknown): Record<string, number> {
       .map(([key, raw]) => [key, Number(raw)] as const)
       .filter(([, numeric]) => Number.isFinite(numeric)),
   );
+}
+
+function normalizeUncertaintySummary(value: unknown): ForecastBulletinUncertaintySummary | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const row = value as Record<string, unknown>;
+  const eligibleCellCount = Number(row.eligible_cell_count ?? 0);
+  const highUncertaintyCellCount = Number(row.high_uncertainty_cell_count ?? 0);
+  const highUncertaintyShare = Number(row.high_uncertainty_share ?? 0);
+  if (!Number.isFinite(eligibleCellCount) || !Number.isFinite(highUncertaintyCellCount) || !Number.isFinite(highUncertaintyShare)) {
+    return undefined;
+  }
+  const lowSarCoverageCellCount = Number(row.low_sar_coverage_cell_count ?? 0);
+  const lowSarCoverageShare = Number(row.low_sar_coverage_share ?? 0);
+  return {
+    eligible_cell_count: eligibleCellCount,
+    high_uncertainty_cell_count: highUncertaintyCellCount,
+    high_uncertainty_share: highUncertaintyShare,
+    low_sar_coverage_cell_count: Number.isFinite(lowSarCoverageCellCount) ? lowSarCoverageCellCount : undefined,
+    low_sar_coverage_share: Number.isFinite(lowSarCoverageShare) ? lowSarCoverageShare : undefined,
+  };
 }
 
 export function formatBulletinProblem(problem: string): string {

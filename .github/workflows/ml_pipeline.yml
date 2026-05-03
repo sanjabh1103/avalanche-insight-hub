@@ -3,7 +3,6 @@ name: Avalanche Async ML Pipeline
 on:
   schedule:
     - cron: '0 4 * * 1'
-    - cron: '0 2 * * *'
     - cron: '0 3 * * 1'  # weekly SAR extraction (only runs when GEE secrets present)
     - cron: '0 5 * * *'  # daily Gemini-assisted news ingest (only runs when NEWSDATA+GEMINI secrets present)
   workflow_dispatch:
@@ -21,6 +20,7 @@ on:
           - news
           - sar_backfill
           - sar_segment
+          - train_sar_unet
           - train_mtslstm
           - infer_mtslstm
           - evaluate_release
@@ -72,6 +72,42 @@ on:
         description: 'Held-out SAR prediction model version used to resolve prediction_mask refs.'
         required: false
         default: 'sar_unet_resnet34_shadow_v1'
+      sar_training_manifest_path:
+        description: 'Path, URL, or storage ref to the supervised SAR training manifest.'
+        required: false
+        default: ''
+      sar_candidate_model_version:
+        description: 'Optional SAR candidate model version override for train_sar_unet.'
+        required: false
+        default: ''
+      sar_initial_checkpoint_path:
+        description: 'Optional local path inside the worker container for fine-tuning from an existing SAR checkpoint.'
+        required: false
+        default: ''
+      sar_patch_size:
+        description: 'SAR training patch size.'
+        required: false
+        default: '128'
+      sar_patch_stride:
+        description: 'SAR training patch stride.'
+        required: false
+        default: '64'
+      sar_epochs:
+        description: 'SAR training epochs.'
+        required: false
+        default: '8'
+      sar_batch_size:
+        description: 'SAR training batch size.'
+        required: false
+        default: '8'
+      sar_learning_rate:
+        description: 'SAR training learning rate.'
+        required: false
+        default: '0.0001'
+      sar_loss:
+        description: 'SAR training loss name.'
+        required: false
+        default: 'focal_tversky'
 
 permissions:
   contents: read
@@ -121,7 +157,7 @@ jobs:
           path: backend/artifacts
 
   infer:
-    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'infer') || (github.event_name == 'schedule' && github.event.schedule == '0 2 * * *')
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'infer'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository (with LFS DEMs)
@@ -337,6 +373,7 @@ jobs:
           REFERENCE_SET_KEY: ${{ github.event.inputs.reference_set_key }}
           PREDICTION_MODEL_VERSION: ${{ github.event.inputs.prediction_model_version || 'sar_unet_resnet34_shadow_v1' }}
         run: |
+          set -euo pipefail
           if [ -z "${MODAL_WORKER_URL}" ]; then
             echo "::error::MODAL_WORKER_URL secret is required for sar_segment"
             exit 1
@@ -383,6 +420,79 @@ jobs:
           name: sar-segment-response
           path: sar-segment-response.json
 
+  train_sar_unet:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'train_sar_unet'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Dispatch SAR trainer worker
+        env:
+          MODAL_WORKER_URL: ${{ secrets.MODAL_WORKER_URL }}
+          MODAL_WORKER_TOKEN: ${{ secrets.MODAL_WORKER_TOKEN }}
+          SAR_TRAINING_MANIFEST_PATH: ${{ github.event.inputs.sar_training_manifest_path }}
+          SAR_CANDIDATE_MODEL_VERSION: ${{ github.event.inputs.sar_candidate_model_version }}
+          SAR_INITIAL_CHECKPOINT_PATH: ${{ github.event.inputs.sar_initial_checkpoint_path }}
+          SAR_PATCH_SIZE: ${{ github.event.inputs.sar_patch_size || '128' }}
+          SAR_PATCH_STRIDE: ${{ github.event.inputs.sar_patch_stride || '64' }}
+          SAR_EPOCHS: ${{ github.event.inputs.sar_epochs || '8' }}
+          SAR_BATCH_SIZE: ${{ github.event.inputs.sar_batch_size || '8' }}
+          SAR_LEARNING_RATE: ${{ github.event.inputs.sar_learning_rate || '0.0001' }}
+          SAR_LOSS: ${{ github.event.inputs.sar_loss || 'focal_tversky' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MODAL_WORKER_URL}" ]; then
+            echo "::error::MODAL_WORKER_URL secret is required for train_sar_unet"
+            exit 1
+          fi
+          if [ -z "${SAR_TRAINING_MANIFEST_PATH}" ]; then
+            echo "::error::sar_training_manifest_path is required for train_sar_unet"
+            exit 1
+          fi
+          auth_args=()
+          if [ -n "${MODAL_WORKER_TOKEN}" ]; then
+            auth_args=(-H "Authorization: Bearer ${MODAL_WORKER_TOKEN}")
+          fi
+          cat > payload.json <<JSON
+          {
+            "hazard_type": "avalanche",
+            "requested_by": "github_actions",
+            "request_type": "train_sar_unet",
+            "training_manifest_path": "${SAR_TRAINING_MANIFEST_PATH}",
+            "model_family": "swinunet_tiny_diff",
+            "patch_size": ${SAR_PATCH_SIZE},
+            "stride": ${SAR_PATCH_STRIDE},
+            "epochs": ${SAR_EPOCHS},
+            "batch_size": ${SAR_BATCH_SIZE},
+            "learning_rate": ${SAR_LEARNING_RATE},
+            "loss": "${SAR_LOSS}"
+          }
+          JSON
+          python - <<'PY'
+          import json
+          import os
+
+          with open('payload.json', 'r', encoding='utf-8') as handle:
+              payload = json.load(handle)
+          candidate = os.environ.get('SAR_CANDIDATE_MODEL_VERSION', '').strip()
+          if candidate:
+              payload["candidate_model_version"] = candidate
+          checkpoint = os.environ.get('SAR_INITIAL_CHECKPOINT_PATH', '').strip()
+          if checkpoint:
+              payload["initial_checkpoint_path"] = checkpoint
+          with open('payload.json', 'w', encoding='utf-8') as handle:
+              json.dump(payload, handle, indent=2, sort_keys=True)
+          PY
+          curl -fsSL -X POST "${MODAL_WORKER_URL%/}/train-sar-unet" \
+            -H "Content-Type: application/json" \
+            "${auth_args[@]}" \
+            --data @payload.json | tee train-sar-unet-response.json
+
+      - name: Upload SAR train response
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: train-sar-unet-response
+          path: train-sar-unet-response.json
+
   train_mtslstm:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'train_mtslstm'
     runs-on: ubuntu-latest
@@ -398,6 +508,7 @@ jobs:
           SAR_RELEASE_GATE_PASSED: ${{ github.event.inputs.sar_release_gate_passed || 'false' }}
           PSS_FLOOR: ${{ github.event.inputs.pss_floor || '0.45' }}
         run: |
+          set -euo pipefail
           if [ -z "${MODAL_WORKER_URL}" ]; then
             echo "::error::MODAL_WORKER_URL secret is required for train_mtslstm"
             exit 1
@@ -445,6 +556,7 @@ jobs:
           MODAL_WORKER_TOKEN: ${{ secrets.MODAL_WORKER_TOKEN }}
           FORECAST_HOURS: ${{ github.event.inputs.forecast_hours || '72' }}
         run: |
+          set -euo pipefail
           if [ -z "${MODAL_WORKER_URL}" ]; then
             echo "::error::MODAL_WORKER_URL secret is required for infer_mtslstm"
             exit 1
@@ -501,6 +613,7 @@ jobs:
           PREDICTION_MODEL_VERSION: ${{ github.event.inputs.prediction_model_version || 'sar_unet_resnet34_shadow_v1' }}
           PYTHONPATH: ${{ github.workspace }}
         run: |
+          set -euo pipefail
           if [ -z "${MODAL_WORKER_URL}" ]; then
             echo "::error::MODAL_WORKER_URL secret is required for evaluate_release"
             exit 1

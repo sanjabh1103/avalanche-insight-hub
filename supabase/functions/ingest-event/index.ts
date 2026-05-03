@@ -40,7 +40,7 @@ type FieldReportRow = {
 };
 
 const GOVERNANCE_VERSION = 'autonomous_label_governance_v2';
-const EVENT_SELECT_COLUMNS = 'id, timestamp, source, description, severity, event_type, confidence, label_confidence, training_weight, location, features';
+const EVENT_SELECT_COLUMNS = 'id, timestamp, source, description, severity, event_type, confidence, label_confidence, training_weight, verification_status, label_role, location, features';
 
 type ElevationSample = {
   name: 'center' | 'north' | 'south' | 'east' | 'west';

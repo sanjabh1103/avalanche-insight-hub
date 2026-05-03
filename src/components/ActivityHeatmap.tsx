@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useMap } from 'react-leaflet';
-import type { AvalancheEvent } from '@/components/HistoricalEventsToggle';
+import type { AvalancheEvent } from '@/lib/avalancheEvents';
 import L from 'leaflet';
 import 'leaflet.heat';
 

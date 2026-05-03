@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   buildOptimisticFieldReportEvent,
   filterAvalancheEventsByBbox,
+  getAvalancheEventGovernanceLabel,
+  getAvalancheEventGovernanceState,
+  getAvalancheEventMarkerAppearance,
   mergeAvalancheEvents,
   parseAvalancheEventRow,
 } from '@/lib/avalancheEvents';
@@ -38,6 +41,7 @@ describe('Historical events layer helpers', () => {
       source: 'field_report',
       event_type: 'unknown',
       timestamp: '2026-05-02T04:30:00.000Z',
+      verification_status: 'unverified',
       features: {
         location_name: 'Khumbu Icefall',
         client_report_id: 'field-client-1',
@@ -49,6 +53,77 @@ describe('Historical events layer helpers', () => {
     expect(event?.location_name).toBe('Khumbu Icefall');
     expect(event?.source).toBe('field_report');
     expect(event?.description).toContain('Khumbu Icefall');
+    expect(event?.verificationStatus).toBe('unverified');
+  });
+
+  it('maps governed field-report events to pending, corroborated, and verified marker semantics', () => {
+    const pending = parseAvalancheEventRow({
+      id: 'event-pending',
+      location: 'SRID=4326;POINT(86.925 27.988)',
+      severity: 3,
+      confidence: 0.4,
+      label_confidence: 0.72,
+      description: 'Pending field report',
+      source: 'field_report',
+      event_type: 'unknown',
+      timestamp: '2026-05-02T04:30:00.000Z',
+      verification_status: 'unverified',
+      features: {},
+    });
+    const corroborated = parseAvalancheEventRow({
+      id: 'event-weak',
+      location: 'SRID=4326;POINT(86.926 27.989)',
+      severity: 3,
+      confidence: 0.5,
+      label_confidence: 0.81,
+      description: 'Corroborated field report',
+      source: 'field_report',
+      event_type: 'unknown',
+      timestamp: '2026-05-02T04:31:00.000Z',
+      verification_status: 'weak',
+      features: {},
+    });
+    const verified = parseAvalancheEventRow({
+      id: 'event-verified',
+      location: 'SRID=4326;POINT(86.927 27.99)',
+      severity: 3,
+      confidence: 0.6,
+      label_confidence: 0.91,
+      description: 'Verified event',
+      source: 'field_report',
+      event_type: 'unknown',
+      timestamp: '2026-05-02T04:32:00.000Z',
+      verification_status: 'verified',
+      features: {},
+    });
+
+    expect(pending).not.toBeNull();
+    expect(corroborated).not.toBeNull();
+    expect(verified).not.toBeNull();
+
+    expect(getAvalancheEventGovernanceState(pending!)).toBe('pending_corroboration');
+    expect(getAvalancheEventGovernanceLabel(pending!)).toBe('Pending corroboration');
+    expect(getAvalancheEventMarkerAppearance(pending!)).toMatchObject({
+      color: '#94a3b8',
+      fillColor: '#f59e0b',
+      fillOpacity: 0.45,
+    });
+
+    expect(getAvalancheEventGovernanceState(corroborated!)).toBe('corroborated');
+    expect(getAvalancheEventGovernanceLabel(corroborated!)).toBe('Corroborated');
+    expect(getAvalancheEventMarkerAppearance(corroborated!)).toMatchObject({
+      color: '#f97316',
+      fillColor: '#f97316',
+      fillOpacity: 0.72,
+    });
+
+    expect(getAvalancheEventGovernanceState(verified!)).toBe('verified');
+    expect(getAvalancheEventGovernanceLabel(verified!)).toBe('Verified');
+    expect(getAvalancheEventMarkerAppearance(verified!)).toMatchObject({
+      color: '#ef4444',
+      fillColor: '#ef4444',
+      fillOpacity: 0.82,
+    });
   });
 
   it('reconciles an optimistic field report with the durable inserted event and filters by bbox', () => {

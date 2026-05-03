@@ -536,6 +536,41 @@ def build_real_feature_row(
             elevation_norm,
         )
 
+    shear_strength_norm = _clamp(snowpack_proxy.estimated_shear_strength / 12.0, 0.0, 1.0)
+    settlement_rate_norm = _clamp(snowpack_proxy.snow_settlement_index, 0.0, 1.0)
+    freezing_level_margin_m = terrain_elevation - float(freezing_level_height)
+    freezing_level_margin_norm = _clamp((freezing_level_margin_m + 1000.0) / 2000.0, 0.0, 1.0)
+    cold_support = _clamp(max(0.0, -downscaled_temp_c) / 8.0, 0.0, 1.0)
+    elevation_precip_bias_factor = 1.0 + _clamp(
+        (terrain_elevation - 1500.0) / 3000.0 * 0.2 + cold_support * 0.15,
+        0.0,
+        0.35,
+    )
+    elevation_precip_bias_norm = _clamp((elevation_precip_bias_factor - 1.0) / 0.35, 0.0, 1.0)
+    adjusted_precipitation_24h_mm = precipitation_24h_mm * elevation_precip_bias_factor
+    adjusted_snowfall_24h_cm = snowfall_24h_cm * elevation_precip_bias_factor
+    seasonal_snow_support = str(getattr(snowpack_proxy, 'method', '')) == 'seasonal_cumulative_v1'
+    snow_evidence = bool(snow_depth_cm >= 10.0 or adjusted_snowfall_24h_cm >= 5.0 or seasonal_snow_support)
+    rain_on_snow_signal = float(
+        precipitation_24h_mm > 3.0 and downscaled_temp_c > 0.0 and snow_evidence
+    )
+    wet_activation_signal = _clamp(
+        max(
+            rain_on_snow_signal,
+            max(0.0, 1.0 - freezing_level_margin_norm) * _clamp(snow_depth_cm / 80.0, 0.0, 1.0),
+        ),
+        0.0,
+        1.0,
+    )
+    loading_signal = (
+        _normalize(adjusted_snowfall_24h_cm, 40.0) * 0.45
+        + _normalize(adjusted_precipitation_24h_mm, 45.0) * 0.2
+        + wind_loading_norm * 0.25
+        + elevation_precip_bias_norm * 0.1
+    )
+    load_to_shear_ratio = _clamp(loading_signal / max(shear_strength_norm, 0.08), 0.0, 1.0)
+    settlement_deficit = _clamp(1.0 - settlement_rate_norm, 0.0, 1.0)
+
     feature_row = {
         'snowfall_24h': _normalize(snowfall_24h_cm, 40.0),
         'precipitation_24h': _normalize(precipitation_24h_mm, 45.0),
@@ -546,29 +581,43 @@ def build_real_feature_row(
         'temp_gradient': temp_gradient_norm,
         'freezing_level_proxy': _normalize(float(freezing_level_height), 5000.0),
         'snowpack': _normalize(snow_depth_cm, 60.0),
-        'ram_hardness': _clamp(snowpack_proxy.estimated_shear_strength / 12.0, 0.0, 1.0),
-        'shear_strength': _clamp(snowpack_proxy.estimated_shear_strength / 12.0, 0.0, 1.0),
-        'settlement_rate': _clamp(snowpack_proxy.snow_settlement_index, 0.0, 1.0),
+        'ram_hardness': shear_strength_norm,
+        'shear_strength': shear_strength_norm,
+        'settlement_rate': settlement_rate_norm,
         'aspect_loading': _clamp(directional_multiplier / 1.5, 0.0, 1.0),
         'terrain_roughness': _normalize(float(terrain['terrain_roughness']), 150.0),
         'curvature_proxy': _normalize(float(terrain['curvature_proxy']), 50.0),
         'northness': _clamp(float(terrain['northness']), 0.0, 1.0),
         'eastness': _clamp(float(terrain['eastness']), 0.0, 1.0),
+        'freezing_level_margin': freezing_level_margin_norm,
+        'load_to_shear_ratio': load_to_shear_ratio,
+        'settlement_deficit': settlement_deficit,
+        'rain_on_snow_signal': rain_on_snow_signal,
+        'wet_activation_signal': wet_activation_signal,
+        'elevation_precip_bias': elevation_precip_bias_norm,
     }
 
     raw_inputs = {
         'temperature_2m': _safe_float(weather_sample.get('temperature_2m')) or downscaled_temp_c,
         'downscaled_temperature_c': downscaled_temp_c,
         'snowfall_24h_cm': snowfall_24h_cm,
+        'elevation_adjusted_snowfall_24h_cm': adjusted_snowfall_24h_cm,
         'precipitation_24h_mm': precipitation_24h_mm,
+        'elevation_adjusted_precipitation_24h_mm': adjusted_precipitation_24h_mm,
         'windspeed_10m': wind_speed,
         'winddirection_10m': wind_direction,
         'freezing_level_height': float(freezing_level_height),
+        'freezing_level_margin_m': float(freezing_level_margin_m),
         'lapse_rate_c_per_m': float(lapse['lapse_rate_c_per_m']),
         'terrain_elevation_m': terrain_elevation,
         'terrain_slope_deg': float(terrain['slope_angle_deg']),
         'terrain_aspect_deg': aspect_deg,
         'snow_depth_cm': snow_depth_cm,
+        'elevation_precip_bias_factor': elevation_precip_bias_factor,
+        'load_to_shear_ratio': load_to_shear_ratio,
+        'settlement_deficit': settlement_deficit,
+        'rain_on_snow_signal': rain_on_snow_signal,
+        'wet_activation_signal': wet_activation_signal,
         'snowpack_proxy_method': snowpack_proxy.method,
     }
 

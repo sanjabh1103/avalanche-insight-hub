@@ -22,6 +22,10 @@ SURROGATE_CV_RF_TREES = 200
 SURROGATE_MIN_SAMPLES_LEAF = 2
 
 
+class TreeShapUnavailableError(RuntimeError):
+    """Raised when the runtime cannot construct a TreeSHAP explainer."""
+
+
 def peirce_skill_score_max(y_true: np.ndarray, y_prob: np.ndarray) -> tuple[float, float]:
     """Threshold-free PSS = max(TPR - FPR) over all probability thresholds."""
     y_true_arr = np.asarray(y_true).astype(int)
@@ -236,7 +240,12 @@ def collect_tree_probabilities(base_model: object, x_sel: pd.DataFrame | np.ndar
 
 
 def build_tree_shap_explainer(base_model: object) -> object:
-    import shap
+    try:
+        import shap
+    except ModuleNotFoundError as exc:  # pragma: no cover - exercised via patched tests/runtime
+        raise TreeShapUnavailableError(
+            'TreeSHAP dependency unavailable: install backend/requirements.txt before running explainability paths.'
+        ) from exc
 
     return shap.TreeExplainer(base_model)
 
@@ -375,5 +384,6 @@ def fit_surrogate_bundle(
         'selector': selector,
         'surrogate_model_version': datetime.now(timezone.utc).isoformat(),
         'train_df': train_df,
+        'calib_df': calib_df,
         'test_df': test_df,
     }

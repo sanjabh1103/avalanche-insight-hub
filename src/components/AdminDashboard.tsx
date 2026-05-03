@@ -67,6 +67,40 @@ interface AutonomousEvidenceSummary {
   } | null;
 }
 
+interface SourceHealthSummary {
+  support_status?: string | null;
+  overall_completeness?: number | null;
+  weather_freshness_hours?: number | null;
+  sar_coverage_mode?: string | null;
+  snowpack_proxy_available?: boolean | null;
+  missing_features?: string[] | null;
+}
+
+interface DecisionProvenanceSummary {
+  threshold_profile?: string | null;
+  threshold_profile_origin?: string | null;
+  dominant_mapping?: string | null;
+  frequency_threshold_profile?: string | null;
+  aggregation_policy?: string | null;
+  calibration_method?: string | null;
+  selected_feature_count?: number | null;
+}
+
+interface StabilitySummary {
+  classification?: string | null;
+  seed_count?: number | null;
+  pss_std?: number | null;
+  threshold_drift?: number | null;
+  selected_feature_overlap_mean?: number | null;
+}
+
+interface BenchmarkSummary {
+  benchmark_kind?: string | null;
+  status?: string | null;
+  total_seconds?: number | null;
+  phase_breakdown_seconds?: Record<string, number> | null;
+}
+
 interface JobRow {
   id: string;
   type: string;
@@ -126,6 +160,7 @@ interface FieldReportRow {
   id: string;
   created_at: string;
   description: string | null;
+  client_report_id?: string | null;
   review_status: string;
   training_eligible: boolean;
 }
@@ -137,6 +172,7 @@ interface GroundsourceEventRow {
   source: string;
   label_confidence: number | null;
   training_weight: number | null;
+  verification_status?: string | null;
   features: Record<string, unknown> | null;
 }
 
@@ -180,10 +216,12 @@ interface ModelStatusRow {
   shadow_mode_active?: boolean | null;
   active_model_type?: string | null;
   active_model_version?: string | null;
+  drift_mode_state?: string | null;
   dynamic_model_candidate?: DynamicModelCandidate | null;
   autonomous_evidence_summary?: AutonomousEvidenceSummary | null;
   feature_version?: string;
   calibration_profile_version?: string;
+  latest_benchmark_summary?: BenchmarkSummary | null;
   threshold_profile_version?: string;
   capability_summary?: string;
   inference_backend?: string;
@@ -194,7 +232,16 @@ interface ModelStatusRow {
   optimization_summary?: OptimizationSummary | null;
   satellite_detection_stats?: SatelliteDetectionStats | null;
   snowpack_metrics?: SnowpackMetrics | null;
+  stability_summary?: StabilitySummary | null;
   last_trained?: string | null;
+}
+
+function formatPercent(value: number | null | undefined): string {
+  return typeof value === 'number' && Number.isFinite(value) ? `${(value * 100).toFixed(0)}%` : 'n/a';
+}
+
+function formatSeconds(value: number | null | undefined): string {
+  return typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(1)}s` : 'n/a';
 }
 
 const JOB_BUTTONS: { type: JobType; label: string; icon: React.ReactNode; description?: string }[] = [
@@ -289,10 +336,10 @@ export default function AdminDashboard() {
         supabase.from('evaluation_runs').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.from('evaluation_metrics').select('*').order('created_at', { ascending: false }).limit(10),
         supabase.from('forecast_outcomes').select('*').order('created_at', { ascending: false }).limit(5),
-        supabase.from('field_reports').select('id, created_at, description, review_status, training_eligible').order('created_at', { ascending: false }).limit(5),
+        supabase.from('field_reports').select('id, created_at, client_report_id, description, review_status, training_eligible').order('created_at', { ascending: false }).limit(5),
         supabase
           .from('avalanche_events')
-          .select('id, timestamp, description, source, label_confidence, training_weight, features')
+          .select('id, timestamp, description, source, label_confidence, training_weight, verification_status, features')
           .eq('source', 'field_report')
           .order('timestamp', { ascending: false })
           .limit(5),
@@ -416,6 +463,11 @@ export default function AdminDashboard() {
       case 'completed': return 'bg-green-500/20 text-green-400';
       case 'running': return 'bg-yellow-500/20 text-yellow-400';
       case 'failed': return 'bg-red-500/20 text-red-400';
+      case 'pending': return 'bg-amber-500/15 text-amber-300';
+      case 'under_review': return 'bg-sky-500/15 text-sky-300';
+      case 'approved': return 'bg-emerald-500/15 text-emerald-400';
+      case 'rejected': return 'bg-red-500/20 text-red-400';
+      case 'needs_info': return 'bg-violet-500/15 text-violet-300';
       default: return 'bg-muted text-muted-foreground';
     }
   };
@@ -447,6 +499,10 @@ export default function AdminDashboard() {
       : null
   );
 
+  const latestForecastMetadata = asRecord(forecastRuns[0]?.model_metadata);
+  const latestSourceHealth = asRecord(latestForecastMetadata?.source_health) as SourceHealthSummary | null;
+  const latestDecisionProvenance = asRecord(latestForecastMetadata?.decision_provenance) as DecisionProvenanceSummary | null;
+  const latestGovernanceScope = asRecord(latestForecastMetadata?.governance_scope);
   const capabilityMode = modelStatus?.capability_summary || modelStatus?.capabilities?.summary || 'Edge-only fallback';
   const activeModelLabel = modelStatus?.active_model_type || modelStatus?.feature_version || 'surrogate_rf_v1';
   const activeModelVersion = modelStatus?.active_model_version || modelStatus?.calibration_profile_version || 'n/a';
@@ -465,11 +521,31 @@ export default function AdminDashboard() {
   const snowpackMetrics = modelStatus?.snowpack_metrics;
   const satelliteStats = modelStatus?.satellite_detection_stats;
   const evidenceSummary = modelStatus?.autonomous_evidence_summary;
+  const stabilitySummary = modelStatus?.stability_summary;
+  const latestBenchmarkSummary = modelStatus?.latest_benchmark_summary;
   const extractLocationName = (features: Record<string, unknown> | null) => (
     typeof features?.location_name === 'string' && features.location_name.trim().length > 0
       ? features.location_name.trim()
       : 'Unknown'
   );
+  const fieldReportEventsByReportId = useMemo(() => {
+    const mapping = new Map<string, GroundsourceEventRow>();
+    groundsourceEvents.forEach((event) => {
+      const fieldReportId = typeof event.features?.field_report_id === 'string'
+        ? event.features.field_report_id
+        : null;
+      const clientReportId = typeof event.features?.client_report_id === 'string'
+        ? event.features.client_report_id
+        : null;
+      if (fieldReportId) {
+        mapping.set(fieldReportId, event);
+      }
+      if (clientReportId && !mapping.has(clientReportId)) {
+        mapping.set(clientReportId, event);
+      }
+    });
+    return mapping;
+  }, [groundsourceEvents]);
 
   return (
     <div className="space-y-2 p-2.5 md:p-3">
@@ -565,9 +641,14 @@ export default function AdminDashboard() {
             <div className="space-y-1 max-h-52 overflow-y-auto pr-1">
               {forecastRuns.map((run) => {
                 const metadata = asRecord(run.model_metadata);
+                const sourceHealth = asRecord(metadata?.source_health) as SourceHealthSummary | null;
+                const decisionProvenance = asRecord(metadata?.decision_provenance) as DecisionProvenanceSummary | null;
                 const compatibilityWriteStatus = typeof metadata?.compatibility_write_status === 'string'
                   ? metadata.compatibility_write_status
                   : null;
+                const treeShapStatus = typeof metadata?.tree_shap_status === 'string'
+                  ? metadata.tree_shap_status
+                  : 'unknown';
                 const hourStats = forecastHourStats.get(run.id);
                 const timeline = publicationEventsByRun.get(run.id) ?? [];
                 const timelineStages = timeline.slice(-4).map((event) => event.stage);
@@ -612,6 +693,12 @@ export default function AdminDashboard() {
                       <div className={`font-mono text-right ${compatibilityState === 'failed' ? 'text-red-400' : 'text-foreground'}`}>
                         {compatibilityState}
                       </div>
+                      <div className="text-muted-foreground">Explainability</div>
+                      <div className="font-mono text-right text-foreground">{treeShapStatus}</div>
+                      <div className="text-muted-foreground">Source health</div>
+                      <div className="font-mono text-right text-foreground">{sourceHealth?.support_status || 'unknown'}</div>
+                      <div className="text-muted-foreground">Decision path</div>
+                      <div className="font-mono text-right text-foreground">{decisionProvenance?.dominant_mapping || 'n/a'}</div>
                     </div>
                     <div className="mt-1 text-[10px] text-muted-foreground">
                       Stages: {timelineStages.length > 0 ? timelineStages.join(' -> ') : 'no publication events yet'}
@@ -623,6 +710,56 @@ export default function AdminDashboard() {
           ) : (
             <div className="text-xs text-muted-foreground">No staged forecast runs visible yet</div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+        <CardHeader className="p-2 pb-1">
+          <CardTitle className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Source Health</CardTitle>
+        </CardHeader>
+        <CardContent className="p-2 pt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
+          <div className="text-muted-foreground">Support status</div>
+          <div className="font-mono text-right text-foreground">{latestSourceHealth?.support_status || 'n/a'}</div>
+          <div className="text-muted-foreground">Completeness</div>
+          <div className="font-mono text-right text-foreground">{formatPercent(latestSourceHealth?.overall_completeness)}</div>
+          <div className="text-muted-foreground">Weather freshness</div>
+          <div className="font-mono text-right text-foreground">
+            {typeof latestSourceHealth?.weather_freshness_hours === 'number'
+              ? `${latestSourceHealth.weather_freshness_hours.toFixed(0)}h`
+              : 'n/a'}
+          </div>
+          <div className="text-muted-foreground">SAR coverage mode</div>
+          <div className="font-mono text-right text-foreground">{latestSourceHealth?.sar_coverage_mode || 'n/a'}</div>
+          <div className="text-muted-foreground">Snowpack proxy</div>
+          <div className="font-mono text-right text-foreground">
+            {latestSourceHealth?.snowpack_proxy_available === true ? 'available' : latestSourceHealth ? 'missing' : 'n/a'}
+          </div>
+          <div className="text-muted-foreground">Missing inputs</div>
+          <div className="font-mono text-right text-foreground">
+            {latestSourceHealth?.missing_features?.length ? latestSourceHealth.missing_features.join(', ') : 'none'}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+        <CardHeader className="p-2 pb-1">
+          <CardTitle className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Decision Provenance</CardTitle>
+        </CardHeader>
+        <CardContent className="p-2 pt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
+          <div className="text-muted-foreground">Threshold profile</div>
+          <div className="font-mono text-right text-foreground">{latestDecisionProvenance?.threshold_profile || 'n/a'}</div>
+          <div className="text-muted-foreground">Profile origin</div>
+          <div className="font-mono text-right text-foreground">{latestDecisionProvenance?.threshold_profile_origin || 'n/a'}</div>
+          <div className="text-muted-foreground">Dominant mapping</div>
+          <div className="font-mono text-right text-foreground">{latestDecisionProvenance?.dominant_mapping || 'n/a'}</div>
+          <div className="text-muted-foreground">Frequency policy</div>
+          <div className="font-mono text-right text-foreground">{latestDecisionProvenance?.frequency_threshold_profile || 'n/a'}</div>
+          <div className="text-muted-foreground">Aggregation policy</div>
+          <div className="font-mono text-right text-foreground">{latestDecisionProvenance?.aggregation_policy || 'n/a'}</div>
+          <div className="text-muted-foreground">Calibration method</div>
+          <div className="font-mono text-right text-foreground">{latestDecisionProvenance?.calibration_method || 'n/a'}</div>
+          <div className="text-muted-foreground">Selected features</div>
+          <div className="font-mono text-right text-foreground">{latestDecisionProvenance?.selected_feature_count ?? 'n/a'}</div>
         </CardContent>
       </Card>
 
@@ -686,7 +823,7 @@ export default function AdminDashboard() {
         <CardHeader className="p-2 pb-1">
           <CardTitle className="text-xs uppercase tracking-[0.24em] text-muted-foreground flex items-center gap-1.5">
             <CloudSnow className="h-3 w-3" />
-            Snowpack Metrics
+            Snowpack Proxy Metrics
           </CardTitle>
         </CardHeader>
         <CardContent className="p-2 pt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
@@ -700,6 +837,9 @@ export default function AdminDashboard() {
           <div className="font-mono text-right text-foreground">{snowpackMetrics?.confidence?.toFixed(2) ?? 'n/a'}</div>
           <div className="text-muted-foreground">Source</div>
           <div className="font-mono text-right text-foreground">{snowpackMetrics?.source || 'n/a'}</div>
+          <div className="col-span-2 text-muted-foreground pt-1">
+            Proxy-based seasonal-memory estimates only; not direct field measurements or full SNOWPACK-class thermodynamics.
+          </div>
         </CardContent>
       </Card>
 
@@ -899,6 +1039,16 @@ export default function AdminDashboard() {
                 <div className="min-w-0">
                   <div className="font-mono text-muted-foreground truncate">{new Date(report.created_at).toLocaleString()}</div>
                   <div className="text-muted-foreground line-clamp-2">{report.description || 'No description'}</div>
+                  {(() => {
+                    const linkedEvent = fieldReportEventsByReportId.get(report.id)
+                      ?? (report.client_report_id ? fieldReportEventsByReportId.get(report.client_report_id) : undefined);
+                    if (!linkedEvent) return null;
+                    return (
+                      <div className="mt-1 text-[9px] text-muted-foreground">
+                        Event: {linkedEvent.verification_status || 'unverified'} • {linkedEvent.id}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
                   <Badge className={`border-0 ${statusColor(report.review_status || 'pending')}`}>{report.review_status || 'pending'}</Badge>
@@ -934,71 +1084,109 @@ export default function AdminDashboard() {
 
       {/* Model Status */}
       {modelStatus && (
-        <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
-          <CardContent className="p-2.5">
-            <div className="text-xs text-muted-foreground uppercase tracking-[0.24em] mb-1.5">Model Status</div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="font-mono text-sm text-foreground">{modelStatus.version}</span>
-              <Badge className="bg-emerald-500/15 text-emerald-400 border-0 font-mono text-xs rounded-full">
-                PSS: {modelStatus.pss_reported?.toFixed(3) ?? '—'}
-              </Badge>
-            </div>
-            <div className="text-[10px] text-muted-foreground">
-              Capability summary: {capabilityMode}
-            </div>
-            <div className="text-[10px] text-muted-foreground">
-              Customer-serving scorer (active): {activeModelLabel} • Version: {activeModelVersion}
-            </div>
-            <div className="text-[10px] text-muted-foreground">
-              Dynamic scorer (candidate): {candidateModelLabel} • Version: {candidateModelVersion} • Gate: {candidateGate}
-            </div>
-            <div className="text-[10px] text-muted-foreground">
-              Promotion gate: {modelStatus.promotion_gate_passed ? 'pass' : 'hold'} • PSS gate: {modelStatus.pss_gate_passed ? 'pass' : 'hold'}
-            </div>
-            <div className="text-[10px] text-muted-foreground">
-              Authoritative SAR: unavailable until an active held-out artifact exists
-            </div>
-            <div className="text-[10px] text-muted-foreground">
-              Whitebox runout: exploratory until `runout_physics_smoke.json` passes
-            </div>
-            <div className="text-[10px] text-muted-foreground">
-              Evidence volume: auto {evidenceSummary?.autonomous_positive_count ?? 0}/{evidenceSummary?.positive_count ?? 0} • manual {evidenceSummary?.manual_positive_count ?? 0} • promoted SAR {evidenceSummary?.promoted_sar_volume?.sar_unet_promoted_count ?? 0}
-            </div>
-            {modelStatus.feature_version && (
-              <div className="text-[10px] text-muted-foreground">
-                Feature: {modelStatus.feature_version}
+        <>
+          <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+            <CardContent className="p-2.5">
+              <div className="text-xs text-muted-foreground uppercase tracking-[0.24em] mb-1.5">Model Status</div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="font-mono text-sm text-foreground">{modelStatus.version}</span>
+                <Badge className="bg-emerald-500/15 text-emerald-400 border-0 font-mono text-xs rounded-full">
+                  PSS: {modelStatus.pss_reported?.toFixed(3) ?? '—'}
+                </Badge>
               </div>
-            )}
-            {modelStatus.calibration_profile_version && (
               <div className="text-[10px] text-muted-foreground">
-                Calibration: {modelStatus.calibration_profile_version}
+                Capability summary: {capabilityMode}
               </div>
-            )}
-            {modelStatus.threshold_profile_version && (
               <div className="text-[10px] text-muted-foreground">
-                Thresholds: {modelStatus.threshold_profile_version}
+                Customer-serving scorer (active): {activeModelLabel} • Version: {activeModelVersion}
               </div>
-            )}
-            {modelStatus.snowpack_model_version && (
               <div className="text-[10px] text-muted-foreground">
-                Snowpack: {modelStatus.snowpack_model_version}
+                Dynamic scorer (candidate): {candidateModelLabel} • Version: {candidateModelVersion} • Gate: {candidateGate}
               </div>
-            )}
-            <div className="text-[10px] text-muted-foreground">
-              Confidence proxy: F1 {modelStatus.f1_score?.toFixed(3) ?? '—'} • Backend: {modelStatus.inference_backend || 'batch_async'}
-            </div>
-            {(!modelStatus.last_trained || modelStatus.version?.includes('-sim') || syntheticBootstrapSkipped || !optimizationSummary || optimizationSummary?.origin === 'hardcoded_fallback') && (
-              <div className="mt-1.5 rounded-md bg-amber-500/10 border border-amber-500/30 px-2 py-1">
-                <span className="text-[10px] font-mono text-amber-300 uppercase tracking-wider">SYNTHETIC BOOTSTRAP</span>
-                <div className="text-[10px] text-amber-200/70 mt-0.5">
-                  {syntheticBootstrapSkipped
-                    ? 'Latest fine-tune was skipped, so the bootstrap model remains active.'
-                    : 'Model was never trained. Run Model Optimization to replace with real weights.'}
+              <div className="text-[10px] text-muted-foreground">
+                Promotion gate: {modelStatus.promotion_gate_passed ? 'pass' : 'hold'} • PSS gate: {modelStatus.pss_gate_passed ? 'pass' : 'hold'}
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                Authoritative SAR: unavailable until an active held-out artifact exists
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                Whitebox runout: exploratory until `runout_physics_smoke.json` passes
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                Evidence volume: auto {evidenceSummary?.autonomous_positive_count ?? 0}/{evidenceSummary?.positive_count ?? 0} • manual {evidenceSummary?.manual_positive_count ?? 0} • promoted SAR {evidenceSummary?.promoted_sar_volume?.sar_unet_promoted_count ?? 0}
+              </div>
+              {modelStatus.feature_version && (
+                <div className="text-[10px] text-muted-foreground">
+                  Feature: {modelStatus.feature_version}
                 </div>
+              )}
+              {modelStatus.calibration_profile_version && (
+                <div className="text-[10px] text-muted-foreground">
+                  Calibration: {modelStatus.calibration_profile_version}
+                </div>
+              )}
+              {modelStatus.threshold_profile_version && (
+                <div className="text-[10px] text-muted-foreground">
+                  Thresholds: {modelStatus.threshold_profile_version}
+                </div>
+              )}
+              {modelStatus.snowpack_model_version && (
+                <div className="text-[10px] text-muted-foreground">
+                  Snowpack: {modelStatus.snowpack_model_version}
+                </div>
+              )}
+              <div className="text-[10px] text-muted-foreground">
+                Confidence proxy: F1 {modelStatus.f1_score?.toFixed(3) ?? '—'} • Backend: {modelStatus.inference_backend || 'batch_async'}
               </div>
-            )}
-          </CardContent>
-        </Card>
+              <div className="text-[10px] text-muted-foreground">
+                Governance scope: internal lineage/evaluation only • external interoperability {String(latestGovernanceScope?.external_interoperability || 'not_implemented').replace(/_/g, ' ')}
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                Operator/public split: admin observability stays richer than customer-facing products by design
+              </div>
+              {(!modelStatus.last_trained || modelStatus.version?.includes('-sim') || syntheticBootstrapSkipped || !optimizationSummary || optimizationSummary?.origin === 'hardcoded_fallback') && (
+                <div className="mt-1.5 rounded-md bg-amber-500/10 border border-amber-500/30 px-2 py-1">
+                  <span className="text-[10px] font-mono text-amber-300 uppercase tracking-wider">SYNTHETIC BOOTSTRAP</span>
+                  <div className="text-[10px] text-amber-200/70 mt-0.5">
+                    {syntheticBootstrapSkipped
+                      ? 'Latest fine-tune was skipped, so the bootstrap model remains active.'
+                      : 'Model was never trained. Run Model Optimization to replace with real weights.'}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+            <CardHeader className="p-2 pb-1">
+              <CardTitle className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Model Stability</CardTitle>
+            </CardHeader>
+            <CardContent className="p-2 pt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
+              <div className="text-muted-foreground">Drift mode</div>
+              <div className="font-mono text-right text-foreground">{modelStatus.drift_mode_state || 'n/a'}</div>
+              <div className="text-muted-foreground">Stability class</div>
+              <div className="font-mono text-right text-foreground">{stabilitySummary?.classification || 'n/a'}</div>
+              <div className="text-muted-foreground">Seed count</div>
+              <div className="font-mono text-right text-foreground">{stabilitySummary?.seed_count ?? 'n/a'}</div>
+              <div className="text-muted-foreground">PSS std</div>
+              <div className="font-mono text-right text-foreground">
+                {typeof stabilitySummary?.pss_std === 'number' ? stabilitySummary.pss_std.toFixed(3) : 'n/a'}
+              </div>
+              <div className="text-muted-foreground">Threshold drift</div>
+              <div className="font-mono text-right text-foreground">
+                {typeof stabilitySummary?.threshold_drift === 'number' ? stabilitySummary.threshold_drift.toFixed(3) : 'n/a'}
+              </div>
+              <div className="text-muted-foreground">Feature overlap</div>
+              <div className="font-mono text-right text-foreground">{formatPercent(stabilitySummary?.selected_feature_overlap_mean)}</div>
+              <div className="text-muted-foreground">Latest benchmark</div>
+              <div className="font-mono text-right text-foreground">
+                {latestBenchmarkSummary?.benchmark_kind || 'n/a'} • {formatSeconds(latestBenchmarkSummary?.total_seconds)}
+              </div>
+              <div className="text-muted-foreground">Benchmark status</div>
+              <div className="font-mono text-right text-foreground">{latestBenchmarkSummary?.status || 'n/a'}</div>
+            </CardContent>
+          </Card>
+        </>
       )}
 
       {/* Job History */}

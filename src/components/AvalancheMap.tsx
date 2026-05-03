@@ -13,7 +13,12 @@ import {
   isHighUncertaintyCell,
   type GridCell,
 } from '@/lib/gridUtils';
-import type { AvalancheEvent } from '@/lib/avalancheEvents';
+import {
+  getAvalancheEventGovernanceLabel,
+  getAvalancheEventGovernanceState,
+  getAvalancheEventMarkerAppearance,
+  type AvalancheEvent,
+} from '@/lib/avalancheEvents';
 import { useTheme } from 'next-themes';
 import ActivityHeatmap from '@/components/ActivityHeatmap';
 import ImpactOverlays from '@/components/ImpactOverlays';
@@ -46,13 +51,6 @@ function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }
     setTimeout(() => map.invalidateSize(), 100);
   }, [map, center, zoom]);
   return null;
-}
-
-function confidenceColor(confidence: number): string {
-  if (confidence >= 0.8) return '#ef4444';
-  if (confidence >= 0.6) return '#f97316';
-  if (confidence >= 0.4) return '#eab308';
-  return '#84cc16';
 }
 
 export default function AvalancheMap({
@@ -217,13 +215,17 @@ export default function AvalancheMap({
       <Pane name="events-pane" style={{ zIndex: 650 }}>
         {historicalEvents
           .filter((event) => Number.isFinite(event.lat) && Number.isFinite(event.lng))
-          .map((evt) => (
-            <CircleMarker
-              key={evt.id}
-              center={[evt.lat, evt.lng]}
-              radius={8}
-              pathOptions={{ color: confidenceColor(evt.confidence), fillColor: confidenceColor(evt.confidence), fillOpacity: 0.8, weight: 2 }}
-            >
+          .map((evt) => {
+            const markerAppearance = getAvalancheEventMarkerAppearance(evt);
+            const governanceLabel = getAvalancheEventGovernanceLabel(evt);
+            const governanceState = getAvalancheEventGovernanceState(evt);
+            return (
+              <CircleMarker
+                key={evt.id}
+                center={[evt.lat, evt.lng]}
+                radius={governanceState === 'pending_corroboration' ? 7 : 8}
+                pathOptions={markerAppearance}
+              >
               <Popup>
                 <div className="text-xs space-y-1" style={{ color: isDark ? '#ddd' : '#111' }}>
                   <div className="font-bold">{evt.event_type.toUpperCase()}</div>
@@ -234,6 +236,14 @@ export default function AvalancheMap({
                   <div className={isDark ? 'text-gray-400' : 'text-gray-600'}>
                     Source: {evt.source} • Confidence: {(evt.confidence * 100).toFixed(0)}%
                   </div>
+                  <div className={isDark ? 'text-amber-300' : 'text-amber-700'}>
+                    Status: {governanceLabel}
+                  </div>
+                  {governanceState === 'pending_corroboration' && (
+                    <div className={isDark ? 'text-gray-400' : 'text-gray-600'}>
+                      Received from the field-report loop and awaiting corroboration or review.
+                    </div>
+                  )}
                   {evt.timestamp && (
                     <div className={isDark ? 'text-gray-500' : 'text-gray-500'}>
                       🕐 {new Date(evt.timestamp).toLocaleString()}
@@ -241,8 +251,9 @@ export default function AvalancheMap({
                   )}
                 </div>
               </Popup>
-            </CircleMarker>
-          ))}
+              </CircleMarker>
+            );
+          })}
       </Pane>
 
       {/* Activity Heatmap layer */}

@@ -8,7 +8,17 @@ from pathlib import PurePosixPath
 from typing import Any, Callable
 
 from backend.common.config import load_settings
-from backend.sar_unet_worker import SAR_UNET_SEGMENTATION_THRESHOLD, run_train_mtslstm, run_worker_request
+from backend.common.run_linkage import (
+    merge_compute_job_result_linkage,
+    merge_forecast_run_model_metadata_linkage,
+)
+from backend.common.supabase_io import has_supabase_credentials
+from backend.sar_unet_worker import (
+    SAR_UNET_SEGMENTATION_THRESHOLD,
+    run_train_mtslstm,
+    run_train_sar_unet,
+    run_worker_request,
+)
 
 if str(os.environ.get('AVALANCHE_SKIP_MODAL_IMPORT') or '').strip().lower() in {'1', 'true', 'yes', 'on'}:
     modal = None
@@ -34,8 +44,16 @@ DEM_VOLUME_ROOT = f'{VOLUME_MOUNT}/dem'
 MODEL_VOLUME_ROOT = f'{VOLUME_MOUNT}/models'
 WORKER_TOKEN_ENV = 'MODAL_WORKER_TOKEN'
 MODAL_APP_NAME = 'avalanche-modal-worker'
+MODAL_REMOTE_SEGMENT_FUNCTION = 'sar_segment_remote'
+MODAL_REMOTE_TRAIN_SAR_FUNCTION = 'train_sar_unet_remote'
 MODAL_REMOTE_TRAIN_FUNCTION = 'train_mts_lstm_remote'
 MODAL_REMOTE_INFER_FUNCTION = 'infer_mts_lstm_remote'
+MODAL_PINNED_RUNTIME_PACKAGES = ('shap==0.51.0', 'scikit-learn==1.8.0')
+MODAL_MIN_CONTAINERS = int(os.environ.get('MODAL_MIN_CONTAINERS', '0'))
+MODAL_BUFFER_CONTAINERS = int(os.environ.get('MODAL_BUFFER_CONTAINERS', '0'))
+MODAL_SCALEDOWN_WINDOW_SECONDS = int(os.environ.get('MODAL_SCALEDOWN_WINDOW_SECONDS', '30'))
+MODAL_INFER_CPU = float(os.environ.get('MODAL_INFER_CPU', '8.0'))
+MODAL_INFER_MEMORY_MB = int(os.environ.get('MODAL_INFER_MEMORY_MB', '16384'))
 
 
 def _artifact_root() -> Path:
@@ -68,6 +86,10 @@ def handle_sar_segment(payload: dict[str, Any]) -> dict[str, Any]:
     return _dispatch_worker_request('sar-segment', payload)
 
 
+def handle_train_sar_unet(payload: dict[str, Any]) -> dict[str, Any]:
+    return _dispatch_worker_request('train-sar-unet', payload)
+
+
 def handle_train_mtslstm(payload: dict[str, Any]) -> dict[str, Any]:
     return _dispatch_worker_request('train-mtslstm', payload)
 
@@ -80,6 +102,22 @@ def handle_evaluate_release(payload: dict[str, Any]) -> dict[str, Any]:
     return _dispatch_worker_request('evaluate-release', payload)
 
 
+def run_remote_train_sar_unet(
+    payload: dict[str, Any],
+    *,
+    artifact_root: Path,
+    device: str,
+    volume_reload: Callable[[], None] | None = None,
+    volume_commit: Callable[[], None] | None = None,
+) -> dict[str, Any]:
+    if volume_reload is not None:
+        volume_reload()
+    report = run_train_sar_unet(payload, artifact_root=artifact_root, device=device)
+    if volume_commit is not None:
+        volume_commit()
+    return report
+
+
 def run_remote_train_mtslstm(
     payload: dict[str, Any],
     *,
@@ -90,6 +128,32 @@ def run_remote_train_mtslstm(
     if volume_reload is not None:
         volume_reload()
     report = run_train_mtslstm(payload, artifact_root=artifact_root)
+    if volume_commit is not None:
+        volume_commit()
+    return report
+
+
+def run_remote_sar_segment(
+    payload: dict[str, Any],
+    *,
+    artifact_root: Path,
+    device: str,
+    volume_reload: Callable[[], None] | None = None,
+    volume_commit: Callable[[], None] | None = None,
+) -> dict[str, Any]:
+    if volume_reload is not None:
+        volume_reload()
+    settings = load_settings()
+    report = run_worker_request(
+        'sar-segment',
+        payload,
+        artifact_root=artifact_root,
+        model_path=_model_path(),
+        device=device,
+        threshold=float(os.environ.get('SAR_UNET_SEGMENTATION_THRESHOLD', str(SAR_UNET_SEGMENTATION_THRESHOLD))),
+        hazard_type=str(payload.get('hazard_type') or settings.hazard_type or 'avalanche'),
+        dry_run=str(payload.get('dry_run', '')).strip().lower() in {'1', 'true', 'yes', 'on'},
+    )
     if volume_commit is not None:
         volume_commit()
     return report
@@ -116,19 +180,29 @@ def _require_modal() -> Any:
     return modal
 
 
-def _accepted_modal_job(call: Any, request_type: str) -> dict[str, Any]:
-    return {
+def _accepted_modal_job(call: Any, request_type: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    body = {
         'status': 'accepted',
         'call_id': str(call.object_id),
+        'modal_call_id': str(call.object_id),
         'request_type': request_type,
         'runtime_provider': 'modal',
     }
+    if isinstance(payload, dict):
+        compute_job_id = payload.get('compute_job_id') or payload.get('job_id')
+        if compute_job_id is not None and str(compute_job_id).strip():
+            body['compute_job_id'] = str(compute_job_id).strip()
+        artifact_dir = payload.get('artifact_dir')
+        if artifact_dir is not None and str(artifact_dir).strip():
+            body['artifact_dir'] = str(artifact_dir).strip()
+    return body
 
 
 def _pending_modal_job(call_id: str, request_type: str) -> dict[str, Any]:
     return {
         'status': 'pending',
         'call_id': call_id,
+        'modal_call_id': call_id,
         'request_type': request_type,
         'runtime_provider': 'modal',
     }
@@ -138,49 +212,199 @@ def _expired_modal_job(call_id: str, request_type: str) -> dict[str, Any]:
     return {
         'status': 'not_found',
         'call_id': call_id,
+        'modal_call_id': call_id,
         'request_type': request_type,
         'runtime_provider': 'modal',
         'reason': 'result_expired',
     }
 
 
+def _cancelled_modal_job(call_id: str, request_type: str) -> dict[str, Any]:
+    return {
+        'status': 'cancelled',
+        'call_id': call_id,
+        'modal_call_id': call_id,
+        'request_type': request_type,
+        'runtime_provider': 'modal',
+        'reason': 'cancelled_by_user',
+    }
+
+
+def _classify_modal_poll_exception(
+    modal_module: Any,
+    exc: Exception,
+    *,
+    call_id: str,
+    request_type: str,
+) -> tuple[int, dict[str, Any]] | None:
+    modal_exceptions = getattr(modal_module, 'exception', None)
+    timeout_error = getattr(modal_exceptions, 'TimeoutError', None)
+    connection_error = getattr(modal_exceptions, 'ConnectionError', None)
+    output_expired_error = getattr(modal_exceptions, 'OutputExpiredError', None)
+    remote_error = getattr(modal_exceptions, 'RemoteError', None)
+    if isinstance(exc, TimeoutError) or (
+        timeout_error is not None and isinstance(exc, timeout_error)
+    ):
+        return 202, _pending_modal_job(call_id, request_type)
+    if connection_error is not None and isinstance(exc, connection_error):
+        if 'deadline exceeded' in str(exc).strip().lower():
+            return 202, _pending_modal_job(call_id, request_type)
+    if output_expired_error is not None and isinstance(exc, output_expired_error):
+        return 404, _expired_modal_job(call_id, request_type)
+    if remote_error is not None and isinstance(exc, remote_error):
+        if 'cancelled by user' in str(exc).strip().lower():
+            return 409, _cancelled_modal_job(call_id, request_type)
+    return None
+
+
+def _extract_run_linkage(result: dict[str, Any], call_id: str) -> dict[str, Any]:
+    compute_job_id = result.get('compute_job_id') or result.get('job_id')
+    forecast_run_id = result.get('forecast_run_id')
+    forecast_run_ids = result.get('forecast_run_ids')
+    forecast_run_ids_by_region = result.get('forecast_run_ids_by_region')
+    return {
+        'modal_call_id': call_id,
+        'compute_job_id': str(compute_job_id).strip() if compute_job_id is not None and str(compute_job_id).strip() else None,
+        'artifact_dir': result.get('artifact_dir'),
+        'forecast_run_id': forecast_run_id,
+        'forecast_run_ids': forecast_run_ids if isinstance(forecast_run_ids, list) else [],
+        'forecast_run_ids_by_region': forecast_run_ids_by_region if isinstance(forecast_run_ids_by_region, dict) else {},
+    }
+
+
+def _sync_modal_job_linkage_best_effort(result: dict[str, Any], call_id: str) -> None:
+    if not has_supabase_credentials():
+        return
+    linkage = _extract_run_linkage(result, call_id)
+    compute_job_id = linkage.get('compute_job_id')
+    if isinstance(compute_job_id, str) and compute_job_id.strip():
+        try:
+            merge_compute_job_result_linkage(
+                compute_job_id=compute_job_id,
+                linkage=linkage,
+            )
+        except Exception:
+            pass
+    forecast_run_ids: list[str] = []
+    forecast_run_id = linkage.get('forecast_run_id')
+    if isinstance(forecast_run_id, str) and forecast_run_id.strip():
+        forecast_run_ids.append(forecast_run_id)
+    for item in linkage.get('forecast_run_ids') if isinstance(linkage.get('forecast_run_ids'), list) else []:
+        if isinstance(item, str) and item.strip() and item not in forecast_run_ids:
+            forecast_run_ids.append(item)
+    for item in (linkage.get('forecast_run_ids_by_region') or {}).values() if isinstance(linkage.get('forecast_run_ids_by_region'), dict) else []:
+        if isinstance(item, str) and item.strip() and item not in forecast_run_ids:
+            forecast_run_ids.append(item)
+    for run_id in forecast_run_ids:
+        try:
+            merge_forecast_run_model_metadata_linkage(
+                forecast_run_id=run_id,
+                linkage=linkage,
+            )
+        except Exception:
+            pass
+
+
 def _ok_modal_job(call_id: str, request_type: str, result: Any) -> dict[str, Any]:
     if isinstance(result, dict):
-        return result
-    return {
+        body = {
+            **result,
+            'call_id': str(result.get('call_id') or call_id),
+            'modal_call_id': str(result.get('modal_call_id') or call_id),
+            'request_type': str(result.get('request_type') or request_type),
+            'runtime_provider': str(result.get('runtime_provider') or 'modal'),
+        }
+        _sync_modal_job_linkage_best_effort(body, call_id)
+        return body
+    body = {
         'status': 'ok',
         'call_id': call_id,
+        'modal_call_id': call_id,
         'request_type': request_type,
         'runtime_provider': 'modal',
         'result': result,
     }
+    return body
+
+
+def submit_train_sar_unet_job(payload: dict[str, Any]) -> dict[str, Any]:
+    modal_module = _require_modal()
+    train_function = modal_module.Function.from_name(MODAL_APP_NAME, MODAL_REMOTE_TRAIN_SAR_FUNCTION)
+    call = train_function.spawn(payload)
+    return _accepted_modal_job(call, 'train_sar_unet', payload)
+
+
+async def submit_train_sar_unet_job_async(payload: dict[str, Any]) -> dict[str, Any]:
+    modal_module = _require_modal()
+    train_function = modal_module.Function.from_name(MODAL_APP_NAME, MODAL_REMOTE_TRAIN_SAR_FUNCTION)
+    call = await train_function.spawn.aio(payload)
+    return _accepted_modal_job(call, 'train_sar_unet', payload)
+
+
+def poll_train_sar_unet_job(call_id: str) -> tuple[int, dict[str, Any]]:
+    modal_module = _require_modal()
+    function_call = modal_module.FunctionCall.from_id(call_id)
+    try:
+        result = function_call.get(timeout=0)
+    except Exception as exc:
+        handled = _classify_modal_poll_exception(
+            modal_module,
+            exc,
+            call_id=call_id,
+            request_type='train_sar_unet',
+        )
+        if handled is not None:
+            return handled
+        raise
+    return 200, _ok_modal_job(call_id, 'train_sar_unet', result)
+
+
+async def poll_train_sar_unet_job_async(call_id: str) -> tuple[int, dict[str, Any]]:
+    modal_module = _require_modal()
+    function_call = modal_module.FunctionCall.from_id(call_id)
+    try:
+        result = await function_call.get.aio(timeout=0)
+    except Exception as exc:
+        handled = _classify_modal_poll_exception(
+            modal_module,
+            exc,
+            call_id=call_id,
+            request_type='train_sar_unet',
+        )
+        if handled is not None:
+            return handled
+        raise
+    return 200, _ok_modal_job(call_id, 'train_sar_unet', result)
 
 
 def submit_train_mtslstm_job(payload: dict[str, Any]) -> dict[str, Any]:
     modal_module = _require_modal()
     train_function = modal_module.Function.from_name(MODAL_APP_NAME, MODAL_REMOTE_TRAIN_FUNCTION)
     call = train_function.spawn(payload)
-    return _accepted_modal_job(call, 'train_mtslstm')
+    return _accepted_modal_job(call, 'train_mtslstm', payload)
 
 
 async def submit_train_mtslstm_job_async(payload: dict[str, Any]) -> dict[str, Any]:
     modal_module = _require_modal()
     train_function = modal_module.Function.from_name(MODAL_APP_NAME, MODAL_REMOTE_TRAIN_FUNCTION)
     call = await train_function.spawn.aio(payload)
-    return _accepted_modal_job(call, 'train_mtslstm')
+    return _accepted_modal_job(call, 'train_mtslstm', payload)
 
 
 def poll_train_mtslstm_job(call_id: str) -> tuple[int, dict[str, Any]]:
     modal_module = _require_modal()
     function_call = modal_module.FunctionCall.from_id(call_id)
-    output_expired_error = getattr(getattr(modal_module, 'exception', None), 'OutputExpiredError', None)
     try:
         result = function_call.get(timeout=0)
-    except TimeoutError:
-        return 202, _pending_modal_job(call_id, 'train_mtslstm')
     except Exception as exc:
-        if output_expired_error is not None and isinstance(exc, output_expired_error):
-            return 404, _expired_modal_job(call_id, 'train_mtslstm')
+        handled = _classify_modal_poll_exception(
+            modal_module,
+            exc,
+            call_id=call_id,
+            request_type='train_mtslstm',
+        )
+        if handled is not None:
+            return handled
         raise
     return 200, _ok_modal_job(call_id, 'train_mtslstm', result)
 
@@ -188,14 +412,17 @@ def poll_train_mtslstm_job(call_id: str) -> tuple[int, dict[str, Any]]:
 async def poll_train_mtslstm_job_async(call_id: str) -> tuple[int, dict[str, Any]]:
     modal_module = _require_modal()
     function_call = modal_module.FunctionCall.from_id(call_id)
-    output_expired_error = getattr(getattr(modal_module, 'exception', None), 'OutputExpiredError', None)
     try:
         result = await function_call.get.aio(timeout=0)
-    except TimeoutError:
-        return 202, _pending_modal_job(call_id, 'train_mtslstm')
     except Exception as exc:
-        if output_expired_error is not None and isinstance(exc, output_expired_error):
-            return 404, _expired_modal_job(call_id, 'train_mtslstm')
+        handled = _classify_modal_poll_exception(
+            modal_module,
+            exc,
+            call_id=call_id,
+            request_type='train_mtslstm',
+        )
+        if handled is not None:
+            return handled
         raise
     return 200, _ok_modal_job(call_id, 'train_mtslstm', result)
 
@@ -204,27 +431,30 @@ def submit_infer_mtslstm_job(payload: dict[str, Any]) -> dict[str, Any]:
     modal_module = _require_modal()
     infer_function = modal_module.Function.from_name(MODAL_APP_NAME, MODAL_REMOTE_INFER_FUNCTION)
     call = infer_function.spawn(payload)
-    return _accepted_modal_job(call, 'infer_mtslstm')
+    return _accepted_modal_job(call, 'infer_mtslstm', payload)
 
 
 async def submit_infer_mtslstm_job_async(payload: dict[str, Any]) -> dict[str, Any]:
     modal_module = _require_modal()
     infer_function = modal_module.Function.from_name(MODAL_APP_NAME, MODAL_REMOTE_INFER_FUNCTION)
     call = await infer_function.spawn.aio(payload)
-    return _accepted_modal_job(call, 'infer_mtslstm')
+    return _accepted_modal_job(call, 'infer_mtslstm', payload)
 
 
 def poll_infer_mtslstm_job(call_id: str) -> tuple[int, dict[str, Any]]:
     modal_module = _require_modal()
     function_call = modal_module.FunctionCall.from_id(call_id)
-    output_expired_error = getattr(getattr(modal_module, 'exception', None), 'OutputExpiredError', None)
     try:
         result = function_call.get(timeout=0)
-    except TimeoutError:
-        return 202, _pending_modal_job(call_id, 'infer_mtslstm')
     except Exception as exc:
-        if output_expired_error is not None and isinstance(exc, output_expired_error):
-            return 404, _expired_modal_job(call_id, 'infer_mtslstm')
+        handled = _classify_modal_poll_exception(
+            modal_module,
+            exc,
+            call_id=call_id,
+            request_type='infer_mtslstm',
+        )
+        if handled is not None:
+            return handled
         raise
     return 200, _ok_modal_job(call_id, 'infer_mtslstm', result)
 
@@ -232,14 +462,17 @@ def poll_infer_mtslstm_job(call_id: str) -> tuple[int, dict[str, Any]]:
 async def poll_infer_mtslstm_job_async(call_id: str) -> tuple[int, dict[str, Any]]:
     modal_module = _require_modal()
     function_call = modal_module.FunctionCall.from_id(call_id)
-    output_expired_error = getattr(getattr(modal_module, 'exception', None), 'OutputExpiredError', None)
     try:
         result = await function_call.get.aio(timeout=0)
-    except TimeoutError:
-        return 202, _pending_modal_job(call_id, 'infer_mtslstm')
     except Exception as exc:
-        if output_expired_error is not None and isinstance(exc, output_expired_error):
-            return 404, _expired_modal_job(call_id, 'infer_mtslstm')
+        handled = _classify_modal_poll_exception(
+            modal_module,
+            exc,
+            call_id=call_id,
+            request_type='infer_mtslstm',
+        )
+        if handled is not None:
+            return handled
         raise
     return 200, _ok_modal_job(call_id, 'infer_mtslstm', result)
 
@@ -247,6 +480,7 @@ async def poll_infer_mtslstm_job_async(call_id: str) -> tuple[int, dict[str, Any
 def _route_handlers() -> dict[str, Callable[[dict[str, Any]], dict[str, Any]]]:
     return {
         '/sar-segment': handle_sar_segment,
+        '/train-sar-unet': handle_train_sar_unet,
         '/train-mtslstm': handle_train_mtslstm,
         '/infer-mtslstm': handle_infer_mtslstm,
         '/evaluate-release': handle_evaluate_release,
@@ -382,6 +616,30 @@ def create_fastapi_app(volume_reload: Callable[[], None] | None = None, volume_c
     async def sar_segment(request: Request) -> dict[str, Any]:
         return await _handle(request, '/sar-segment', True)
 
+    @app.post('/train-sar-unet')
+    async def train_sar_unet_endpoint(request: Request) -> dict[str, Any]:
+        _authorize_or_raise(request.headers.get('Authorization'))
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            payload = {}
+        try:
+            return await submit_train_sar_unet_job_async(payload)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail={'status': 'misconfigured', 'reason': str(exc)}) from exc
+
+    @app.get('/train-sar-unet/result/{call_id}')
+    async def train_sar_unet_result(call_id: str, request: Request) -> Any:
+        _authorize_or_raise(request.headers.get('Authorization'))
+        try:
+            status_code, body = await poll_train_sar_unet_job_async(call_id)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail={'status': 'misconfigured', 'reason': str(exc)}) from exc
+        if status_code == 202:
+            return JSONResponse(status_code=202, content=body)
+        if status_code != 200:
+            raise HTTPException(status_code=status_code, detail=body)
+        return body
+
     @app.post('/train-mtslstm')
     async def train_mtslstm(request: Request) -> dict[str, Any]:
         _authorize_or_raise(request.headers.get('Authorization'))
@@ -450,7 +708,7 @@ if modal is not None:  # pragma: no cover - exercised in deployment, not local t
             'DEM_ROOT': DEM_VOLUME_ROOT,
         })
         .pip_install_from_requirements('backend/requirements.txt')
-        .pip_install('modal>=0.73.82', 'fastapi[standard]>=0.115.0')
+        .pip_install(*MODAL_PINNED_RUNTIME_PACKAGES, 'modal>=0.73.82', 'fastapi[standard]>=0.115.0', 'pyarrow>=21.0.0')
         .run_commands('pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121')
         .add_local_python_source('backend')
         .add_local_file('config/regions.json', remote_path='/root/config/regions.json')
@@ -463,7 +721,10 @@ if modal is not None:  # pragma: no cover - exercised in deployment, not local t
         volumes={VOLUME_MOUNT: _artifact_volume},
         cpu=1.0,
         memory=1024,
-        timeout=300,
+        min_containers=MODAL_MIN_CONTAINERS,
+        buffer_containers=MODAL_BUFFER_CONTAINERS,
+        scaledown_window=MODAL_SCALEDOWN_WINDOW_SECONDS,
+        timeout=1800,
     )
     @modal.asgi_app()
     def worker_api() -> Any:
@@ -477,6 +738,49 @@ if modal is not None:  # pragma: no cover - exercised in deployment, not local t
         secrets=_secrets,
         volumes={VOLUME_MOUNT: _artifact_volume},
         gpu='T4',
+        min_containers=MODAL_MIN_CONTAINERS,
+        buffer_containers=MODAL_BUFFER_CONTAINERS,
+        scaledown_window=MODAL_SCALEDOWN_WINDOW_SECONDS,
+        timeout=1800,
+        retries=0,
+    )
+    def sar_segment_remote(request: dict[str, Any]) -> dict[str, Any]:
+        return run_remote_sar_segment(
+            request,
+            artifact_root=Path(VOLUME_MOUNT),
+            device='cuda',
+            volume_reload=_artifact_volume.reload,
+            volume_commit=_artifact_volume.commit,
+        )
+
+    @app.function(
+        image=image,
+        secrets=_secrets,
+        volumes={VOLUME_MOUNT: _artifact_volume},
+        gpu='T4',
+        min_containers=MODAL_MIN_CONTAINERS,
+        buffer_containers=MODAL_BUFFER_CONTAINERS,
+        scaledown_window=MODAL_SCALEDOWN_WINDOW_SECONDS,
+        timeout=14400,
+        retries=0,
+    )
+    def train_sar_unet_remote(request: dict[str, Any]) -> dict[str, Any]:
+        return run_remote_train_sar_unet(
+            request,
+            artifact_root=Path(VOLUME_MOUNT),
+            device='cuda',
+            volume_reload=_artifact_volume.reload,
+            volume_commit=_artifact_volume.commit,
+        )
+
+    @app.function(
+        image=image,
+        secrets=_secrets,
+        volumes={VOLUME_MOUNT: _artifact_volume},
+        gpu='T4',
+        min_containers=MODAL_MIN_CONTAINERS,
+        buffer_containers=MODAL_BUFFER_CONTAINERS,
+        scaledown_window=MODAL_SCALEDOWN_WINDOW_SECONDS,
         timeout=14400,
         retries=0,
     )
@@ -492,8 +796,12 @@ if modal is not None:  # pragma: no cover - exercised in deployment, not local t
         image=image,
         secrets=_secrets,
         volumes={VOLUME_MOUNT: _artifact_volume},
-        gpu='T4',
-        timeout=7200,
+        cpu=MODAL_INFER_CPU,
+        memory=MODAL_INFER_MEMORY_MB,
+        min_containers=MODAL_MIN_CONTAINERS,
+        buffer_containers=MODAL_BUFFER_CONTAINERS,
+        scaledown_window=MODAL_SCALEDOWN_WINDOW_SECONDS,
+        timeout=28800,
         retries=0,
     )
     def infer_mts_lstm_remote(request: dict[str, Any]) -> dict[str, Any]:
@@ -508,6 +816,9 @@ if modal is not None:  # pragma: no cover - exercised in deployment, not local t
         image=image,
         secrets=_secrets,
         volumes={VOLUME_MOUNT: _artifact_volume},
+        min_containers=MODAL_MIN_CONTAINERS,
+        buffer_containers=MODAL_BUFFER_CONTAINERS,
+        scaledown_window=MODAL_SCALEDOWN_WINDOW_SECONDS,
         timeout=1800,
         retries=0,
     )

@@ -1,7 +1,15 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { RISK_LABELS } from '@/lib/constants';
-import { getRiskColor, isCellUnavailable, type GridCell } from '@/lib/gridUtils';
+import {
+  getCellMaskLabel,
+  getCellMaskReasonDescriptions,
+  getCellMaskSummary,
+  getRiskColor,
+  isCellMasked,
+  isCellUnavailable,
+  type GridCell,
+} from '@/lib/gridUtils';
 import { buildRiskExplanation, selectRiskDrivers } from '@/lib/riskNarratives';
 
 interface WeatherSummary {
@@ -35,7 +43,11 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
   }
 
   const unavailable = isCellUnavailable(cell);
-  const { drivers: shapData } = selectRiskDrivers(cell);
+  const masked = isCellMasked(cell) && !unavailable;
+  const maskLabel = getCellMaskLabel(cell);
+  const maskSummary = getCellMaskSummary(cell);
+  const maskReasonDescriptions = getCellMaskReasonDescriptions(cell);
+  const { shapSource, drivers: shapData } = selectRiskDrivers(cell);
 
   const maxShap = Math.max(...shapData.map((d) => Math.abs(d.value)), 0.01);
   const coverageState = cell.coverageFlags?.sar_coverage_state;
@@ -67,6 +79,39 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
               <div>reason: {cell.availabilityReason ?? 'unavailable_terrain'}</div>
               <div>dynamic_model_version: {cell.dynamicModelVersion ?? 'n/a'}</div>
               <div>surrogate_model_version: {cell.surrogateModelVersion ?? 'n/a'}</div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (masked) {
+    return (
+      <div className="space-y-3 p-4">
+        <Card className="border border-border/70 bg-card/70 backdrop-blur-xl shadow-lg shadow-black/20">
+          <CardHeader className="p-4 pb-2">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.24em]">Grid State</CardTitle>
+              <Badge className="rounded-full border-0 bg-slate-500/15 text-slate-300 text-xs">
+                {maskLabel}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 pt-1 space-y-3">
+            <div className="text-sm text-foreground">
+              {maskSummary}
+            </div>
+            <div className="grid grid-cols-1 gap-2 text-[11px] text-muted-foreground font-mono">
+              {cell.aptEligible === false && (
+                <div>profile: {cell.aptProfile ?? 'apt_30_50_v1'}</div>
+              )}
+              {maskReasonDescriptions.map((reason) => (
+                <div key={reason}>reason: {reason}</div>
+              ))}
+              <div>slope_angle_deg: {cell.terrainInputs?.slope_angle_deg?.toFixed(1) ?? 'n/a'}</div>
+              <div>probability: {typeof cell.probability === 'number' ? (cell.probability * 100).toFixed(1) + '%' : 'n/a'}</div>
+              <div>terrain_fused_risk_score: {cell.terrainFusedRiskScore ?? 'n/a'}</div>
             </div>
           </CardContent>
         </Card>
@@ -246,17 +291,19 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
         <CardHeader className="p-3 pb-1">
           <div className="flex items-center justify-between">
             <CardTitle className="text-xs text-muted-foreground uppercase tracking-[0.24em]">
-              TreeSHAP Contributions
+              {shapSource === 'tree_shap' ? 'TreeSHAP Contributions' : 'Explainability Contributions'}
             </CardTitle>
-            <Badge className="text-[8px] rounded-full border-0 px-1.5 py-0 bg-emerald-500/15 text-emerald-400">
-              ● ARTIFACT
+            <Badge className={`text-[8px] rounded-full border-0 px-1.5 py-0 ${shapSource === 'tree_shap' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-300'}`}>
+              ● {shapSource === 'tree_shap' ? 'TREESHAP' : 'FALLBACK'}
             </Badge>
           </div>
         </CardHeader>
         <CardContent className="p-3 pt-1 space-y-1.5">
           {shapData.length === 0 ? (
             <div className="text-[11px] text-muted-foreground">
-              TreeSHAP contributions are missing from the batch artifact for this cell.
+              {cell.explainabilityMode === 'heuristic_fallback'
+                ? `TreeSHAP was unavailable for this batch${cell.explainabilityReason ? ` (${cell.explainabilityReason.replace(/_/g, ' ')})` : ''}, so the dashboard withholds a TreeSHAP claim for this cell.`
+                : 'TreeSHAP contributions are missing from the batch artifact for this cell.'}
             </div>
           ) : (
             <>
@@ -283,7 +330,7 @@ export default function RiskDashboard({ cell, weatherSummary }: Props) {
                 );
               })}
               <div className="pt-1 text-[9px] text-muted-foreground/70 font-mono">
-                origin: forecast_grids.grid_geojson
+                origin: {shapSource === 'tree_shap' ? 'batch TreeSHAP artifact' : 'heuristic fallback context'}
               </div>
             </>
           )}

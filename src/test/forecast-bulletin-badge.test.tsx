@@ -16,6 +16,31 @@ describe('ForecastBulletinBadge', () => {
       critical_elevations: { min_m: 2400, max_m: 3400, band_step_m: 200 },
       critical_aspects: ['W', 'NW', 'N', 'NE'],
       coverage: 'ready',
+      confidence_state: 'reduced',
+      confidence_reasons: ['high_uncertainty_share'],
+      uncertainty_summary: {
+        eligible_cell_count: 92,
+        high_uncertainty_cell_count: 31,
+        high_uncertainty_share: 0.337,
+        low_sar_coverage_cell_count: 8,
+        low_sar_coverage_share: 0.087,
+      },
+      source_health: {
+        summary_version: 'source_health_v1',
+        support_status: 'partial',
+        overall_completeness: 0.75,
+        weather_freshness_hours: 3,
+        sar_coverage_mode: 'mixed',
+        snowpack_proxy_available: true,
+      },
+      decision_provenance: {
+        summary_version: 'decision_provenance_v1',
+        threshold_profile: 'heuristic-risk-bands-v1',
+        threshold_profile_origin: 'heuristic_seeded',
+        dominant_mapping: 'heuristic_thresholds_and_frequency',
+        calibration_method: 'isotonic_v1',
+        selected_feature_count: 12,
+      },
       issue_window_policy: 'daypart_v1',
       primary_window: 'day_1_morning',
       primary_window_policy: 'first_available_current_or_future_daypart_v1',
@@ -65,8 +90,13 @@ describe('ForecastBulletinBadge', () => {
     render(<ForecastBulletinBadge bulletin={bulletin} timeOffset={12} onSelectForecastHour={onSelectForecastHour} />);
 
     expect(screen.getByText('Danger Level 5: Very High')).toBeTruthy();
+    expect(bulletin?.source_health?.support_status).toBe('partial');
+    expect(bulletin?.decision_provenance?.threshold_profile_origin).toBe('heuristic_seeded');
+    expect(screen.getByTestId('confidence-badge').textContent).toContain('Reduced Confidence');
     expect(screen.getByText('Wind Slab')).toBeTruthy();
     expect(screen.getByText(/W, NW, N, NE • 2400–3400 m • EAWS-style experimental/i)).toBeTruthy();
+    expect(screen.getByTestId('confidence-caption').textContent).toContain('High uncertainty remains across many eligible cells');
+    expect(screen.getByTestId('confidence-caption').textContent).toContain('High-uncertainty cells 31/92');
     expect(screen.getByTestId('daypart-strip')).toBeTruthy();
     expect(screen.getByTestId('daypart-chip-night').textContent).toContain('Night');
     expect(screen.getByTestId('daypart-chip-morning').textContent).toContain('Morning');

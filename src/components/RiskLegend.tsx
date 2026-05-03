@@ -17,6 +17,12 @@ export default function RiskLegend() {
           </span>
         </div>
       ))}
+      <div className="flex items-center gap-2 pt-1">
+        <div className="h-3 w-6 rounded-sm bg-slate-500" />
+        <span className="text-[11px] text-foreground font-mono">
+          Masked terrain
+        </span>
+      </div>
     </div>
   );
 }

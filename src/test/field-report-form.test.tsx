@@ -66,17 +66,22 @@ describe('FieldReportForm', () => {
   it('defaults the observed time, supports geolocation and map clicks, and submits optimistic plus durable events', async () => {
     const submitted: AvalancheEvent[] = [];
     submitQueuedFieldReport.mockResolvedValue({
-      id: 'event-1',
-      lat: 27.99,
-      lng: 86.92,
-      severity: 3,
-      confidence: 0.82,
-      description: 'Observed crown line below Camp II',
-      source: 'field_report',
-      event_type: 'unknown',
-      timestamp: '2026-05-02T04:30:00.000Z',
-      location_name: 'Himalayas (Nepal)',
-      clientReportId: 'field-durable',
+      event: {
+        id: 'event-1',
+        lat: 27.99,
+        lng: 86.92,
+        severity: 3,
+        confidence: 0.82,
+        description: 'Observed crown line below Camp II',
+        source: 'field_report',
+        event_type: 'unknown',
+        timestamp: '2026-05-02T04:30:00.000Z',
+        location_name: 'Himalayas (Nepal)',
+        clientReportId: 'field-durable',
+        verificationStatus: 'unverified',
+      },
+      governanceLabel: 'Pending corroboration',
+      promoted: false,
     });
 
     render(

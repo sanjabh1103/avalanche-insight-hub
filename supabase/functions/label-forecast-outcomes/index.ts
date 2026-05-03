@@ -1,5 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  fetchPublishedRunByCompatibilityForecastGridId,
+  loadHourlyGridsFromForecastRun,
+} from "../_shared/forecastArtifacts.ts";
+import {
+  getCellDryWetDomain,
+  getCellElevation,
+  getCellProblemSlug,
+  getCellSarCoverageState,
+  normalizeAsyncHourlyGrids,
+} from "../_shared/evaluationMetadata.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,6 +31,85 @@ interface ForecastSourceRecord {
   created_at: string;
   bbox: number[];
   hourly_grids: any[][];
+}
+
+interface EligibleEvent {
+  id: string;
+  timestamp: string | null;
+  severity: number;
+  verification_status: string;
+  elevation_m: number | null;
+  label_role: string | null;
+  training_eligible_reason: string | null;
+  location: string;
+}
+
+interface FetchEligibleEventsRpcResult {
+  events: EligibleEvent[];
+  error: unknown;
+}
+
+interface ForecastEventLookupParams {
+  hazardType: string;
+  windowStartIso: string;
+  windowEndIso: string;
+  bbox: [number, number, number, number];
+  minVerificationRank: number;
+  limit: number;
+}
+
+interface LabelForecastRequestBody {
+  forecast_id?: unknown;
+  days_back?: unknown;
+  hazard_type?: unknown;
+}
+
+type ForecastOutcomeInsert = Record<string, unknown>;
+
+interface LabelForecastOutcomesDeps {
+  createJob: (params: { hazardType: string; forecastId?: string; daysBack: number }) => Promise<{ id: string }>;
+  completeJob: (jobId: string, result: Record<string, unknown>) => Promise<void>;
+  failRunningJob: (errorMessage: string) => Promise<void>;
+  fetchLabelPolicy: (hazardType: string) => Promise<LabelPolicy>;
+  fetchForecastSources: (params: { hazardType: string; forecastId?: string; daysBack: number }) => Promise<ForecastSourceRecord[]>;
+  fetchExistingOutcome: (forecast: ForecastSourceRecord) => Promise<boolean>;
+  fetchEligibleEventsRpc: (params: ForecastEventLookupParams) => Promise<FetchEligibleEventsRpcResult>;
+  fetchEligibleEventsFallback: (params: Omit<ForecastEventLookupParams, 'bbox'>) => Promise<EligibleEvent[]>;
+  insertForecastOutcomeBatch: (outcomes: ForecastOutcomeInsert[]) => Promise<void>;
+  runWithTimeout: <T>(work: () => Promise<T>, timeoutMs: number, timeoutMessage: string) => Promise<T>;
+}
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+function normalizeRpcEvent(event: any): EligibleEvent {
+  return {
+    id: String(event.id),
+    timestamp: typeof event.timestamp === 'string' ? event.timestamp : null,
+    severity: Number(event.severity ?? 0),
+    verification_status: typeof event.verification_status === 'string' ? event.verification_status : 'unverified',
+    elevation_m: typeof event.elevation_m === 'number' ? event.elevation_m : null,
+    label_role: typeof event.label_role === 'string' ? event.label_role : null,
+    training_eligible_reason: typeof event.training_eligible_reason === 'string' ? event.training_eligible_reason : null,
+    location: `POINT(${event.lng} ${event.lat})`,
+  };
+}
+
+function normalizeRestEvent(event: any): EligibleEvent {
+  return {
+    id: String(event.id),
+    timestamp: typeof event.timestamp === 'string' ? event.timestamp : null,
+    severity: Number(event.severity ?? 0),
+    verification_status: typeof event.verification_status === 'string' ? event.verification_status : 'unverified',
+    elevation_m: typeof event.elevation_m === 'number' ? event.elevation_m : null,
+    label_role: typeof event.label_role === 'string' ? event.label_role : null,
+    training_eligible_reason: typeof event.training_eligible_reason === 'string' ? event.training_eligible_reason : null,
+    location: typeof event.location === 'string' ? event.location : '',
+  };
 }
 
 async function getActiveLabelPolicy(supabase: any): Promise<LabelPolicy> {
@@ -61,13 +151,6 @@ function getVerificationRank(status: string): number {
   return ranks[status] || 0;
 }
 
-function estimateElevation(row: number, totalRows: number, regionMinElev: number, regionMaxElev: number): number {
-  // Rough elevation estimate based on grid row position
-  // In production, use actual DEM data
-  const elevationRange = regionMaxElev - regionMinElev;
-  return regionMinElev + (row / totalRows) * elevationRange;
-}
-
 function checkElevationCompatible(
   cellElevation: number,
   eventElevation: number | null,
@@ -88,25 +171,6 @@ function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
   return R * c;
 }
 
-function normalizeAsyncGridCells(gridGeojson: unknown): any[][] {
-  if (!Array.isArray(gridGeojson)) return [];
-  const baseGrid = gridGeojson.filter((cell) => cell && typeof cell === 'object');
-  return [baseGrid];
-}
-
-function getCellElevation(cell: any): number {
-  const terrainInputs = cell?.terrainInputs ?? cell?.terrain_inputs ?? null;
-  const terrainElevation = terrainInputs?.elevation_m ?? terrainInputs?.elevationM;
-  if (typeof terrainElevation === 'number' && Number.isFinite(terrainElevation)) {
-    return terrainElevation;
-  }
-  const fallbackElevation = cell?.elevation_m ?? cell?.elevation ?? null;
-  if (typeof fallbackElevation === 'number' && Number.isFinite(fallbackElevation)) {
-    return fallbackElevation;
-  }
-  return estimateElevation(Number(cell?.row ?? 0), 20, 1000, 4500);
-}
-
 async function fetchForecastSources(supabase: any, hazardType: string, forecastId: string | undefined, daysBack: number): Promise<ForecastSourceRecord[]> {
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - daysBack);
@@ -120,9 +184,9 @@ async function fetchForecastSources(supabase: any, hazardType: string, forecastI
 
   let asyncQuery = supabase
     .from('forecast_grids')
-    .select('id, created_at, grid_geojson, bbox, hazard_type')
+    .select('id, created_at, hourly_grids, grid_geojson, bbox, hazard_type, status')
     .eq('hazard_type', hazardType)
-    .eq('status', 'ready')
+    .in('status', ['ready', 'partial', 'stale'])
     .order('created_at', { ascending: false });
 
   if (forecastId) {
@@ -154,55 +218,188 @@ async function fetchForecastSources(supabase: any, hazardType: string, forecastI
     id: forecast.id,
     created_at: forecast.created_at,
     bbox: Array.isArray(forecast.bbox) ? forecast.bbox : [0, 0, 0, 0],
-    hourly_grids: normalizeAsyncGridCells(forecast.grid_geojson),
+    hourly_grids: normalizeAsyncHourlyGrids(forecast.hourly_grids, forecast.grid_geojson),
+  }));
+  const hydratedAsync = await Promise.all(normalizedAsync.map(async (forecast: ForecastSourceRecord) => {
+    if (forecast.hourly_grids.length > 0) return forecast;
+    const publishedRun = await fetchPublishedRunByCompatibilityForecastGridId(supabase, forecast.id);
+    if (!publishedRun?.manifest_storage_ref) return forecast;
+    const artifactPayload = await loadHourlyGridsFromForecastRun(supabase, publishedRun.manifest_storage_ref);
+    return {
+      ...forecast,
+      created_at: artifactPayload.created_at || forecast.created_at,
+      bbox: Array.isArray(artifactPayload.bbox) ? artifactPayload.bbox : forecast.bbox,
+      hourly_grids: artifactPayload.hourly_grids,
+    };
   }));
 
-  return [...normalizedAsync, ...normalizedLegacy].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  return [...hydratedAsync, ...normalizedLegacy].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
 }
 
-serve(async (req) => {
+function defaultDeps(): LabelForecastOutcomesDeps {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+  return {
+    async createJob({ hazardType, forecastId, daysBack }) {
+      const { data: job, error: jobErr } = await supabase
+        .from('compute_jobs')
+        .insert({
+          type: 'label_forecast_outcomes',
+          status: 'running',
+          hazard_type: hazardType,
+          payload: { forecast_id: forecastId, days_back: daysBack },
+        })
+        .select('id')
+        .maybeSingle();
+      if (jobErr) throw jobErr;
+      if (!job?.id) throw new Error('Failed to create compute_job row');
+      return { id: String(job.id) };
+    },
+
+    async completeJob(jobId, result) {
+      await supabase
+        .from('compute_jobs')
+        .update({ status: 'completed', result })
+        .eq('id', jobId);
+    },
+
+    async failRunningJob(errorMessage) {
+      if (!supabaseUrl || !serviceRoleKey) return;
+      const cleanupClient = createClient(supabaseUrl, serviceRoleKey);
+      const { data: latestJob } = await cleanupClient
+        .from('compute_jobs')
+        .select('id')
+        .eq('type', 'label_forecast_outcomes')
+        .eq('status', 'running')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!latestJob?.id) return;
+      await cleanupClient
+        .from('compute_jobs')
+        .update({ status: 'failed', error: errorMessage })
+        .eq('id', latestJob.id);
+    },
+
+    async fetchLabelPolicy(_hazardType) {
+      return await getActiveLabelPolicy(supabase);
+    },
+
+    async fetchForecastSources({ hazardType, forecastId, daysBack }) {
+      return await fetchForecastSources(supabase, hazardType, forecastId, daysBack);
+    },
+
+    async fetchExistingOutcome(forecast) {
+      let existingQuery = supabase
+        .from('forecast_outcomes')
+        .select('id')
+        .limit(1);
+      existingQuery = forecast.source_type === 'forecast_grid'
+        ? existingQuery.eq('forecast_grid_id', forecast.id)
+        : existingQuery.eq('forecast_id', forecast.id);
+      const { data: existing } = await existingQuery;
+      return Array.isArray(existing) && existing.length > 0;
+    },
+
+    async fetchEligibleEventsRpc({
+      hazardType,
+      windowStartIso,
+      windowEndIso,
+      bbox,
+      minVerificationRank,
+      limit,
+    }) {
+      const [latMin, lngMin, latMax, lngMax] = bbox;
+      if (latMin === 0 && lngMin === 0 && latMax === 0 && lngMax === 0) {
+        return { events: [], error: null };
+      }
+      const { data: rpcEvents, error } = await supabase.rpc('fetch_labeler_events', {
+        p_hazard_type: hazardType,
+        p_window_start: windowStartIso,
+        p_window_end: windowEndIso,
+        p_bbox_min_lng: lngMin,
+        p_bbox_min_lat: latMin,
+        p_bbox_max_lng: lngMax,
+        p_bbox_max_lat: latMax,
+        p_min_verification_rank: minVerificationRank,
+        p_limit: limit,
+      });
+      return {
+        events: !error && Array.isArray(rpcEvents) ? rpcEvents.map(normalizeRpcEvent) : [],
+        error,
+      };
+    },
+
+    async fetchEligibleEventsFallback({
+      hazardType,
+      windowStartIso,
+      windowEndIso,
+      minVerificationRank,
+      limit,
+    }) {
+      const { data: events } = await supabase
+        .from('avalanche_events')
+        .select('id, location, timestamp, severity, verification_status, elevation_m, label_role, training_eligible_reason')
+        .eq('hazard_type', hazardType)
+        .gte('timestamp', windowStartIso)
+        .lte('timestamp', windowEndIso)
+        .not('label_role', 'eq', 'excluded')
+        .order('timestamp', { ascending: false })
+        .limit(limit);
+      return (events || [])
+        .filter((event: any) => getVerificationRank(event.verification_status) >= minVerificationRank)
+        .map(normalizeRestEvent);
+    },
+
+    async insertForecastOutcomeBatch(outcomes) {
+      const { error } = await supabase
+        .from('forecast_outcomes')
+        .insert(outcomes);
+      if (error) throw error;
+    },
+
+    async runWithTimeout(work, timeoutMs, timeoutMessage) {
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs)
+      );
+      return await Promise.race([work(), timeoutPromise]);
+    },
+  };
+}
+
+export async function handleLabelForecastOutcomes(
+  req: Request,
+  deps: LabelForecastOutcomesDeps = defaultDeps(),
+) {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    const { 
-      forecast_id: forecastId,
-      days_back: daysBack = 7,
-      hazard_type: hazardType = 'avalanche'
-    } = await req.json();
+    const requestBody = await req.json() as LabelForecastRequestBody;
+    const forecastId = typeof requestBody.forecast_id === 'string' && requestBody.forecast_id
+      ? requestBody.forecast_id
+      : undefined;
+    const daysBack = typeof requestBody.days_back === 'number' && Number.isFinite(requestBody.days_back)
+      ? requestBody.days_back
+      : 7;
+    const hazardType = typeof requestBody.hazard_type === 'string' && requestBody.hazard_type
+      ? requestBody.hazard_type
+      : 'avalanche';
 
     if (hazardType !== 'avalanche') {
-      return new Response(JSON.stringify({ error: 'Only avalanche supported' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ error: 'Only avalanche supported' }, 400);
     }
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-    );
-
-    // Create job
-    const { data: job, error: jobErr } = await supabase
-      .from('compute_jobs')
-      .insert({ 
-        type: 'label_forecast_outcomes', 
-        status: 'running',
-        hazard_type: hazardType,
-        payload: { forecast_id: forecastId, days_back: daysBack }
-      })
-      .select('id')
-      .maybeSingle();
-    if (jobErr) throw jobErr;
-    if (!job?.id) throw new Error('Failed to create compute_job row');
+    const job = await deps.createJob({ hazardType, forecastId, daysBack });
 
     // Get labeling policy
-    const policy = await getActiveLabelPolicy(supabase);
+    const policy = await deps.fetchLabelPolicy(hazardType);
     const minVerificationRank = getVerificationRank(policy.min_event_verification);
 
-    const forecasts = await fetchForecastSources(supabase, hazardType, forecastId, daysBack);
+    const forecasts = await deps.fetchForecastSources({ hazardType, forecastId, daysBack });
 
     let totalLabeled = 0;
     let totalSkipped = 0;
@@ -216,31 +413,15 @@ serve(async (req) => {
         labeling_policy: policy,
         note: 'No matching forecasts found in window. Completed with 0 labels.',
       };
-      await supabase
-        .from('compute_jobs')
-        .update({ status: 'completed', result: earlyResult })
-        .eq('id', job.id);
-      return new Response(JSON.stringify(earlyResult), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      await deps.completeJob(job.id, earlyResult);
+      return jsonResponse(earlyResult);
     }
 
     // Wrap the labeling work in a timeout race to prevent stuck-running jobs
     const labelingWork = async () => {
       for (const forecast of forecasts) {
         // Check if already labeled
-        let existingQuery = supabase
-          .from('forecast_outcomes')
-          .select('id')
-          .limit(1);
-
-        existingQuery = forecast.source_type === 'forecast_grid'
-          ? existingQuery.eq('forecast_grid_id', forecast.id)
-          : existingQuery.eq('forecast_id', forecast.id);
-
-        const { data: existing } = await existingQuery;
-        
-        if (existing && existing.length > 0) {
+        if (await deps.fetchExistingOutcome(forecast)) {
           totalSkipped++;
           continue;
         }
@@ -259,50 +440,28 @@ serve(async (req) => {
         // O(all events in window). Falls back to the legacy REST query only
         // when the RPC is unavailable (e.g. during migration rollout).
         const [latMin, lngMin, latMax, lngMax] = bbox;
-        let eligibleEvents: any[] = [];
-        let rpcError: unknown = null;
-        if (latMin !== 0 || lngMin !== 0 || latMax !== 0 || lngMax !== 0) {
-          const { data: rpcEvents, error: rpcErr } = await supabase.rpc('fetch_labeler_events', {
-            p_hazard_type: hazardType,
-            p_window_start: windowStart.toISOString(),
-            p_window_end: windowEnd.toISOString(),
-            p_bbox_min_lng: lngMin,
-            p_bbox_min_lat: latMin,
-            p_bbox_max_lng: lngMax,
-            p_bbox_max_lat: latMax,
-            p_min_verification_rank: minVerificationRank,
-            p_limit: 200,
-          });
-          rpcError = rpcErr;
-          if (!rpcErr && Array.isArray(rpcEvents)) {
-            eligibleEvents = rpcEvents.map((e: any) => ({
-              id: e.id,
-              timestamp: e.timestamp,
-              severity: e.severity,
-              verification_status: e.verification_status,
-              elevation_m: e.elevation_m,
-              label_role: e.label_role,
-              location: `POINT(${e.lng} ${e.lat})`,
-            }));
-          }
-        }
+        let eligibleEvents: EligibleEvent[] = [];
+        const { events: rpcEvents, error: rpcError } = await deps.fetchEligibleEventsRpc({
+          hazardType,
+          windowStartIso: windowStart.toISOString(),
+          windowEndIso: windowEnd.toISOString(),
+          bbox: [latMin, lngMin, latMax, lngMax],
+          minVerificationRank,
+          limit: 200,
+        });
+        eligibleEvents = rpcEvents;
         if (rpcError || eligibleEvents.length === 0) {
-          const { data: events } = await supabase
-            .from('avalanche_events')
-            .select('id, location, timestamp, severity, verification_status, elevation_m, label_role')
-            .eq('hazard_type', hazardType)
-            .gte('timestamp', windowStart.toISOString())
-            .lte('timestamp', windowEnd.toISOString())
-            .not('label_role', 'eq', 'excluded')
-            .order('timestamp', { ascending: false })
-            .limit(200);
-          eligibleEvents = (events || []).filter((e: any) =>
-            getVerificationRank(e.verification_status) >= minVerificationRank
-          );
+          eligibleEvents = await deps.fetchEligibleEventsFallback({
+            hazardType,
+            windowStartIso: windowStart.toISOString(),
+            windowEndIso: windowEnd.toISOString(),
+            minVerificationRank,
+            limit: 200,
+          });
         }
 
         // Process each hour and cell for this forecast only
-        const outcomes = [];
+        const outcomes: ForecastOutcomeInsert[] = [];
 
         if (eligibleEvents.length === 0) {
           totalSkipped++;
@@ -321,7 +480,8 @@ serve(async (req) => {
           for (const cell of grid) {
             if (!cell || typeof cell.row !== 'number') continue;
 
-            const cellElevation = getCellElevation(cell);
+            const cellRecord = cell as Record<string, unknown>;
+            const cellElevation = getCellElevation(cellRecord);
             
             // Find nearest matching event
             let nearestEvent: any = null;
@@ -387,6 +547,11 @@ serve(async (req) => {
               spatial_tolerance_m: policy.spatial_tolerance_m,
               temporal_tolerance_hours: policy.temporal_tolerance_hours,
               elevation_band_compatible: isElevationCompatible,
+              cell_elevation_m: cellElevation,
+              sar_coverage_state: getCellSarCoverageState(cellRecord),
+              dry_wet_domain: getCellDryWetDomain(cellRecord),
+              problem_slug: getCellProblemSlug(cellRecord),
+              training_eligible_reason: nearestEvent?.training_eligible_reason ?? null,
               excluded_from_training: !eventObserved && labelConfidence < 0.3,
               exclusion_reason: !eventObserved && labelConfidence < 0.3 ? 'low_confidence_negative' : null,
             });
@@ -399,26 +564,19 @@ serve(async (req) => {
           const CHUNK = 500;
           for (let i = 0; i < outcomes.length; i += CHUNK) {
             const slice = outcomes.slice(i, i + CHUNK);
-            const { error: insertErr } = await supabase
-              .from('forecast_outcomes')
-              .insert(slice);
-            if (!insertErr) {
-              totalLabeled += slice.length;
-            }
+            await deps.insertForecastOutcomeBatch(slice);
+            totalLabeled += slice.length;
           }
         }
       }
     };
 
-    // P0.1: Outer timeout lifted to 60s. Inner per-forecast budget keeps any
-    // single region from hogging the whole window; partial results are still
-    // saved on timeout.
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Labeling timed out after 60s — partial results saved')), 60000)
-    );
-
     try {
-      await Promise.race([labelingWork(), timeoutPromise]);
+      await deps.runWithTimeout(
+        labelingWork,
+        60000,
+        'Labeling timed out after 60s — partial results saved',
+      );
     } catch (timeoutErr) {
       // Mark job completed with partial results rather than leaving it 'running'
       const partialResult = {
@@ -428,13 +586,8 @@ serve(async (req) => {
         labeling_policy: policy,
         warning: (timeoutErr as Error).message,
       };
-      await supabase
-        .from('compute_jobs')
-        .update({ status: 'completed', result: partialResult })
-        .eq('id', job.id);
-      return new Response(JSON.stringify(partialResult), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      await deps.completeJob(job.id, partialResult);
+      return jsonResponse(partialResult);
     }
 
     const result = {
@@ -444,41 +597,19 @@ serve(async (req) => {
       labeling_policy: policy,
     };
 
-    await supabase
-      .from('compute_jobs')
-      .update({ status: 'completed', result })
-      .eq('id', job.id);
+    await deps.completeJob(job.id, result);
 
-    return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonResponse(result);
   } catch (err) {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    if (supabaseUrl && serviceRoleKey) {
-      try {
-        const supabase = createClient(supabaseUrl, serviceRoleKey);
-        const { data: latestJob } = await supabase
-          .from('compute_jobs')
-          .select('id')
-          .eq('type', 'label_forecast_outcomes')
-          .eq('status', 'running')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (latestJob?.id) {
-          await supabase
-            .from('compute_jobs')
-            .update({ status: 'failed', error: (err as Error).message })
-            .eq('id', latestJob.id);
-        }
-      } catch {
-        // Best effort only; original error still returns to caller.
-      }
+    try {
+      await deps.failRunningJob((err as Error).message);
+    } catch {
+      // Best effort only; original error still returns to caller.
     }
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ error: (err as Error).message }, 500);
   }
-});
+}
+
+if (import.meta.main) {
+  serve((req) => handleLabelForecastOutcomes(req));
+}

@@ -44,6 +44,30 @@ class LabelGovernanceTests(unittest.TestCase):
         self.assertFalse(governance.training_eligible)
         self.assertLess(governance.training_weight, 0.5)
 
+    def test_weak_training_reason_penalizes_weight_without_excluding_event(self) -> None:
+        governance = derive_label_governance({
+            'timestamp': '2026-04-24T00:00:00Z',
+            'source': 'gee_sar',
+            'label_confidence': 0.8,
+            'training_eligible': True,
+            'training_eligible_reason': 'sar_low_coverage_weak_training',
+        })
+
+        self.assertTrue(governance.training_eligible)
+        self.assertLess(governance.training_weight, 0.6)
+
+    def test_audit_only_reason_forces_ineligible_training(self) -> None:
+        governance = derive_label_governance({
+            'timestamp': '2026-04-24T00:00:00Z',
+            'source': 'gee_sar',
+            'label_confidence': 0.8,
+            'training_eligible': True,
+            'training_eligible_reason': 'sar_single_pass_audit_only',
+        })
+
+        self.assertFalse(governance.training_eligible)
+        self.assertLess(governance.training_weight, 0.3)
+
     def test_uses_raw_label_confidence_not_decayed_view_value(self) -> None:
         now = datetime(2026, 4, 25, tzinfo=timezone.utc)
         governance = derive_label_governance({
