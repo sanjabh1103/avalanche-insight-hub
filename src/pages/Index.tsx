@@ -745,6 +745,52 @@ export default function Index() {
           toast.success('Restored shared legacy forecast grid view');
           return;
         }
+        const activeRun = await supabase
+          .from('forecast_runs')
+          .select('id, region_name, region_key, forecast_date, horizon_hours, manifest_storage_ref, compatibility_forecast_grid_id, forecast_bulletins, weather_summary, model_metadata, status, created_at')
+          .eq('id', sharedForecast)
+          .maybeSingle();
+        if (activeRun.data?.manifest_storage_ref) {
+          const response: RunForecastResponse = {
+            ok: true,
+            stale: activeRun.data.status === 'stale',
+            status: activeRun.data.status ?? 'ready',
+            source: 'forecast_runs',
+            forecastRunId: activeRun.data.id,
+            forecastId: activeRun.data.compatibility_forecast_grid_id,
+            manifestPath: activeRun.data.manifest_storage_ref,
+            forecastBulletin: normalizeForecastBulletin(activeRun.data.forecast_bulletins),
+            regionName: activeRun.data.region_name,
+            regionKey: activeRun.data.region_key,
+            forecastDate: activeRun.data.forecast_date,
+            hours: activeRun.data.horizon_hours,
+            weatherSummary: activeRun.data.weather_summary,
+            modelMetadata: activeRun.data.model_metadata,
+          };
+          const manifest = await loadForecastManifest(activeRun.data.manifest_storage_ref);
+          const { row, grids } = await buildRowFromManifest(response, manifest);
+          setArtifactHourRefs(manifest.hours);
+          hydrateForecastGridRow(row, {
+            grids,
+            bulletin: normalizeForecastBulletin(response.forecastBulletin ?? manifest.forecastBulletin ?? null),
+          });
+          const safeHourIdx = Math.max(0, Math.min(hourValue, grids.length - 1));
+          setTimeOffset(safeHourIdx);
+          const cellParam = params.get('cell');
+          if (cellParam) {
+            const [rowIndex, colIndex] = cellParam.split(',').map(Number);
+            const gridAtHour = grids[safeHourIdx];
+            if (gridAtHour) {
+              const cell = gridAtHour.find(c => c.row === rowIndex && c.col === colIndex);
+              if (cell && !isCellUnavailable(cell)) {
+                setSelectedCell(cell);
+                if (!isMobile) setSidebarOpen(true);
+              }
+            }
+          }
+          toast.success('Restored shared published forecast view');
+          return;
+        }
         setUnavailableForecast('This shared forecast is not available in the authoritative precomputed batch artifact.');
       })();
     }
