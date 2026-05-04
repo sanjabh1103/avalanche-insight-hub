@@ -1,19 +1,14 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { Suspense, lazy, useState, useCallback, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mountain, AlertTriangle, Settings, BarChart3, Loader2, Menu, X, Zap } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
-import AvalancheMap from '@/components/AvalancheMap';
 import RiskDashboard from '@/components/RiskDashboard';
 import TimeSlider from '@/components/TimeSlider';
-import AdminDashboard from '@/components/AdminDashboard';
-import AdminAccessGate from '@/components/AdminAccessGate';
-import FieldReportForm from '@/components/FieldReportForm';
 import ModelStatusBadge from '@/components/ModelStatusBadge';
 import RiskLegend from '@/components/RiskLegend';
 import ForecastBulletinBadge from '@/components/ForecastBulletinBadge';
@@ -23,8 +18,6 @@ import ShareForecast from '@/components/ShareForecast';
 import ExportForecast from '@/components/ExportForecast';
 import ThemeToggle from '@/components/ThemeToggle';
 import HistoricalEventsToggle from '@/components/HistoricalEventsToggle';
-import ExpertModePanel from '@/components/ExpertModePanel';
-import VoxelNeighborhoodModal from '@/components/VoxelNeighborhoodModal';
 import {
   filterAvalancheEventsByBbox,
   mergeAvalancheEvents,
@@ -52,7 +45,7 @@ import {
     type GridCell,
 } from '@/lib/gridUtils';
 import { supabase } from '@/integrations/supabase/client';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { useIsMobile, useMediaQuery } from '@/hooks/use-mobile';
 
 type ForecastSource = 'precomputed' | null;
 type ForecastAvailability = 'ready' | 'partial' | 'stale' | 'unavailable';
@@ -304,11 +297,56 @@ function buildPublicMaskSmokeFixture(): {
   };
 }
 
+const LazyAvalancheMap = lazy(() => import('@/components/AvalancheMap'));
+const LazyFieldReportForm = lazy(() => import('@/components/FieldReportForm'));
+const LazyExpertModePanel = lazy(() => import('@/components/ExpertModePanel'));
+const LazyVoxelNeighborhoodModal = lazy(() => import('@/components/VoxelNeighborhoodModal'));
+
+function ShellLoadingNotice({
+  label,
+  className = '',
+}: {
+  label: string;
+  className?: string;
+}) {
+  return (
+    <div className={`rounded-[1.35rem] border border-border/70 bg-card/70 px-4 py-3 shadow-2xl shadow-black/20 backdrop-blur-2xl ${className}`}>
+      <div className="flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+        <span>{label}</span>
+      </div>
+    </div>
+  );
+}
+
+function MapSurfaceFallback() {
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top_left,_hsl(156_74%_45%_/_0.14),_transparent_28%),linear-gradient(180deg,hsl(224_28%_8%),hsl(224_24%_6%))] px-4">
+      <ShellLoadingNotice label="Loading map surface" className="w-full max-w-sm text-center" />
+    </div>
+  );
+}
+
+function ExpertPanelFallback() {
+  return (
+    <div className="fixed right-0 top-0 bottom-0 z-40 flex h-full w-[min(23rem,calc(100vw-0.75rem))] flex-col border-l border-border/80 bg-card/95 p-4 shadow-2xl shadow-black/40 backdrop-blur-2xl md:absolute">
+      <ShellLoadingNotice label="Loading expert panel" />
+    </div>
+  );
+}
+
+function ModalFallback({ label }: { label: string }) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+      <ShellLoadingNotice label={label} className="w-full max-w-md" />
+    </div>
+  );
+}
+
 export default function Index() {
   const isMobile = useIsMobile();
-  const navigate = useNavigate();
+  const isCompactViewport = useMediaQuery('(max-width: 1279px)');
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'admin'>(location.pathname.startsWith('/admin') ? 'admin' : 'dashboard');
   const [region, setRegion] = useState<Region>(REGIONS[0]);
   const [timeOffset, setTimeOffset] = useState(0);
   const [selectedCell, setSelectedCell] = useState<GridCell | null>(null);
@@ -343,11 +381,6 @@ export default function Index() {
   }, [location.search]);
 
   const maxHour = hourlyGrids ? hourlyGrids.length - 1 : 0;
-
-  useEffect(() => {
-    const nextTab: 'dashboard' | 'admin' = location.pathname.startsWith('/admin') ? 'admin' : 'dashboard';
-    setActiveTab((current) => (current === nextTab ? current : nextTab));
-  }, [location.pathname]);
 
   const hydrateForecastGridRow = useCallback((
     row: ForecastGridRowRecord,
@@ -809,13 +842,15 @@ export default function Index() {
     return { cells: [], timestamp: new Date().toISOString(), bbox: region.bbox };
   }, [activeForecastRow?.bbox, activeForecastRow?.created_at, activeForecastRow?.forecast_date, timeOffset, region.bbox, hourlyGrids]);
 
-  const controlInset = !isMobile && (expertPanelOpen || sidebarOpen) ? 'calc(23rem + 1rem)' : '1rem';
+  const leftControlInset = !isCompactViewport && sidebarOpen ? 'calc(23rem + 1rem)' : '1rem';
+  const rightControlInset = !isCompactViewport && expertPanelOpen ? 'calc(23rem + 1rem)' : '1rem';
+  const useWideTopControlLayout = !isCompactViewport && !sidebarOpen && !expertPanelOpen;
 
   const handleCellClick = useCallback((cell: GridCell) => {
     if (isCellUnavailable(cell)) return;
     setSelectedCell(cell);
-    if (isMobile) setSidebarOpen(true);
-  }, [isMobile]);
+    if (isCompactViewport) setSidebarOpen(true);
+  }, [isCompactViewport]);
 
   const handleRegionChange = useCallback((r: Region) => {
     setRegion(r);
@@ -887,6 +922,47 @@ export default function Index() {
     }
   }, [fixtureKey, hydrateForecastGridRow, loadLatestForecastProduct, region.name, setUnavailableForecast]);
 
+  const actionControls = (
+    <>
+      <Button onClick={runForecast} disabled={forecasting} className="h-11 text-[11px] uppercase tracking-[0.18em] font-semibold gap-2 bg-emerald-500 text-black hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 rounded-2xl touch-manipulation whitespace-nowrap px-4" aria-label="Refresh precomputed forecast">
+        {forecasting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mountain className="h-4 w-4" />}
+        {isMobile ? 'Refresh Batch' : 'Refresh batch'}
+      </Button>
+      <Button variant="outline" className="h-11 text-[11px] uppercase tracking-[0.18em] font-semibold gap-2 glass-panel border-0 text-foreground hover:text-foreground touch-manipulation rounded-2xl px-4" onClick={() => setReportOpen(true)} aria-label="Submit field report">
+        <AlertTriangle className="h-4 w-4" />
+        Report
+      </Button>
+      <ShareForecast className="justify-center sm:justify-start" forecastId={forecastId} region={region} hour={timeOffset} selectedCell={selectedCell} expertMode={expertMode} show3D={show3DModal} />
+      <ExportForecast
+        className="w-full flex-wrap sm:w-auto sm:flex-nowrap"
+        buttonClassName="flex-1 justify-center sm:flex-none"
+        grid={grid}
+        events={regionEvents}
+        regionName={region.name}
+        hour={timeOffset}
+        canExport={Boolean(forecastId)}
+      />
+      <HistoricalEventsToggle
+        className="justify-center sm:justify-start"
+        visible={showEvents}
+        loading={eventsLoading}
+        onToggle={() => setShowEvents((current) => !current)}
+      />
+    </>
+  );
+
+  const forecastSourceBadge = hourlyGrids ? (
+    <span data-testid="forecast-data-badge" className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-mono ${
+      forecastAvailability === 'ready'
+        ? 'glass-panel text-emerald-400'
+        : forecastAvailability === 'partial'
+          ? 'glass-panel text-amber-300'
+          : 'glass-panel text-rose-300'
+    }`}>
+      ● {forecastSource === 'precomputed' ? `PRECOMPUTED BATCH • ${forecastAvailability.toUpperCase()}` : 'FORECAST DATA'} ({hourlyGrids.length}h)
+    </span>
+  ) : null;
+
   useEffect(() => {
     if (!artifactHourRefs || !hourlyGrids || Array.isArray(hourlyGrids[timeOffset])) {
       return;
@@ -940,7 +1016,7 @@ export default function Index() {
 
       <div className="flex-1 flex overflow-hidden relative">
         {/* Mobile overlay */}
-        {isMobile && sidebarOpen && (
+        {isCompactViewport && sidebarOpen && (
           <div className="absolute inset-0 bg-black/50 z-20" onClick={() => setSidebarOpen(false)} />
         )}
 
@@ -952,7 +1028,8 @@ export default function Index() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: -320, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="w-[23rem] h-full flex flex-col border-r border-border/80 bg-card/90 backdrop-blur-2xl z-30 shrink-0 absolute md:relative left-0 top-0 bottom-0 shadow-2xl shadow-black/30"
+              data-testid="sidebar-panel"
+              className="h-full w-[min(23rem,calc(100vw-1rem))] max-w-[23rem] flex flex-col border-r border-border/80 bg-card/90 backdrop-blur-2xl z-30 shrink-0 absolute xl:relative left-0 top-0 bottom-0 shadow-2xl shadow-black/30"
             >
               <div className="p-5 border-b border-border/70 bg-secondary/20">
                 <div className="flex items-start justify-between gap-3">
@@ -976,32 +1053,23 @@ export default function Index() {
                 </div>
               </div>
 
-              <Tabs
-                value={activeTab}
-                onValueChange={(value) => {
-                  const nextTab = value === 'admin' ? 'admin' : 'dashboard';
-                  setActiveTab(nextTab);
-                  navigate(nextTab === 'admin' ? '/admin' : '/');
-                }}
-                className="flex-1 flex flex-col min-h-0"
-              >
-                <TabsList className="mx-4 mt-4 grid grid-cols-2 bg-secondary/60 border border-border/70 p-1 h-11 rounded-2xl">
-                  <TabsTrigger value="dashboard" className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] rounded-xl data-[state=active]:bg-emerald-500 data-[state=active]:text-black">
-                    <BarChart3 className="h-3.5 w-3.5" /> Dashboard
-                  </TabsTrigger>
-                  <TabsTrigger value="admin" className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] rounded-xl data-[state=active]:bg-emerald-500 data-[state=active]:text-black">
-                    <Settings className="h-3.5 w-3.5" /> Admin
-                  </TabsTrigger>
-                </TabsList>
-                <TabsContent value="dashboard" className="flex-1 overflow-y-auto mt-0 px-2 pb-3">
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="mx-4 mt-4 grid grid-cols-2 gap-2 rounded-2xl border border-border/70 bg-secondary/60 p-1">
+                  <Button type="button" className="h-11 justify-center gap-1.5 rounded-xl bg-emerald-500 text-[11px] font-semibold uppercase tracking-[0.18em] text-black hover:bg-emerald-400">
+                    <BarChart3 className="h-3.5 w-3.5" />
+                    Dashboard
+                  </Button>
+                  <Button asChild variant="ghost" className="h-11 justify-center gap-1.5 rounded-xl text-[11px] uppercase tracking-[0.18em] text-muted-foreground hover:bg-white/5 hover:text-foreground">
+                    <Link to="/admin" onClick={() => { if (isCompactViewport) setSidebarOpen(false); }}>
+                      <Settings className="h-3.5 w-3.5" />
+                      Admin
+                    </Link>
+                  </Button>
+                </div>
+                <div className="mt-0 flex-1 overflow-y-auto px-2 pb-3">
                   <RiskDashboard cell={selectedCell} weatherSummary={weatherSummary} />
-                </TabsContent>
-                <TabsContent value="admin" className="flex-1 overflow-y-auto mt-0 px-2 pb-3">
-                  <AdminAccessGate>
-                    <AdminDashboard />
-                  </AdminAccessGate>
-                </TabsContent>
-              </Tabs>
+                </div>
+              </div>
             </motion.aside>
           )}
         </AnimatePresence>
@@ -1010,95 +1078,85 @@ export default function Index() {
         <div className="flex-1 relative flex flex-col min-h-0">
           {/* Top Controls */}
           <div
+            data-testid="top-control-zone"
             className="absolute top-4 left-4 right-4 z-50 pointer-events-none transition-all duration-300"
             style={{
-              left: controlInset,
-              right: controlInset,
+              left: leftControlInset,
+              right: rightControlInset,
             }}
           >
             <div className="flex flex-col gap-3">
-              <div className="pointer-events-auto flex flex-col gap-3 rounded-[1.35rem] border border-border/70 bg-card/70 px-3 py-3 shadow-2xl shadow-black/20 backdrop-blur-2xl lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex flex-wrap items-center gap-2">
+              <div className="pointer-events-auto rounded-[1.35rem] border border-border/70 bg-card/70 px-3 py-3 shadow-2xl shadow-black/20 backdrop-blur-2xl">
+                <div className={`grid gap-3 ${useWideTopControlLayout ? 'md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)_minmax(0,16.5rem)]' : 'md:grid-cols-[minmax(0,1fr)_auto]'}`}>
+                  <div className="order-1 flex min-w-0 flex-wrap items-center gap-2 xl:flex-nowrap">
                   {!sidebarOpen && (
                     <Button variant="outline" size="icon" className="h-11 w-11 glass-panel border-0 touch-manipulation rounded-2xl" onClick={() => setSidebarOpen(true)} aria-label="Open sidebar">
                       <Menu className="h-5 w-5" />
                     </Button>
                   )}
-                  <div className="flex items-center gap-2 glass-panel rounded-2xl px-3 py-2.5 shadow-sm">
+                  <div className="flex min-w-0 flex-1 items-center gap-2 glass-panel rounded-2xl px-3 py-2.5 shadow-sm">
                     <span className="text-[10px] font-mono uppercase tracking-[0.22em] text-muted-foreground pl-1 pr-1.5">Region</span>
                     <RegionSelector value={region.name} onChange={handleRegionChange} />
                   </div>
-                </div>
-
-                <ForecastBulletinBadge
-                  bulletin={forecastBulletin}
-                  stale={forecastAvailability === 'stale'}
-                  timeOffset={timeOffset}
-                  onSelectForecastHour={setTimeOffset}
-                />
-
-                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                  <div className="flex items-center gap-2 glass-panel rounded-2xl px-3 py-2.5 shadow-sm">
-                    <span className="text-[10px] font-mono uppercase tracking-[0.22em] text-muted-foreground pl-1 pr-1.5">Display</span>
-                    <ThemeToggle />
                   </div>
-                  {/* Expert Mode Toggle */}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center gap-2 glass-panel rounded-2xl px-3 py-2.5 shadow-sm">
-                        <Zap className={`h-3.5 w-3.5 ${expertMode ? 'text-amber-400' : 'text-muted-foreground'}`} />
-                        <Label className="text-[10px] font-mono uppercase tracking-[0.22em] text-muted-foreground cursor-pointer" htmlFor="expert-toggle">Expert</Label>
-                        <Switch id="expert-toggle" checked={expertMode} onCheckedChange={setExpertMode} aria-label="Toggle Expert Mode" />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>Enable impact overlays, 72h forecast, hydrograph, and vector polygons</TooltipContent>
-                  </Tooltip>
+
+                  <div className={`order-2 flex min-w-0 flex-wrap items-center gap-2 md:justify-end ${useWideTopControlLayout ? 'xl:order-3 xl:max-w-[16.5rem] xl:justify-start xl:justify-self-end' : ''}`}>
+                    <div className="flex min-w-0 flex-1 items-center gap-2 glass-panel rounded-2xl px-3 py-2.5 shadow-sm md:flex-none">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.22em] text-muted-foreground pl-1 pr-1.5">Display</span>
+                      <ThemeToggle />
+                    </div>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex min-w-0 items-center gap-2 glass-panel rounded-2xl px-3 py-2.5 shadow-sm">
+                          <Zap className={`h-3.5 w-3.5 ${expertMode ? 'text-amber-400' : 'text-muted-foreground'}`} />
+                          <Label className="text-[10px] font-mono uppercase tracking-[0.22em] text-muted-foreground cursor-pointer" htmlFor="expert-toggle">Expert</Label>
+                          <Switch id="expert-toggle" checked={expertMode} onCheckedChange={setExpertMode} aria-label="Toggle Expert Mode" />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>Enable impact overlays, 72h forecast, hydrograph, and vector polygons</TooltipContent>
+                    </Tooltip>
+                  </div>
+
+                  <div className={`order-3 min-w-0 md:col-span-2 ${useWideTopControlLayout ? 'xl:order-2 xl:col-span-1' : ''}`}>
+                    <ForecastBulletinBadge
+                      bulletin={forecastBulletin}
+                      stale={forecastAvailability === 'stale'}
+                      timeOffset={timeOffset}
+                      onSelectForecastHour={setTimeOffset}
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div
-                className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-[1.35rem] border border-border/70 bg-card/70 px-3 py-2.5 shadow-2xl shadow-black/20 backdrop-blur-2xl"
-                style={{
-                  maxWidth: sidebarOpen && isMobile ? 'calc(100vw - 2rem)' : '100%',
-                }}
-              >
-                <Button onClick={runForecast} disabled={forecasting} className="h-11 mr-1 text-[11px] uppercase tracking-[0.18em] font-semibold gap-2 bg-emerald-500 text-black hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 rounded-2xl touch-manipulation whitespace-nowrap px-4" aria-label="Refresh precomputed forecast">
-                  {forecasting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mountain className="h-4 w-4" />}
-                  {isMobile ? 'REFRESH' : 'REFRESH BATCH'}
-                </Button>
-                <ShareForecast forecastId={forecastId} region={region} hour={timeOffset} selectedCell={selectedCell} expertMode={expertMode} show3D={show3DModal} />
-                <ExportForecast grid={grid} events={regionEvents} regionName={region.name} hour={timeOffset} canExport={Boolean(forecastId)} />
-                <HistoricalEventsToggle
-                  visible={showEvents}
-                  loading={eventsLoading}
-                  onToggle={() => setShowEvents((current) => !current)}
-                />
-                <Button variant="outline" className="h-11 text-[11px] uppercase tracking-[0.18em] font-semibold gap-2 glass-panel border-0 text-foreground hover:text-foreground touch-manipulation rounded-2xl" onClick={() => setReportOpen(true)} aria-label="Submit field report">
-                  <AlertTriangle className="h-4 w-4" />
-                  {isMobile ? '' : 'REPORT'}
-                </Button>
-              </div>
+              {!isMobile ? (
+                <div data-testid="desktop-action-tray" className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-[1.35rem] border border-border/70 bg-card/70 px-3 py-2.5 shadow-2xl shadow-black/20 backdrop-blur-2xl">
+                  {actionControls}
+                  {forecastSourceBadge ? <div className="ml-auto">{forecastSourceBadge}</div> : null}
+                </div>
+              ) : null}
             </div>
           </div>
 
           {/* Map */}
-          <div className="flex-1 pt-[12.5rem] md:pt-[11.25rem] lg:pt-[10.5rem]">
-            <AvalancheMap
-              cells={grid.cells}
-              selectedCell={selectedCell}
-              onCellClick={handleCellClick}
-              center={region.center}
-              zoom={region.zoom}
-              historicalEvents={historicalEvents}
-              heatmapEvents={regionEvents}
-              showHeatmap={expertMode && showHeatmap}
-              showRoads={expertMode && showRoads}
-              showInfra={expertMode && showInfra}
-              showVectorPolygons={expertMode && showVectorPolygons}
-              runoutPolygons={activeForecastRow ? forecastGridRowToRunoutPolygons(activeForecastRow) : []}
-              sarEventGeometries={activeForecastRow ? forecastGridRowToSarGeometries(activeForecastRow) : []}
-              bbox={region.bbox}
-            />
+          <div className={`flex-1 ${isMobile ? 'pt-[15.75rem]' : isCompactViewport ? 'pt-[14.5rem] lg:pt-[12.5rem]' : 'pt-[10.5rem]'}`}>
+            <Suspense fallback={<MapSurfaceFallback />}>
+              <LazyAvalancheMap
+                cells={grid.cells}
+                selectedCell={selectedCell}
+                onCellClick={handleCellClick}
+                center={region.center}
+                zoom={region.zoom}
+                historicalEvents={historicalEvents}
+                heatmapEvents={regionEvents}
+                showHeatmap={expertMode && showHeatmap}
+                showRoads={expertMode && showRoads}
+                showInfra={expertMode && showInfra}
+                showVectorPolygons={expertMode && showVectorPolygons}
+                runoutPolygons={activeForecastRow ? forecastGridRowToRunoutPolygons(activeForecastRow) : []}
+                sarEventGeometries={activeForecastRow ? forecastGridRowToSarGeometries(activeForecastRow) : []}
+                bbox={region.bbox}
+              />
+            </Suspense>
             {!hourlyGrids && (
               <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex justify-center">
                 <div className="max-w-xl rounded-2xl border border-amber-500/25 bg-black/65 px-4 py-3 text-center shadow-2xl shadow-black/25 backdrop-blur-xl">
@@ -1112,74 +1170,108 @@ export default function Index() {
           </div>
 
           {/* Legend */}
-          <div className="absolute bottom-24 right-4 z-10 hidden md:block">
-            <RiskLegend />
-          </div>
+          {!isMobile ? (
+            <>
+              <div className="absolute bottom-24 right-4 z-10 hidden md:block">
+                <RiskLegend />
+              </div>
 
-          {/* Data source indicator */}
-          {hourlyGrids && (
-            <div className="absolute top-[11rem] right-4 z-10 md:top-[8.75rem] lg:top-[7.5rem]">
-              <span className={`glass-panel rounded-full px-3 py-1 text-[10px] font-mono ${
-                forecastAvailability === 'ready'
-                  ? 'text-emerald-400'
-                  : forecastAvailability === 'partial'
-                    ? 'text-amber-300'
-                    : 'text-rose-300'
-              }`}>
-                ● {forecastSource === 'precomputed' ? `PRECOMPUTED BATCH • ${forecastAvailability.toUpperCase()}` : 'FORECAST DATA'} ({hourlyGrids.length}h)
-              </span>
+              <div className="absolute bottom-4 left-4 right-4 z-10">
+                <TimeSlider value={timeOffset} onChange={setTimeOffset} max={maxHour} playing={playingTimeline} onPlayToggle={setPlayingTimeline} />
+              </div>
+            </>
+          ) : (
+            <div className="absolute bottom-4 left-4 right-4 z-10 flex flex-col gap-3">
+              <div data-testid="mobile-action-tray" className="pointer-events-auto rounded-[1.35rem] border border-border/70 bg-card/70 px-3 py-2.5 shadow-2xl shadow-black/20 backdrop-blur-2xl">
+                <div className="grid grid-cols-2 gap-2">
+                  <Button onClick={runForecast} disabled={forecasting} className="h-11 text-[11px] uppercase tracking-[0.18em] font-semibold gap-2 bg-emerald-500 text-black hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 rounded-2xl touch-manipulation px-4" aria-label="Refresh precomputed forecast">
+                    {forecasting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mountain className="h-4 w-4" />}
+                    Refresh batch
+                  </Button>
+                  <Button variant="outline" className="h-11 text-[11px] uppercase tracking-[0.18em] font-semibold gap-2 glass-panel border-0 text-foreground hover:text-foreground touch-manipulation rounded-2xl px-4" onClick={() => setReportOpen(true)} aria-label="Submit field report">
+                    <AlertTriangle className="h-4 w-4" />
+                    Report
+                  </Button>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <ShareForecast className="justify-center" forecastId={forecastId} region={region} hour={timeOffset} selectedCell={selectedCell} expertMode={expertMode} show3D={show3DModal} />
+                  <HistoricalEventsToggle
+                    className="justify-center"
+                    visible={showEvents}
+                    loading={eventsLoading}
+                    onToggle={() => setShowEvents((current) => !current)}
+                  />
+                </div>
+                <ExportForecast
+                  className="mt-2 w-full"
+                  buttonClassName="flex-1 justify-center"
+                  grid={grid}
+                  events={regionEvents}
+                  regionName={region.name}
+                  hour={timeOffset}
+                  canExport={Boolean(forecastId)}
+                />
+                {forecastSourceBadge ? <div className="mt-2">{forecastSourceBadge}</div> : null}
+              </div>
+              <RiskLegend compact className="pointer-events-auto" />
+              <TimeSlider className="pointer-events-auto" value={timeOffset} onChange={setTimeOffset} max={maxHour} playing={playingTimeline} onPlayToggle={setPlayingTimeline} />
             </div>
           )}
-
-          {/* Timeline Scrubber */}
-          <div className="absolute bottom-4 left-4 right-4 z-10">
-            <TimeSlider value={timeOffset} onChange={setTimeOffset} max={maxHour} playing={playingTimeline} onPlayToggle={setPlayingTimeline} />
-          </div>
         </div>
 
         {/* Expert Mode Right Panel */}
         {/* B8 fix: closing the sidebar ONLY hides it — does NOT turn off Expert Mode or reset overlays */}
-        <ExpertModePanel
-          open={expertPanelOpen}
-          onClose={() => setExpertPanelOpen(false)}
-          showHeatmap={showHeatmap}
-          onToggleHeatmap={setShowHeatmap}
-          showRoads={showRoads}
-          onToggleRoads={setShowRoads}
-          showInfra={showInfra}
-          onToggleInfra={setShowInfra}
-          showVectorPolygons={showVectorPolygons}
-          onToggleVectorPolygons={setShowVectorPolygons}
-          hourlyGrids={hourlyGrids}
-          selectedCell={selectedCell}
-          regionBbox={region.bbox}
-          onToggle3D={() => setShow3DModal(true)}
-        />
+        {expertPanelOpen && (
+          <Suspense fallback={<ExpertPanelFallback />}>
+            <LazyExpertModePanel
+              open={expertPanelOpen}
+              onClose={() => setExpertPanelOpen(false)}
+              showHeatmap={showHeatmap}
+              onToggleHeatmap={setShowHeatmap}
+              showRoads={showRoads}
+              onToggleRoads={setShowRoads}
+              showInfra={showInfra}
+              onToggleInfra={setShowInfra}
+              showVectorPolygons={showVectorPolygons}
+              onToggleVectorPolygons={setShowVectorPolygons}
+              hourlyGrids={hourlyGrids}
+              selectedCell={selectedCell}
+              regionBbox={region.bbox}
+              onToggle3D={() => setShow3DModal(true)}
+            />
+          </Suspense>
+        )}
 
         {/* 3D Voxel Modal */}
         {show3DModal && (
-          <VoxelNeighborhoodModal
-            open={show3DModal}
-            onClose={() => setShow3DModal(false)}
-            bbox={region.bbox}
-            gridCells={grid.cells}
-            hourlyGrids={hourlyGrids}
-            timeOffset={timeOffset}
-          />
+          <Suspense fallback={<ModalFallback label="Loading 3D neighborhood" />}>
+            <LazyVoxelNeighborhoodModal
+              open={show3DModal}
+              onClose={() => setShow3DModal(false)}
+              bbox={region.bbox}
+              gridCells={grid.cells}
+              hourlyGrids={hourlyGrids}
+              timeOffset={timeOffset}
+            />
+          </Suspense>
         )}
 
         {/* Field Report Modal */}
-        <FieldReportForm
-          open={reportOpen}
-          onClose={() => setReportOpen(false)}
-          onSubmitted={(event) => {
-            setEvents((current) => mergeAvalancheEvents(current, event));
-            setShowEvents(true);
-          }}
-          regionCenter={region.center}
-          regionBbox={region.bbox}
-          regionName={region.name}
-        />
+        {reportOpen && (
+          <Suspense fallback={<ModalFallback label="Loading field report form" />}>
+            <LazyFieldReportForm
+              open={reportOpen}
+              onClose={() => setReportOpen(false)}
+              onSubmitted={(event) => {
+                setEvents((current) => mergeAvalancheEvents(current, event));
+                setShowEvents(true);
+              }}
+              regionCenter={region.center}
+              regionBbox={region.bbox}
+              regionName={region.name}
+            />
+          </Suspense>
+        )}
       </div>
     </div>
   );

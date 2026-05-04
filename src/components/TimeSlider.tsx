@@ -9,9 +9,10 @@ interface Props {
   max?: number;
   playing?: boolean;
   onPlayToggle?: (playing: boolean) => void;
+  className?: string;
 }
 
-export default function TimeSlider({ value, onChange, max = 24, playing: externalPlaying, onPlayToggle }: Props) {
+export default function TimeSlider({ value, onChange, max = 24, playing: externalPlaying, onPlayToggle, className }: Props) {
   const [internalPlaying, setInternalPlaying] = useState(false);
   const playing = externalPlaying ?? internalPlaying;
   const setPlaying = onPlayToggle ?? setInternalPlaying;
@@ -31,38 +32,40 @@ export default function TimeSlider({ value, onChange, max = 24, playing: externa
   }, [playing, tick]);
 
   return (
-    <div className="glass-panel rounded-xl px-3 md:px-4 py-3 flex items-center gap-2 md:gap-3" role="toolbar" aria-label="Timeline controls">
+    <div className={`glass-panel rounded-2xl px-3 py-3 md:px-4 flex flex-wrap items-center gap-2 md:gap-3 ${className ?? ''}`} role="toolbar" aria-label="Timeline controls">
       <Button
         variant="ghost"
         size="icon"
-        className="h-10 w-10 md:h-8 md:w-8 shrink-0 touch-manipulation"
+        className="h-10 w-10 shrink-0 rounded-2xl touch-manipulation md:h-9 md:w-9"
         onClick={() => setPlaying(!playing)}
         aria-label={playing ? 'Pause timeline' : 'Play timeline'}
       >
-        {playing ? <Pause className="h-5 w-5 md:h-4 md:w-4" /> : <Play className="h-5 w-5 md:h-4 md:w-4" />}
+        {playing ? <Pause className="h-5 w-5 md:h-4.5 md:w-4.5" /> : <Play className="h-5 w-5 md:h-4.5 md:w-4.5" />}
       </Button>
       <Button
         variant="ghost"
         size="icon"
-        className="h-10 w-10 md:h-8 md:w-8 shrink-0 touch-manipulation"
+        className="h-10 w-10 shrink-0 rounded-2xl touch-manipulation md:h-9 md:w-9"
         onClick={() => { setPlaying(false); onChange(0); }}
         aria-label="Reset timeline"
       >
-        <RotateCcw className="h-4 w-4 md:h-3.5 md:w-3.5" />
+        <RotateCcw className="h-4.5 w-4.5 md:h-4 md:w-4" />
       </Button>
-      <Slider
-        value={[value]}
-        onValueChange={([v]) => onChange(v)}
-        min={0}
-        max={max}
-        step={1}
-        className="flex-1 [&_[role=slider]]:h-5 [&_[role=slider]]:w-5 md:[&_[role=slider]]:h-4 md:[&_[role=slider]]:w-4 touch-manipulation"
-        aria-label="Timeline hour offset"
-        aria-valuemin={0}
-        aria-valuemax={max}
-        aria-valuenow={value}
-        aria-valuetext={`+${value}h of ${max}h forecast`}
-      />
+      <div className="order-last min-w-[12rem] flex-1 basis-full sm:order-none sm:basis-[12rem]">
+        <Slider
+          value={[value]}
+          onValueChange={([v]) => onChange(v)}
+          min={0}
+          max={max}
+          step={1}
+          className="flex-1 [&_[role=slider]]:h-5 [&_[role=slider]]:w-5 md:[&_[role=slider]]:h-4.5 md:[&_[role=slider]]:w-4.5 touch-manipulation"
+          aria-label="Timeline hour offset"
+          aria-valuemin={0}
+          aria-valuemax={max}
+          aria-valuenow={value}
+          aria-valuetext={`+${value}h of ${max}h forecast`}
+        />
+      </div>
       <span className="font-mono text-xs text-muted-foreground w-12 text-right shrink-0">
         +{value}h
       </span>

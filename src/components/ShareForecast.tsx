@@ -4,6 +4,7 @@ import { Share2, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import type { GridCell } from '@/lib/gridUtils';
 import type { Region } from '@/components/RegionSelector';
+import { cn } from '@/lib/utils';
 
 interface Props {
   forecastId?: string;
@@ -12,9 +13,10 @@ interface Props {
   selectedCell?: GridCell | null;
   expertMode?: boolean;
   show3D?: boolean;
+  className?: string;
 }
 
-export default function ShareForecast({ forecastId, region, hour = 0, selectedCell, expertMode, show3D }: Props) {
+export default function ShareForecast({ forecastId, region, hour = 0, selectedCell, expertMode, show3D, className }: Props) {
   const [copied, setCopied] = useState(false);
 
   const handleShare = async () => {
@@ -62,7 +64,7 @@ export default function ShareForecast({ forecastId, region, hour = 0, selectedCe
   return (
     <Button
       variant="outline"
-      className="h-9 text-xs font-semibold gap-2 glass-panel border-0"
+      className={cn('h-10 text-xs font-semibold gap-2 glass-panel border-0 rounded-2xl px-3 sm:px-4', className)}
       onClick={handleShare}
     >
       {copied ? <Check className="h-4 w-4 text-green-400" /> : <Share2 className="h-4 w-4" />}

@@ -1,5 +1,5 @@
-import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
-import type { User } from '@supabase/supabase-js';
+import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import { Loader2, LockKeyhole, LogOut, ShieldAlert, ShieldCheck } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,8 @@ import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 
 type AdminAccessState = 'loading' | 'signed_out' | 'forbidden' | 'ready';
+const ACCESS_CHECK_TIMEOUT_MS = 4500;
+const SIGN_IN_RETRY_DELAYS_MS = [150, 300, 600];
 
 function extractAdminRoles(appMetadata: unknown): string[] {
   if (!appMetadata || typeof appMetadata !== 'object' || Array.isArray(appMetadata)) {
@@ -31,6 +33,24 @@ function isAdminUser(user: User | null): boolean {
   return extractAdminRoles(user.app_metadata).includes('admin');
 }
 
+function resolveAccessState(user: User | null): AdminAccessState {
+  if (!user) {
+    return 'signed_out';
+  }
+  return isAdminUser(user) ? 'ready' : 'forbidden';
+}
+
+async function waitForUserSession(): Promise<User | null> {
+  for (const delayMs of SIGN_IN_RETRY_DELAYS_MS) {
+    const { data, error } = await supabase.auth.getSession();
+    if (!error && data.session?.user) {
+      return data.session.user;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+  }
+  return null;
+}
+
 export default function AdminAccessGate({ children }: { children: ReactNode }) {
   const [accessState, setAccessState] = useState<AdminAccessState>('loading');
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -38,46 +58,111 @@ export default function AdminAccessGate({ children }: { children: ReactNode }) {
   const [password, setPassword] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [accessCheckTimedOut, setAccessCheckTimedOut] = useState(false);
+  const syncRequestRef = useRef(0);
+  const timeoutRef = useRef<number | null>(null);
 
-  const syncUser = useCallback(async () => {
-    setSubmitError(null);
-    setAccessState('loading');
-    const { data, error } = await supabase.auth.getUser();
-    if (error) {
-      setUserEmail(null);
-      setAccessState('signed_out');
-      return;
+  const clearAccessTimeout = useCallback(() => {
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
     }
-
-    const user = data.user;
-    if (!user) {
-      setUserEmail(null);
-      setAccessState('signed_out');
-      return;
-    }
-
-    setUserEmail(user.email ?? null);
-    setAccessState(isAdminUser(user) ? 'ready' : 'forbidden');
   }, []);
 
+  const scheduleAccessTimeout = useCallback((requestId: number) => {
+    clearAccessTimeout();
+    timeoutRef.current = window.setTimeout(() => {
+      if (syncRequestRef.current === requestId) {
+        setAccessCheckTimedOut(true);
+      }
+    }, ACCESS_CHECK_TIMEOUT_MS);
+  }, [clearAccessTimeout]);
+
+  const applyUserState = useCallback((user: User | null) => {
+    setUserEmail(user?.email ?? null);
+    setAccessState(resolveAccessState(user));
+    setAccessCheckTimedOut(false);
+  }, []);
+
+  const syncUser = useCallback(async (options?: { showLoading?: boolean }) => {
+    const requestId = syncRequestRef.current + 1;
+    syncRequestRef.current = requestId;
+    if (options?.showLoading ?? false) {
+      setAccessState('loading');
+      scheduleAccessTimeout(requestId);
+    }
+    const { data, error } = await supabase.auth.getUser();
+    if (syncRequestRef.current !== requestId) {
+      return;
+    }
+    clearAccessTimeout();
+    if (error) {
+      applyUserState(null);
+      return;
+    }
+    applyUserState(data.user ?? null);
+  }, [applyUserState, clearAccessTimeout, scheduleAccessTimeout]);
+
+  const hydrateFromSession = useCallback((session: Session | null) => {
+    applyUserState(session?.user ?? null);
+  }, [applyUserState]);
+
+  const handleAuthTransition = useCallback((event: AuthChangeEvent, session: Session | null) => {
+    syncRequestRef.current += 1;
+    clearAccessTimeout();
+    setAccessCheckTimedOut(false);
+    if (event === 'SIGNED_OUT') {
+      hydrateFromSession(null);
+      return;
+    }
+    hydrateFromSession(session);
+    if (session?.user && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+      void syncUser();
+    }
+  }, [clearAccessTimeout, hydrateFromSession, syncUser]);
+
+  const retrySessionCheck = useCallback(() => {
+    void syncUser({ showLoading: true });
+  }, [syncUser]);
+
   useEffect(() => {
-    void syncUser();
+    const requestId = syncRequestRef.current + 1;
+    syncRequestRef.current = requestId;
+    setAccessState('loading');
+    setAccessCheckTimedOut(false);
+    scheduleAccessTimeout(requestId);
+    void supabase.auth.getSession().then(({ data, error }) => {
+      if (syncRequestRef.current !== requestId) {
+        return;
+      }
+      clearAccessTimeout();
+      if (error) {
+        applyUserState(null);
+        return;
+      }
+      const session = data.session ?? null;
+      hydrateFromSession(session);
+      if (session?.user) {
+        void syncUser();
+      }
+    });
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
-      void syncUser();
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      handleAuthTransition(event, session);
     });
     return () => {
+      clearAccessTimeout();
       subscription.unsubscribe();
     };
-  }, [syncUser]);
+  }, [applyUserState, clearAccessTimeout, handleAuthTransition, hydrateFromSession, scheduleAccessTimeout, syncUser]);
 
   const handleSignIn = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitError(null);
     setSubmitting(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
@@ -86,11 +171,17 @@ export default function AdminAccessGate({ children }: { children: ReactNode }) {
         return;
       }
       setPassword('');
-      await syncUser();
+      const signedInUser = data.user ?? data.session?.user ?? await waitForUserSession();
+      if (signedInUser) {
+        applyUserState(signedInUser);
+        void syncUser();
+      } else {
+        await syncUser({ showLoading: true });
+      }
     } finally {
       setSubmitting(false);
     }
-  }, [email, password, syncUser]);
+  }, [applyUserState, email, password, syncUser]);
 
   const handleSignOut = useCallback(async () => {
     setSubmitting(true);
@@ -119,9 +210,16 @@ export default function AdminAccessGate({ children }: { children: ReactNode }) {
   if (accessState === 'loading') {
     return (
       <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
-        <CardContent className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Verifying admin session...
+        <CardContent className="flex flex-col gap-3 p-4 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>{accessCheckTimedOut ? 'Admin session check is taking longer than expected.' : 'Verifying admin session...'}</span>
+          </div>
+          {accessCheckTimedOut ? (
+            <Button type="button" variant="outline" size="sm" className="self-start sm:self-auto" onClick={retrySessionCheck}>
+              Retry session check
+            </Button>
+          ) : null}
         </CardContent>
       </Card>
     );

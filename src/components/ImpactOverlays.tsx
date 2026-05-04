@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMap } from 'react-leaflet';
 import L from 'leaflet';
-import * as turf from '@turf/turf';
+import booleanIntersects from '@turf/boolean-intersects';
+import { lineString, point, polygon } from '@turf/helpers';
 import type { Feature, Polygon } from 'geojson';
 import { fetchOverpassJson } from '@/lib/overpassClient';
 
@@ -31,10 +32,10 @@ function buildQuery(bbox: [number, number, number, number], type: 'roads' | 'inf
 function buildRunoutFeatures(runoutPolygons: Array<Record<string, unknown>>): Array<Feature<Polygon>> {
   return runoutPolygons
     .map((item) => item.polygon)
-    .filter((polygon): polygon is unknown[] => Array.isArray(polygon) && polygon.length >= 4)
-    .map((polygon) =>
-      turf.polygon([
-        polygon
+    .filter((ringCoordinates): ringCoordinates is unknown[] => Array.isArray(ringCoordinates) && ringCoordinates.length >= 4)
+    .map((ringCoordinates) =>
+      polygon([
+        ringCoordinates
           .filter((point): point is [number, number] => Array.isArray(point) && point.length >= 2)
           .map((point) => [Number(point[0]), Number(point[1])]),
       ]),
@@ -47,8 +48,8 @@ function intersectsRoad(
   runoutFeatures: Array<Feature<Polygon>>,
 ): boolean {
   if (runoutFeatures.length === 0 || geometry.length < 2) return false;
-  const line = turf.lineString(geometry.map((point) => [point.lon, point.lat]));
-  return runoutFeatures.some((feature) => turf.booleanIntersects(feature, line));
+  const line = lineString(geometry.map((segmentPoint) => [segmentPoint.lon, segmentPoint.lat]));
+  return runoutFeatures.some((feature) => booleanIntersects(feature, line));
 }
 
 function intersectsAsset(
@@ -57,8 +58,8 @@ function intersectsAsset(
   runoutFeatures: Array<Feature<Polygon>>,
 ): boolean {
   if (runoutFeatures.length === 0) return false;
-  const point = turf.point([lon, lat]);
-  return runoutFeatures.some((feature) => turf.booleanIntersects(feature, point));
+  const assetPoint = point([lon, lat]);
+  return runoutFeatures.some((feature) => booleanIntersects(feature, assetPoint));
 }
 
 const EMPTY_SUMMARY: OverlaySummary = {

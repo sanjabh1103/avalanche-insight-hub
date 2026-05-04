@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { CircleMarker, MapContainer, Rectangle, TileLayer, useMapEvents } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';

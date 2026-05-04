@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Rectangle, CircleMarker, Pane, Popup, Polygon, Tooltip, useMap } from 'react-leaflet';
 import type { LatLngBoundsExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -20,8 +20,9 @@ import {
   type AvalancheEvent,
 } from '@/lib/avalancheEvents';
 import { useTheme } from 'next-themes';
-import ActivityHeatmap from '@/components/ActivityHeatmap';
-import ImpactOverlays from '@/components/ImpactOverlays';
+
+const LazyActivityHeatmap = lazy(() => import('@/components/ActivityHeatmap'));
+const LazyImpactOverlays = lazy(() => import('@/components/ImpactOverlays'));
 
 interface Props {
   cells: GridCell[];
@@ -38,6 +39,14 @@ interface Props {
   runoutPolygons?: Array<Record<string, unknown>>;
   sarEventGeometries?: Array<Record<string, unknown>>;
   bbox?: [number, number, number, number];
+}
+
+function OverlayLoadingNotice({ label }: { label: string }) {
+  return (
+    <div className="absolute top-20 left-1/2 z-[1000] max-w-[22rem] -translate-x-1/2 rounded-full border border-border/70 bg-card/80 px-4 py-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground shadow-xl backdrop-blur-xl">
+      {label}
+    </div>
+  );
 }
 
 function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }) {
@@ -257,17 +266,23 @@ export default function AvalancheMap({
       </Pane>
 
       {/* Activity Heatmap layer */}
-      <ActivityHeatmap events={heatmapEvents} visible={showHeatmap} />
+      {showHeatmap ? (
+        <Suspense fallback={<OverlayLoadingNotice label="Loading activity heatmap" />}>
+          <LazyActivityHeatmap events={heatmapEvents} visible={showHeatmap} />
+        </Suspense>
+      ) : null}
 
       {/* Impact overlays */}
-      {bbox && (
-        <ImpactOverlays
-          bbox={bbox}
-          showRoads={showRoads}
-          showInfrastructure={showInfra}
-          runoutPolygons={runoutPolygons}
-        />
-      )}
+      {bbox && (showRoads || showInfra) ? (
+        <Suspense fallback={<OverlayLoadingNotice label="Loading impact overlays" />}>
+          <LazyImpactOverlays
+            bbox={bbox}
+            showRoads={showRoads}
+            showInfrastructure={showInfra}
+            runoutPolygons={runoutPolygons}
+          />
+        </Suspense>
+      ) : null}
     </MapContainer>
   );
 }

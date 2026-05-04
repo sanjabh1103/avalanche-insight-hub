@@ -68,11 +68,11 @@ export default function ForecastBulletinBadge({
     : null;
 
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl border border-border/70 bg-black/20 px-3 py-2.5 shadow-sm">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5">
+    <div data-testid="forecast-bulletin-root" className="flex min-w-0 w-full flex-1 flex-col items-start gap-3 rounded-2xl border border-border/70 bg-black/20 px-3 py-3 shadow-sm sm:flex-row sm:items-center">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5">
         <AlertTriangle className="h-4 w-4" style={{ color: dangerColor }} />
       </div>
-      <div className="min-w-0 space-y-1">
+      <div className="min-w-0 w-full space-y-1">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Badge
             className="rounded-full border-0 text-[11px] font-semibold"
@@ -95,14 +95,14 @@ export default function ForecastBulletinBadge({
             </Badge>
           )}
         </div>
-        <div className="truncate text-xs font-medium text-foreground">
+        <div className="text-xs font-medium text-foreground sm:truncate">
           {formatBulletinProblem(bulletin.primary_problem)}
         </div>
-        <div className="truncate text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground sm:truncate">
           {proneLocation ? `${proneLocation} • EAWS-style experimental` : 'EAWS-style experimental'}
         </div>
         {confidenceCaption && (
-          <div className="truncate text-[10px] uppercase tracking-[0.16em] text-amber-200/90" data-testid="confidence-caption">
+          <div className="text-[10px] uppercase tracking-[0.16em] text-amber-200/90 sm:truncate" data-testid="confidence-caption">
             {confidenceCaption}
           </div>
         )}
@@ -146,7 +146,7 @@ export default function ForecastBulletinBadge({
           </div>
         )}
         {peakWindowCaption && (
-          <div className="truncate text-[10px] uppercase tracking-[0.18em] text-muted-foreground" data-testid="peak-window-caption">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground sm:truncate" data-testid="peak-window-caption">
             {peakWindowCaption}
           </div>
         )}

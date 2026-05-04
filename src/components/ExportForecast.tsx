@@ -4,6 +4,7 @@ import { Check, FileSpreadsheet, FileJson, FileSpreadsheet as CsvIcon } from 'lu
 import { toast } from 'sonner';
 import type { GridCell } from '@/lib/gridUtils';
 import type { AvalancheEvent } from '@/lib/avalancheEvents';
+import { cn } from '@/lib/utils';
 
 interface Props {
   grid?: { cells: GridCell[]; timestamp: string; bbox: [number, number, number, number] } | null;
@@ -11,9 +12,19 @@ interface Props {
   regionName?: string;
   hour?: number;
   canExport?: boolean;
+  className?: string;
+  buttonClassName?: string;
 }
 
-export default function ExportForecast({ grid, events = [], regionName = 'Unknown', hour = 0, canExport = false }: Props) {
+export default function ExportForecast({
+  grid,
+  events = [],
+  regionName = 'Unknown',
+  hour = 0,
+  canExport = false,
+  className,
+  buttonClassName,
+}: Props) {
   const [copied, setCopied] = useState<'csv' | 'json' | null>(null);
 
   const downloadCSV = (): boolean => {
@@ -124,10 +135,10 @@ export default function ExportForecast({ grid, events = [], regionName = 'Unknow
   };
 
   return (
-    <div className="flex items-center gap-2">
+    <div className={cn('flex items-center gap-2', className)}>
       <Button
         variant="outline"
-        className="h-9 text-xs font-semibold gap-2 glass-panel border-0"
+        className={cn('h-10 text-xs font-semibold gap-2 glass-panel border-0 rounded-2xl px-3 sm:px-4', buttonClassName)}
         disabled={!canExport}
         onClick={handleExport}
       >
@@ -136,7 +147,7 @@ export default function ExportForecast({ grid, events = [], regionName = 'Unknow
       </Button>
       <Button
         variant="outline"
-        className="h-9 text-xs font-semibold gap-2 glass-panel border-0"
+        className={cn('h-10 text-xs font-semibold gap-2 glass-panel border-0 rounded-2xl px-3 sm:px-4', buttonClassName)}
         disabled={!canExport}
         onClick={() => {
           if (downloadJSON()) {

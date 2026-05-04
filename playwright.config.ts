@@ -3,6 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 const defaultPort = process.env.PLAYWRIGHT_PHASE6_PORT || '4176';
 const baseURL = process.env.TEST_BASE_URL || `http://127.0.0.1:${defaultPort}`;
 const webServerTimeoutMs = Number(process.env.PLAYWRIGHT_WEBSERVER_TIMEOUT_MS || '420000');
+const skipWebServer = process.env.PLAYWRIGHT_SKIP_WEBSERVER === '1';
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -32,7 +33,7 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
+  webServer: skipWebServer ? undefined : {
     command: 'npm run test:e2e:preview',
     url: baseURL,
     reuseExistingServer: false,

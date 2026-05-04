@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { X, Bell, Layers, Map as MapIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -8,10 +8,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import HydrographChart from '@/components/HydrographChart';
 import SnowpackProxyCard from '@/components/SnowpackProxyCard';
 import { supabase } from '@/integrations/supabase/client';
 import type { GridCell } from '@/lib/gridUtils';
+
+const LazyHydrographChart = lazy(() => import('@/components/HydrographChart'));
 
 interface Props {
   open: boolean;
@@ -28,6 +29,16 @@ interface Props {
   selectedCell: GridCell | null;
   regionBbox: [number, number, number, number];
   onToggle3D: () => void;
+}
+
+function HydrographFallback() {
+  return (
+    <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+      <CardContent className="p-4 text-center text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+        Loading hydrograph…
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function ExpertModePanel({
@@ -116,7 +127,9 @@ export default function ExpertModePanel({
             <SnowpackProxyCard selectedCell={selectedCell} />
 
             {/* Hydrograph */}
-            <HydrographChart hourlyGrids={hourlyGrids} selectedCell={selectedCell} />
+            <Suspense fallback={<HydrographFallback />}>
+              <LazyHydrographChart hourlyGrids={hourlyGrids} selectedCell={selectedCell} />
+            </Suspense>
 
             {/* Alerts */}
             <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
