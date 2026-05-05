@@ -1,57 +1,91 @@
-"Avalanche Insight Hub is an open-source, self-improving AI avalanche early-warning system. It combines weighted Groundsource event mining, batch-served 24h/72h forecast grids with SHAP explainability and Chebyshev multi-criteria risk fusion, a physics-aware 3D neighborhood view, real-time field reports with PWA offline sync, and an evaluation harness — all in one shareable web app that is designed for minimal local manual-history dependence rather than zero-history operation."
+# Top 20 Features — Avalanche Insight Hub
 
-**Top 20 Features — Avalanche Insight Hub**
+Updated: May 5, 2026
 
-This list reflects the actual implementation state after the LSTM/PINN + Chebyshev IPA integration milestone. It positions the app as an open-source, Groundsource-style avalanche early-warning platform with unique ML methodology depth.
+This file remains a broad current-repo feature map, not a pure public-demo list. It now separates four layers with explicit boundaries:
 
-### Unique Differentiators
-No other public avalanche prediction tool combines **all** of these in one open-source system:
-- **Physics-informed ML pipeline** — LSTM/PINN sibling model, Chebyshev Ideal Point Analysis for non-compensatory risk fusion, Wasserstein drift detection.
-- **LLM-powered Groundsource mining** — Gemini-extracted events from news + citizen field reports → daily enrichment.
-- **Explainable ensemble forecasts** — SHAP per cell, TreeSHAP precomputed cache, dominant driver narratives.
-- **3D voxel neighborhood visualization** — OSM-based extruded geometry with terrain-fallback when data is sparse.
-- **Async CI/CD ML backend** — GitHub Actions orchestrates training, inference, Sentinel-1 SAR extraction, and news ingestion into precomputed forecast grids.
+- `current live MVP`
+- `repo/admin verified capability`
+- `shadow/future science path`
+- `research-only precedent`
 
-### Top 20 Features (Ranked by Impact & Uniqueness)
+Evidence baseline used for this refresh:
 
-| Rank | Feature | Why It Is Unique / Technical Detail | Customer Value |
-|------|---------|-----------------------------------|----------------|
-| 1 | **Chebyshev IPA Risk Fusion** | Multi-criteria compromise programming using weighted Chebyshev distance over 5 hazard criteria (probability, slope deviation from 38°, aspect risk, snowpack weakness, exposure). Identifies the *limiting factor* — the single criterion that drives risk. Implemented in both Python backend (`backend/common/risk_math.py`) and the live TypeScript edge fallback (`supabase/functions/run-forecast/index.ts`). | Users see *why* a cell is dangerous: "limiting factor = slope_deviation_from_38deg" tells them slope angle is the blocker, not snowpack. |
-| 2 | **LSTM / Physics-Informed Neural Network (PINN) Sibling Model** | Optional LSTM head with physics monotonicity penalty (`PINN_LAMBDA`) trained on two timescales (daily pre-train + hourly fine-tune). It remains shadow-gated until PSS + Brier + SAR promotion gates pass, with RF staying active until then. | Captures temporal dynamics (snowpack evolution over days) that RF misses, while physics constraints prevent unrealistic predictions once promotion criteria are met. |
-| 3 | **Self-Improving Groundsource Loop** | Gemini 1.5 Flash parses global news + local field reports → extracted events upserted to `avalanche_events`. GitHub Actions `news` job runs daily. `trigger-job` edge function coordinates enrichment. Events feed training dataset (`backend/common/training_dataset.py`). | Dataset grows automatically from both institutional news and citizen reports, enabling active learning in data-sparse regions. |
-| 4 | **24h/72h Dynamic Risk Grid with Open-Meteo Ensemble + Physics Fallback** | 20×20 grid per forecast. Real Open-Meteo weather with deterministic fallback simulation when API is unavailable. HIM-STRAT Class-II snowpack proxies (`estimated_shear_strength`, `snow_settlement_index`) derived from cumulative winter weather. The authoritative runtime path hydrates from precomputed `forecast_grids` (async batch), with legacy rows clearly treated as static hour-0 artifacts. | Works globally including Himalayas, Andes, and remote areas with minimal local station dependence, while keeping batch/runtime limits explicit. |
-| 5 | **Wasserstein Concept-Drift Detection + Adaptive Decay** | `wasserstein_distance` compares recent feature distributions vs. training window. If drift exceeds threshold, `drift_multiplier = 0.5` down-weights old rows. Drift stats persisted to `model_status`. | Model adapts to climate shift (e.g., warmer winters changing snowpack patterns) rather than becoming stale. |
-| 6 | **3D Voxel Neighborhood View with Terrain Extrusion Fallback** | Overpass API fetches buildings, lifts, roads → extruded into 3D blocks with risk-colored voxels. When OSM data is sparse, ground cells extrude into low terrain columns so the view never collapses to a flat plane. Timeline-synced coloring. | Users "see" risk on their actual neighborhood geometry — intuitive for guides and local residents. |
-| 7 | **TreeSHAP Explainability per Cell with Precomputed Cache** | Python backend (`daily_inference.py`) computes TreeSHAP per cell and upserts to `forecast_shap_cache`. UI renders dominant driver narratives client-side. Edge function (`shap-explainer`) is an auxiliary Gemini fallback. | Trust through transparency: users understand exactly which weather/terrain feature drove the score. |
-| 8 | **Sentinel-1 SAR Wet-Snow Detection + Coverage Tracking** | Google Earth Engine (`backend/gee_extractor.py`) performs VV/VH wet-snow thresholding on Sentinel-1 with terrain masking (layover, shadow, >65° slope). Tracks ascending/descending scene counts. Historical backfill supported via `historical_sar_backfill.py`. Coverage flags (`sar_coverage_state`) exposed in UI. | Satellite-derived snowpack state where ground stations don't exist. Honest coverage badges show data quality. |
-| 9 | **PWA Offline Sync for Field Reports** | Field reports submitted via `FieldReportForm` queue in `localStorage` when offline. Background Sync (via service worker) replays once connectivity returns. `client_report_id` ensures idempotent upserts. | Backcountry users with no cell signal can still file reports that sync automatically later. |
-| 10 | **Evaluation Harness with PSS Thresholding & Model Lineage** | Youden's J (Peirce Skill Score) selects optimal classification threshold. Calibration profiles, F1, ECE metrics tracked in `evaluation_results`. `model_status` table stores version, drift stats, threshold profile. Admin dashboard shows synthetic bootstrap warnings when `publish_skipped = true`. | Professional-grade model governance — rare in public avalanche tools. |
-| 11 | **Async CI/CD ML Pipeline (GitHub Actions)** | Scheduled jobs: `train` (weekly), `infer` (daily), `gee` (weekly SAR), `news` (daily). `workflow_dispatch` enables manual triggers + `sar_backfill`. All write precomputed `forecast_grids` and SHAP cache. Supabase Edge Functions serve them live. | Zero-cost serverless training/inference — no persistent GPU server needed. |
-| 12 | **Full-State Shareable Links** | One URL serializes region, hour, selected cell, expert mode, 3D view state. Anyone opening the link sees exactly what the sharer saw. | Rescue teams, guides, and friends can share precise risk snapshots without screenshots. |
-| 13 | **Expert Mode with Impact Overlays** | Toggle roads, villages, ski lifts, population heatmaps, historical activity heatmap (recency-weighted), and persisted runout/vector polygons with live road and asset intersection warnings. | Professionals assess real-world consequences — which roads or villages sit in mapped runout zones. |
-| 14 | **KMeansSMOTE + Cost-Sensitive Learning + SVM-RFE** | Training pipeline addresses class imbalance via KMeansSMOTE oversampling. SVM-RFE feature selection prevents overfitting. Class weights penalize false negatives more than false positives. | Safer predictions in the natural class imbalance of avalanche events (rare positives). |
-| 15 | **Admin Panel with Job Triggers, Analytics & Honest Fallback Badges** | One-click retrain, enrichment, snow-cover refresh, evaluation. Realtime job status from `compute_jobs`. Synthetic bootstrap warning when training used bootstrapped data. Satellite fallback badge when SAR is unavailable. | Maintainers have full observability and honest visibility into data quality limitations. |
-| 16 | **Multi-Hazard Foundation** | `hazard_type` column wired throughout DB (`avalanche_events`, `forecasts`, `forecast_grids`, `model_status`). Default is `avalanche`; schema supports volcano, flood, thunderstorm expansion without migration. | Future-proof: the same pipeline can serve multiple natural hazards. |
-| 17 | **Mobile-Responsive with Dark/Light Theme + Keyboard Shortcuts** | Full functionality on phone. R=Run Forecast, Space=Play/Pause, arrows=scrub timeline. Seamless basemap switching. | Power users interact fast; backcountry users check conditions on-device. |
-| 18 | **Real-Time Job & Model Status Badges** | Live `compute_jobs` status, model version, PSS/F1, data freshness, inference backend, promotion-gate state, and the currently active scorer instead of only the trained artifact label. | Users always know how current the forecast is and whether they are seeing promoted MTS output or RF shadow fallback. |
-| 19 | **Export CSV/JSON** | Full forecast grid + hourly grids + events + weather summary + SHAP values + hazard vector downloadable. | Guides, researchers, agencies can archive or analyze offline. |
-| 20 | **Open-Source & Self-Hostable** | Full repo with Supabase (PostgreSQL + Edge Functions), GitHub Actions CI/CD, React+Vite frontend. Dual-mode: Edge-only works without GPU/SAR credentials; GPU/SAR paths activate when credentials present. | Anyone can fork, self-host, or contribute. No vendor lock-in. |
+- Repo truth: `src/App.tsx`, `src/pages/Index.tsx`, current UI components, `package.json`, backend requirements, and active operator paths.
+- Live truth: the canonical demo surface is `https://avalanche-insight-hub.netlify.app/`, with `/` and `/admin` as the only customer-safe route references.
+- Research truth: client publications, peer-reviewed avalanche papers, EAWS material, and WMO guidance were used to validate or soften claims, not to inflate them.
 
-These 20 features make Avalanche Insight Hub a **research-grade, transparent avalanche forecasting system** that scales from zero-infrastructure edge fallback to GPU-enhanced inference while maintaining scientific honesty about data quality and model limitations.
+Proof levels used below:
 
----
+- `Live demo`: visible in the routed public app or the live admin gate right now.
+- `Repo/admin verified`: implemented and verifiable in code or operator surfaces, but not a core public demo moment.
+- `Shadow-gated or config-gated`: present in the repo, but held behind release gates, credentials, or non-default runtime paths.
 
-### Top Shortcomings at This Moment
+## Current MVP And Verified Stack
 
-| # | Shortcoming | Impact | Mitigation / Future Work |
-|---|-------------|--------|--------------------------|
-| 1 | **Sentinel-1 SAR is search-only without download credentials** | ASF Search API works without auth, but downloading actual SAR scenes requires NASA Earthdata login. Pixel-level change detection is not practical inside a lightweight Edge Function without an external raster backend. | Use GEE for wet-snow vectorization (already implemented); heavier raster processing would need Modal GPU worker or preprocessed assets. |
-| 2 | **LSTM/PINN is config-gated, not always active** | The LSTM head only runs when `USE_LSTM_HEAD=true` and a trained model exists on Modal. Most edge fallbacks use RF only. | Promote via PSS/Brier gating; train head on sufficient promoted autonomous-label volume after authoritative SAR release validation. |
-| 3 | **Real-time inference is heuristic; true ensemble is precomputed daily** | The live `run-forecast` edge function uses a physics-informed heuristic when no fresh `forecast_grids` row exists. Full RF+LSTM ensemble runs once per day via GitHub Actions. | Precomputed grids have 26h TTL; heuristic is calibrated to match ensemble bounds. |
-| 4 | **3D voxel Overpass dependency can be sparse in remote regions** | Overpass API returns few buildings/roads in unmapped areas. Terrain extrusion fallback prevents flat-plane collapse but lacks semantic detail. | Cache OSM tiles; add DEM-based terrain features as fallback geometry. |
-| 5 | **Gemini usage counter undercounts malformed responses** | Counter increments only after successful parse. Empty/malformed Gemini responses are not counted, skewing cost estimates. | Move increment to immediately after `fetch()` returns, update by row ID. |
-| 6 | **Drift detection reports but does not autonomously remediate** | `wasserstein_distance` flags drift and applies a multiplier, but there is no automatic retraining or model rollback pipeline. | Wire drift flag → auto-trigger `train` workflow when drift exceeds critical threshold. |
-| 7 | **Edge fallback coverage flags are generic** | When no SAR is available, `sar_coverage_state` is `not_applicable`. The UI shows an honest UNAVAILABLE badge, but there is no probabilistic gap-filling. | Implement spatial interpolation from nearest SAR pass, or add Sentinel-2 snow cover as secondary proxy. |
-| 8 | **Multi-hazard is wired but only avalanche is implemented** | DB schema and `hazard_type` plumbing exist, but no actual volcano/flood/thunderstorm models, datasets, or UI modules are built. | Add hazard-specific feature extractors and training pipelines behind the same `hazard_type` gate. |
-| 9 | **No real-time collaborative editing** | Field reports appear as read-only markers. No simultaneous multi-user annotation or comment threads. | Add Supabase Realtime channel for live report comments and moderation queue. |
-| 10 | **Snowpack proxies are weather-derived, not measurement-based** | HIM-STRAT Class-II proxies use cumulative temperature/precipitation, not actual ram hardness or shear frame tests. | Integrate manual snowpit data upload + IoT sensor ingestion for ground-truthed proxies. |
+### Current Technology Stack Now In Repo
+
+| Layer | Implemented now | Why it matters now | Caveat |
+|---|---|---|---|
+| Frontend app | React 18, Vite 7, TypeScript 5.8, React Router 6, TanStack React Query 5, Tailwind/Radix, Framer Motion | Delivers a fast forecast workspace with stable state management and modern client routing. | Modern UI tooling is not itself the scientific moat. |
+| Mapping and 3D | Leaflet, React-Leaflet, Turf, Recharts, `@react-three/fiber`, `@react-three/drei` | Powers map review, overlays, charts, and voxel-style terrain inspection. | Advanced visualization does not by itself solve sparse-data truth gaps. |
+| Platform and delivery | Supabase JS 2, Postgres/PostGIS, Edge Functions, Vite PWA / Workbox | Supports async jobs, auth gating, report replay, and published forecast artifact delivery. | Some operator flows remain gated behind credentials and background jobs. |
+| Science and ML runtime | scikit-learn 1.8, imbalanced-learn, SHAP 0.51, PyTorch 2.5+, segmentation-models-pytorch, timm, einops | Gives the repo a credible baseline scorer, explainability path, and future deep-learning expansion path. | Not every imported science dependency is active in the public MVP today. |
+| Geospatial backend | rasterio, whitebox, Earth Engine integration | Supports terrain, snow-cover, raster, and geometry workflows needed for avalanche mapping. | Several geospatial chains are repo-valid but not visible in the public route. |
+| Verification stack | Vitest, React Testing Library, Playwright | Supports browser and component verification of the public workspace and admin shell. | Not every future-path science flow is fully end-to-end tested yet. |
+
+## Top 3 Demo Story
+
+| Rank | Demo story | Why it matters | Proof |
+|---|---|---|---|
+| 1 | Precomputed 72h forecast workspace | The public app already delivers a usable batch-first forecast experience instead of making the user wait for heavy compute. | `Live demo` |
+| 2 | EAWS-style experimental bulletin with explicit uncertainty | The app already frames danger by daypart, problem type, elevation/aspect, and reduced-confidence states. | `Live demo` |
+| 3 | Honest operational decision support | Masked terrain, share/export/report actions, and expert overlays make the forecast easier to use without pretending the science is finished. | `Live demo` |
+
+## Ranked Feature Map
+
+| Rank | Feature | What it does | Proof level | Maturity (1-5) | Why this matters to customer pain | Caveat |
+|---|---|---|---|---:|---|---|
+| 1 | Precomputed 72h forecast workspace | Loads the latest published batch artifact, exposes ready/partial/stale states, and lazy-hydrates hourly grids. | `Live demo` | 5 | Solves the customer pain of slow, brittle forecast delivery by moving heavy compute off the user path. | Batch-first delivery is real; true full-model reruns are not happening on every click. |
+| 2 | EAWS-style experimental daypart bulletin | Shows danger level, avalanche problem, critical elevations/aspects, daypart chips, and peak-window framing. | `Live demo` | 5 | Converts model output into a structured public-facing forecast instead of a raw internal score. | It is explicitly `EAWS-style experimental`, not an official avalanche warning service bulletin. |
+| 3 | APT-gated masked terrain contract | Uses the `apt_30_50_v1` slope gate and public masking rules so irrelevant terrain is shown as masked rather than falsely low danger. | `Live demo` | 5 | Addresses a key trust pain: users are less likely to misread out-of-scope terrain as safe terrain. | APT gating improves honesty but does not fully solve snowline or snow-cover eligibility. |
+| 4 | Uncertainty and evidence-coverage signaling | Propagates `reduced confidence`, high-uncertainty counts, and thin-SAR-support warnings into the bulletin and dashboard. | `Live demo` | 5 | Answers the customer demand for transparent outputs rather than hidden model guesswork. | Coverage badges do not mean SAR is fully operational across all runs and regions. |
+| 5 | Shareable full-state forecast links | Encodes region, bbox, hour, forecast id, selected cell, expert mode, and 3D state in one URL. | `Live demo` | 5 | Solves coordination pain for guides, operators, and rescue-style reviews. | Restoring state depends on the referenced published forecast remaining resolvable. |
+| 6 | CSV and JSON export | Exports grid cells, uncertainty fields, SHAP values, metadata, and mapped events. | `Live demo` | 5 | Reduces friction for agency review, offline analysis, and scientific handoff. | Export works only after a forecast artifact is loaded. |
+| 7 | Field report capture in the public app | Lets users submit avalanche-related field observations from the forecast workspace and merges successful reports back into the event view. | `Live demo` | 5 | Creates a concrete path to reduce dependence on centralized observation programs alone. | Raw user reports still need downstream governance before they should influence model trust. |
+| 8 | Offline field-report sync and reconnect replay | Uses a service worker plus queued replay on startup or reconnect so reports can survive low-connectivity conditions. | `Repo/admin verified` | 4 | Targets the customer pain of sparse or unreliable mountain connectivity. | The mechanism is implemented, but each deployment still needs explicit offline smoke verification. |
+| 9 | Expert overlays with runout and asset warnings | Toggles roads, infrastructure, vector polygons, and runout intersection warnings. | `Live demo` | 5 | Moves the product closer to consequence-aware operations instead of map-only hazard viewing. | Overlay quality depends on available runout artifacts and OSM coverage. |
+| 10 | 3D voxel neighborhood view | Opens a 3D modal that extrudes terrain and mapped features while respecting masked and unavailable states. | `Repo/admin verified` | 4 | Helps advanced users inspect spatial structure when 2D views hide slope relationships. | Sparse OSM regions fall back to simpler terrain geometry. |
+| 11 | Admin operator lane | Provides an authenticated operator route with access gating and a lazily loaded admin dashboard. | `Repo/admin verified` | 4 | Separates public forecast consumption from internal release and monitoring work. | The live proof right now is the gate and route shell; the full dashboard requires an operator session. |
+| 12 | Model status and release-evidence surfaces | Shows version, freshness, candidate-shadow status, benchmark timing, and evidence volume in the sidebar and admin lane. | `Repo/admin verified` | 4 | Addresses the customer demand for objective release discipline instead of hand-wavy AI claims. | The readout is only as strong as the upstream `model_status` rows and jobs feeding it. |
+| 13 | Batch artifact delivery architecture | Serves published `forecast_runs` and `forecast_grids` through manifests and per-hour payload loading rather than giant one-shot responses. | `Repo/admin verified` | 4 | Makes the app more stable under heavy geospatial payloads and matches the compute-bottleneck reality in avalanche science. | This is a strong architectural capability, but most users experience it indirectly. |
+| 14 | Groundsource-style news and field-report ingestion | Uses `backend/news_ingest.py` and `ingest-event` to transform news and field reports into structured avalanche-event records. | `Repo/admin verified` | 4 | Directly addresses missing occurrence records in sparse-data regions. | This is inspired by Google’s flood-domain Groundsource approach; it is not avalanche-standard proof by itself. |
+| 15 | Governed event weighting and deduplication | Assigns `label_confidence`, `training_weight`, deposit-vs-release checks, and dedupe logic before records are trusted downstream. | `Repo/admin verified` | 4 | Solves the customer pain that autonomous evidence becomes dangerous if it is ungoverned. | Governance helps, but extracted evidence can still be incomplete or wrong. |
+| 16 | Evaluation and outcome-labeling loop | Exposes `label_forecast_outcomes` and `run_evaluation` jobs plus slice-level metrics such as ECE, Brier, and PSS. | `Repo/admin verified` | 4 | Supports rare-event-aware model governance rather than vanity accuracy reporting. | This governance loop is real, but it is mostly an operator capability, not a public MVP moment. |
+| 17 | MTS-LSTM candidate shadow path | Keeps an env-gated multi-time-scale LSTM path with PSS/Brier/SAR promotion gates and shadow-mode defaults. | `Shadow-gated or config-gated` | 3 | Gives the repo a credible path beyond a simpler baseline scorer and aligns with the client’s longer ANN/HIM-STRAT lineage. | It should not be described as the active public scoring path unless promotion gates actually pass. |
+| 18 | Physics-aware runout seeding and persisted runouts | Uses public-risk and APT-gated runout seeding and can persist runout polygons for later overlay use. | `Repo/admin verified` | 4 | Adds consequence context beyond a colored cell grid, which is important for roads and settlements. | Some runs intentionally skip runout generation or publish empty runout sets. |
+| 19 | Multi-hazard schema foundation | Threads `hazard_type` through schema and jobs so the platform can grow beyond avalanche later. | `Repo/admin verified` | 3 | Future-proofs the data model for co-development beyond a single hazard type. | Avalanche is the only implemented hazard flow today. |
+| 20 | Open-source and self-hostable stack | Ships as a public React/Vite + Supabase + Python/Modal-style stack that can be inspected and self-operated. | `Repo/admin verified` | 4 | Reduces vendor lock-in and supports scientist-team co-development rather than a black-box vendor posture. | Self-hosting still requires credentials, infrastructure, and operator setup. |
+
+## Future Product Path And Research-Driven Expansions
+
+These items are intentionally separated from the ranked feature map because they are credible next-step directions, not current MVP proof.
+
+| Rank | Future path feature | Why it is credible | Current base in repo or research | Horizon | Readiness (1-5) | Caveat |
+|---|---|---|---|---|---:|---|
+| 1 | Governed autonomous evidence fusion | The repo already has news ingest, field-report replay, and weighted event governance; the next step is stronger corroboration logic across sources. | `backend/news_ingest.py`, field-report queueing, `training_weight`, client publications on sparse-data pain | 3-6 months | 4 | This still does not replace snow-truth collection by itself. |
+| 2 | Scientist-in-the-loop validation suite | The customer wants co-development with their scientist team, and the repo already has evaluation jobs and release evidence surfaces. | `run_evaluation`, `label_forecast_outcomes`, admin surfaces, client research lineage | 3-6 months | 4 | Requires agreed validation protocol and shared review cadence. |
+| 3 | Operational SAR artifact pipeline | The repo has SAR coverage semantics and schema hooks; next is promoted mask generation, geometry storage, and operator QA. | `sar_mask_asset_refs`, `sar_event_geometries`, wave-4 planning docs | 6-12 months | 3 | Remote sensing coverage and validation remain the hard bottlenecks. |
+| 4 | Promoted MTS-LSTM scorer with RF surrogate explanations | The shadow path and promotion-gate language already exist; the next step is real GPU training plus release qualification. | `lstm_model.py` pathing, wave-4 context, ANN/HIM-STRAT lineage | 6-12 months | 3 | Promotion must be earned with evaluation; it is not a marketing swap. |
+| 5 | Snowpack critical-layer validation loop | International research shows that weak-layer simulation is useful only with real-time validation suites. | Mayer 2023, Herla 2024, client HIM-STRAT lineage | 6-12 months | 2 | This requires more data, scientist involvement, and validation discipline than the MVP currently has. |
+| 6 | Impact-based alert packaging and dissemination | The forecast UX plus impact overlays create a base for future WMO-style impact messaging and alert packaging. | Public bulletin UI, expert overlays, WMO impact-based warning guidance | 9-15 months | 2 | Official-authority dissemination is outside current MVP proof. |
+| 7 | Scientist-grade operator workflows for roads and infrastructure | Impact overlays and runout logic can be hardened into corridor and asset workflows. | Expert overlays, persisted runouts, share/export surfaces | 9-15 months | 3 | Needs better asset data quality and field-operational validation. |
+| 8 | Multi-region Himalayan pilot dataset and benchmark pack | The client publication lineage and repo schema create a credible base for a scientist co-development pilot across regions. | Open schema, event governance, publications from 2008-2025 | 12-18 months | 2 | This needs fresh labeled data and a jointly owned benchmark protocol. |
+
+## What This File Intentionally Does Not Claim
+
+- It does not claim the public app is running a fully active LSTM or physics-informed sequence path today.
+- It does not claim every forecast click triggers a live ensemble or continuous retraining loop.
+- It does not claim Google Groundsource is already an avalanche-standard methodology.
+- It does not claim EAWS compliance beyond an `EAWS-style experimental` public framing.
+- It does not treat future-path rows as shipped customer-demo capability.
