@@ -4,7 +4,11 @@ import argparse
 import json
 from typing import Any
 
-from backend.common.supabase_io import has_supabase_credentials, patch_first_row, rest_get
+from backend.common.supabase_io import (
+    fetch_latest_model_status_row,
+    has_supabase_credentials,
+    patch_latest_model_status_row,
+)
 
 
 def _as_dict(value: object) -> dict[str, Any]:
@@ -14,10 +18,10 @@ def _as_dict(value: object) -> dict[str, Any]:
 def _fetch_model_status_row() -> dict[str, Any]:
     if not has_supabase_credentials():
         raise RuntimeError('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required')
-    rows = rest_get('model_status', params={'select': '*', 'limit': '1'}) or []
-    if not rows:
+    row = fetch_latest_model_status_row()
+    if not row:
         raise RuntimeError('model_status row not found')
-    return rows[0]
+    return row
 
 
 def _candidate_blockers(candidate: dict[str, Any]) -> list[str]:
@@ -74,8 +78,7 @@ def activate_dynamic_model_candidate(
     }
     if blockers or already_active or not execute_activation:
         return result
-    patch_first_row(
-        'model_status',
+    patch_latest_model_status_row(
         {
             'active_model_type': candidate_type,
             'active_model_version': candidate_version,

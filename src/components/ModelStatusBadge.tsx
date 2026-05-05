@@ -29,6 +29,7 @@ interface ModelInfo {
     } | null;
   } | null;
   last_inference: string | null;
+  last_trained?: string | null;
   data_freshness_hours: number;
   feature_version?: string | null;
   calibration_profile_version?: string | null;
@@ -65,7 +66,9 @@ export default function ModelStatusBadge() {
   const loadStatus = useCallback(async () => {
     const { data } = await supabase
       .from('model_status')
-      .select('version, f1_score, pss_reported, pss_gate_passed, promotion_gate_passed, shadow_mode_active, active_model_type, active_model_version, drift_mode_state, dynamic_model_candidate, autonomous_evidence_summary, last_inference, data_freshness_hours, feature_version, calibration_profile_version, threshold_profile_version, capability_summary, inference_backend, latest_benchmark_summary, snowpack_model_version, stability_summary')
+      .select('version, f1_score, pss_reported, pss_gate_passed, promotion_gate_passed, shadow_mode_active, active_model_type, active_model_version, drift_mode_state, dynamic_model_candidate, autonomous_evidence_summary, last_inference, last_trained, data_freshness_hours, feature_version, calibration_profile_version, threshold_profile_version, capability_summary, inference_backend, latest_benchmark_summary, snowpack_model_version, stability_summary')
+      .order('last_inference', { ascending: false, nullsFirst: false })
+      .order('last_trained', { ascending: false, nullsFirst: false })
       .limit(1)
       .maybeSingle();
     if (data) setStatus(data as unknown as ModelInfo);
@@ -113,6 +116,10 @@ export default function ModelStatusBadge() {
     ? `${status.data_freshness_hours.toFixed(0)}h`
     : 'sim';
   const evidence = status.autonomous_evidence_summary;
+  const stabilityLabel = status.stability_summary?.classification || 'n/a';
+  const stabilitySeedCount = status.stability_summary?.seed_count;
+  const benchmarkKind = status.latest_benchmark_summary?.benchmark_kind || 'n/a';
+  const benchmarkStatus = status.latest_benchmark_summary?.status || 'n/a';
 
   return (
     <div className="flex flex-col gap-1">
@@ -136,13 +143,16 @@ export default function ModelStatusBadge() {
         Confidence proxy: F1 {status.f1_score?.toFixed(2) ?? '—'} • Snowpack: {status.snowpack_model_version || 'edge-proxy'}
       </span>
       <span className="text-[9px] text-muted-foreground font-mono pl-0.5 leading-tight">
-        Evidence volume: auto {evidence?.autonomous_positive_count ?? 0}/{evidence?.positive_count ?? 0} • manual {evidence?.manual_positive_count ?? 0} • promoted SAR {evidence?.promoted_sar_volume?.sar_unet_promoted_count ?? 0}
+        Evidence mix: auto {evidence?.autonomous_positive_count ?? 0}/{evidence?.positive_count ?? 0} • manual {evidence?.manual_positive_count ?? 0} • promoted SAR {evidence?.promoted_sar_volume?.sar_unet_promoted_count ?? 0}
       </span>
       <span className="text-[9px] text-muted-foreground font-mono pl-0.5 leading-tight">
-        Drift mode: {status.drift_mode_state || 'guarded_monitoring_only'} • Stability: {status.stability_summary?.classification || 'n/a'}
+        Drift mode: {status.drift_mode_state || 'guarded_monitoring_only'} • Stability: {stabilityLabel}{typeof stabilitySeedCount === 'number' ? ` • ${stabilitySeedCount} seeds` : ''}
       </span>
       <span className="text-[9px] text-muted-foreground font-mono pl-0.5 leading-tight">
-        Benchmark: {status.latest_benchmark_summary?.benchmark_kind || 'n/a'} • {typeof status.latest_benchmark_summary?.total_seconds === 'number' ? `${status.latest_benchmark_summary.total_seconds.toFixed(1)}s` : 'n/a'}
+        Benchmark: {benchmarkKind} • {benchmarkStatus} • {typeof status.latest_benchmark_summary?.total_seconds === 'number' ? `${status.latest_benchmark_summary.total_seconds.toFixed(1)}s` : 'n/a'}
+      </span>
+      <span className="text-[9px] text-muted-foreground font-mono pl-0.5 leading-tight">
+        Governance scope: operator evidence only; public promotion remains gated
       </span>
     </div>
   );

@@ -57,8 +57,9 @@ from backend.common.risk_math import (
 )
 from backend.common.snowpack_proxy import fetch_batched_cell_snowpack_proxies_partial
 from backend.common.supabase_io import (
+    fetch_latest_model_status_row,
     has_supabase_credentials,
-    patch_first_row,
+    patch_latest_model_status_row,
     rest_get,
     rest_insert,
     rest_upsert,
@@ -343,16 +344,10 @@ def _fetch_current_model_status() -> dict[str, object] | None:
     if not has_supabase_credentials():
         return None
     try:
-        rows = rest_get(
-            'model_status',
-            params={
-                'select': '*',
-                'limit': '1',
-            },
-        ) or []
+        row = fetch_latest_model_status_row()
     except Exception:
         return None
-    return rows[0] if rows else None
+    return row
 
 
 def _runout_method_counts(runout_polygons: list[dict[str, object]]) -> dict[str, int]:
@@ -1783,7 +1778,7 @@ def main(argv: list[str] | None = None) -> int:
     if has_supabase_credentials() and not args.dry_run:
         next_run = (datetime.now(timezone.utc) + pd.Timedelta(hours=24)).isoformat()
         bundle_metrics = bundle.get('metrics') if isinstance(bundle.get('metrics'), dict) else {}
-        patch_first_row('model_status', {
+        patch_latest_model_status_row({
             'version': f"forecast-{artifact_dir.name}",
             'last_inference': datetime.now(timezone.utc).isoformat(),
             'capability_summary': 'batch-only forecast_grids',

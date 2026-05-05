@@ -18,13 +18,19 @@ def _load_json(path: Path | None) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def _non_empty_summary(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict) or not value:
+        return None
+    return value
+
+
 def _training_summary(
     training_metrics: dict[str, Any] | None,
     training_stage_metrics: dict[str, Any] | None,
 ) -> dict[str, Any] | None:
     if isinstance(training_metrics, dict):
-        existing = training_metrics.get('latest_benchmark_summary')
-        if isinstance(existing, dict):
+        existing = _non_empty_summary(training_metrics.get('latest_benchmark_summary'))
+        if existing is not None:
             return existing
     if not isinstance(training_stage_metrics, dict):
         return None
@@ -52,8 +58,8 @@ def _training_summary(
 def _inference_summary(inference_manifest: dict[str, Any] | None) -> dict[str, Any] | None:
     if not isinstance(inference_manifest, dict):
         return None
-    existing = inference_manifest.get('latest_benchmark_summary')
-    if isinstance(existing, dict):
+    existing = _non_empty_summary(inference_manifest.get('latest_benchmark_summary'))
+    if existing is not None:
         return existing
     stage_metrics = inference_manifest.get('stage_metrics_summary')
     if not isinstance(stage_metrics, dict):
@@ -110,7 +116,7 @@ def build_pipeline_benchmark_report(
     report['available_sections'] = [
         section
         for section in ('training', 'inference_publication', 'release_verification')
-        if isinstance(report.get(section), dict)
+        if isinstance(report.get(section), dict) and report.get(section)
     ]
     return report
 

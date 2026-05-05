@@ -743,7 +743,7 @@ class ForecastGridMetadataTests(unittest.TestCase):
         self.assertEqual(payload['runout_polygons'][0]['row'], 0)
         self.assertEqual(payload['runout_polygons'][0]['col'], 0)
 
-    @patch('backend.daily_inference.patch_first_row')
+    @patch('backend.daily_inference.patch_latest_model_status_row')
     @patch('backend.daily_inference.has_supabase_credentials', return_value=True)
     @patch('backend.daily_inference.dump_json')
     @patch('backend.daily_inference.upsert_forecast_grid', return_value={'region_key': 'davos', 'region_name': 'Davos', 'forecast_date': '2026-04-25', 'horizon_hours': 72, 'grid_geojson': []})
@@ -760,7 +760,7 @@ class ForecastGridMetadataTests(unittest.TestCase):
         upsert_forecast_grid_mock,
         _dump_json_mock,
         _has_creds_mock,
-        patch_first_row_mock,
+        patch_latest_model_status_row_mock,
     ) -> None:
         resolve_artifact_dir_mock.return_value = Path('/tmp/fake-artifact-dir')
 
@@ -768,9 +768,9 @@ class ForecastGridMetadataTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertTrue(upsert_forecast_grid_mock.call_args.kwargs['dry_run'])
-        patch_first_row_mock.assert_not_called()
+        patch_latest_model_status_row_mock.assert_not_called()
 
-    @patch('backend.daily_inference.patch_first_row')
+    @patch('backend.daily_inference.patch_latest_model_status_row')
     @patch('backend.daily_inference.has_supabase_credentials', return_value=True)
     @patch('backend.daily_inference.dump_json')
     @patch('backend.daily_inference.upsert_forecast_grid', return_value={'region_key': 'davos', 'region_name': 'Davos', 'forecast_date': '2026-04-25', 'horizon_hours': 72, 'grid_geojson': []})
@@ -787,7 +787,7 @@ class ForecastGridMetadataTests(unittest.TestCase):
         _upsert_forecast_grid_mock,
         _dump_json_mock,
         _has_creds_mock,
-        patch_first_row_mock,
+        patch_latest_model_status_row_mock,
     ) -> None:
         artifact_dir = Path('/tmp/fake-artifact-dir')
         resolve_artifact_dir_mock.return_value = artifact_dir
@@ -797,9 +797,9 @@ class ForecastGridMetadataTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(resolve_artifact_dir_mock.call_args.args[1], artifact_dir)
         self.assertTrue(resolve_artifact_dir_mock.call_args.kwargs['require_model'])
-        patch_first_row_mock.assert_not_called()
+        patch_latest_model_status_row_mock.assert_not_called()
 
-    @patch('backend.daily_inference.patch_first_row')
+    @patch('backend.daily_inference.patch_latest_model_status_row')
     @patch('backend.daily_inference.has_supabase_credentials', return_value=True)
     @patch('backend.daily_inference.dump_json')
     @patch('backend.daily_inference.upsert_forecast_grid', return_value={'region_key': 'davos', 'region_name': 'Davos', 'forecast_date': '2026-04-25', 'horizon_hours': 2, 'grid_geojson': [], 'status': 'ready'})
@@ -828,14 +828,14 @@ class ForecastGridMetadataTests(unittest.TestCase):
         _upsert_forecast_grid_mock,
         _dump_json_mock,
         _has_creds_mock,
-        patch_first_row_mock,
+        patch_latest_model_status_row_mock,
     ) -> None:
         resolve_artifact_dir_mock.return_value = Path('/tmp/fake-artifact-dir')
 
         exit_code = main([])
 
         self.assertEqual(exit_code, 0)
-        payload = patch_first_row_mock.call_args.args[1]
+        payload = patch_latest_model_status_row_mock.call_args.args[0]
         self.assertEqual(payload['pss_reported'], 0.51)
         self.assertTrue(payload['pss_gate_passed'])
         self.assertFalse(payload['promotion_gate_passed'])
@@ -852,7 +852,7 @@ class ForecastGridMetadataTests(unittest.TestCase):
         self.assertIn('latest_benchmark_summary', payload)
         self.assertIn('stability_summary', payload)
 
-    @patch('backend.daily_inference.patch_first_row')
+    @patch('backend.daily_inference.patch_latest_model_status_row')
     @patch('backend.daily_inference.has_supabase_credentials', return_value=False)
     @patch('backend.daily_inference.dump_json')
     @patch('backend.daily_inference.upsert_forecast_grid', return_value={'region_key': 'japanese_alps', 'region_name': 'Japanese Alps', 'forecast_date': '2026-04-25', 'horizon_hours': 72, 'grid_geojson': []})
@@ -875,7 +875,7 @@ class ForecastGridMetadataTests(unittest.TestCase):
         _upsert_forecast_grid_mock,
         _dump_json_mock,
         _has_creds_mock,
-        _patch_first_row_mock,
+        _patch_latest_model_status_row_mock,
     ) -> None:
         resolve_artifact_dir_mock.return_value = Path('/tmp/fake-artifact-dir')
 
@@ -899,7 +899,7 @@ class ForecastGridMetadataTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'Unknown region_key\\(s\\): japanese_alps'):
             main(['--dry-run', '--region-key', 'japanese_alps'])
 
-    @patch('backend.daily_inference.patch_first_row')
+    @patch('backend.daily_inference.patch_latest_model_status_row')
     @patch('backend.daily_inference.has_supabase_credentials', return_value=False)
     @patch('backend.daily_inference.dump_json')
     @patch('backend.daily_inference.upsert_forecast_grid', return_value={'region_key': 'japanese_alps', 'region_name': 'Japanese Alps', 'forecast_date': '2026-04-25', 'horizon_hours': 72, 'grid_geojson': [], 'model_metadata': {'lifeboat_mode': True, 'lifeboat_profile': 'proof72'}})
@@ -916,7 +916,7 @@ class ForecastGridMetadataTests(unittest.TestCase):
         upsert_forecast_grid_mock,
         dump_json_mock,
         _has_creds_mock,
-        _patch_first_row_mock,
+        _patch_latest_model_status_row_mock,
     ) -> None:
         resolve_artifact_dir_mock.return_value = Path('/tmp/fake-artifact-dir')
 

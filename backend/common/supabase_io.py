@@ -54,6 +54,21 @@ def rest_get(table: str, params: dict[str, str] | None = None) -> list[dict[str,
         raise SupabaseError(f'GET {table} failed ({response.status_code}): {response.text}')
     return _json_response_payload(response)
 
+
+LATEST_MODEL_STATUS_ORDER = 'last_inference.desc.nullslast,last_trained.desc.nullslast'
+
+
+def fetch_latest_model_status_row(select: str = '*') -> dict[str, Any] | None:
+    rows = rest_get(
+        'model_status',
+        {
+            'select': select,
+            'order': LATEST_MODEL_STATUS_ORDER,
+            'limit': '1',
+        },
+    )
+    return rows[0] if rows else None
+
 def rest_upsert(
     table: str,
     records: list[dict[str, Any]],
@@ -147,6 +162,25 @@ def patch_row_by_id(
         raise SupabaseError(f'PATCH {table} failed ({response.status_code}): {response.text}')
     data = _json_response_payload(response)
     return data[0] if data else None
+
+
+def patch_latest_model_status_row(
+    values: dict[str, Any],
+    *,
+    returning: str = 'representation',
+    timeout_seconds: int = 30,
+) -> dict[str, Any] | None:
+    row = fetch_latest_model_status_row(select='id')
+    row_id = row.get('id') if row else None
+    if row_id is None:
+        return None
+    return patch_row_by_id(
+        'model_status',
+        str(row_id),
+        values,
+        returning=returning,
+        timeout_seconds=timeout_seconds,
+    )
 
 
 def rest_rpc(

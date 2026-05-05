@@ -331,7 +331,13 @@ export default function AdminDashboard() {
       ] = await Promise.all([
         supabase.from('compute_jobs').select('*').order('created_at', { ascending: false }).limit(10),
         supabase.from('system_config').select('*').limit(1).maybeSingle(),
-        supabase.from('model_status').select('*').limit(1).maybeSingle(),
+        supabase
+          .from('model_status')
+          .select('*')
+          .order('last_inference', { ascending: false, nullsFirst: false })
+          .order('last_trained', { ascending: false, nullsFirst: false })
+          .limit(1)
+          .maybeSingle(),
         supabase.from('forecast_analytics').select('*').order('created_at', { ascending: false }).limit(100),
         supabase.from('evaluation_runs').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.from('evaluation_metrics').select('*').order('created_at', { ascending: false }).limit(10),
@@ -609,6 +615,9 @@ export default function AdminDashboard() {
             </div>
             <div className="text-[10px] text-muted-foreground">
               Authoritative SAR: artifact-gated • Whitebox runout: artifact-gated
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              Scientist-safe interpretation: governance evidence and benchmark traces only; not promotion proof.
             </div>
           </CardContent>
       </Card>
@@ -1104,6 +1113,9 @@ export default function AdminDashboard() {
                 Dynamic scorer (candidate): {candidateModelLabel} • Version: {candidateModelVersion} • Gate: {candidateGate}
               </div>
               <div className="text-[10px] text-muted-foreground">
+                Scientist-safe interpretation: operator evidence for gated candidate review, not proof of activation or authority standing.
+              </div>
+              <div className="text-[10px] text-muted-foreground">
                 Promotion gate: {modelStatus.promotion_gate_passed ? 'pass' : 'hold'} • PSS gate: {modelStatus.pss_gate_passed ? 'pass' : 'hold'}
               </div>
               <div className="text-[10px] text-muted-foreground">
@@ -1114,6 +1126,12 @@ export default function AdminDashboard() {
               </div>
               <div className="text-[10px] text-muted-foreground">
                 Evidence volume: auto {evidenceSummary?.autonomous_positive_count ?? 0}/{evidenceSummary?.positive_count ?? 0} • manual {evidenceSummary?.manual_positive_count ?? 0} • promoted SAR {evidenceSummary?.promoted_sar_volume?.sar_unet_promoted_count ?? 0}
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                Latest benchmark: {latestBenchmarkSummary?.benchmark_kind || 'n/a'} • {latestBenchmarkSummary?.status || 'n/a'} • {formatSeconds(latestBenchmarkSummary?.total_seconds)}
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                Drift mode: {modelStatus.drift_mode_state || 'n/a'} • Stability class: {stabilitySummary?.classification || 'n/a'} • Seeds: {stabilitySummary?.seed_count ?? 'n/a'}
               </div>
               {modelStatus.feature_version && (
                 <div className="text-[10px] text-muted-foreground">
@@ -1139,7 +1157,10 @@ export default function AdminDashboard() {
                 Confidence proxy: F1 {modelStatus.f1_score?.toFixed(3) ?? '—'} • Backend: {modelStatus.inference_backend || 'batch_async'}
               </div>
               <div className="text-[10px] text-muted-foreground">
-                Governance scope: internal lineage/evaluation only • external interoperability {String(latestGovernanceScope?.external_interoperability || 'not_implemented').replace(/_/g, ' ')}
+                Governance scope: internal lineage/evaluation only; public claims remain gated until release artifacts pass.
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                External interoperability: {String(latestGovernanceScope?.external_interoperability || 'not_implemented').replace(/_/g, ' ')}
               </div>
               <div className="text-[10px] text-muted-foreground">
                 Operator/public split: admin observability stays richer than customer-facing products by design

@@ -31,7 +31,13 @@ from backend.common.model_status_state import (
     build_stability_summary,
 )
 from backend.common.schema_drift import feature_columns_hash, label_schema_hash
-from backend.common.supabase_io import has_supabase_credentials, patch_first_row, rest_get, rest_insert, rest_upsert
+from backend.common.supabase_io import (
+    has_supabase_credentials,
+    patch_latest_model_status_row,
+    rest_get,
+    rest_insert,
+    rest_upsert,
+)
 from backend.common.training_dataset import load_training_frame
 from backend.models.surrogate_rf import fit_surrogate_bundle, peirce_skill_score_max
 
@@ -815,7 +821,7 @@ def main() -> int:
         frame.attrs['concept_drift_detected'] = True
         if has_supabase_credentials():
             try:
-                patch_first_row('model_status', {
+                patch_latest_model_status_row({
                     'feature_version': 'drift-accelerated-decay',
                     'calibration_profile_version': 'drift-accelerated-decay',
                     'threshold_profile_version': 'drift-accelerated-decay',
@@ -1016,7 +1022,7 @@ def main() -> int:
         if bundle.get('label_schema_hash'):
             payload['label_schema_hash'] = bundle['label_schema_hash']
         try:
-            patch_first_row('model_status', payload)
+            patch_latest_model_status_row(payload)
         except Exception as exc:  # pragma: no cover - publish is best effort
             metadata['publish_error'] = str(exc)
             (artifact_dir / 'training_metrics.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
