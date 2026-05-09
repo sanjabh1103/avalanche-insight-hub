@@ -5,6 +5,7 @@ on:
     - cron: '0 4 * * 1'
     - cron: '0 3 * * 1'  # weekly SAR extraction (only runs when GEE secrets present)
     - cron: '0 5 * * *'  # daily Gemini-assisted news ingest (only runs when NEWSDATA+GEMINI secrets present)
+    - cron: '0 6 * * *'  # daily same-day forecast publication proof
   workflow_dispatch:
     inputs:
       mode:
@@ -40,6 +41,14 @@ on:
         description: 'Forecast horizon hours'
         required: false
         default: '72'
+      snowpack_proxy_mode:
+        description: 'Snowpack proxy mode for public inference publication. Synthetic is intentionally excluded from this workflow input.'
+        required: false
+        type: choice
+        default: 'regional'
+        options:
+          - regional
+          - cell
       dataset_snapshot_id:
         description: 'Dataset snapshot requested by the Modal worker. Use latest for automatic resolution.'
         required: false
@@ -157,7 +166,7 @@ jobs:
           path: backend/artifacts
 
   infer:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'infer'
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'infer') || (github.event_name == 'schedule' && github.event.schedule == '0 6 * * *')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository (with LFS DEMs)
@@ -186,11 +195,12 @@ jobs:
           ARTIFACT_ROOT: backend/artifacts
           FORECAST_HOURS: ${{ github.event.inputs.forecast_hours || '72' }}
           GRID_SIZE: '20'
+          SNOWPACK_PROXY_MODE: ${{ github.event.inputs.snowpack_proxy_mode || 'regional' }}
           RUN_PHYSICS_RUNOUT: ${{ github.event.inputs.run_physics_runout || 'false' }}
           PYTHONPATH: ${{ github.workspace }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python -m backend.daily_inference
+        run: python -m backend.daily_inference --forecast-hours "${FORECAST_HOURS}" --snowpack-proxy-mode "${SNOWPACK_PROXY_MODE}" --require-full-grid-publication
 
       # P0.2: Surface the inference manifest as a step output so failures show
       # the last-known-good state inline in the GitHub UI.
@@ -201,6 +211,11 @@ jobs:
             cat backend/artifacts/*/inference_manifest.json | tail -n 200
           else
             echo '::warning::inference_manifest.json not written; daily inference probably failed before regions_written stage.'
+          fi
+          if [ -f backend/artifacts/*/publication_proof.json ]; then
+            cat backend/artifacts/*/publication_proof.json | tail -n 200
+          else
+            echo '::warning::publication_proof.json not written; same-day publication proof was not generated.'
           fi
 
       - name: Upload inference artifacts

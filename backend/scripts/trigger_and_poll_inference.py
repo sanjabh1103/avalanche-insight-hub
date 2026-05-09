@@ -8,17 +8,17 @@ from pathlib import Path
 from typing import Any
 
 from backend.scripts.bootstrap_release_gate import load_rollout_env
-from backend.scripts.trigger_and_poll_training import DEFAULT_POLL_INTERVAL_SECONDS, DEFAULT_TIMEOUT_SECONDS
+from backend.scripts.trigger_and_poll_training import DEFAULT_POLL_INTERVAL_SECONDS, _poll_until_terminal
 from backend.scripts.trigger_and_verify_shadow_regression import (
     DEFAULT_FORECAST_HOURS,
     DEFAULT_GRID_SIZE,
-    _poll_until_terminal,
+    DEFAULT_INFERENCE_TIMEOUT_SECONDS,
     build_inference_payload,
     poll_inference_job as poll_inference_job_http,
     submit_inference_job as submit_inference_job_http,
 )
 
-DEFAULT_REATTACH_TIMEOUT_SECONDS = 86400
+DEFAULT_REATTACH_TIMEOUT_SECONDS = 3600
 
 
 def apply_inference_env(env_file: Path, *, transport: str) -> dict[str, str]:
@@ -112,7 +112,7 @@ def trigger_and_poll_inference(
     resolved_timeout_seconds = (
         int(timeout_seconds)
         if timeout_seconds is not None
-        else (DEFAULT_REATTACH_TIMEOUT_SECONDS if call_id else DEFAULT_TIMEOUT_SECONDS)
+        else (DEFAULT_REATTACH_TIMEOUT_SECONDS if call_id else DEFAULT_INFERENCE_TIMEOUT_SECONDS)
     )
 
     if transport == 'http':

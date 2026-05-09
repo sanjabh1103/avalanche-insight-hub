@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import sys
+import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,7 +56,13 @@ from backend.common.risk_math import (
     legacy_max_risk_level,
     risk_level as ipa_risk_level,
 )
-from backend.common.snowpack_proxy import fetch_batched_cell_snowpack_proxies_partial
+from backend.common.snowpack_proxy import (
+    SnowpackProxy,
+    SnowpackProxyBatchResult,
+    compute_region_snowpack_proxy,
+    fetch_batched_cell_snowpack_proxies_partial,
+    winter_season_start,
+)
 from backend.common.supabase_io import (
     fetch_latest_model_status_row,
     has_supabase_credentials,
@@ -75,6 +82,13 @@ from backend.models.surrogate_rf import (
 
 
 DEFAULT_DEM_DIR = repo_root() / 'backend' / 'data' / 'dem'
+
+warnings.filterwarnings(
+    'ignore',
+    message='`sklearn.utils.parallel.delayed` should be used.*',
+    category=UserWarning,
+    module='sklearn.utils.parallel',
+)
 
 
 @dataclass(frozen=True)
@@ -97,6 +111,280 @@ class ProofModeOptions:
             'skip_compatibility_write': self.skip_compatibility_write,
             'emit_stage_metrics': self.emit_stage_metrics,
         }
+
+
+def _coerce_iso_datetime(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _freshness_hours(published_at: object, generated_at: datetime) -> float | None:
+    published_dt = _coerce_iso_datetime(published_at)
+    if published_dt is None:
+        return None
+    return round(max(0.0, (generated_at - published_dt.astimezone(timezone.utc)).total_seconds() / 3600), 3)
+
+
+def _is_truthy_env(name: str) -> bool:
+    return str(os.getenv(name) or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def _snowpack_method_is_synthetic(method: object) -> bool:
+    return str(method or '').strip().lower().startswith('synthetic_')
+
+
+def _summarize_snowpack_lineage(cells: list[object]) -> dict[str, object]:
+    methods: set[str] = set()
+    synthetic_methods: set[str] = set()
+    inspected_cell_count = 0
+    synthetic_cell_count = 0
+    for cell in cells:
+        if not isinstance(cell, dict):
+            continue
+        inspected_cell_count += 1
+        snowpack_proxy = cell.get('snowpack_proxy')
+        if not isinstance(snowpack_proxy, dict):
+            continue
+        method = str(snowpack_proxy.get('method') or '').strip()
+        if not method:
+            continue
+        methods.add(method)
+        if _snowpack_method_is_synthetic(method):
+            synthetic_methods.add(method)
+            synthetic_cell_count += 1
+    synthetic_inputs_present = bool(synthetic_methods)
+    data_lineage = (
+        'mixed'
+        if synthetic_inputs_present and len(methods) > len(synthetic_methods)
+        else 'synthetic_internal'
+        if synthetic_inputs_present
+        else 'observed_or_derived_real'
+    )
+    return {
+        'data_lineage': data_lineage,
+        'publish_eligible': not synthetic_inputs_present,
+        'snowpack_proxy_methods': sorted(methods),
+        'synthetic_inputs_present': synthetic_inputs_present,
+        'synthetic_input_methods': sorted(synthetic_methods),
+        'synthetic_cell_count': synthetic_cell_count,
+        'inspected_cell_count': inspected_cell_count,
+    }
+
+
+def _merge_lineage_with_metadata(*, cells: list[object], model_metadata: dict[str, object]) -> dict[str, object]:
+    lineage = _summarize_snowpack_lineage(cells)
+    proxy_methods = {
+        str(method)
+        for method in lineage.get('snowpack_proxy_methods', [])
+        if isinstance(method, str) and method.strip()
+    }
+    metadata_methods = model_metadata.get('snowpack_proxy_methods')
+    if isinstance(metadata_methods, list):
+        for method in metadata_methods:
+            if isinstance(method, str) and method.strip():
+                proxy_methods.add(method.strip())
+    synthetic_methods = {
+        str(method)
+        for method in lineage.get('synthetic_input_methods', [])
+        if isinstance(method, str) and method.strip()
+    }
+    metadata_synthetic_methods = model_metadata.get('synthetic_input_methods')
+    if isinstance(metadata_synthetic_methods, list):
+        for method in metadata_synthetic_methods:
+            if isinstance(method, str) and method.strip():
+                synthetic_methods.add(method.strip())
+    synthetic_methods = {method for method in synthetic_methods if _snowpack_method_is_synthetic(method)}
+    synthetic_inputs_present = bool(model_metadata.get('synthetic_inputs_present')) or bool(synthetic_methods)
+    lineage['snowpack_proxy_methods'] = sorted(proxy_methods)
+    lineage['synthetic_inputs_present'] = synthetic_inputs_present
+    lineage['synthetic_input_methods'] = sorted(set(synthetic_methods))
+    if synthetic_inputs_present:
+        lineage['data_lineage'] = 'mixed' if proxy_methods - synthetic_methods else 'synthetic_internal'
+        lineage['publish_eligible'] = False
+    return lineage
+
+
+def build_publication_proof(
+    *,
+    outputs: list[dict[str, object]],
+    generated_at: datetime,
+    dry_run: bool,
+    supabase_enabled: bool,
+    expected_forecast_date: str,
+    artifact_dir: Path,
+    expected_grid_size: int | None = None,
+    require_full_grid: bool = False,
+) -> dict[str, object]:
+    regions: list[dict[str, object]] = []
+    for payload in outputs:
+        model_metadata = payload.get('model_metadata') if isinstance(payload.get('model_metadata'), dict) else {}
+        assert isinstance(model_metadata, dict)
+        region_coverage = (
+            model_metadata.get('region_coverage')
+            if isinstance(model_metadata.get('region_coverage'), dict)
+            else {}
+        )
+        forecast_run_id = model_metadata.get('forecast_run_id')
+        manifest_storage_ref = model_metadata.get('manifest_storage_ref')
+        published_at = payload.get('published_at') or model_metadata.get('published_at')
+        forecast_date = payload.get('forecast_date')
+        status = str(payload.get('status') or 'unavailable')
+        publication_status = (
+            'published'
+            if forecast_run_id and manifest_storage_ref and supabase_enabled and not dry_run
+            else 'dry_run'
+            if dry_run
+            else 'not_published'
+        )
+        freshness_hours = _freshness_hours(published_at, generated_at)
+        same_day_published = (
+            publication_status == 'published'
+            and forecast_date == expected_forecast_date
+            and status != 'stale'
+            and freshness_hours is not None
+            and freshness_hours <= 24
+        )
+        hourly_grids = payload.get('hourly_grids') if isinstance(payload.get('hourly_grids'), list) else []
+        grid_cells = payload.get('grid_geojson') if isinstance(payload.get('grid_geojson'), list) else []
+        lineage_cells = (
+            grid_cells
+            if grid_cells
+            else hourly_grids[0]
+            if hourly_grids and isinstance(hourly_grids[0], list)
+            else []
+        )
+        lineage = _merge_lineage_with_metadata(cells=lineage_cells, model_metadata=model_metadata)
+        grid_size = (
+            expected_grid_size
+            if isinstance(expected_grid_size, int) and expected_grid_size > 0
+            else int(region_coverage.get('grid_size') or 0)
+            if isinstance(region_coverage.get('grid_size'), (int, float))
+            else None
+        )
+        expected_cell_count = grid_size * grid_size if isinstance(grid_size, int) and grid_size > 0 else None
+        hourly_cell_counts = [
+            len(cells) for cells in hourly_grids if isinstance(cells, list)
+        ]
+        hourly_ready_counts = [
+            sum(1 for cell in cells if isinstance(cell, dict) and cell.get('status') == 'ready')
+            for cells in hourly_grids
+            if isinstance(cells, list)
+        ]
+        hourly_stale_counts = [
+            len(cells) - ready_count
+            for cells, ready_count in zip(
+                [cells for cells in hourly_grids if isinstance(cells, list)],
+                hourly_ready_counts,
+            )
+        ]
+        forecast_bulletins = payload.get('forecast_bulletins')
+        structured_bulletin = (
+            isinstance(forecast_bulletins, dict)
+            and forecast_bulletins.get('schema_version') == 'forecast-bulletin/v1'
+            and isinstance(forecast_bulletins.get('dayparts'), list)
+            and len(forecast_bulletins.get('dayparts') or []) > 0
+            and isinstance(forecast_bulletins.get('danger_level'), (int, float))
+        )
+        first_hour_cell_count = len(grid_cells) or (hourly_cell_counts[0] if hourly_cell_counts else 0)
+        min_hourly_cell_count = min(hourly_cell_counts) if hourly_cell_counts else 0
+        min_hourly_ready_cell_count = min(hourly_ready_counts) if hourly_ready_counts else 0
+        max_hourly_stale_cell_count = max(hourly_stale_counts) if hourly_stale_counts else 0
+        full_grid_cells_present = (
+            expected_cell_count is not None
+            and first_hour_cell_count == expected_cell_count
+            and len(hourly_cell_counts) == int(payload.get('horizon_hours') or len(hourly_cell_counts))
+            and min_hourly_cell_count == expected_cell_count
+        )
+        full_grid_ready = (
+            full_grid_cells_present
+            and int(payload.get('stale_cell_count') or 0) == 0
+            and max_hourly_stale_cell_count == 0
+            and min_hourly_ready_cell_count == expected_cell_count
+        )
+        full_grid_publication_ready = bool(
+            same_day_published
+            and full_grid_ready
+            and structured_bulletin
+            and bool(lineage.get('publish_eligible'))
+        )
+        regions.append({
+            'forecast_run_id': forecast_run_id,
+            'forecast_date': forecast_date,
+            'published_at': published_at,
+            'region_key': payload.get('region_key'),
+            'region_name': payload.get('region_name'),
+            'status': status,
+            'publication_status': publication_status,
+            'active': publication_status == 'published',
+            'same_day_published': same_day_published,
+            'freshness_hours': freshness_hours,
+            'hour_count': len(hourly_grids) or payload.get('horizon_hours'),
+            'manifest_path': manifest_storage_ref,
+            'grid_size': grid_size,
+            'expected_cell_count': expected_cell_count,
+            'first_hour_cell_count': first_hour_cell_count,
+            'min_hourly_cell_count': min_hourly_cell_count,
+            'min_hourly_ready_cell_count': min_hourly_ready_cell_count,
+            'max_hourly_stale_cell_count': max_hourly_stale_cell_count,
+            'full_grid_cells_present': full_grid_cells_present,
+            'full_grid_ready': full_grid_ready,
+            'full_grid_publication_ready': full_grid_publication_ready,
+            'data_lineage': lineage.get('data_lineage'),
+            'publish_eligible': lineage.get('publish_eligible'),
+            'snowpack_proxy_methods': lineage.get('snowpack_proxy_methods'),
+            'synthetic_inputs_present': lineage.get('synthetic_inputs_present'),
+            'synthetic_input_methods': lineage.get('synthetic_input_methods'),
+            'synthetic_cell_count': lineage.get('synthetic_cell_count'),
+            'inspected_cell_count': lineage.get('inspected_cell_count'),
+            'ready_cell_count': int(payload.get('ready_cell_count') or 0),
+            'stale_cell_count': int(payload.get('stale_cell_count') or 0),
+            'bulletin_present': isinstance(forecast_bulletins, dict)
+            and bool(forecast_bulletins),
+            'structured_bulletin': structured_bulletin,
+            'bulletin_schema_version': (
+                forecast_bulletins.get('schema_version')
+                if isinstance(forecast_bulletins, dict)
+                else None
+            ),
+            'bulletin_daypart_count': (
+                len(forecast_bulletins.get('dayparts') or [])
+                if isinstance(forecast_bulletins, dict)
+                and isinstance(forecast_bulletins.get('dayparts'), list)
+                else 0
+            ),
+        })
+
+    same_day_published_count = sum(1 for region in regions if region.get('same_day_published'))
+    full_grid_publication_ready_count = sum(
+        1 for region in regions if region.get('full_grid_publication_ready')
+    )
+    failures = [
+        str(region.get('region_key') or region.get('region_name') or 'unknown')
+        for region in regions
+        if not region.get('same_day_published')
+        or (require_full_grid and not region.get('full_grid_publication_ready'))
+    ]
+    return {
+        'schema_version': 'publication-proof/v1',
+        'generated_at': generated_at.isoformat(),
+        'expected_forecast_date': expected_forecast_date,
+        'expected_grid_size': expected_grid_size,
+        'require_full_grid': require_full_grid,
+        'artifact_dir': str(artifact_dir),
+        'dry_run': dry_run,
+        'supabase_enabled': supabase_enabled,
+        'region_count': len(regions),
+        'same_day_published_count': same_day_published_count,
+        'full_grid_publication_ready_count': full_grid_publication_ready_count,
+        'proof_status': 'passed' if not failures and regions else 'failed',
+        'failures': failures,
+        'regions': regions,
+    }
 
 
 def _execution_linkage(*, artifact_dir: Path | None = None) -> dict[str, object]:
@@ -478,9 +766,13 @@ def _prepare_region_context(
     *,
     artifact_dir: Path | None = None,
     proof_options: ProofModeOptions | None = None,
+    snowpack_proxy_mode: str = 'cell',
     stage_metrics: dict[str, Any] | None = None,
 ) -> dict[str, object]:
     proof_options = proof_options or ProofModeOptions()
+    snowpack_proxy_mode = str(snowpack_proxy_mode or 'cell').strip().lower()
+    if snowpack_proxy_mode not in {'cell', 'regional', 'synthetic'}:
+        raise ValueError(f'Unsupported snowpack_proxy_mode: {snowpack_proxy_mode}')
     context_started_at = perf_counter()
     region_grid = build_region_grid(region, grid_size=grid_size)
     weather_profile = fetch_forecast_weather_profile(region.center, forecast_date.to_pydatetime(), 72)
@@ -498,15 +790,38 @@ def _prepare_region_context(
         for cell in region_grid
     ]
     snowpack_started_at = perf_counter()
-    snowpack_results = fetch_batched_cell_snowpack_proxies_partial(
-        coordinates=cell_centers,
-        as_of=forecast_date.to_pydatetime(),
-        cache_path=(
-            artifact_dir / 'snowpack_proxy_cache' / f'{region.key}-{forecast_date.date().isoformat()}.json'
-            if artifact_dir is not None
-            else None
-        ),
-    )
+    if snowpack_proxy_mode == 'cell':
+        snowpack_results = fetch_batched_cell_snowpack_proxies_partial(
+            coordinates=cell_centers,
+            as_of=forecast_date.to_pydatetime(),
+            cache_path=(
+                artifact_dir / 'snowpack_proxy_cache' / f'{region.key}-{forecast_date.date().isoformat()}.json'
+                if artifact_dir is not None
+                else None
+            ),
+        )
+    elif snowpack_proxy_mode == 'regional':
+        regional_proxy = compute_region_snowpack_proxy(
+            center_lat=float(region.center[0]),
+            center_lng=float(region.center[1]),
+            as_of=forecast_date.to_pydatetime(),
+            cells=[],
+        )
+        snowpack_results = [
+            SnowpackProxyBatchResult(proxy=regional_proxy, status='ready')
+            for _ in region_grid
+        ]
+    else:
+        synthetic_proxy = SnowpackProxy(
+            estimated_shear_strength=3.0,
+            snow_settlement_index=0.3,
+            season_start=winter_season_start(forecast_date.to_pydatetime()).isoformat(),
+            method='synthetic_full_grid_publication_v1',
+        )
+        snowpack_results = [
+            SnowpackProxyBatchResult(proxy=synthetic_proxy, status='ready')
+            for _ in region_grid
+        ]
     if len(snowpack_results) != len(region_grid):
         raise RuntimeError(
             f'Snowpack proxy count mismatch for {region.key}: '
@@ -514,6 +829,7 @@ def _prepare_region_context(
         )
     if stage_metrics is not None:
         stage_metrics['snowpack_fetch_seconds'] = round(perf_counter() - snowpack_started_at, 3)
+        stage_metrics['snowpack_proxy_mode'] = snowpack_proxy_mode
 
     dem_path = _dem_path(region.key)
     prepared_cells: list[dict[str, object]] = []
@@ -620,24 +936,29 @@ def _build_rows_for_timestamp(
     explainability_context: dict[str, object] = region_context['explainability_context']  # type: ignore[assignment]
     history_samples: list[object] = region_context['history_samples']  # type: ignore[assignment]
     timezone_name = str(region_context.get('timezone_name') or 'UTC')
-    rows: list[dict[str, object]] = []
+    prepared_cells = list(region_context['prepared_cells'])  # type: ignore[arg-type]
+    row_slots: list[dict[str, object] | None] = [None for _ in prepared_cells]
+    ready_items: list[dict[str, object]] = []
+    bundle_feature_columns = (
+        bundle.get('feature_columns')
+        if isinstance(bundle.get('feature_columns'), list)
+        else FEATURE_COLUMNS
+    )
 
-    for prepared in region_context['prepared_cells']:  # type: ignore[index]
+    for slot_index, prepared in enumerate(prepared_cells):
         cell = prepared['cell']
         center_lat = float(prepared['center_lat'])
         center_lng = float(prepared['center_lng'])
         snowpack_proxy = prepared['snowpack_proxy']
         availability_reason = prepared['availability_reason']
         if availability_reason:
-            rows.append(
-                _build_unavailable_cell(
-                    cell=cell,
-                    center_lat=center_lat,
-                    center_lng=center_lng,
-                    bundle=bundle,
-                    snowpack_proxy=snowpack_proxy,
-                    reason=str(availability_reason),
-                )
+            row_slots[slot_index] = _build_unavailable_cell(
+                cell=cell,
+                center_lat=center_lat,
+                center_lng=center_lng,
+                bundle=bundle,
+                snowpack_proxy=snowpack_proxy,
+                reason=str(availability_reason),
             )
             continue
 
@@ -651,11 +972,46 @@ def _build_rows_for_timestamp(
             snowpack_proxy_override=snowpack_proxy,
         )
         feature_row = assembled['feature_row']
-        bundle_feature_columns = bundle.get('feature_columns') if isinstance(bundle.get('feature_columns'), list) else FEATURE_COLUMNS
-        feature_frame = pd.DataFrame([feature_row], columns=bundle_feature_columns)
-        selected_frame = pd.DataFrame(selector.transform(feature_frame), columns=selected_features)
-        probabilities = collect_tree_probabilities(base_model, selected_frame)
-        rf_probability = float(calibrated_model.predict_proba(selected_frame)[0, 1])
+        ready_items.append({
+            'slot_index': slot_index,
+            'cell': cell,
+            'center_lat': center_lat,
+            'center_lng': center_lng,
+            'snowpack_proxy': snowpack_proxy,
+            'terrain': terrain,
+            'assembled': assembled,
+            'feature_row': feature_row,
+        })
+
+    if not ready_items:
+        return [row for row in row_slots if row is not None]
+
+    feature_frame = pd.DataFrame(
+        [item['feature_row'] for item in ready_items],
+        columns=bundle_feature_columns,
+    )
+    selected_frame_all = pd.DataFrame(
+        selector.transform(feature_frame),
+        columns=selected_features,
+    )
+    probability_matrix = np.asarray(collect_tree_probabilities(base_model, selected_frame_all))
+    rf_probabilities = np.asarray(calibrated_model.predict_proba(selected_frame_all)[:, 1], dtype=float)
+
+    for ready_index, ready_item in enumerate(ready_items):
+        cell = ready_item['cell']
+        center_lat = float(ready_item['center_lat'])
+        center_lng = float(ready_item['center_lng'])
+        terrain = ready_item['terrain']
+        assembled = ready_item['assembled']
+        feature_row = ready_item['feature_row']
+        selected_frame = selected_frame_all.iloc[[ready_index]]
+        if probability_matrix.ndim == 2:
+            probabilities = probability_matrix[ready_index]
+        elif probability_matrix.ndim == 1 and probability_matrix.shape[0] == len(ready_items):
+            probabilities = np.asarray([probability_matrix[ready_index]])
+        else:
+            probabilities = probability_matrix
+        rf_probability = float(rf_probabilities[ready_index])
         dynamic_candidate_available = (
             lstm_head is not None and getattr(lstm_head, 'model', None) is not None
         )
@@ -759,7 +1115,7 @@ def _build_rows_for_timestamp(
             forecast_time=forecast_time.to_pydatetime(),
             timezone_name=timezone_name,
         )
-        rows.append(apply_public_eligibility_metric(apply_apt_unified_metric({
+        row_slots[int(ready_item['slot_index'])] = apply_public_eligibility_metric(apply_apt_unified_metric({
             'row': int(cell['row']),
             'col': int(cell['col']),
             'lat': center_lat,
@@ -856,9 +1212,9 @@ def _build_rows_for_timestamp(
             'stale': False,
             'disabled': False,
             'availability_reason': None,
-        })))
+        }))
 
-    return rows
+    return [row for row in row_slots if row is not None]
 
 
 def build_cells(
@@ -870,6 +1226,7 @@ def build_cells(
     artifact_dir: Path | None = None,
     use_dynamic_inference: bool = False,
     proof_options: ProofModeOptions | None = None,
+    snowpack_proxy_mode: str = 'cell',
     stage_metrics: dict[str, Any] | None = None,
 ):
     region_context = _prepare_region_context(
@@ -879,6 +1236,7 @@ def build_cells(
         forecast_date,
         artifact_dir=artifact_dir,
         proof_options=proof_options,
+        snowpack_proxy_mode=snowpack_proxy_mode,
         stage_metrics=stage_metrics,
     )
     weather_profile = region_context['weather_profile']
@@ -904,6 +1262,7 @@ def build_hourly_grids(
     artifact_dir: Path | None = None,
     use_dynamic_inference: bool = False,
     proof_options: ProofModeOptions | None = None,
+    snowpack_proxy_mode: str = 'cell',
     stage_metrics: dict[str, Any] | None = None,
 ):
     region_context = _prepare_region_context(
@@ -913,6 +1272,7 @@ def build_hourly_grids(
         forecast_date,
         artifact_dir=artifact_dir,
         proof_options=proof_options,
+        snowpack_proxy_mode=snowpack_proxy_mode,
         stage_metrics=stage_metrics,
     )
     weather_profile = region_context['weather_profile']
@@ -1080,6 +1440,7 @@ def upsert_forecast_grid(
             'source_health': source_health,
             'decision_provenance': decision_provenance,
         }
+    snowpack_lineage = _summarize_snowpack_lineage(rows)
     model_metadata = {
         'model_version': bundle['created_at'],
         'dynamic_model_type': bundle.get('dynamic_model_type'),
@@ -1147,7 +1508,15 @@ def upsert_forecast_grid(
             'sar_mask_asset_count': len(sar_evidence.get('mask_asset_refs', [])),
             'sar_event_geometry_count': len(sar_evidence.get('sar_event_geometries', [])),
             'snowpack_source': 'snowpack_proxy_v1',
+            'snowpack_proxy_methods': snowpack_lineage['snowpack_proxy_methods'],
         },
+        'data_lineage': snowpack_lineage['data_lineage'],
+        'publish_eligible': snowpack_lineage['publish_eligible'],
+        'snowpack_proxy_methods': snowpack_lineage['snowpack_proxy_methods'],
+        'synthetic_inputs_present': snowpack_lineage['synthetic_inputs_present'],
+        'synthetic_input_methods': snowpack_lineage['synthetic_input_methods'],
+        'synthetic_cell_count': snowpack_lineage['synthetic_cell_count'],
+        'inspected_snowpack_cell_count': snowpack_lineage['inspected_cell_count'],
         'source_health': source_health,
         'decision_provenance': decision_provenance,
         'governance_scope': {
@@ -1203,6 +1572,12 @@ def upsert_forecast_grid(
         'status': region_status,
     }
     if has_supabase_credentials() and not dry_run:
+        if bool(model_metadata.get('synthetic_inputs_present')) and not _is_truthy_env('ALLOW_SYNTHETIC_PUBLICATION'):
+            methods = model_metadata.get('synthetic_input_methods') or []
+            raise RuntimeError(
+                'Synthetic inputs cannot be published to the active forecast path '
+                f'without ALLOW_SYNTHETIC_PUBLICATION=true: {methods}'
+            )
         publication_started_at = perf_counter()
         publication = publish_forecast_run(
             hazard_type=str(payload['hazard_type']),
@@ -1396,7 +1771,7 @@ def upsert_forecast_grid(
             modal_call_id=modal_call_id if isinstance(modal_call_id, str) else None,
         )
         try:
-            promote_forecast_run(forecast_run_id=forecast_run_id)
+            promoted_row = promote_forecast_run(forecast_run_id=forecast_run_id)
         except Exception as exc:
             _record_publication_event_best_effort(
                 forecast_run_id=forecast_run_id,
@@ -1411,6 +1786,19 @@ def upsert_forecast_grid(
             )
             raise
         else:
+            published_at = (
+                promoted_row.get('published_at')
+                if isinstance(promoted_row, dict)
+                else None
+            )
+            if published_at:
+                payload['published_at'] = published_at
+                payload['model_metadata'] = {
+                    **payload['model_metadata'],
+                    'published_at': published_at,
+                    'publication_status': 'published',
+                    'active': True,
+                }
             _record_publication_event_best_effort(
                 forecast_run_id=forecast_run_id,
                 stage='promote_completed',
@@ -1502,12 +1890,30 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--skip-runout-generation', action='store_true')
     parser.add_argument('--skip-compatibility-write', action='store_true')
     parser.add_argument('--emit-stage-metrics', action='store_true')
+    parser.add_argument(
+        '--snowpack-proxy-mode',
+        choices=('cell', 'regional', 'synthetic'),
+        default=os.getenv('SNOWPACK_PROXY_MODE', 'cell'),
+        help='Snowpack proxy source. Use synthetic only for bounded technical publication proofs.',
+    )
+    parser.add_argument(
+        '--require-same-day-publication',
+        action='store_true',
+        help='Fail unless every generated region has same-day published forecast_run proof.',
+    )
+    parser.add_argument(
+        '--require-full-grid-publication',
+        action='store_true',
+        help='Fail unless every generated region has same-day full-grid proof plus structured bulletin content.',
+    )
     args = parser.parse_args(raw_argv)
 
     def _flag_was_explicit(flag: str) -> bool:
         return any(item == flag or item.startswith(f'{flag}=') for item in raw_argv)
 
     if args.lifeboat_mode:
+        if args.require_full_grid_publication:
+            raise RuntimeError('lifeboat_mode cannot satisfy --require-full-grid-publication')
         if not _flag_was_explicit('--forecast-hours'):
             args.forecast_hours = 24 if args.lifeboat_profile == 'smoke24' else 72
         if not _flag_was_explicit('--grid-size'):
@@ -1628,6 +2034,7 @@ def main(argv: list[str] | None = None) -> int:
             artifact_dir=artifact_dir,
             use_dynamic_inference=bool(active_model_state.get('use_dynamic_inference')),
             proof_options=proof_options,
+            snowpack_proxy_mode=str(args.snowpack_proxy_mode),
             stage_metrics=region_stage_metrics,
         )
         region_stage_metrics['hourly_grid_build_seconds'] = round(perf_counter() - hourly_grid_started_at, 3)
@@ -1739,6 +2146,7 @@ def main(argv: list[str] | None = None) -> int:
                 'unavailable_weather_cell_count': int(payload.get('unavailable_weather_cell_count') or 0),
                 'runout_method_sample': (payload.get('model_metadata') or {}).get('runout_method_sample'),
                 'runout_method_counts': (payload.get('model_metadata') or {}).get('runout_method_counts'),
+                'snowpack_proxy_mode': str(args.snowpack_proxy_mode),
                 'training_dataset_version': (payload.get('model_metadata') or {}).get('training_dataset_version'),
                 'lifeboat_mode': (payload.get('model_metadata') or {}).get('lifeboat_mode'),
                 'lifeboat_profile': (payload.get('model_metadata') or {}).get('lifeboat_profile'),
@@ -1765,6 +2173,7 @@ def main(argv: list[str] | None = None) -> int:
         input_context={
             'forecast_hours': int(args.forecast_hours),
             'grid_size': int(args.grid_size),
+            'snowpack_proxy_mode': str(args.snowpack_proxy_mode),
             'region_count': len(outputs),
             'dry_run': bool(args.dry_run),
             'lifeboat_mode': bool(proof_options.enabled),
@@ -1774,6 +2183,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     inference_manifest['latest_benchmark_summary'] = latest_benchmark_summary
     dump_json(artifact_dir / 'inference_manifest.json', inference_manifest)
+    publication_proof_generated_at = datetime.now(timezone.utc)
+    publication_proof = build_publication_proof(
+        outputs=outputs,
+        generated_at=publication_proof_generated_at,
+        dry_run=bool(args.dry_run),
+        supabase_enabled=has_supabase_credentials(),
+        expected_forecast_date=forecast_date.date().isoformat(),
+        artifact_dir=artifact_dir,
+        expected_grid_size=int(args.grid_size),
+        require_full_grid=bool(args.require_full_grid_publication),
+    )
+    dump_json(artifact_dir / 'publication_proof.json', publication_proof)
+    if (args.require_same_day_publication or args.require_full_grid_publication) and publication_proof.get('proof_status') != 'passed':
+        failures = publication_proof.get('failures')
+        raise RuntimeError(
+            'publication proof failed for region(s): '
+            + ', '.join(str(item) for item in failures if item)
+        )
 
     if has_supabase_credentials() and not args.dry_run:
         next_run = (datetime.now(timezone.utc) + pd.Timedelta(hours=24)).isoformat()

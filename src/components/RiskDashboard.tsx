@@ -23,6 +23,9 @@ interface WeatherSummary {
 interface Props {
   cell: GridCell | null;
   weatherSummary?: WeatherSummary | null;
+  hasForecastData?: boolean;
+  forecastAvailability?: 'ready' | 'partial' | 'stale' | 'unavailable';
+  forecastNotice?: string | null;
 }
 
 function formatCriterionName(value?: string | null): string {
@@ -30,13 +33,31 @@ function formatCriterionName(value?: string | null): string {
   return value.replace(/_/g, ' ');
 }
 
-export default function RiskDashboard({ cell, weatherSummary }: Props) {
+export default function RiskDashboard({
+  cell,
+  weatherSummary,
+  hasForecastData = true,
+  forecastAvailability = 'ready',
+  forecastNotice,
+}: Props) {
   if (!cell) {
+    const emptyTitle = hasForecastData
+      ? 'Click a grid tile on the map to inspect risk details'
+      : 'Published forecast artifact is not loaded yet';
+    const emptyLabel = hasForecastData
+      ? 'Telemetry standby'
+      : forecastAvailability === 'unavailable'
+        ? 'Batch proof unavailable'
+        : 'Batch proof pending';
+
     return (
       <div className="p-4 text-center text-muted-foreground">
         <div className="rounded-2xl border border-border/70 bg-black/20 px-4 py-6">
-          <p className="text-sm">Click a grid tile on the map to inspect risk details</p>
-          <p className="mt-2 text-[10px] uppercase tracking-[0.24em] text-muted-foreground/80">Telemetry standby</p>
+          <p className="text-sm">{emptyTitle}</p>
+          {!hasForecastData && forecastNotice ? (
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground/90">{forecastNotice}</p>
+          ) : null}
+          <p className="mt-2 text-[10px] uppercase tracking-[0.24em] text-muted-foreground/80">{emptyLabel}</p>
         </div>
       </div>
     );

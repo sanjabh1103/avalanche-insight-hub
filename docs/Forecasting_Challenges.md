@@ -169,43 +169,43 @@ use of ai in disaster management - Press Release: Press Information Bureau, acce
 ANNUAL CONFERENCE OF RELIEF COMMISSIONERS OF STATES/UTs - NDM India, accessed April 16, 2026, https://ndmindia.mha.gov.in/ndmi/viewUploadedDocument?uid=NEW2680
 impact of avalanches - Press Release: Press Information Bureau, accessed April 16, 2026, https://www.pib.gov.in/PressReleseDetailm.aspx?PRID=2114752
 
-2. Deep Research ChatGPT: 
+2. Deep Research ChatGPT:
 # Key Challenges in Himalayan Avalanche Forecasting
 
-## 1. Dangerous and Spatially Limited Manual Data Collection  
-Accurate avalanche forecasting requires detailed snowpack stability data, but conventional field methods (snowpack stratigraphy) are slow, hazardous, and highly localized. Forecasters manually dig pits and record layer stability, which is **time-consuming and sometimes dangerous**, and because mountain snowpack varies greatly over short distances, these point measurements **“cannot provide [a] true picture of snowpack stability over larger areas.”**【13†L407-L411】. In practice, this means vast regions remain unmeasured, forcing models to rely on sparse spot samples. The result is **low spatial coverage** and dangerous field work. 
+## 1. Dangerous and Spatially Limited Manual Data Collection
+Accurate avalanche forecasting requires detailed snowpack stability data, but conventional field methods (snowpack stratigraphy) are slow, hazardous, and highly localized. Forecasters manually dig pits and record layer stability, which is **time-consuming and sometimes dangerous**, and because mountain snowpack varies greatly over short distances, these point measurements **“cannot provide [a] true picture of snowpack stability over larger areas.”**【13†L407-L411】. In practice, this means vast regions remain unmeasured, forcing models to rely on sparse spot samples. The result is **low spatial coverage** and dangerous field work.
 
-## 2. Sparse Automated Weather Station (AWS) Networks  
+## 2. Sparse Automated Weather Station (AWS) Networks
 Physical snow-cover models need continuous weather input, but the Himalayan AWS network is too thin and unreliable in storms. In the Indian Himalaya, the SNOWPACK model could only be run in *very limited regions* because the AWS network is “**very thin**” and data are **discontinuous during snow storms**【13†L444-L447】. In effect, many forecast models cannot run at all in most areas, or they experience data gaps exactly when avalanches are most likely (heavy snow periods). This lack of robust real-time observations makes operational forecasting impossible across much of the range.
 
-## 3. Uncertain and Incomplete Avalanche-Occurrence Records  
+## 3. Uncertain and Incomplete Avalanche-Occurrence Records
 Official avalanche databases in the Himalayas suffer **huge blind spots**. They rely almost entirely on human visual reports from field parties or road patrols. Small slides or events during storms often go unnoticed and unrecorded. In remote terrain and bad weather, no observers are present, so “**small avalanches often go unreported**,” and overall records are “quite challenging, to observe or accurately record [their] release date.” This severe undercounting of avalanche events creates large gaps in the historical record and leaves model training data biased toward only the largest, reported slides (the paragraph on this point could not be directly cited from the available sources). In practice, the data available are neither **complete nor representative** of true avalanche frequency or timing, undermining any data-driven model.
 
-## 4. Severe Class Imbalance in Forecast Data  
-Avalanches are rare. In avalanche-forecast datasets, **“the number of non-avalanche days exceed the number of avalanche days,”** often by orders of magnitude【27†L79-L82】. This extreme imbalance means a naive model can score high accuracy simply by always predicting “no avalanche,” yet miss every real slide. As one study warns, skewed data “interferes with the construction of decision boundaries,” so standard classifiers **“tend to favor the non-avalanche class”** and under-predict the actual avalanche days【27†L79-L82】. In short, most models trained on imbalanced data have very low true-positive (avalanche) rates unless explicitly corrected. 
+## 4. Severe Class Imbalance in Forecast Data
+Avalanches are rare. In avalanche-forecast datasets, **“the number of non-avalanche days exceed the number of avalanche days,”** often by orders of magnitude【27†L79-L82】. This extreme imbalance means a naive model can score high accuracy simply by always predicting “no avalanche,” yet miss every real slide. As one study warns, skewed data “interferes with the construction of decision boundaries,” so standard classifiers **“tend to favor the non-avalanche class”** and under-predict the actual avalanche days【27†L79-L82】. In short, most models trained on imbalanced data have very low true-positive (avalanche) rates unless explicitly corrected.
 
-## 5. Feature Redundancy Leading to Overfitting  
+## 5. Feature Redundancy Leading to Overfitting
 Avalanche prediction models often use large meteorological feature sets (snow, weather, terrain) to maximize “coverage,” but many of these features are **irrelevant or redundant**. In practice, “**prevailing forecasting models often access redundant data leading to slower learning processes, increased computational complexity, and potential overfitting that ultimately compromises [their] generalization ability**”【79†L45-L49】. In other words, feeding dozens of correlated weather variables (temperature, wind, snowfall over multiple days, etc.) tends to bloat models and cause them to fit noise. Research shows that careful feature selection (e.g. SVM‐RFE) can reduce to a small subset of truly informative variables (such as fresh snow, multi-day precipitation, temperature and wind trends) while maintaining or improving forecast skill【79†L45-L49】. Without such selection, models become large “black boxes” that learn spurious patterns and fail to perform well on new data.
 
-## 6. Complex Physical Processes and Many Parameters  
+## 6. Complex Physical Processes and Many Parameters
 Avalanches result from **a huge number of interacting factors** – snow stratigraphy, temperature gradients, wind redistribution, terrain shape, human activity, etc. Because “the factors involved in the formation of an avalanche are too many and underlying physical processes are quite complex,” no automated model can truly replicate an expert forecaster’s intuition【39†L672-L674】. Each slope can have unique snow layering and local variability, so even high-dimensional models cannot capture every nuance. In short, models face an inherent ceiling: beyond a point the unpredictable physics and variability of snow make perfect forecasts impossible. This complexity is compounded by **high spatial variability** in snow properties, meaning local calibration fails to generalize across the range.
 
-## 7. Spatial–Temporal Disconnect in Hazard Modeling  
-Avalanche risk has *where* and *when* components that are hard to fuse. Some methods analyze **spatial hazard** (e.g. avalanche paths, terrain maps, runout models), while others focus on **temporal forecasting** (“will an avalanche occur today?”). Few frameworks truly integrate both. Experts note it is “quite evident that the problem has to be addressed both in spatial and time domain together”【45†L47-L54】. Traditional GIS tools handle static spatial layers well, but as one review concludes, a GIS “lacks the ability to model a dynamic phenomenon in spatial-temporal domain”【47†L186-L189】. This mismatch means that static hazard maps and time-series forecasts often remain disconnected: one may know which slopes are dangerous in principle, but not know on which day to issue warnings. 
+## 7. Spatial–Temporal Disconnect in Hazard Modeling
+Avalanche risk has *where* and *when* components that are hard to fuse. Some methods analyze **spatial hazard** (e.g. avalanche paths, terrain maps, runout models), while others focus on **temporal forecasting** (“will an avalanche occur today?”). Few frameworks truly integrate both. Experts note it is “quite evident that the problem has to be addressed both in spatial and time domain together”【45†L47-L54】. Traditional GIS tools handle static spatial layers well, but as one review concludes, a GIS “lacks the ability to model a dynamic phenomenon in spatial-temporal domain”【47†L186-L189】. This mismatch means that static hazard maps and time-series forecasts often remain disconnected: one may know which slopes are dangerous in principle, but not know on which day to issue warnings.
 
-## 8. Subjective Parameter Weighting (“Black-Box” Calibration)  
+## 8. Subjective Parameter Weighting (“Black-Box” Calibration)
 Many current models rely on **expert-chosen weights and thresholds** for weather variables (snowfall amounts, wind factors, etc.). These weights (wk) and thresholds (e.g. probability cutoffs) are typically set “subjectively on the basis of [forecasters’] experience”【58†L73-L77】. This manual tuning means different experts may pick different values, and there is no guarantee that any choice is optimal. In other words, the model’s behavior depends on opaque expert judgment rather than objective calibration, introducing unquantified uncertainty. Because these parameters are “decided by experts out of their experience,” forecast accuracy can be undermined by human bias or simple guesswork. (No citation was found for this specific point beyond the source text.)
 
-## 9. Severe Computational Bottlenecks  
-High-resolution, data-driven avalanche models can be **extremely slow to calibrate and run**. For example, calibrating even a moderate-scale nearest-neighbor model (eNN10) via an optimization routine took **on the order of 400 minutes per region** on a standard MATLAB code【9†L239-L242】. Such prolonged run times come from repeatedly evaluating complex objective functions (like maximizing skill score) on large data. In practice, this means forecasters cannot recalibrate models quickly for new data or run ensemble forecasts – every update takes hours or days. In remote operations, this bottleneck makes *real-time* forecasting very difficult. 
+## 9. Severe Computational Bottlenecks
+High-resolution, data-driven avalanche models can be **extremely slow to calibrate and run**. For example, calibrating even a moderate-scale nearest-neighbor model (eNN10) via an optimization routine took **on the order of 400 minutes per region** on a standard MATLAB code【9†L239-L242】. Such prolonged run times come from repeatedly evaluating complex objective functions (like maximizing skill score) on large data. In practice, this means forecasters cannot recalibrate models quickly for new data or run ensemble forecasts – every update takes hours or days. In remote operations, this bottleneck makes *real-time* forecasting very difficult.
 
-## 10. Multiple Optima in Model Calibration  
-Avalanche model calibration often has **multiple local optima**, making it hard for gradient or analytical methods to find the best solution. One study found that the Heidke Skill Score (HSS) landscape for a 10-variable model had a “broad spread” and **multiple distinct peaks**【58†L75-L77】. In practice, this means that simple optimization can get “trapped” in a suboptimal solution, and different runs may give different calibrated weights. This uncertainty compounds the problem: even if one could compute fast, there may not be a single “best” calibration, so forecasters must rely on heuristic metaheuristics (genetic algorithms, bee-colony, etc.) to explore the calibration space【58†L75-L77】. 
+## 10. Multiple Optima in Model Calibration
+Avalanche model calibration often has **multiple local optima**, making it hard for gradient or analytical methods to find the best solution. One study found that the Heidke Skill Score (HSS) landscape for a 10-variable model had a “broad spread” and **multiple distinct peaks**【58†L75-L77】. In practice, this means that simple optimization can get “trapped” in a suboptimal solution, and different runs may give different calibrated weights. This uncertainty compounds the problem: even if one could compute fast, there may not be a single “best” calibration, so forecasters must rely on heuristic metaheuristics (genetic algorithms, bee-colony, etc.) to explore the calibration space【58†L75-L77】.
 
-## 11. Difficulties Integrating Diverse Data Sources  
-Finally, combining static geographic data (terrain, slope aspect, vegetation) with dynamic meteorological data (snowfall history, temperature) into a unified model remains challenging. Each data type has different units, scales, and uncertainty. As one authors note, an “important problem in spatial modeling is how to efficiently integrate data from various sources”【47†L117-L120】. Some factors may be exclusionary (e.g. a rock barrier), others contributory. Typically this requires a weighting scheme or decision-rule framework. In fact, the multi-criteria decision literature emphasizes that **“combining different factors, some exclusionary and some expedient, requires a weighting factor.”**【45†L75-L78】 When data layers are simply combined with naive linear weights (as in basic GIS overlays), it assumes perfect compensation between criteria, which is rarely valid in complex terrain【47†L117-L120】. Thus, building one coherent model layer that marries terrain topology with weather patterns is mathematically delicate. 
+## 11. Difficulties Integrating Diverse Data Sources
+Finally, combining static geographic data (terrain, slope aspect, vegetation) with dynamic meteorological data (snowfall history, temperature) into a unified model remains challenging. Each data type has different units, scales, and uncertainty. As one authors note, an “important problem in spatial modeling is how to efficiently integrate data from various sources”【47†L117-L120】. Some factors may be exclusionary (e.g. a rock barrier), others contributory. Typically this requires a weighting scheme or decision-rule framework. In fact, the multi-criteria decision literature emphasizes that **“combining different factors, some exclusionary and some expedient, requires a weighting factor.”**【45†L75-L78】 When data layers are simply combined with naive linear weights (as in basic GIS overlays), it assumes perfect compensation between criteria, which is rarely valid in complex terrain【47†L117-L120】. Thus, building one coherent model layer that marries terrain topology with weather patterns is mathematically delicate.
 
-These challenges – data sparsity and danger, poor observations, skewed data, redundant inputs, inherent complexity, spatio-temporal disconnects, subjective tuning, and computational limits – combine to make Himalayan avalanche forecasting extremely difficult. 
+These challenges – data sparsity and danger, poor observations, skewed data, redundant inputs, inherent complexity, spatio-temporal disconnects, subjective tuning, and computational limits – combine to make Himalayan avalanche forecasting extremely difficult.
 
 **Additional Context – Advanced Approaches:** Recent research highlights shifts toward data-driven, hybrid systems to address these gaps. For example, machine-learning models now often use feature selection to pare down input variables【79†L45-L49】. Class-imbalance techniques (oversampling, cost-sensitive methods) have been shown to dramatically improve avalanche prediction accuracy【27†L79-L82】. Open platforms like the Avalanche Insight Hub (an open-source AI and 3D-visualization system) propose to fuse historical data with real-time citizen science reports to give broader early warnings. Such systems aim to leverage remote sensors (infrasound, satellite debris imaging) and crowd-sourced snow observations to overcome sparse records. In practice, **the future of Himalayan avalanche early warning lies in integrating all available data – automated sensors, remote imagery, local field reports – within scalable AI frameworks**. Doing so addresses many of these key challenges by expanding data coverage, automating feature weighting, and providing dynamic, probabilistic hazard maps for remote regions.
 
@@ -213,13 +213,13 @@ These challenges – data sparsity and danger, poor observations, skewed data, r
 
 **Research References:**
 
-- Langhammer and Baum (2020), *HIM-STRAT: Neural-Network Snow Cover Modeling*【13†L407-L411】  
-- Kala et al. (2025), *Cold Regions Sci Tech (Addressing Class Imbalance)*【27†L79-L82】  
-- Kaushik et al. (2025), *Environ. Model. Assess. (Feature Selection)*【79†L45-L49】  
-- Kala et al. (2024), *Avalanche Susceptibility Review*【39†L672-L674】  
-- Jacob et al. (2006), *Emerging Trends in Avalanche Modeling*【45†L47-L54】【47†L186-L189】  
-- Singh et al. (2015), *Cold Regions Sci Tech (NN Calibration)*【58†L75-L77】  
-- Singh & Ganju (2024), *Data-Efficient Avalanche Forecasting (model calibration costs)*【9†L239-L242】  
+- Langhammer and Baum (2020), *HIM-STRAT: Neural-Network Snow Cover Modeling*【13†L407-L411】
+- Kala et al. (2025), *Cold Regions Sci Tech (Addressing Class Imbalance)*【27†L79-L82】
+- Kaushik et al. (2025), *Environ. Model. Assess. (Feature Selection)*【79†L45-L49】
+- Kala et al. (2024), *Avalanche Susceptibility Review*【39†L672-L674】
+- Jacob et al. (2006), *Emerging Trends in Avalanche Modeling*【45†L47-L54】【47†L186-L189】
+- Singh et al. (2015), *Cold Regions Sci Tech (NN Calibration)*【58†L75-L77】
+- Singh & Ganju (2024), *Data-Efficient Avalanche Forecasting (model calibration costs)*【9†L239-L242】
 
 
 Deep Research Perplexcity:
@@ -243,38 +243,38 @@ Together, these constraints justify a transition toward integrated, data‑drive
 
 ### 1. Dangerous and Spatially Limited Manual Snowpack (Class‑II) Data
 
-**Problem statement**  
+**Problem statement**
 High‑quality internal snowpack stability data (Class‑II data) are acquired through manual stratigraphy pits that are time‑consuming, dangerous, and sparsely distributed, making them fundamentally incapable of representing the spatially heterogeneous Himalayan snowpack at scale.[^5]
 
-**Evidence from Indian research**  
+**Evidence from Indian research**
 The HIM‑STRAT study notes that detailed information on snowpack stability is collected via manual snowpack stratigraphy, which is "quite time-consuming, sometime dangerous," and cannot provide a "true picture" of snowpack stability over larger areas due to the high spatial variability of mountainous snow.  The same work stresses that while SASE has decades of snow and meteorological records from a few observatories, Class‑II stratigraphy is limited to a small number of profiles (613 layers over 24 winters on a single zero‑aspect site for HIM‑STRAT), underscoring the spatial undersampling.[^5]
 
-**Global practice and mitigations**  
+**Global practice and mitigations**
 Worldwide, professional services still rely heavily on manual pits, stability tests, and expert interpretation, recognizing large spatial variability and limited representativeness of any individual pit.  Remote sensing (optical, SAR) can map surface avalanches and wet snow, but cannot directly observe internal weak layers or mechanical properties of the snowpack, so it cannot replace Class‑II information.[^12][^9][^11][^8]
 
-**Adversarial considerations**  
+**Adversarial considerations**
 Manual pits remain indispensable near critical infrastructure and in research sites, but their risks and costs mean they will never densely cover all relevant Himalayan slopes.  Even if more pits were dug, the small spatial correlation length of weak layers implies that many profiles would still miss critical instabilities; the problem is structural, not just logistical.[^5]
 
-**Implications for system design**  
+**Implications for system design**
 A modern platform should treat manual Class‑II data as high‑value, low‑frequency ground truth for calibration and validation, not as the primary operational input.  Models must learn to infer snowpack stability proxies from more scalable data streams (Class‑III meteorology, remote sensing, citizen observations) and explicitly propagate the residual uncertainty due to sparse Class‑II coverage.[^9][^8][^5]
 
 ***
 
 ### 2. Sparse and Fragile AWS / NWP Infrastructure
 
-**Problem statement**  
+**Problem statement**
 State‑of‑the‑art physical snowpack models require dense, continuous, high‑frequency meteorological data, but the Indian Himalayas have a very thin AWS network with frequent outages during snowstorms, preventing robust operational use of models like SNOWPACK or SAFRAN‑CROCUS.[^5]
 
-**Evidence from Indian research**  
+**Evidence from Indian research**
 HIM‑STRAT explicitly states that SNOWPACK could be run only in limited Himalayan regions due to a "very thin AWS network" and "discontinuous data during snow storms," leading to incomplete and wrong simulations.  It also notes that bias‑corrected high‑resolution NWP fields suitable for such models are not routinely available for the Himalayas at SASE/DGRE.[^5]
 
-**Global practice and mitigations**  
+**Global practice and mitigations**
 European services (e.g., MEPRA/SCM, SNOWPACK) achieve good performance by combining dense AWS networks with NWP models and terrain corrections.  Some commercial systems (e.g., MetGIS) can provide ultra‑high‑resolution weather predictions for the Himalaya, but they are proprietary and may not integrate seamlessly with defence or public‑sector workflows.[^10][^5]
 
-**Adversarial considerations**  
+**Adversarial considerations**
 In principle, AWS networks could be densified and hardened, but cost, power, communication, and maintenance constraints across remote, conflict‑prone, high‑elevation corridors make full coverage unrealistic in the near term.  Even with better hardware, extreme storms – precisely when accurate forecasts are most critical – are also when sensors and data links fail most often.[^13][^5]
 
-**Implications for system design**  
+**Implications for system design**
 Any forecasting system for the Indian Himalayas must assume intermittent, spatially sparse AWS and NWP inputs.  It should support:
 
 - Robust gap‑filling and interpolation using statistical and ML methods.
@@ -285,21 +285,21 @@ Any forecasting system for the Indian Himalayas must assume intermittent, spatia
 
 ### 3. High Uncertainty and Gaps in Avalanche Occurrence Records
 
-**Problem statement**  
+**Problem statement**
 Avalanche occurrence data in the Indian Himalayas are heavily incomplete and uncertain because they depend on visual observations from army personnel and local residents, with small, remote, or storm‑time avalanches often going entirely unreported.[^4]
 
-**Evidence from Indian research**  
+**Evidence from Indian research**
 The class‑imbalance study explicitly states that avalanche occurrence records suffer significant uncertainty and gaps due to over‑dependence on visual observations, the remoteness and vastness of the area, and the lack of effective monitoring mechanisms during storms; small avalanches frequently go unreported, and many events lack accurate release dates.  The feature‑selection paper for Bandipore–Gurez similarly notes that many avalanche occurrences likely go unnoticed given the data collection challenges in difficult terrain and weather.[^3][^4]
 
-**Global practice and mitigations**  
+**Global practice and mitigations**
 Infrasound and seismic systems can detect some avalanches automatically, but their detection rates fall for small, wet, or distant events, and scaling them across a large mountain range is costly.  Satellite‑based methods using Sentinel‑1 SAR and optical imagery can map avalanche debris over wide areas, but are limited by revisit intervals, cloud cover for optical data, and difficulty detecting small or overlapping events.  Long‑term projects such as SAFE in Afghanistan demonstrate that even multi‑decadal satellite monitoring still yields incomplete frequency estimates and requires careful uncertainty analysis.[^14][^15][^16][^17][^18][^19][^8][^13][^9]
 
 Citizen‑science reporting platforms (e.g., White Risk’s new avalanche reporting, AvaNet‑style systems, and emerging crowdsourced mountain safety apps) increase coverage but are biased toward recreational users and accessible terrain, which is not fully representative of high‑risk military corridors.[^20][^21]
 
-**Adversarial considerations**  
+**Adversarial considerations**
 Even with aggressive deployment of sensors and satellites, some avalanches will remain unobserved because they are small, occur at night or during storms, or leave ambiguous debris signatures.  Data scarcity is thus inherent and must be modeled explicitly rather than assumed away.  Moreover, attempts to "hallucinate" missing avalanches by oversampling or synthetic data generation risk encoding incorrect patterns into ML models.[^4][^9]
 
-**Implications for system design**  
+**Implications for system design**
 The platform should:
 
 - Treat avalanche labels as noisy, censored observations rather than complete ground truth.
@@ -310,19 +310,19 @@ The platform should:
 
 ### 4. Difficult Integration of Heterogeneous Data Sources
 
-**Problem statement**  
+**Problem statement**
 Merging static terrain/topology data with dynamic meteorological and snowpack information into a coherent predictive layer is mathematically and structurally challenging, requiring careful weighting and fusion strategies that go beyond traditional GIS overlays.[^2]
 
-**Evidence from Indian research**  
+**Evidence from Indian research**
 The GeoSpatial World Forum paper notes that an "important problem in spatial modeling" is how to efficiently integrate data from various sources, particularly when combining exclusionary and expedient factors that demand weighting factors.  It describes the use of analytic hierarchy process (AHP) and compromise programming/ideal point analysis (IPA) within a GIS–MCDM framework to integrate terrain parameters (slope, curvature, ruggedness, aspect, altitude, land cover, vegetation density) with snow–meteorological parameters for hazard zonation and risk to roads.[^2]
 
-**Global practice and mitigations**  
+**Global practice and mitigations**
 GIS‑based multi‑criteria analysis is widely used to derive avalanche susceptibility and hazard maps, but methods remain sensitive to expert‑chosen weights, correlations between layers, and assumptions about compensability between criteria.  Remote sensing adds further complexity: SAR‑based avalanche detection, optical land‑cover mapping, and DEM‑derived topographic indices all come with differing resolution, uncertainty, and acquisition times, complicating fusion.[^22][^9][^8][^2]
 
-**Adversarial considerations**  
+**Adversarial considerations**
 Even sophisticated GIS–MCDM frameworks risk double‑counting correlated factors (e.g., slope and ruggedness) or masking key drivers when too many layers are aggregated into a single index.  Statistical and ML models that ingest raw or engineered features can partially mitigate this but introduce their own interpretability and overfitting risks.[^3][^9]
 
-**Implications for system design**  
+**Implications for system design**
 A scalable system should:
 
 - Provide an explicit data‑model layer for handling heterogeneous inputs with different spatial/temporal resolutions.
@@ -335,19 +335,19 @@ A scalable system should:
 
 ### 5. Severe Class Imbalance Skewing AI Predictions
 
-**Problem statement**  
+**Problem statement**
 Because non‑avalanche days vastly outnumber avalanche days, standard classification algorithms trained on raw data tend to favor the majority class, achieving deceptively high accuracy while failing precisely on the rare, high‑cost avalanche events.[^4]
 
-**Evidence from Indian research**  
+**Evidence from Indian research**
 The class‑imbalance study for Chowkibal–Tangdhar and Drass–Kargil notes that the number of non‑avalanche days far exceeds avalanche days, and this skewness distorts decision boundaries, leading models to misclassify avalanche days as non‑avalanche days.  It emphasizes that accuracy alone is misleading, as a trivial classifier predicting "no avalanche" every day can achieve high accuracy but zero utility.  The study demonstrates that resampling (SMOTE, KMeans‑SMOTE, NearMiss), and cost‑sensitive learning substantially improve probability of detection (POD) and Peirce Skill Score (PSS) for avalanche days, especially for random forests and SVMs.[^4]
 
-**Global practice and mitigations**  
+**Global practice and mitigations**
 Imbalanced‑learning methods (oversampling, undersampling, cost‑sensitive training, anomaly detection) are standard in rare‑event domains such as fraud detection and medical diagnosis, and are increasingly applied in avalanche forecasting.  Prior work has used virtual avalanche day generation, balanced random forests, and adjusted class weights to reduce imbalance in European datasets, with mixed but generally positive results.[^16][^4]
 
-**Adversarial considerations**  
+**Adversarial considerations**
 Resampling and cost‑sensitive methods can overfit to a small, noisy minority class, especially when labels are uncertain (see Challenge 13).  Over‑aggressive oversampling may create unrealistic synthetic conditions, while undersampling discards valuable information about non‑avalanche regimes.  There is thus a trade‑off between improving minority‑class performance and preserving the true joint distribution of snow–meteorological states.[^4]
 
-**Implications for system design**  
+**Implications for system design**
 An operational system must:
 
 - Use evaluation metrics tailored to imbalanced domains (POD, TNR, balanced accuracy, geometric mean, HSS, PSS) rather than raw accuracy.[^4]
@@ -358,19 +358,19 @@ An operational system must:
 
 ### 6. Feature Redundancy and Overfitting in High‑Dimensional Meteorological Data
 
-**Problem statement**  
+**Problem statement**
 Feeding ML models with large sets of correlated or irrelevant meteorological and snow features slows learning, increases computational cost, and can lead to overfitting that degrades generalization to new seasons or regions.[^3]
 
-**Evidence from Indian research**  
+**Evidence from Indian research**
 The feature‑selection study in the Bandipore–Gurez sector constructs a 40‑dimensional feature set capturing temperatures, snow, rainfall, humidity, wind, and their multi‑day perturbations, then explicitly notes that many features are irrelevant or redundant and add more noise than signal.  It states that such inefficient features highly influence the modeling process, causing overfitting and slower learning, and potentially compromising model generalization.  Using SVM‑RFE, the authors show that subsets of only 7–15 features (primarily fresh snowfall, cumulative snow, temperature, wind, sunshine) achieve equal or better AUC than the full feature set for both SVM and random forest classifiers.[^3]
 
-**Global practice and mitigations**  
+**Global practice and mitigations**
 Avalanche ML studies often start with dozens of candidate features derived from operational forecast variables, then apply filter, wrapper, or embedded feature‑selection methods to identify compact, informative subsets.  Feature selection is particularly valuable when integrating NWP outputs, remote sensing, and local observations, where high dimensionality and correlation are unavoidable.[^23][^16][^3]
 
-**Adversarial considerations**  
+**Adversarial considerations**
 Feature selection that is too aggressive or tuned only on one region risks discarding variables that are important under different climatic regimes (e.g., rain‑on‑snow events, wind redistribution patterns) or for other corridors.  Additionally, data‑driven feature rankings can be unstable under small changes in the training set, especially in noisy, imbalanced contexts.[^3]
 
-**Implications for system design**  
+**Implications for system design**
 A production system should:
 
 - Implement automated, but auditable, feature‑selection pipelines for different regions/climates.
@@ -381,21 +381,21 @@ A production system should:
 
 ### 7. Complex Physical Processes and Too Many Governing Parameters
 
-**Problem statement**  
+**Problem statement**
 Avalanche formation arises from a highly complex set of mechanical and physical processes involving numerous interacting parameters; no model can perfectly replicate the holistic reasoning of an expert forecaster or fully capture the variability of snowpack behavior across diverse slopes.[^6]
 
-**Evidence from Indian research**  
+**Evidence from Indian research**
 Early ANN‑based work on avalanche forecasting in India explicitly acknowledges that the number of factors involved in avalanche formation is large and the underlying physical processes are complex, so no prediction model can completely imitate the thought process and analysis methods of an expert forecaster.  It further emphasizes the high variability of snow‑cover characteristics across slopes, complicating any attempt at universal parameterization.[^6]
 
 HIM‑STRAT, even with its detailed modeling of RAM hardness, shear strength, density, temperature, and settlement, must approximate physical processes and uses a stability index based on a simplified ratio of strength to overburden pressure.[^5]
 
-**Global practice and mitigations**  
+**Global practice and mitigations**
 Physical models (SNOWPACK, CROCUS, SCM) encode sophisticated energy‑balance and snow metamorphism physics, but still rely on simplifying assumptions (rigid ice matrix, no water content, simplified metamorphism) and struggle with certain failure modes like wet‑snow avalanches and complex terrain effects.  ML models can capture non‑linearities but require large, representative datasets and remain vulnerable to covariate shift.[^10][^5]
 
-**Adversarial considerations**  
+**Adversarial considerations**
 The complexity argument cannot be used to dismiss models wholesale; models demonstrably improve situational awareness and decision‑making when used as tools rather than oracles.  However, over‑confidence in model outputs without acknowledging the residual physical complexity and unmodeled processes can be dangerous, especially in novel scenarios (e.g., unprecedented rain‑on‑snow events).[^10][^5]
 
-**Implications for system design**  
+**Implications for system design**
 The system should be explicitly designed for **model pluralism**:
 
 - Combine physics‑based, empirical, and ML models where each is strongest, and expose disagreements rather than hiding them.
@@ -406,21 +406,21 @@ The system should be explicitly designed for **model pluralism**:
 
 ### 8. Subjective Parameter Weighting and Black‑Box Calibration
 
-**Problem statement**  
+**Problem statement**
 In many operational models, key parameters such as variable weights, thresholds, and hazard level cutoffs are set subjectively by experts, which introduces unquantified uncertainty and makes it difficult to ensure globally optimal or even consistent calibration across regions and seasons.[^1][^2]
 
-**Evidence from Indian research**  
+**Evidence from Indian research**
 The eNN10 calibration paper notes that weights for input variables in nearest‑neighbor models, the number of neighbors K, and the probability threshold for avalanche classification are generally assigned subjectively based on expert experience, without assurance of optimality and with associated uncertainty in model accuracy.  The authors show that the calibration problem has multiple optima (see Challenge 10) and requires metaheuristic optimization to explore the parameter space effectively.[^7][^1]
 
 In the GIS–MCDM framework, AHP relies on expert pairwise comparisons to derive weights for terrain and hazard criteria, again introducing subjectivity and potential inconsistency.[^2]
 
-**Global practice and mitigations**  
+**Global practice and mitigations**
 Operational services often use expert‑driven parameter settings and then iteratively adjust based on forecast verification and practitioner feedback.  Metaheuristic calibration (genetic algorithms, particle swarm, artificial bee colony) can systematically search parameter spaces, but results still depend on the objective function (e.g., HSS vs POD vs cost‑weighted metrics) and may find different optima under slight data changes.[^11][^7][^1]
 
-**Adversarial considerations**  
+**Adversarial considerations**
 Purely data‑driven calibration without expert constraints risks overfitting to the historical record and producing parameter sets that are physically implausible or operationally unacceptable (e.g., overly sensitive thresholds that generate unmanageable false alarms).  Conversely, purely expert‑driven tuning may crystallize biases and prevent models from adapting to new regimes.[^1]
 
-**Implications for system design**  
+**Implications for system design**
 The platform should support **transparent, multi‑objective calibration workflows** that:
 
 - Expose parameter sets, objective functions, and performance trade‑offs to forecasters and developers.
@@ -431,21 +431,21 @@ The platform should support **transparent, multi‑objective calibration workflo
 
 ### 9. Severe Computational Bottlenecks for Calibration and Spatial Inference
 
-**Problem statement**  
+**Problem statement**
 Calibrating models such as eNN10 via global optimization over high‑dimensional parameter spaces, or running fine‑grained spatial hazard inference, can be computationally intensive (order of hours per run), limiting the ability to update models frequently or perform ensemble evaluations.
 
-**Evidence from Indian research**  
+**Evidence from Indian research**
 The eNN10 calibration study reports that a sequential MATLAB implementation of the artificial bee colony optimization for one study area requires about 400 minutes of CPU time due to thousands of evaluations of a computationally expensive objective function (HSS via leave‑one‑out cross‑validation).  Uniform random sampling with 20,000 points to explore the parameter space also entails substantial computation.[^7][^1]
 
 HIM‑STRAT training involves 100,000 iterations for multiple neural networks (for RAM hardness, density, shear strength, temperature, settlement, and avalanche occurrence), which, while tractable, becomes heavier when extended to multiple regions or hyper‑parameter sweeps.[^5]
 
-**Global practice and mitigations**  
+**Global practice and mitigations**
 Modern HPC and GPU infrastructures significantly reduce runtimes for ML and physical models, but computing resources remain constrained in many operational agencies, particularly when models must be re‑trained or recalibrated during the season.  Spatially explicit SAR‑based avalanche mapping and deep learning segmentation models also demand substantial compute and storage for high‑resolution images.[^24][^23][^10]
 
-**Adversarial considerations**  
+**Adversarial considerations**
 Raw compute costs are decreasing, but data volumes and methodological ambition are increasing faster.  Moreover, near‑real‑time operational environments often cannot rely on long wall‑clock runs, regardless of theoretical resource availability.  There is a persistent need for architectures and workflows that prioritize timeliness and robustness over marginal gains in skill from heavy offline tuning.[^23][^8]
 
-**Implications for system design**  
+**Implications for system design**
 The system should:
 
 - Separate heavy offline tasks (model training, calibration, backtesting) from lightweight online inference services with strict latency budgets.
@@ -456,19 +456,19 @@ The system should:
 
 ### 10. Multiple Optima in Model Calibration
 
-**Problem statement**  
+**Problem statement**
 The calibration objective landscape for nearest‑neighbor models is characterized by multiple local maxima in skill scores, making it difficult for traditional analytical methods to find a single globally best parameter set and raising questions about solution uniqueness and robustness.[^1]
 
-**Evidence from Indian research**  
+**Evidence from Indian research**
 Using uniform random sampling over the weight space, the eNN10 study shows that HSS plotted against normalized distance from the estimated optimum exhibits a broad spread at almost all HSS levels, suggesting multiple maxima.  Contour plots of HSS versus pairs of decision variables reveal several distinct regions of high performance, confirming that many parameter combinations can achieve similar skill.  This structure motivated the adoption of the artificial bee colony metaheuristic, and the authors still emphasize that different runs converge to slightly different but comparably good solutions.[^1][^7]
 
-**Global practice and mitigations**  
+**Global practice and mitigations**
 Multi‑modal objective landscapes are common in hydrology, climate modeling, and ML hyper‑parameter tuning.  Population‑based metaheuristics and Bayesian optimization are now standard tools, but they focus on finding good solutions rather than guaranteeing global optimality.[^16][^1]
 
-**Adversarial considerations**  
+**Adversarial considerations**
 Multiple optima themselves are not inherently problematic if the resulting parameter sets are operationally similar and stable across seasons.  The main risk is that small changes in data or objective function can lead to qualitatively different behavior, especially if parameters lack physical interpretability or constraints.  Over‑optimizing to a particular period may degrade performance in other years or under climate shift.[^7][^10][^1]
 
-**Implications for system design**  
+**Implications for system design**
 Rather than seeking a single "best" calibration, the platform should:
 
 - Maintain ensembles of calibrated parameter sets and propagate parameter uncertainty into forecast uncertainty.
@@ -481,19 +481,19 @@ Rather than seeking a single "best" calibration, the platform should:
 
 ### 11. Spatial and Temporal Disconnect in Hazard Modeling
 
-**Problem statement**  
+**Problem statement**
 Traditional GIS‑based hazard zonation excels at "where" questions (formation zones, paths, runout, road risk), while time‑series forecasting models address "when" questions (avalanche day vs non‑avalanche day), but integrating both domains into a single dynamic spatio‑temporal framework remains challenging.[^2]
 
-**Evidence from Indian research**  
+**Evidence from Indian research**
 The GeoSpatial World Forum paper explicitly contrasts spatial techniques (for formation‑zone identification, path delineation, risk to roads) with time‑domain techniques (for predicting when avalanches are likely), concluding that avalanche problems must be addressed in both domains together.  It also notes that traditional GIS lacks the ability to model dynamic phenomena in the spatio‑temporal domain and proposes integrating GIS with MCDM and temporal snow–met analysis as a partial solution.[^2]
 
-**Global practice and mitigations**  
+**Global practice and mitigations**
 Many services use static or slowly updated susceptibility and hazard maps for planning, combined with daily or sub‑daily danger level forecasts for operations.  Satellite‑based avalanche mapping (e.g., Sentinel‑1‑derived activity maps) provides a partial spatio‑temporal view but is still limited by revisit times and processing delays.  Fully coupled spatio‑temporal forecasting systems remain an active research area.[^9][^11][^8]
 
-**Adversarial considerations**  
+**Adversarial considerations**
 Strong separation between spatial planning tools and temporal danger forecasting can cause inconsistencies: temporal models may implicitly assume spatial homogeneity, while spatial products may not reflect evolving snow states.  On the other hand, tightly integrated systems risk becoming overly complex, harder to communicate, and more fragile to data outages.[^11][^2]
 
-**Implications for system design**  
+**Implications for system design**
 A modern platform should:
 
 - Maintain explicit linkage between spatial hazard layers and temporal forecast models (e.g., per‑path risk indices driven by time‑varying predictors).
@@ -504,21 +504,21 @@ A modern platform should:
 
 ### 12. Climate‑Driven Non‑Stationarity and Concept Drift (New)
 
-**Problem statement**  
+**Problem statement**
 Climate change is altering snowfall regimes, temperature patterns, and rain‑on‑snow events in the Himalayas, leading to non‑stationary avalanche behavior that degrades the validity of models trained on past decades and complicates the interpretation of long‑term statistics.
 
-**Evidence from research**  
+**Evidence from research**
 Recent land‑surface modeling work in the Himalayas highlights the sensitivity of snow and energy budgets to changing climate forcing, including shifts in storm tracks and temperature, and stresses that model parameterizations tuned under historical conditions may not remain valid under future climates.  Global avalanche research points to increased frequency of wet‑snow and rain‑on‑snow avalanches in some regions as temperatures warm and precipitation patterns change, altering the relative importance of different drivers.[^10]
 
 Indian forecasting studies generally train models on 10–25 years of data from specific corridors (e.g., 24 winters of stratigraphy and weather for HIM‑STRAT; 12 winters for Bandipore–Gurez feature‑selection), implicitly assuming stationarity over these periods.[^3][^4][^5]
 
-**Global practice and mitigations**  
+**Global practice and mitigations**
 Few operational avalanche systems explicitly model non‑stationarity; most rely on ongoing expert interpretation and incremental recalibration as they detect performance shifts.  In other domains, concept drift detection and continual learning techniques are used to monitor changes in data distributions and update models accordingly.[^11]
 
-**Adversarial considerations**  
+**Adversarial considerations**
 Not every anomaly in performance is due to climate change; instrumentation changes, data processing updates, and evolving land use also affect distributions.  Over‑reacting to short‑term fluctuations can introduce instability, while under‑reacting can bake outdated relationships into models.
 
-**Implications for system design**  
+**Implications for system design**
 The platform should:
 
 - Implement drift‑detection tools that monitor feature distributions, model residuals, and skill metrics over time.
@@ -529,21 +529,21 @@ The platform should:
 
 ### 13. Label Noise and Epistemic Uncertainty in Avalanche Datasets (New)
 
-**Problem statement**  
+**Problem statement**
 Beyond missing events (Challenge 3), many recorded avalanches have uncertain or incorrect attributes (e.g., date, size, type, exact location), introducing label noise that degrades model training and obscures true performance.
 
-**Evidence from Indian research**  
+**Evidence from Indian research**
 The Bandipore–Gurez feature‑selection paper notes the likelihood that many avalanches go unnoticed or have incomplete attribute information due to logistical constraints.  The class‑imbalance paper explicitly discusses uncertainties in occurrence records, including delayed or estimated reporting, and references limits of infrasound and satellite detection systems that themselves introduce false positives and false negatives.[^3][^4]
 
 SAR‑based avalanche mapping studies report omission and commission errors; even advanced deep learning segmentation methods fail to detect all avalanches and sometimes misclassify other bright or decorrelated features as avalanche debris.[^14][^9][^23][^8]
 
-**Global practice and mitigations**  
+**Global practice and mitigations**
 Quality‑controlled subsets of avalanche datasets (e.g., curated danger level labels, vetted event catalogs) are often used for model development, but such curation is labor‑intensive and still imperfect.  Robust learning methods that account for label noise (e.g., loss corrections, label smoothing, probabilistic labels) are increasingly explored in other fields but are not yet standard in avalanche forecasting.[^25]
 
-**Adversarial considerations**  
+**Adversarial considerations**
 Treating all avalanche labels as ground truth and all non‑avalanche labels as true negatives encourages models to learn the noise patterns of the data collection process rather than the underlying physical processes.  Conversely, attempting to "clean" labels without clear evidence can introduce its own biases.
 
-**Implications for system design**  
+**Implications for system design**
 A robust system should:
 
 - Represent avalanche occurrence and characteristics probabilistically (e.g., confidence scores) where possible.
@@ -554,21 +554,21 @@ A robust system should:
 
 ### 14. Data Governance, Standardization, and Inter‑Agency Integration (New)
 
-**Problem statement**  
+**Problem statement**
 Avalanche‑relevant data in the Indian Himalayas are collected by multiple agencies (DGRE/SASE, IMD, army units, state disaster authorities, remote sensing bodies) using heterogeneous formats, vocabularies, and quality‑control standards, hindering seamless integration and limiting the scalability of data‑driven systems.
 
-**Evidence from existing work**  
+**Evidence from existing work**
 The Indian studies analyzed here draw on different observatories (Stage‑II, Drass, Kanzalwan), variable sets (10‑feature vs 40‑feature schemes), and temporal coverage windows, often curated specifically for a given research project.  The GIS–MCDM hazard zonation work similarly combines terrain layers derived from remote sensing with locally curated snow–met datasets, requiring bespoke processing chains.[^1][^2][^4][^3][^5]
 
 Internationally, avalanche warning services have converged on standardized danger scales and communication formats, but data collection and storage practices remain diverse, as evidenced by the need for project‑specific QC when evaluating manual and automatic detection systems.[^25][^11]
 
-**Global practice and mitigations**  
+**Global practice and mitigations**
 Some regions are establishing centralized, open data platforms for snow and avalanche information, with standardized schemas and APIs, but such efforts are uneven and often limited to specific countries or research consortia.[^15][^9][^8]
 
-**Adversarial considerations**  
+**Adversarial considerations**
 Full standardization across all agencies and use‑cases may be unrealistic given differing mandates, security constraints, and resource levels.  Overly rigid schemas can also stifle innovation or fail to capture new sensor types and variables.
 
-**Implications for system design**  
+**Implications for system design**
 The Avalanche Insight Hub or similar platforms should be designed as **interoperability layers**, not monolithic databases:
 
 - Define flexible, extensible data models that can map multiple upstream formats into a coherent representation without forcing uniformity at the source.
@@ -579,19 +579,19 @@ The Avalanche Insight Hub or similar platforms should be designed as **interoper
 
 ### 15. Human–AI Integration, Explainability, and Communication (New)
 
-**Problem statement**  
+**Problem statement**
 Even when technically sound models exist, their operational impact depends on how well human forecasters, decision‑makers, and end‑users understand, trust, and act upon AI‑driven outputs; opaque models or poorly communicated warnings can fail in practice, regardless of their statistical skill.
 
-**Evidence from research**  
+**Evidence from research**
 Indian avalanche forecasting papers repeatedly emphasize that statistical and ML models are decision‑support tools meant to assist, not replace, human forecasters, whose judgment remains central.  A NHESS study on communicating avalanche warnings underscores that message framing, clarity, and trust significantly affect how the public interprets danger levels and adjusts behavior, and that complex or poorly explained products can backfire.[^6][^11][^4][^5]
 
-**Global practice and mitigations**  
+**Global practice and mitigations**
 Services in Europe and North America increasingly complement numerical danger levels with graphical products, scenario narratives, and educational content, and they are cautious about deploying black‑box ML outputs directly to the public.  In high‑stakes rare‑event settings, there is a growing emphasis on explainable AI, uncertainty visualization, and co‑design with practitioners.[^11]
 
-**Adversarial considerations**  
+**Adversarial considerations**
 There is a tension between the complexity of cutting‑edge ML models (deep neural networks, ensemble methods) and the need for interpretability.  Over‑simplification of explanations can be misleading, while raw model internals are incomprehensible to most users.  Additionally, the communication needs differ between expert forecasters, field commanders, and local communities.
 
-**Implications for system design**  
+**Implications for system design**
 The platform should:
 
 - Provide multi‑layered outputs: detailed technical views for experts and simplified, actionable summaries for field users and the public.
@@ -616,19 +616,19 @@ These principles provide a rigorous, evidence‑based backbone for the problem s
 
 ## References
 
-1. [2015-_-1-s2.0-S0165232X14001694-main.pdf](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/767611/12b3248b-3f12-4731-a7fb-55b1abc14717/2015-_-1-s2.0-S0165232X14001694-main.pdf?AWSAccessKeyId=ASIA2F3EMEYEWDMRA5RF&Signature=Sh0DpWdy00i%2FhfzrRFF2e5NW%2Bsk%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEPX%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJHMEUCIQDsGXFHhKQmcMF6hRy1A%2F5MRheKxJOzszATnW5x1E48lgIgUZk1prhllS0hd1Q%2BcY%2BQEN57Vv2FL95Pyzxk9Cw%2B3Q8q%2FAQIvv%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDP9IXvtuaJ7%2BqpYNYyrQBCqa6u1mZPgckivxHFCkkuglhsbOM%2Fcp3OF%2BJBzbuR6js7dbtXhtzALQB8w%2BDnAWHkDtskugwKsDSDqh4vIqxac2lSlPqr1PWcHBBCON5Rz%2BsxDaaq7I5iPhEbWdh%2FsT%2BI6cNFhW2il2i1%2B0EsZ7J4OWOh5oamb%2B7krGRQvbjDQErwdANf0Edvum6SoYVe13IVzfBT6UU%2B7ZzoEu7fvqktlOrGolnz8Vx%2B3spHrtlUzXGq6%2BgZLFkUSQU4Do1W4bVy12rHVnoe%2Bn8JfmW%2FB%2B3034LHZXR0bH6ojqkga6ztHZtZVMqB5cb82lRGpuMZl7w%2Bcy%2FwnQVU9heUpxnHLfzAENa1Emt1qnsAYt9alsT9AL4Ba1PfcxfB9Oiw%2F9RO9kesE03MfHBLB2BW%2BTpKH1dZQmeXEzezxX5EXvmUGD%2BgrnKcAYZptxsevj1VbeMi45daviSqEZXOFE1u%2F%2BqeDI1MFXzhzh702CCQ84i8DX2nuUV3tpncjyPnxj4yucDvoRE7%2Fk3JDaHC%2BpvtykSKa%2F%2BBlyZ6xXe4OYS1zGysfdpOXbph1Q1bNTyZFfpJb4cDq2DU3NXp2wjI3j6qzLg4aLuVlAzq8d1scoypPkrh6i8v1fZBro3H82%2Bd62DZP5qrXd%2BWWojOFxE5vQO384%2FMaEn9pU2rLrzSHvAJj8ehIJkLRQ2RrOMLnq%2BuORUv34HDV8sZuYTo9LIRpGg9SK8O4se7JBSaVSXp81XKnIFZdo%2Fb9l7NtcfGlj85dSKElQBtSe%2FeMKutTcqZWlH%2FboHdky16cwi6qDzwY6mAFmzKJQZ1Z5RZRRtEQs9oKbM4AC3ws1g%2Fm7DYaYAbTp8jTCLWx6mqIlS6FFarewEwxqkp66CDYgvHkI2n7WoOZWIEPBXX%2BjCXH2swkGPX%2FhDQNxjPRiz3tiPyWBw14vXZIxRjiJotX4VnB%2BJQZlAEGZJ%2FIpjCyp3iL9gcUHitc%2Frl9cI%2BMRg%2Bd0q%2BpX%2FzSELZ6kk5103d3dIw%3D%3D&Expires=1776345822) - page-1 Cold Regions Science and Technology 109 2015 3342 Contents lists available at ScienceDirect C...
+1. [2015-_-1-s2.0-S0165232X14001694-main.pdf](<publications/2015 _ 1-s2.0-S0165232X14001694-main.pdf>) - page-1 Cold Regions Science and Technology 109 2015 3342 Contents lists available at ScienceDirect C...
 
-2. [2011-_-GeoSpatial-World-Forum.pdf](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/767611/16df9c92-bf5b-48e3-94bc-f8f1788e64d7/2011-_-GeoSpatial-World-Forum.pdf?AWSAccessKeyId=ASIA2F3EMEYEWDMRA5RF&Signature=4OtvoW1L4Y0iPI0F5ymXF1zzTkg%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEPX%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJHMEUCIQDsGXFHhKQmcMF6hRy1A%2F5MRheKxJOzszATnW5x1E48lgIgUZk1prhllS0hd1Q%2BcY%2BQEN57Vv2FL95Pyzxk9Cw%2B3Q8q%2FAQIvv%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDP9IXvtuaJ7%2BqpYNYyrQBCqa6u1mZPgckivxHFCkkuglhsbOM%2Fcp3OF%2BJBzbuR6js7dbtXhtzALQB8w%2BDnAWHkDtskugwKsDSDqh4vIqxac2lSlPqr1PWcHBBCON5Rz%2BsxDaaq7I5iPhEbWdh%2FsT%2BI6cNFhW2il2i1%2B0EsZ7J4OWOh5oamb%2B7krGRQvbjDQErwdANf0Edvum6SoYVe13IVzfBT6UU%2B7ZzoEu7fvqktlOrGolnz8Vx%2B3spHrtlUzXGq6%2BgZLFkUSQU4Do1W4bVy12rHVnoe%2Bn8JfmW%2FB%2B3034LHZXR0bH6ojqkga6ztHZtZVMqB5cb82lRGpuMZl7w%2Bcy%2FwnQVU9heUpxnHLfzAENa1Emt1qnsAYt9alsT9AL4Ba1PfcxfB9Oiw%2F9RO9kesE03MfHBLB2BW%2BTpKH1dZQmeXEzezxX5EXvmUGD%2BgrnKcAYZptxsevj1VbeMi45daviSqEZXOFE1u%2F%2BqeDI1MFXzhzh702CCQ84i8DX2nuUV3tpncjyPnxj4yucDvoRE7%2Fk3JDaHC%2BpvtykSKa%2F%2BBlyZ6xXe4OYS1zGysfdpOXbph1Q1bNTyZFfpJb4cDq2DU3NXp2wjI3j6qzLg4aLuVlAzq8d1scoypPkrh6i8v1fZBro3H82%2Bd62DZP5qrXd%2BWWojOFxE5vQO384%2FMaEn9pU2rLrzSHvAJj8ehIJkLRQ2RrOMLnq%2BuORUv34HDV8sZuYTo9LIRpGg9SK8O4se7JBSaVSXp81XKnIFZdo%2Fb9l7NtcfGlj85dSKElQBtSe%2FeMKutTcqZWlH%2FboHdky16cwi6qDzwY6mAFmzKJQZ1Z5RZRRtEQs9oKbM4AC3ws1g%2Fm7DYaYAbTp8jTCLWx6mqIlS6FFarewEwxqkp66CDYgvHkI2n7WoOZWIEPBXX%2BjCXH2swkGPX%2FhDQNxjPRiz3tiPyWBw14vXZIxRjiJotX4VnB%2BJQZlAEGZJ%2FIpjCyp3iL9gcUHitc%2Frl9cI%2BMRg%2Bd0q%2BpX%2FzSELZ6kk5103d3dIw%3D%3D&Expires=1776345822) - page-1 ResearchGate See discussions, stats, and author profiles for this publication at httpswww.res...
+2. [2011-_-GeoSpatial-World-Forum.pdf](<publications/2011 _ GeoSpatial World Forum.pdf>) - page-1 ResearchGate See discussions, stats, and author profiles for this publication at httpswww.res...
 
-3. [2025-_-10.1007_s10666-025-10061-x.pdf](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/767611/a37e2999-060c-4585-b9d1-701e7845c81c/2025-_-10.1007_s10666-025-10061-x.pdf?AWSAccessKeyId=ASIA2F3EMEYEWDMRA5RF&Signature=SKbIjspYsDNZBfRPHzQ%2BhlTXpiM%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEPX%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJHMEUCIQDsGXFHhKQmcMF6hRy1A%2F5MRheKxJOzszATnW5x1E48lgIgUZk1prhllS0hd1Q%2BcY%2BQEN57Vv2FL95Pyzxk9Cw%2B3Q8q%2FAQIvv%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDP9IXvtuaJ7%2BqpYNYyrQBCqa6u1mZPgckivxHFCkkuglhsbOM%2Fcp3OF%2BJBzbuR6js7dbtXhtzALQB8w%2BDnAWHkDtskugwKsDSDqh4vIqxac2lSlPqr1PWcHBBCON5Rz%2BsxDaaq7I5iPhEbWdh%2FsT%2BI6cNFhW2il2i1%2B0EsZ7J4OWOh5oamb%2B7krGRQvbjDQErwdANf0Edvum6SoYVe13IVzfBT6UU%2B7ZzoEu7fvqktlOrGolnz8Vx%2B3spHrtlUzXGq6%2BgZLFkUSQU4Do1W4bVy12rHVnoe%2Bn8JfmW%2FB%2B3034LHZXR0bH6ojqkga6ztHZtZVMqB5cb82lRGpuMZl7w%2Bcy%2FwnQVU9heUpxnHLfzAENa1Emt1qnsAYt9alsT9AL4Ba1PfcxfB9Oiw%2F9RO9kesE03MfHBLB2BW%2BTpKH1dZQmeXEzezxX5EXvmUGD%2BgrnKcAYZptxsevj1VbeMi45daviSqEZXOFE1u%2F%2BqeDI1MFXzhzh702CCQ84i8DX2nuUV3tpncjyPnxj4yucDvoRE7%2Fk3JDaHC%2BpvtykSKa%2F%2BBlyZ6xXe4OYS1zGysfdpOXbph1Q1bNTyZFfpJb4cDq2DU3NXp2wjI3j6qzLg4aLuVlAzq8d1scoypPkrh6i8v1fZBro3H82%2Bd62DZP5qrXd%2BWWojOFxE5vQO384%2FMaEn9pU2rLrzSHvAJj8ehIJkLRQ2RrOMLnq%2BuORUv34HDV8sZuYTo9LIRpGg9SK8O4se7JBSaVSXp81XKnIFZdo%2Fb9l7NtcfGlj85dSKElQBtSe%2FeMKutTcqZWlH%2FboHdky16cwi6qDzwY6mAFmzKJQZ1Z5RZRRtEQs9oKbM4AC3ws1g%2Fm7DYaYAbTp8jTCLWx6mqIlS6FFarewEwxqkp66CDYgvHkI2n7WoOZWIEPBXX%2BjCXH2swkGPX%2FhDQNxjPRiz3tiPyWBw14vXZIxRjiJotX4VnB%2BJQZlAEGZJ%2FIpjCyp3iL9gcUHitc%2Frl9cI%2BMRg%2Bd0q%2BpX%2FzSELZ6kk5103d3dIw%3D%3D&Expires=1776345822) - page-1 Environmental Modeling Assessment httpsdoi.org10.1007s10666-025-10061-x RESEARCH Selection of...
+3. [2025-_-10.1007_s10666-025-10061-x.pdf](<publications/2025 _ 10.1007_s10666-025-10061-x.pdf>) - page-1 Environmental Modeling Assessment httpsdoi.org10.1007s10666-025-10061-x RESEARCH Selection of...
 
-4. [2025-_-manish-kala-_-crst.pdf](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/767611/a649c029-38fb-4134-8dbc-9fd69d076378/2025-_-manish-kala-_-crst.pdf?AWSAccessKeyId=ASIA2F3EMEYEWDMRA5RF&Signature=FueFLzoid2Mk32uHHxluAAC4%2BZw%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEPX%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJHMEUCIQDsGXFHhKQmcMF6hRy1A%2F5MRheKxJOzszATnW5x1E48lgIgUZk1prhllS0hd1Q%2BcY%2BQEN57Vv2FL95Pyzxk9Cw%2B3Q8q%2FAQIvv%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDP9IXvtuaJ7%2BqpYNYyrQBCqa6u1mZPgckivxHFCkkuglhsbOM%2Fcp3OF%2BJBzbuR6js7dbtXhtzALQB8w%2BDnAWHkDtskugwKsDSDqh4vIqxac2lSlPqr1PWcHBBCON5Rz%2BsxDaaq7I5iPhEbWdh%2FsT%2BI6cNFhW2il2i1%2B0EsZ7J4OWOh5oamb%2B7krGRQvbjDQErwdANf0Edvum6SoYVe13IVzfBT6UU%2B7ZzoEu7fvqktlOrGolnz8Vx%2B3spHrtlUzXGq6%2BgZLFkUSQU4Do1W4bVy12rHVnoe%2Bn8JfmW%2FB%2B3034LHZXR0bH6ojqkga6ztHZtZVMqB5cb82lRGpuMZl7w%2Bcy%2FwnQVU9heUpxnHLfzAENa1Emt1qnsAYt9alsT9AL4Ba1PfcxfB9Oiw%2F9RO9kesE03MfHBLB2BW%2BTpKH1dZQmeXEzezxX5EXvmUGD%2BgrnKcAYZptxsevj1VbeMi45daviSqEZXOFE1u%2F%2BqeDI1MFXzhzh702CCQ84i8DX2nuUV3tpncjyPnxj4yucDvoRE7%2Fk3JDaHC%2BpvtykSKa%2F%2BBlyZ6xXe4OYS1zGysfdpOXbph1Q1bNTyZFfpJb4cDq2DU3NXp2wjI3j6qzLg4aLuVlAzq8d1scoypPkrh6i8v1fZBro3H82%2Bd62DZP5qrXd%2BWWojOFxE5vQO384%2FMaEn9pU2rLrzSHvAJj8ehIJkLRQ2RrOMLnq%2BuORUv34HDV8sZuYTo9LIRpGg9SK8O4se7JBSaVSXp81XKnIFZdo%2Fb9l7NtcfGlj85dSKElQBtSe%2FeMKutTcqZWlH%2FboHdky16cwi6qDzwY6mAFmzKJQZ1Z5RZRRtEQs9oKbM4AC3ws1g%2Fm7DYaYAbTp8jTCLWx6mqIlS6FFarewEwxqkp66CDYgvHkI2n7WoOZWIEPBXX%2BjCXH2swkGPX%2FhDQNxjPRiz3tiPyWBw14vXZIxRjiJotX4VnB%2BJQZlAEGZJ%2FIpjCyp3iL9gcUHitc%2Frl9cI%2BMRg%2Bd0q%2BpX%2FzSELZ6kk5103d3dIw%3D%3D&Expires=1776345822) - page-1
+4. [2025-_-manish-kala-_-crst.pdf](<publications/2025 _ manish kala _ crst.pdf>) - page-1
 
-5. [2020-_-10.1007_s11069-020-04032-6-_-HIM-STRAT.pdf](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/767611/d040a39f-e1f4-4e55-ad80-d85d22ccbc8e/2020-_-10.1007_s11069-020-04032-6-_-HIM-STRAT.pdf?AWSAccessKeyId=ASIA2F3EMEYEWDMRA5RF&Signature=KvqMWz1bwIb3f05yeMu3ZAqM1X4%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEPX%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJHMEUCIQDsGXFHhKQmcMF6hRy1A%2F5MRheKxJOzszATnW5x1E48lgIgUZk1prhllS0hd1Q%2BcY%2BQEN57Vv2FL95Pyzxk9Cw%2B3Q8q%2FAQIvv%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDP9IXvtuaJ7%2BqpYNYyrQBCqa6u1mZPgckivxHFCkkuglhsbOM%2Fcp3OF%2BJBzbuR6js7dbtXhtzALQB8w%2BDnAWHkDtskugwKsDSDqh4vIqxac2lSlPqr1PWcHBBCON5Rz%2BsxDaaq7I5iPhEbWdh%2FsT%2BI6cNFhW2il2i1%2B0EsZ7J4OWOh5oamb%2B7krGRQvbjDQErwdANf0Edvum6SoYVe13IVzfBT6UU%2B7ZzoEu7fvqktlOrGolnz8Vx%2B3spHrtlUzXGq6%2BgZLFkUSQU4Do1W4bVy12rHVnoe%2Bn8JfmW%2FB%2B3034LHZXR0bH6ojqkga6ztHZtZVMqB5cb82lRGpuMZl7w%2Bcy%2FwnQVU9heUpxnHLfzAENa1Emt1qnsAYt9alsT9AL4Ba1PfcxfB9Oiw%2F9RO9kesE03MfHBLB2BW%2BTpKH1dZQmeXEzezxX5EXvmUGD%2BgrnKcAYZptxsevj1VbeMi45daviSqEZXOFE1u%2F%2BqeDI1MFXzhzh702CCQ84i8DX2nuUV3tpncjyPnxj4yucDvoRE7%2Fk3JDaHC%2BpvtykSKa%2F%2BBlyZ6xXe4OYS1zGysfdpOXbph1Q1bNTyZFfpJb4cDq2DU3NXp2wjI3j6qzLg4aLuVlAzq8d1scoypPkrh6i8v1fZBro3H82%2Bd62DZP5qrXd%2BWWojOFxE5vQO384%2FMaEn9pU2rLrzSHvAJj8ehIJkLRQ2RrOMLnq%2BuORUv34HDV8sZuYTo9LIRpGg9SK8O4se7JBSaVSXp81XKnIFZdo%2Fb9l7NtcfGlj85dSKElQBtSe%2FeMKutTcqZWlH%2FboHdky16cwi6qDzwY6mAFmzKJQZ1Z5RZRRtEQs9oKbM4AC3ws1g%2Fm7DYaYAbTp8jTCLWx6mqIlS6FFarewEwxqkp66CDYgvHkI2n7WoOZWIEPBXX%2BjCXH2swkGPX%2FhDQNxjPRiz3tiPyWBw14vXZIxRjiJotX4VnB%2BJQZlAEGZJ%2FIpjCyp3iL9gcUHitc%2Frl9cI%2BMRg%2Bd0q%2BpX%2FzSELZ6kk5103d3dIw%3D%3D&Expires=1776345822) - page-1 HIM-STRAT a neural network-based model for snow cover simulation and avalanche hazard predict...
+5. [2020-_-10.1007_s11069-020-04032-6-_-HIM-STRAT.pdf](<publications/2020 _ 10.1007_s11069-020-04032-6 _ HIM-STRAT.pdf>) - page-1 HIM-STRAT a neural network-based model for snow cover simulation and avalanche hazard predict...
 
-6. [2008-_-12th-IACMAG__F08.pdf](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/767611/18b631d5-b03a-4b1d-bfb0-5c24fbfa9ec4/2008-_-12th-IACMAG__F08.pdf?AWSAccessKeyId=ASIA2F3EMEYEWDMRA5RF&Signature=EZRu9XJvuN1WlwbUYUCjXEIjnhI%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEPX%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJHMEUCIQDsGXFHhKQmcMF6hRy1A%2F5MRheKxJOzszATnW5x1E48lgIgUZk1prhllS0hd1Q%2BcY%2BQEN57Vv2FL95Pyzxk9Cw%2B3Q8q%2FAQIvv%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDP9IXvtuaJ7%2BqpYNYyrQBCqa6u1mZPgckivxHFCkkuglhsbOM%2Fcp3OF%2BJBzbuR6js7dbtXhtzALQB8w%2BDnAWHkDtskugwKsDSDqh4vIqxac2lSlPqr1PWcHBBCON5Rz%2BsxDaaq7I5iPhEbWdh%2FsT%2BI6cNFhW2il2i1%2B0EsZ7J4OWOh5oamb%2B7krGRQvbjDQErwdANf0Edvum6SoYVe13IVzfBT6UU%2B7ZzoEu7fvqktlOrGolnz8Vx%2B3spHrtlUzXGq6%2BgZLFkUSQU4Do1W4bVy12rHVnoe%2Bn8JfmW%2FB%2B3034LHZXR0bH6ojqkga6ztHZtZVMqB5cb82lRGpuMZl7w%2Bcy%2FwnQVU9heUpxnHLfzAENa1Emt1qnsAYt9alsT9AL4Ba1PfcxfB9Oiw%2F9RO9kesE03MfHBLB2BW%2BTpKH1dZQmeXEzezxX5EXvmUGD%2BgrnKcAYZptxsevj1VbeMi45daviSqEZXOFE1u%2F%2BqeDI1MFXzhzh702CCQ84i8DX2nuUV3tpncjyPnxj4yucDvoRE7%2Fk3JDaHC%2BpvtykSKa%2F%2BBlyZ6xXe4OYS1zGysfdpOXbph1Q1bNTyZFfpJb4cDq2DU3NXp2wjI3j6qzLg4aLuVlAzq8d1scoypPkrh6i8v1fZBro3H82%2Bd62DZP5qrXd%2BWWojOFxE5vQO384%2FMaEn9pU2rLrzSHvAJj8ehIJkLRQ2RrOMLnq%2BuORUv34HDV8sZuYTo9LIRpGg9SK8O4se7JBSaVSXp81XKnIFZdo%2Fb9l7NtcfGlj85dSKElQBtSe%2FeMKutTcqZWlH%2FboHdky16cwi6qDzwY6mAFmzKJQZ1Z5RZRRtEQs9oKbM4AC3ws1g%2Fm7DYaYAbTp8jTCLWx6mqIlS6FFarewEwxqkp66CDYgvHkI2n7WoOZWIEPBXX%2BjCXH2swkGPX%2FhDQNxjPRiz3tiPyWBw14vXZIxRjiJotX4VnB%2BJQZlAEGZJ%2FIpjCyp3iL9gcUHitc%2Frl9cI%2BMRg%2Bd0q%2BpX%2FzSELZ6kk5103d3dIw%3D%3D&Expires=1776345822)
+6. [2008-_-12th-IACMAG__F08.pdf](<publications/2008 _ 12th IACMAG__F08.pdf>)
 
-7. [2017-_-1-s2.0-S0743731517300096-main.pdf](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/767611/45ef488a-1148-48f3-8a82-210e4d0cbcb8/2017-_-1-s2.0-S0743731517300096-main.pdf?AWSAccessKeyId=ASIA2F3EMEYEWDMRA5RF&Signature=m3%2B7RM1qpyxmFRGve6EMJwYf5A0%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEPX%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJHMEUCIQDsGXFHhKQmcMF6hRy1A%2F5MRheKxJOzszATnW5x1E48lgIgUZk1prhllS0hd1Q%2BcY%2BQEN57Vv2FL95Pyzxk9Cw%2B3Q8q%2FAQIvv%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDP9IXvtuaJ7%2BqpYNYyrQBCqa6u1mZPgckivxHFCkkuglhsbOM%2Fcp3OF%2BJBzbuR6js7dbtXhtzALQB8w%2BDnAWHkDtskugwKsDSDqh4vIqxac2lSlPqr1PWcHBBCON5Rz%2BsxDaaq7I5iPhEbWdh%2FsT%2BI6cNFhW2il2i1%2B0EsZ7J4OWOh5oamb%2B7krGRQvbjDQErwdANf0Edvum6SoYVe13IVzfBT6UU%2B7ZzoEu7fvqktlOrGolnz8Vx%2B3spHrtlUzXGq6%2BgZLFkUSQU4Do1W4bVy12rHVnoe%2Bn8JfmW%2FB%2B3034LHZXR0bH6ojqkga6ztHZtZVMqB5cb82lRGpuMZl7w%2Bcy%2FwnQVU9heUpxnHLfzAENa1Emt1qnsAYt9alsT9AL4Ba1PfcxfB9Oiw%2F9RO9kesE03MfHBLB2BW%2BTpKH1dZQmeXEzezxX5EXvmUGD%2BgrnKcAYZptxsevj1VbeMi45daviSqEZXOFE1u%2F%2BqeDI1MFXzhzh702CCQ84i8DX2nuUV3tpncjyPnxj4yucDvoRE7%2Fk3JDaHC%2BpvtykSKa%2F%2BBlyZ6xXe4OYS1zGysfdpOXbph1Q1bNTyZFfpJb4cDq2DU3NXp2wjI3j6qzLg4aLuVlAzq8d1scoypPkrh6i8v1fZBro3H82%2Bd62DZP5qrXd%2BWWojOFxE5vQO384%2FMaEn9pU2rLrzSHvAJj8ehIJkLRQ2RrOMLnq%2BuORUv34HDV8sZuYTo9LIRpGg9SK8O4se7JBSaVSXp81XKnIFZdo%2Fb9l7NtcfGlj85dSKElQBtSe%2FeMKutTcqZWlH%2FboHdky16cwi6qDzwY6mAFmzKJQZ1Z5RZRRtEQs9oKbM4AC3ws1g%2Fm7DYaYAbTp8jTCLWx6mqIlS6FFarewEwxqkp66CDYgvHkI2n7WoOZWIEPBXX%2BjCXH2swkGPX%2FhDQNxjPRiz3tiPyWBw14vXZIxRjiJotX4VnB%2BJQZlAEGZJ%2FIpjCyp3iL9gcUHitc%2Frl9cI%2BMRg%2Bd0q%2BpX%2FzSELZ6kk5103d3dIw%3D%3D&Expires=1776345822)
+7. [2017-_-1-s2.0-S0743731517300096-main.pdf](<publications/2017 _ 1-s2.0-S0743731517300096-main.pdf>)
 
 8. [Near-Real Time Automatic Snow Avalanche Activity Monitoring System Using Sentinel-1 SAR Data in Norway](https://www.mdpi.com/2072-4292/11/23/2863/pdf?version=1575351134) - Knowledge of the spatio-temporal occurrence of avalanche activity is critical for avalanche forecast...
 

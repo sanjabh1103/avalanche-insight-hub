@@ -1,8 +1,10 @@
 # Avalanche Demo Research Appendix
 
-Updated: May 5, 2026
+Updated: May 8, 2026
 
 This appendix is intentionally more adversarial than the customer-ready brief. Its job is to pressure-test claims, compare the repo to the strongest prior art, and keep novelty language honest.
+
+For deck generation, use this as `Artifact/doc proof only` unless a specific row points to hosted route or admin proof. It is designed to support cautious wording, not to upgrade candidate paths.
 
 ## Adversarial Repo-Vs-Claim Audit
 
@@ -16,7 +18,7 @@ This appendix is intentionally more adversarial than the customer-ready brief. I
 | Autonomy level | “No or minimal human-observed data required” | Unsupported as a present-state claim. The literature and repo both still lean on limited but important observed inputs. | `research-only precedent` | “Designed to reduce manual dependence, not eliminate the need for truth and validation.” |
 | Bulletin equivalence | “EAWS bulletin” | Incorrect. The correct wording is `EAWS-style experimental`. | `current live MVP` | “An EAWS-style experimental bulletin layer.” |
 | Authority equivalence | “Operational warning service” | Too strong for the current product. There is no proof of official-authority deployment or dissemination standards. | `future path` | “A decision-support MVP with authority-facing future potential.” |
-| Admin proof | “Live admin dashboard proves operator maturity” | Overstated. The live proof on `/admin` is the sign-in gate and route shell; deeper proof is repo-side. | `current live MVP` plus `repo/admin verified` | “The public proof is the gated operator lane; deeper operator features are code-verified.” |
+| Admin proof | “Live admin dashboard proves scientific maturity” | Overstated. Hosted authenticated admin proof succeeded on May 8 and supports operator observability for the active same-day publication, but it does not prove scientific correctness. | `Hosted production` plus `Repo/admin verified` | “The signed-in operator lane exposes source health, provenance, model status, stability, publication state, and benchmark context as governance evidence.” |
 | Human replacement | “AI can replace expert avalanche forecasters” | Contradicted by recent benchmark literature. Model support is getting stronger, but expert workflows still matter. | `research-only precedent` | “Model support is approaching operational usefulness as a second opinion.” |
 
 ## Client Publication Findings
@@ -36,7 +38,7 @@ This appendix is intentionally more adversarial than the customer-ready brief. I
 | Benchmark body | What they proved | How our proposal compares today | Where we are weaker | Where we may differ if fully developed | Distinctness (1-5) |
 |---|---|---|---|---|---:|
 | Client Himalayan lineage (2008-2025) | ANN, calibration, feature selection, class imbalance, and snowpack-aware thinking are all already part of the client’s research tradition. | The repo aligns well as a product and systems layer around that lineage. | Current validation depth is shallower than the lineage’s strongest science claims. | Could become the productized, governed operational shell around the lineage’s science. | 4 |
-| EAWS Matrix and bulletin structure work | Danger-level assessment can be standardized through explicit stability, frequency, and size logic. | The product already uses `EAWS-style experimental` bulletin framing. | It is not an official warning service and does not yet prove authority-grade consistency. | Could become a stronger structured presentation layer for regional avalanche outputs. | 3 |
+| EAWS Matrix and bulletin structure work | Danger-level assessment can be standardized through explicit stability, frequency, and size logic. | The product already uses `EAWS-style experimental` bulletin framing. | It is not an authority warning service and does not yet prove authority-grade consistency. | Could become a stronger structured presentation layer for regional avalanche outputs. | 3 |
 | WMO impact-based warning guidance | Hazard communication should move from “what the hazard is” to “what the hazard will do”. | Expert overlays and runout warnings point in this direction. | No current proof of formal impact-based alert dissemination or authority workflows. | Could differentiate the product if consequence-aware outputs are hardened. | 4 |
 | Explainable ML danger models (Switzerland) | ML danger models can provide strong second opinions, with SHAP improving transparency. | The repo is philosophically aligned and more productized on the UX side. | Swiss systems have deeper operational validation and stronger forecast infrastructure. | A sparse-data Himalayan adaptation with stronger public UX could become a distinct contribution. | 3 |
 | Critical-layer snowpack validation work | Snowpack simulations are useful only when continuously validated against operationally relevant layers and weak points. | The repo currently offers only partial physics-aware signals and future validation intent. | We do not yet have a real-time critical-layer validation suite. | Co-development with scientists could make this a strong next-stage differentiator. | 3 |

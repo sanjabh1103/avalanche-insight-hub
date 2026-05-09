@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from backend.common.forecast_publication import publish_forecast_run
+from backend.common.forecast_publication import promote_forecast_run, publish_forecast_run
 
 
 class ForecastPublicationTests(unittest.TestCase):
@@ -79,6 +79,20 @@ class ForecastPublicationTests(unittest.TestCase):
         self.assertEqual(manifest_payload['forecastBulletin'], bulletin)
         patch_row_payload = patch_row_by_id_mock.call_args.args[2]
         self.assertEqual(patch_row_payload['forecast_bulletins'], bulletin)
+
+    @patch('backend.common.forecast_publication._record_event')
+    @patch('backend.common.forecast_publication.rest_rpc')
+    def test_promote_forecast_run_returns_promoted_row(self, rest_rpc_mock, _record_event_mock) -> None:
+        rest_rpc_mock.return_value = {
+            'id': 'run-1',
+            'published_at': '2026-05-08T02:00:00+00:00',
+            'active': True,
+        }
+
+        promoted = promote_forecast_run(forecast_run_id='run-1')
+
+        self.assertEqual(promoted['id'], 'run-1')
+        self.assertEqual(promoted['published_at'], '2026-05-08T02:00:00+00:00')
 
 
 if __name__ == '__main__':

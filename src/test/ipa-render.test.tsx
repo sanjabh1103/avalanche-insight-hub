@@ -140,6 +140,23 @@ describe('IPA hydration and render contract', () => {
     expect(screen.getByText('fusion: chebyshev_ipa_v2')).toBeTruthy();
   }, 15_000);
 
+  it('does not tell users to click map tiles before a forecast artifact is loaded', () => {
+    render(
+      <RiskDashboard
+        cell={null}
+        weatherSummary={null}
+        hasForecastData={false}
+        forecastAvailability="unavailable"
+        forecastNotice="No published forecast artifact is currently available for this region."
+      />,
+    );
+
+    expect(screen.getByText('Published forecast artifact is not loaded yet')).toBeTruthy();
+    expect(screen.getByText('No published forecast artifact is currently available for this region.')).toBeTruthy();
+    expect(screen.getByText('Batch proof unavailable')).toBeTruthy();
+    expect(screen.queryByText(/Click a grid tile/i)).toBeNull();
+  });
+
   it('hydrates unavailable terrain cells and renders the disabled state', () => {
     const row: ForecastGridRowRecord = {
       id: 'grid-2',

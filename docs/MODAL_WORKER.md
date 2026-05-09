@@ -291,7 +291,7 @@ Required response fields:
 
 ### `POST /infer-mtslstm`
 
-GPU-side MTS-LSTM inference entrypoint. It should run batch inference against the latest artifact and return the inference manifest summary plus whether the artifact is still shadowed.
+Modal-backed MTS-LSTM inference entrypoint. In the current worker code this path is CPU/memory-sized rather than GPU-backed, and it runs batch inference against the latest artifact before returning the inference manifest summary plus whether the artifact is still shadowed.
 
 ### `POST /evaluate-release`
 

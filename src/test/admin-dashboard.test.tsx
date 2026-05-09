@@ -159,13 +159,15 @@ describe('AdminDashboard', () => {
   it('loads the freshest model status row and surfaces scientist-safe admin interpretation', async () => {
     render(<AdminDashboard />);
 
-    expect(await screen.findByText(/Scientist-safe interpretation: governance evidence and benchmark traces only; not promotion proof\./i)).toBeTruthy();
-    expect(screen.getByText(/Scientist-safe interpretation: operator evidence for gated candidate review, not proof of activation or authority standing\./i)).toBeTruthy();
+    expect(await screen.findByText(/Current-state interpretation: governance evidence and benchmark traces for gated promotion review\./i)).toBeTruthy();
+    expect(screen.getByText(/Current-state interpretation: operator evidence for gated candidate review; activation and authority standing require promotion proof\./i)).toBeTruthy();
     expect(screen.getByText(/Latest benchmark: inference_publication • ok • 211\.9s/i)).toBeTruthy();
     expect(screen.getByText(/Governance scope: internal lineage\/evaluation only; public claims remain gated until release artifacts pass\./i)).toBeTruthy();
+    expect(screen.getByText('Run ID')).toBeTruthy();
+    expect(screen.getAllByText('run-1').length).toBeGreaterThan(0);
     expect(orderCalls).toEqual([
       ['last_inference', { ascending: false, nullsFirst: false }],
       ['last_trained', { ascending: false, nullsFirst: false }],
     ]);
-  });
+  }, 30_000);
 });

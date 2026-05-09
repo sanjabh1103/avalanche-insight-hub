@@ -1,54 +1,77 @@
-# Customer Communication And Expectation Matrix
+# Customer Communication And MVP Alignment
 
-Updated: May 5, 2026
+Updated: May 8, 2026
 
-This file converts the earlier proposal-and-response narrative into a compact expectation table. It is intentionally strict about separating:
+This document is the current customer-facing alignment source for the MVP deck set. It separates the current state of the platform from the future strategy so customer discussions can stay optimistic, precise, and actionable.
 
-- what the current MVP can truthfully demo now
-- what the repo clearly supports in admin or backend paths
-- what remains future co-development direction with the client scientist team
+## Current Customer Position
 
-Alignment scale:
+The current platform is ready for customer alignment and scientist validation planning. It demonstrates a hosted avalanche decision-support workspace, a governed operator lane, published-batch forecast delivery, experimental bulletin framing, uncertainty cues, masking semantics, share/report/export controls, and candidate-model governance surfaces.
 
-- `5` = strongly matched by current MVP/repo proof
-- `4` = strong fit with visible caveats
-- `3` = partial fit
-- `2` = weak fit or mostly directional
-- `1` = essentially unaddressed
+The strongest customer message is:
 
-## Top 15 Customer Expectations
+> Avalanche Insight Hub is a current-state decision-support MVP with a clear future strategy for scientific validation, same-day publication hardening, governed autonomous evidence, and candidate model promotion.
 
-| Rank | Expectation | Customer signal | Current MVP proposition | Alignment (1-5) | Demo framing | Risk if overstated |
-|---|---|---|---|---:|---|---|
-| 1 | Minimize dependence on human-observed data | “Assume there is no historical data or existing research… rethink an autonomous solution that requires no or minimal human-observed data.” | The repo combines public field reports, offline replay, and a `Groundsource-style` news ingest path to reduce exclusive dependence on manual observations. That direction is consistent with the client’s ANN/HIM-STRAT lineage, but the live MVP remains governed decision support. | 3 | “We reduce manual dependence with governed autonomous evidence loops.” | Claiming this replaces snowpack truth would overstate what the repo can actually verify. |
-| 2 | Update quickly as recent data flows in | The customer explicitly asked for a rapidly updating system. | The public app refreshes the latest published batch forecast, and the operator lane exposes jobs for ingestion, labeling, and evaluation. | 3 | “The app reloads the latest published forecast artifact and shows freshness.” | Calling this continuous real-time autonomous retraining would be inaccurate. |
-| 3 | Be scientifically robust and operationally implementable | The customer wants something that is both rigorous and usable, not a research toy. | The repo combines batch forecasts, bulletin framing, uncertainty signaling, and operator metrics, while the publication lineage shows the client has already explored ANN and snowpack-simulation approaches beyond the current MVP. | 3 | “This is a physics-aware decision-support MVP with clear operational hooks.” | Saying the science stack is fully closed would outrun current proof. |
-| 4 | Do not rely on old historical registries as the main moat | The customer pushed back hard on “improving the candle” with legacy data. | The repo emphasizes fresh forecast artifacts and autonomous evidence ingestion rather than only static registries. | 2 | “We augment history with fresh evidence and current forecast state.” | The repo still contains model-training and historical-governance logic; it is not history-free. |
-| 5 | Keep outputs transparent and inspectable | The customer repeatedly pushed for trustworthy, explainable outputs. | The app exposes SHAP-style reasoning, per-cell inspection, and operator provenance surfaces. | 4 | “You can inspect why a cell looks dangerous and what confidence cues accompany it.” | Explainability is not the same as correctness. |
-| 6 | Communicate uncertainty explicitly | Forecast users need to know when the system is guessing. | The public UI already surfaces reduced-confidence states, uncertainty counts, and SAR-coverage caveats. | 4 | “We show uncertainty as part of the forecast, not as hidden model metadata.” | Hiding these cues would damage trust; overselling them as full uncertainty quantification would also be misleading. |
-| 7 | Work in sparse-data mountain regions | The customer wants an approach that does not collapse outside heavily instrumented regions. | The repo uses region-wide batch products, Open-Meteo-driven inputs, and autonomous evidence augmentation. | 3 | “The design targets data-sparse regions better than a station-only workflow.” | That is still not equivalent to dense local instrumentation or perfect coverage. |
-| 8 | Use land- and space-based monitoring where helpful | The customer explicitly mentioned land- and space-based monitoring resources. | The repo includes SAR coverage handling, snow-cover refresh jobs, field reports, and news ingestion. | 3 | “We already combine multiple evidence channels and expose when some are thin.” | The SAR path remains constrained and should not be framed as universal operational coverage. |
-| 9 | Govern autonomous evidence before it influences trust | The customer wanted autonomy, but not naive autonomy. | The ingest path uses dedupe, `label_confidence`, `training_weight`, and governed field-report linkage. | 4 | “Autonomous evidence is weighted and filtered before it is treated as useful.” | Calling autonomous ingest “self-validating” would be false. |
-| 10 | Provide an operational public forecast format | The customer wants something forecasters and field users can actually read and use. | The app already exposes an `EAWS-style experimental` bulletin layer over the batch forecast grid. | 4 | “The public surface behaves like a forecast workspace, not a raw model console.” | It is still experimental and not an official avalanche warning service product. |
-| 11 | Show impact on roads, assets, and field operations | The audience includes safety and mobility stakeholders, not just data scientists. | Expert overlays and runout intersection warnings tie hazard output to roads and mapped assets. | 4 | “We can move from abstract risk to consequence-aware review.” | Coverage is only as good as the available runout and OSM data. |
-| 12 | Keep the automation maintainable and cloud-friendly | The customer rejected brittle, heavyweight operational complexity. | The repo uses precomputed artifacts, async job triggers, Supabase-backed surfaces, and admin controls. | 4 | “Heavy lifting happens off the critical UI path; the forecast workspace stays responsive.” | This is maintainable relative to synchronous heavy compute, not a claim of zero ops burden. |
-| 13 | Show objective model-quality gates before promotion | The customer asked for something better than subjective “latest AI” claims. | The repo tracks PSS/Brier-oriented gates, candidate shadow status, benchmarks, and evaluation jobs. | 4 | “Candidate models are supposed to earn promotion rather than being marketed into it.” | It would be misleading to imply the shadow candidate is already the active public scorer. |
-| 14 | Keep current proof and future co-development visibly separate | The customer explicitly challenged hand-wavy innovation language and will likely ask what comes after MVP. | The refreshed docs now separate `Live demo`, `Repo/admin verified`, `Shadow-gated or config-gated`, and future co-development phases with scientist-team involvement. | 3 | “We can show the delivered forecast workspace and separately describe the co-development roadmap.” | Blurring these layers would weaken credibility fast. |
-| 15 | Do not borrow Google- or authority-level validation without avalanche proof | The plan explicitly required softening both Groundsource and official-warning comparisons. | The honest proposition is `Groundsource-style` inspiration for avalanche ingest and `EAWS-style experimental` bulletin framing, not avalanche-domain validation or official-authority status. | 2 | “We can cite Google, EAWS, and WMO as reference points, not as proof transfers.” | Claiming Google-equivalent or authority-equivalent validation would be an avoidable overclaim. |
+Position the platform as an experimental decision-support MVP with a concrete path toward stronger operational claims. The next few days should focus on closing presentation-readiness gaps and tightening live proof around forecast freshness, authenticated admin evidence, and export/report workflow screenshots.
 
-## Communication Rules For Demos
+## Customer-Ready Claim Matrix
 
-- Lead with the forecast workspace, bulletin framing, uncertainty cues, share/export, reporting, and expert overlays.
-- Describe the autonomous ingest path as `Groundsource-style` and governed, not as a solved avalanche truth engine.
-- When the autonomy question comes up, cite the 2008-2025 ANN/HIM-STRAT lineage as research continuity, then immediately separate it from the current batch-first MVP.
-- Describe the MTS-LSTM path as a candidate shadow path unless promotion gates are actually passed and activated.
-- Use `EAWS-style experimental` exactly as written in the app; do not say the product is an official EAWS bulletin.
-- Keep “current proof”, “repo/admin capability”, and “future co-development path” visibly separate in every customer-facing artifact.
+| Customer question | Current state | Future strategy | Readiness (1-5) |
+|---|---|---|---:|
+| Can users inspect avalanche risk on a hosted route? | Yes. The hosted public route shows a forecast workspace with map, bulletin, timeline, controls, and uncertainty cues. | Refresh live proof after publication hardening and use the latest screenshots in all decks. | 4 |
+| Is the published forecast current enough for operational language? | The current hosted proof must be checked against the generated publication proof before using current-forecast language. | Run the daily publication path, require `publication_proof.json`, and attach hosted proof for each demo cycle. | 3 |
+| Is the system transparent to operators? | Yes. The admin route exposes source health, publication runs, decision provenance, model status, stability, benchmark, and gate language. | Keep a repeatable credentialed smoke test and attach dated evidence before customer distribution. | 4 |
+| Is the active model claim bounded? | Yes. Public scoring is framed around the explainable baseline, with MTS-LSTM and SAR treated as candidate/gated paths. | Promote candidate paths only after benchmark, held-out, stability, and scientist review gates pass. | 4 |
+| Does the product reduce dependence on manual observations? | Partly. The repo supports governed field-report and autonomous-evidence paths, but these are decision-support inputs. | Expand governed ingestion, confidence weighting, scientist review, and evaluation feedback loops. | 3 |
+| Can the customer understand what happens next? | Yes, if decks use current-state/future-strategy language and avoid internal proof jargon. | Present the next phase as same-day artifact hardening, validation pilot, SAR qualification, and candidate-model promotion. | 4 |
 
-## How To Answer “What Happens After MVP?”
+## Product And Engineering Improvement Areas
 
-| Horizon | Honest answer | Why this is the safe framing |
-|---|---|---|
-| 0-3 months | Harden the current batch-first MVP, verify operator workflows, and align the demo narrative with proof-tier truth. | This is strongly grounded in the current repo and avoids speculative science claims. |
-| 3-9 months | Run a scientist-in-the-loop pilot around governed event ingest, evaluation cadence, and validation review. | This fits the customer’s co-development posture without pretending autonomy is already solved. |
-| 9-18 months | Expand into remote-sensing promotion, shadow-model evaluation, and stronger consequence workflows if the validation evidence is good enough. | This turns future science into earned roadmap steps rather than premature claims. |
+| Priority | Area | Why it matters | Current action | Future strategy |
+|---:|---|---|---|---|
+| 5 | Same-day forecast publication | Customer confidence depends on seeing a current batch rather than a dated fallback. | The publication path now has an explicit same-day proof contract; hosted proof still must be captured after deployment/run. | Run the scheduled batch job, verify `publication_proof.json`, and capture same-day hosted screenshots. |
+| 5 | Credentialed admin smoke | Operator claims need dated, repeatable proof. | Admin route and observability surfaces exist; proof must stay dated. | Add one-command hosted admin smoke capture before every customer send. |
+| 5 | Rendered deck QA | Customer-send decks should be free of source notes, overflow, and internal wording. | Final deck Markdown is being converted to direct customer language. | Re-render and run viewport checks at desktop, tablet, and mobile sizes. |
+| 4 | Export/report/share workflow proof | These controls are useful only when artifact availability is clear. | Export disabled state explains artifact dependency. | Capture export/share/report screenshots after same-day artifact repair. |
+| 4 | GPU and Modal.com access | GPU is valuable for SAR and MTS-LSTM candidates while still separate from public-scorer proof. | Modal.com remains off-path candidate infrastructure. | Stabilize worker credentials, held-out artifacts, and promotion reports before claiming acceleration value. |
+| 4 | SAR qualification | SAR can improve remote-sensing coverage but can be overclaimed quickly. | SAR is presented as candidate/gated. | Secure data access, labels, revisit-aware evaluation, dry-snow limitations, and region-specific qualification. |
+| 4 | Benchmark and release gates | Promotion requires objective quality gates. | PSS/Brier/stability/benchmark language exists in admin and docs. | Tie every candidate promotion to scientist-approved slices and field-validation outcomes. |
+| 3 | Weak-layer science | Weak layers are central to avalanche risk and remain open beyond UX. | Decks identify this as an open validation workstream. | Add taxonomy, field labels, snowpack proxy refinement, and failure-case review. |
+| 3 | Runout physics validation | Consequence overlays strengthen the product, but need terrain/field validation. | Runout is artifact-backed and bounded as exploratory where needed. | Validate Alpha-Beta/Whitebox outputs against known events and road/asset intersections. |
+| 3 | Offline batch-processing split | Keeping heavy math off the live route improves maintainability. | Architecture docs and tech deck describe the split. | Formalize GitHub Actions or lightweight VPS runs with freshness and failure alerts. |
+
+## Presentation Deck Improvement Areas
+
+| Priority | Deck area | Customer-facing fix | Acceptance check |
+|---:|---|---|---|
+| 5 | Deck tone | Use “current state” and “future strategy”; remove internal authoring notes and defensive wording. | Final deck files read as customer-facing material. |
+| 5 | Proof clarity | Use evidence levels without turning the deck into an internal QA report. | Each major claim maps to hosted production, repo/admin verified, or artifact/doc support. |
+| 5 | First three slides | Make the customer immediately understand why the MVP exists, what works now, and what comes next. | Slides 1-3 can stand alone as an executive summary. |
+| 4 | Screenshot use | Use the canonical May 8 hosted screenshots for same-day publication and admin proof. Use May 7 screenshots only when showing full-bulletin/share/report flows not present in the May 8 proof-mode artifact. | All screenshot paths resolve locally and point to `docs/MVP/presentation/rendered/assets/screenshots/`. |
+| 4 | Future strategy | Make next actions specific: same-day publication, validation pilot, SAR qualification, MTS-LSTM promotion, runout validation. | Every deck includes named future workstreams and promotion gates. |
+| 4 | Mobile/overflow readiness | Customer decks should render cleanly across standard viewports. | Re-render and inspect `1920x1080`, `1280x720`, `768x1024`, and `390x844`. |
+| 3 | Technical depth | Architecture deck should be readable by scientist, developer, and non-technical stakeholder. | Keep diagrams clear; avoid unexplained acronyms unless defined in glossary. |
+
+## Customer Language To Use
+
+| Instead of | Use |
+|---|---|
+| Fresh forecast claim without dated proof | Latest published batch, with freshness state visible |
+| Production MTS-LSTM | Candidate MTS-LSTM path with release gates |
+| Operational SAR | SAR qualification path |
+| Official warning service | Experimental decision-support workspace |
+| Real-time retraining | Batch-first publication with future automated refresh |
+| Generic trust language | Current-state boundaries and future promotion strategy |
+
+## Immediate Readiness Loop
+
+1. Run same-day publication proof and keep latest-published wording unless `publication_proof.json` passes.
+2. Run credentialed hosted admin smoke and record the dated evidence.
+3. Re-render Deck 1, Deck 2, and the Technical Architecture deck from the updated Markdown.
+4. Run deck viewport QA and fix overflow before customer send.
+5. Run targeted frontend tests and production build.
+6. Capture fresh public/admin screenshots after any hosted deployment.
+
+## Customer Close
+
+The customer ask is a structured validation partnership rather than unconditional production adoption. The most useful next decision is whether to run a scoped validation pilot that tests the current MVP against scientist-approved cases and defines the gates for SAR, MTS-LSTM, same-day publication, and operational expansion.

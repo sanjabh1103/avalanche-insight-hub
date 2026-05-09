@@ -80,6 +80,39 @@ jobs:
             --prediction-model-version "${{ github.event.inputs.prediction_model_version }}" \
             "${extra_args[@]}" | tee authoritative_release_gate.json
 
+      - name: Write readable release-gate summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          source = Path('authoritative_release_gate.json')
+          if source.exists():
+              payload = json.loads(source.read_text(encoding='utf-8'))
+          else:
+              payload = {'decision': 'missing', 'decision_reason': 'authoritative_release_gate.json was not written'}
+          summary = {
+              'schema_version': 'authoritative-release-gate-summary/v1',
+              'reference_set_key': '${{ github.event.inputs.reference_set_key }}',
+              'prediction_model_version': '${{ github.event.inputs.prediction_model_version }}',
+              'execute_promotion': '${{ github.event.inputs.execute_promotion }}' == 'true',
+              'decision': payload.get('decision'),
+              'decision_reason': payload.get('decision_reason') or payload.get('reason') or payload.get('error'),
+              'promotion_executed': isinstance(payload.get('promotion_result'), dict),
+              'customer_claim_boundary': (
+                  'candidate_path_only'
+                  if payload.get('decision') != 'promote'
+                  else 'promotion_artifact_available_recheck_before_public_claim'
+              ),
+          }
+          Path('authoritative_release_gate_summary.json').write_text(
+              json.dumps(summary, indent=2, sort_keys=True),
+              encoding='utf-8',
+          )
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          PY
+
       - name: Enforce execute-promotion gate
         if: ${{ github.event.inputs.execute_promotion == 'true' }}
         run: |
@@ -102,4 +135,6 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: authoritative-release-gate
-          path: authoritative_release_gate.json
+          path: |
+            authoritative_release_gate.json
+            authoritative_release_gate_summary.json

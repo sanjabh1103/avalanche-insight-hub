@@ -1,0 +1,1893 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Avalanche Insight Hub — Collaboration Roadmap</title>
+  <meta name="description" content="Scientist collaboration model, validation path, and roadmap.">
+  <style>
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap');
+
+html, body {
+  height: 100%;
+  overflow-x: hidden;
+}
+
+html {
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --title-size: clamp(1.8rem, 4.8vw, 4.4rem);
+  --h2-size: clamp(1.25rem, 2.8vw, 2.4rem);
+  --h3-size: clamp(0.95rem, 1.9vw, 1.4rem);
+  --body-size: clamp(0.8rem, 1.15vw, 1.05rem);
+  --small-size: clamp(0.64rem, 0.9vw, 0.82rem);
+  --slide-padding: clamp(1rem, 3vw, 3.2rem);
+  --content-gap: clamp(0.7rem, 1.5vw, 1.5rem);
+  --element-gap: clamp(0.45rem, 1vw, 0.95rem);
+  --radius-lg: 1.6rem;
+  --radius-md: 1rem;
+  --radius-sm: 0.7rem;
+  --shell-bg: #f4f1ea;
+  --text-main: #0e1318;
+  --text-soft: #48505a;
+  --line-soft: rgba(14, 19, 24, 0.12);
+  --line-strong: rgba(14, 19, 24, 0.22);
+  --surface: rgba(255, 255, 255, 0.84);
+  --surface-strong: rgba(255, 255, 255, 0.93);
+  --ink-grid: rgba(14, 19, 24, 0.05);
+  --shadow-soft: 0 24px 60px rgba(7, 10, 14, 0.08);
+  --proof-live: #9f1d1d;
+  --proof-internal: #134055;
+  --proof-future: #0b6a61;
+  --accent-main: #a11919;
+  --accent-soft: rgba(161, 25, 25, 0.13);
+  --accent-alt: #0b6a61;
+  --accent-alt-soft: rgba(11, 106, 97, 0.14);
+}
+
+body {
+  margin: 0;
+  font-family: 'Nunito', 'Avenir Next', system-ui, sans-serif;
+  color: var(--text-main);
+  background:
+    radial-gradient(circle at top left, rgba(161, 25, 25, 0.07), transparent 28%),
+    radial-gradient(circle at top right, rgba(11, 106, 97, 0.06), transparent 24%),
+    linear-gradient(180deg, #f7f4ee 0%, #f0ebe2 100%);
+}
+
+body.deck-collaboration {
+  background:
+    radial-gradient(circle at top left, rgba(11, 106, 97, 0.09), transparent 32%),
+    radial-gradient(circle at top right, rgba(82, 112, 143, 0.06), transparent 24%),
+    linear-gradient(180deg, #f6f3ed 0%, #eef2f0 100%);
+}
+
+body.deck-technical {
+  --proof-live: #1c7c74;
+  --proof-internal: #26373a;
+  --proof-future: #7e9f35;
+  --accent-main: #1c7c74;
+  --accent-soft: rgba(28, 124, 116, 0.14);
+  --accent-alt: #7e9f35;
+  --accent-alt-soft: rgba(126, 159, 53, 0.15);
+  background:
+    radial-gradient(circle at top left, rgba(28, 124, 116, 0.10), transparent 30%),
+    radial-gradient(circle at top right, rgba(126, 159, 53, 0.08), transparent 25%),
+    linear-gradient(180deg, #f4f8f7 0%, #e9f0ee 100%);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--ink-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--ink-grid) 1px, transparent 1px);
+  background-size: 44px 44px;
+  opacity: 0.45;
+}
+
+.slide {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  isolation: isolate;
+}
+
+.slide::after {
+  content: '';
+  position: absolute;
+  inset: clamp(0.7rem, 1.8vw, 1.2rem);
+  border: 1px solid rgba(14, 19, 24, 0.08);
+  border-radius: 1.8rem;
+  pointer-events: none;
+}
+
+.slide-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  overflow: hidden;
+  padding: var(--slide-padding);
+  padding-bottom: calc(var(--slide-padding) + 1.65rem);
+  gap: var(--content-gap);
+  position: relative;
+  z-index: 1;
+}
+
+.slide-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--content-gap);
+}
+
+.kicker-stack {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.kicker {
+  font-family: 'Archivo', 'Avenir Next Condensed', sans-serif;
+  font-size: var(--small-size);
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--accent-main);
+}
+
+.deck-collaboration .kicker {
+  color: var(--accent-alt);
+}
+
+.eyebrow {
+  font-size: var(--small-size);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.slide-title {
+  margin: 0;
+  font-family: 'Archivo', 'Avenir Next Condensed', sans-serif;
+  font-size: var(--title-size);
+  line-height: 0.94;
+  max-width: 11ch;
+}
+
+.slide-subtitle {
+  margin: 0;
+  max-width: min(66ch, 94%);
+  font-size: clamp(0.94rem, 1.4vw, 1.15rem);
+  line-height: 1.48;
+  color: var(--text-soft);
+}
+
+.proof-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  max-width: min(34rem, 48vw);
+}
+
+.proof-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0.78rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: var(--small-size);
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  background: var(--surface-strong);
+  box-shadow: 0 8px 24px rgba(15, 19, 24, 0.08);
+}
+
+.proof-chip::before {
+  content: '';
+  width: 0.56rem;
+  height: 0.56rem;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.proof-chip.live {
+  color: var(--proof-live);
+  border-color: rgba(159, 29, 29, 0.22);
+}
+
+.proof-chip.internal {
+  color: var(--proof-internal);
+  border-color: rgba(19, 64, 85, 0.22);
+}
+
+.proof-chip.future {
+  color: var(--proof-future);
+  border-color: rgba(11, 106, 97, 0.22);
+}
+
+.content-shell {
+  flex: 1;
+  display: grid;
+  gap: var(--content-gap);
+  min-height: 0;
+}
+
+.content-shell.split-2 {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
+.content-shell.split-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.stack {
+  display: grid;
+  gap: var(--element-gap);
+  min-height: 0;
+}
+
+.stack.loose {
+  gap: clamp(0.7rem, 1.3vw, 1.2rem);
+}
+
+.lead-panel,
+.card,
+.frame,
+.matrix,
+.metric-strip,
+.timeline,
+.diagram-shell {
+  border: 1px solid var(--line-soft);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+}
+
+.lead-panel,
+.matrix,
+.diagram-shell {
+  padding: clamp(0.9rem, 1.8vw, 1.2rem);
+}
+
+.lead-panel strong,
+.card strong,
+.matrix strong {
+  font-weight: 800;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: clamp(0.55rem, 1.1vw, 0.9rem);
+}
+
+.card {
+  padding: 0.95rem 1rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.card h3,
+.card h4,
+.section-label,
+.stat-number,
+.matrix-title,
+.phase-title {
+  font-family: 'Archivo', 'Avenir Next Condensed', sans-serif;
+}
+
+.card h3,
+.card h4 {
+  margin: 0;
+  font-size: var(--h3-size);
+  line-height: 1.06;
+}
+
+.card p,
+.card li,
+.lead-panel p,
+.matrix p,
+.matrix li {
+  margin: 0;
+  font-size: var(--body-size);
+  line-height: 1.42;
+  color: var(--text-soft);
+}
+
+.bullet-list,
+.compact-list {
+  margin: 0;
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 0.42rem;
+}
+
+.bullet-list li,
+.compact-list li {
+  font-size: var(--body-size);
+  line-height: 1.42;
+}
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 165px), 1fr));
+  gap: 0.7rem;
+}
+
+.stat {
+  padding: 0.85rem 0.95rem;
+  border-radius: 1rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(250, 247, 241, 0.84));
+  border: 1px solid var(--line-soft);
+  display: grid;
+  gap: 0.25rem;
+}
+
+.deck-collaboration .stat {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(241, 248, 246, 0.84));
+}
+
+.stat-number {
+  font-size: clamp(1.1rem, 2.4vw, 2.15rem);
+  line-height: 0.96;
+}
+
+.stat-label {
+  font-size: var(--small-size);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.frame {
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+
+.frame img {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  object-fit: cover;
+  display: block;
+}
+
+.frame--wide {
+  min-height: 41vh;
+}
+
+.frame--tall {
+  min-height: 53vh;
+}
+
+.frame--public img {
+  object-position: center top;
+}
+
+.frame--workspace img {
+  object-position: 72% 24%;
+}
+
+.frame--bulletin img {
+  object-position: 76% 18%;
+}
+
+.frame--workflow img {
+  object-position: 78% 18%;
+}
+
+.frame--admin img {
+  object-position: center top;
+}
+
+.frame-label {
+  position: absolute;
+  left: 1rem;
+  bottom: 1rem;
+  padding: 0.5rem 0.72rem;
+  border-radius: 999px;
+  font-size: var(--small-size);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(9, 11, 16, 0.74);
+  color: #f6f4ef;
+}
+
+.link-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.link-chip,
+.note-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.62rem 0.82rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: var(--surface-strong);
+  text-decoration: none;
+  color: inherit;
+  font-size: var(--small-size);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.link-chip:hover,
+.link-chip:focus-visible {
+  border-color: var(--line-strong);
+}
+
+.matrix {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.matrix-title {
+  font-size: var(--h3-size);
+  margin: 0;
+}
+
+.matrix-table {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.matrix-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 0.75rem;
+  padding: 0.72rem 0.78rem;
+  border-radius: 0.95rem;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.matrix-row strong {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.matrix-row p {
+  margin: 0;
+  font-size: var(--body-size);
+  line-height: 1.38;
+}
+
+.diagram-shell {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+  align-items: stretch;
+}
+
+.flow-node {
+  border-radius: 1rem;
+  border: 1px solid var(--line-soft);
+  padding: 0.72rem;
+  background: rgba(255, 255, 255, 0.75);
+  display: grid;
+  gap: 0.35rem;
+}
+
+.flow-node strong {
+  font-size: var(--small-size);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.flow-node p {
+  margin: 0;
+  font-size: var(--body-size);
+  color: var(--text-soft);
+  line-height: 1.38;
+}
+
+.flow-arrow {
+  display: grid;
+  place-items: center;
+  color: var(--accent-main);
+  font-family: 'Archivo', sans-serif;
+  font-size: clamp(1.1rem, 2vw, 1.6rem);
+}
+
+.deck-collaboration .flow-arrow {
+  color: var(--accent-alt);
+}
+
+.timeline {
+  padding: 0.9rem 1rem;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.timeline-step {
+  display: grid;
+  gap: 0.35rem;
+  position: relative;
+  padding-top: 0.75rem;
+}
+
+.timeline-step::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2.2rem;
+  height: 0.28rem;
+  border-radius: 999px;
+  background: var(--accent-main);
+}
+
+.deck-collaboration .timeline-step::before {
+  background: var(--accent-alt);
+}
+
+.timeline-step strong {
+  font-size: var(--small-size);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.timeline-step p {
+  margin: 0;
+  font-size: var(--body-size);
+  line-height: 1.35;
+  color: var(--text-soft);
+}
+
+.section-label {
+  font-size: var(--small-size);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.quote-band {
+  padding: 0.9rem 1rem;
+  border-radius: 1rem;
+  border-left: 0.4rem solid var(--accent-main);
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: var(--shadow-soft);
+}
+
+.deck-collaboration .quote-band {
+  border-left-color: var(--accent-alt);
+}
+
+.quote-band p,
+.quote-band small {
+  margin: 0;
+}
+
+.quote-band p {
+  font-size: clamp(0.95rem, 1.55vw, 1.15rem);
+  line-height: 1.45;
+}
+
+.quote-band small {
+  display: block;
+  margin-top: 0.45rem;
+  font-size: var(--small-size);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.footer {
+  position: absolute;
+  left: var(--slide-padding);
+  right: var(--slide-padding);
+  bottom: max(0.55rem, calc(var(--slide-padding) * 0.48));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: var(--small-size);
+  color: var(--text-soft);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.footer .slide-id {
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.progress-shell {
+  position: fixed;
+  right: clamp(0.8rem, 1.4vw, 1.4rem);
+  bottom: clamp(0.8rem, 1.4vw, 1.4rem);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(246, 242, 236, 0.86);
+  border: 1px solid rgba(14, 19, 24, 0.1);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-soft);
+}
+
+.progress-count {
+  font-family: 'Archivo', sans-serif;
+  font-size: var(--small-size);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.progress-bar {
+  width: min(24vw, 180px);
+  height: 0.36rem;
+  border-radius: 999px;
+  background: rgba(14, 19, 24, 0.12);
+  overflow: hidden;
+}
+
+.progress-bar span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent-main), rgba(241, 172, 95, 0.95));
+}
+
+.deck-collaboration .progress-bar span {
+  background: linear-gradient(90deg, var(--accent-alt), rgba(98, 151, 147, 0.95));
+}
+
+.keyboard-hint {
+  position: fixed;
+  left: clamp(0.8rem, 1.4vw, 1.4rem);
+  bottom: clamp(0.8rem, 1.4vw, 1.4rem);
+  z-index: 20;
+  padding: 0.52rem 0.72rem;
+  border-radius: 999px;
+  background: rgba(246, 242, 236, 0.84);
+  border: 1px solid rgba(14, 19, 24, 0.1);
+  font-size: var(--small-size);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.row-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.row-item {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 0.75rem;
+  padding: 0.72rem 0.82rem;
+  border-radius: 0.95rem;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--line-soft);
+}
+
+.row-item strong {
+  font-size: var(--small-size);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.row-item p {
+  margin: 0;
+  font-size: var(--body-size);
+  color: var(--text-soft);
+  line-height: 1.38;
+}
+
+.phase-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.phase-card {
+  padding: 0.9rem 0.95rem;
+  border-radius: 1rem;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.75);
+  display: grid;
+  gap: 0.42rem;
+}
+
+.phase-title {
+  margin: 0;
+  font-size: var(--h3-size);
+  line-height: 1.08;
+}
+
+.phase-meta {
+  font-size: var(--small-size);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.warning-band {
+  padding: 0.72rem 0.86rem;
+  border-radius: 1rem;
+  background: rgba(161, 25, 25, 0.08);
+  border: 1px solid rgba(161, 25, 25, 0.14);
+}
+
+.deck-collaboration .warning-band {
+  background: rgba(11, 106, 97, 0.08);
+  border-color: rgba(11, 106, 97, 0.14);
+}
+
+.warning-band p {
+  margin: 0;
+  font-size: var(--body-size);
+  line-height: 1.4;
+}
+
+.decision-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.decision-card {
+  padding: 0.95rem;
+  border-radius: 1rem;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.78);
+  display: grid;
+  gap: 0.45rem;
+}
+
+.decision-card h3 {
+  margin: 0;
+  font-size: var(--h3-size);
+  line-height: 1.04;
+}
+
+.decision-card p,
+.decision-card li {
+  margin: 0;
+  font-size: var(--body-size);
+  color: var(--text-soft);
+  line-height: 1.38;
+}
+
+.decision-card ul {
+  margin: 0;
+  padding-left: 1rem;
+  display: grid;
+  gap: 0.38rem;
+}
+
+.slide.revealed .reveal {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+
+.delay-1 { transition-delay: 0.06s; }
+.delay-2 { transition-delay: 0.12s; }
+.delay-3 { transition-delay: 0.18s; }
+.delay-4 { transition-delay: 0.24s; }
+
+a {
+  color: inherit;
+}
+
+@media (max-height: 760px) {
+  :root {
+    --slide-padding: clamp(0.8rem, 2.2vw, 2rem);
+    --title-size: clamp(1.45rem, 4.1vw, 3rem);
+    --h2-size: clamp(1.05rem, 2.3vw, 1.75rem);
+    --body-size: clamp(0.72rem, 1vw, 0.94rem);
+  }
+
+  .slide-subtitle {
+    display: none;
+  }
+
+  .quote-band,
+  .warning-band,
+  .lead-panel,
+  .matrix,
+  .card,
+  .phase-card,
+  .decision-card,
+  .stat,
+  .flow-node {
+    padding: 0.72rem 0.8rem;
+  }
+
+  .card p,
+  .lead-panel p,
+  .matrix p,
+  .matrix li,
+  .decision-card p,
+  .decision-card li,
+  .flow-node p,
+  .timeline-step p,
+  .row-item p,
+  .phase-card p,
+  .stat p {
+    line-height: 1.33;
+  }
+
+  .card-grid,
+  .phase-grid,
+  .decision-grid,
+  .timeline,
+  .flow,
+  .matrix-table,
+  .row-list {
+    gap: 0.48rem;
+  }
+
+  .bullet-list,
+  .compact-list {
+    gap: 0.28rem;
+  }
+
+  .frame--wide { min-height: 34vh; }
+  .frame--tall { min-height: 44vh; }
+}
+
+@media (max-height: 620px) {
+  :root {
+    --slide-padding: clamp(0.6rem, 2vw, 1.3rem);
+    --title-size: clamp(1.2rem, 3.6vw, 2rem);
+  }
+
+  .progress-shell,
+  .keyboard-hint {
+    display: none;
+  }
+}
+
+@media (max-height: 720px) {
+  .quote-band {
+    display: none;
+  }
+}
+
+@media (max-height: 680px) {
+  .slide-subtitle,
+  .eyebrow {
+    display: none;
+  }
+}
+
+@media (max-width: 980px) {
+  .content-shell.split-2,
+  .content-shell.split-3,
+  .phase-grid,
+  .decision-grid,
+  .flow,
+  .timeline {
+    grid-template-columns: 1fr;
+  }
+
+  .slide-top,
+  .footer {
+    gap: 0.8rem;
+  }
+
+  .proof-row {
+    justify-content: flex-start;
+    max-width: 100%;
+  }
+
+  .slide-title {
+    max-width: 100%;
+  }
+
+  .matrix-row,
+  .row-item {
+    grid-template-columns: 1fr;
+  }
+
+  .frame--wide { min-height: 30vh; }
+  .frame--tall { min-height: 38vh; }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --title-size: clamp(1.05rem, 6vw, 1.55rem);
+    --h2-size: clamp(0.82rem, 3.4vw, 1.1rem);
+    --h3-size: clamp(0.72rem, 2.9vw, 0.92rem);
+    --body-size: clamp(0.58rem, 2.25vw, 0.72rem);
+    --small-size: clamp(0.5rem, 1.9vw, 0.62rem);
+    --slide-padding: clamp(0.42rem, 2.8vw, 0.75rem);
+    --content-gap: clamp(0.28rem, 1.45vw, 0.45rem);
+    --element-gap: clamp(0.22rem, 1.1vw, 0.36rem);
+  }
+
+  .slide-subtitle {
+    display: none;
+  }
+
+  .slide-content {
+    padding-bottom: var(--slide-padding);
+  }
+
+  .footer,
+  .progress-shell,
+  .keyboard-hint,
+  .frame-label {
+    display: none;
+  }
+
+  .slide-title {
+    line-height: 0.98;
+  }
+
+  .slide-top {
+    align-items: flex-start;
+  }
+
+  .quote-band {
+    display: none;
+  }
+
+  .warning-band,
+  .lead-panel,
+  .matrix,
+  .card,
+  .phase-card,
+  .decision-card,
+  .stat,
+  .flow-node {
+    padding: 0.48rem;
+  }
+
+  .card p,
+  .card li,
+  .lead-panel p,
+  .matrix p,
+  .matrix li,
+  .bullet-list li,
+  .compact-list li,
+  .decision-card p,
+  .decision-card li,
+  .flow-node p,
+  .timeline-step p,
+  .row-item p,
+  .phase-card p,
+  .stat p {
+    line-height: 1.22;
+  }
+
+  .frame--wide { min-height: 18vh; }
+  .frame--tall { min-height: 22vh; }
+}
+
+@media (max-width: 640px) and (max-height: 760px) {
+  .quote-band,
+  .slide-subtitle,
+  .eyebrow {
+    display: none;
+  }
+
+  .frame--wide,
+  .frame--tall {
+    min-height: 16vh;
+  }
+}
+
+@media (max-width: 480px) {
+  .eyebrow {
+    display: none;
+  }
+
+  .proof-row {
+    gap: 0.3rem;
+  }
+
+  .proof-chip {
+    padding: 0.38rem 0.6rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.15s !important;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+@media print {
+  @page { size: 13.333in 7.5in; margin: 0; }
+
+  html, body {
+    width: 13.333in;
+    overflow: visible;
+    background: white !important;
+  }
+
+  body::before,
+  .progress-shell,
+  .keyboard-hint {
+    display: none !important;
+  }
+
+  .slide {
+    width: 13.333in;
+    height: 7.5in;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .footer {
+    position: absolute;
+  }
+}
+</style>
+</head>
+<body class="deck-collaboration">
+  <main>
+
+    <section class="slide" id="d2-1">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 2</div>
+            <div class="eyebrow">Collaboration arc</div>
+            <h1 class="slide-title">Why Scientist Co-Development Is Necessary Now</h1>
+            <p class="slide-subtitle">The platform is ready for a serious scientific discussion. It is not yet a finished validation story.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip internal">Technical evidence</span><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+      <div class="stack reveal delay-1">
+        <div class="lead-panel">
+          <div class="section-label">Transition after Deck 1</div>
+          <ul class="bullet-list">
+            <li>The current platform already includes a public route, administration observability, an explainable baseline, and governance surfaces.</li>
+            <li>The science gap is also real: weak layers, regional transfer, qualification, and promotion evidence are unfinished.</li>
+            <li>That gap is exactly where the scientist team becomes central rather than decorative.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="stack reveal delay-2">
+        <div class="stat-row">
+          <article class="stat">
+            <div class="stat-label">Ready now</div>
+            <div class="stat-number">Decision-support platform</div>
+            <p>Public-facing platform shell and operational evidence surfaces already exist.</p>
+          </article>
+          <article class="stat">
+            <div class="stat-label">Not ready now</div>
+            <div class="stat-number">Scientific closure</div>
+            <p>The next phase is about benchmark and validation ownership, not about declaring victory.</p>
+          </article>
+        </div>
+        <div class="quote-band">
+          <p>The strongest collaboration pitch is: “help us decide what should count as real evidence here.”</p>
+          <small>Scientist-first framing</small>
+        </div>
+      </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 1</span>
+          <span>Collaboration framing</span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-2">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 2</div>
+            <div class="eyebrow">Attraction layer</div>
+            <h1 class="slide-title">Why This Is Worth The Scientist Team’s Time</h1>
+            <p class="slide-subtitle">The program becomes attractive when scientists gain ownership, benchmark authority, and publishable pilot leverage instead of being asked to bless a black box.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip internal">Technical evidence</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+      <div class="card-grid reveal delay-1">
+        <article class="card">
+          <div class="section-label">Ownership</div>
+          <h3>Benchmark design authority</h3>
+          <p>The scientist team can define slices, acceptance thresholds, and the cases that matter operationally.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Control</div>
+          <h3>Release-gate veto power</h3>
+          <p>Promotion claims stay blocked until scientist-reviewed evidence says otherwise.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Relevance</div>
+          <h3>Field and weak-layer focus</h3>
+          <p>The hardest real avalanche questions become the center of the roadmap, not an appendix afterthought.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Output</div>
+          <h3>Publication and pilot value</h3>
+          <p>A co-owned validation pack can become the basis for publishable pilot evidence, not just interface polish.</p>
+        </article>
+      </div>
+      <div class="warning-band reveal delay-2">
+        <p><strong>What makes this scientifically interesting:</strong> the stack is inspectable, the claims are gated, and the next step is benchmark ownership rather than UI applause.</p>
+      </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 2</span>
+          <span>Collaboration value analysis</span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-3">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 2</div>
+            <div class="eyebrow">Relationship contract</div>
+            <h1 class="slide-title">Ground Rules: Claim Discipline, Evidence Discipline, Validation Authority</h1>
+            <p class="slide-subtitle">This collaboration only works if current platform behavior, technical evidence, and future research remain visibly separate throughout the program.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip internal">Technical evidence</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+      <div class="stack reveal delay-1">
+        <div class="matrix">
+          <h3 class="matrix-title">Three rules for the program</h3>
+          <div class="matrix-table">
+            <div class="matrix-row">
+              <div><strong>Rule 1</strong><p>Every major statement should map to one of three lanes: live platform, technical evidence, or research agenda.</p></div>
+              <div><strong>Rule 2</strong><p>Validation authority stays with scientists and operators, not with promotional language.</p></div>
+            </div>
+            <div class="matrix-row">
+              <div><strong>Rule 3</strong><p>Data-governance and publication expectations should be explicit before deeper pilot work begins.</p></div>
+              <div><strong>Consequence</strong><p>If a gate fails, the claim downgrades immediately instead of being explained away.</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="stack reveal delay-2">
+        <div class="lead-panel">
+          <div class="section-label">Why scientists should like this</div>
+          <ul class="bullet-list">
+            <li>The collaboration asks for challenge and review, not passive endorsement.</li>
+            <li>The product team is committing to explicit downgrade rules when evidence is weak.</li>
+            <li>The language discipline is part of the operating model, not a one-off deck exercise.</li>
+          </ul>
+        </div>
+      </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 3</span>
+          <span>Claim and evidence discipline</span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-4">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 2</div>
+            <div class="eyebrow">Scientist role</div>
+            <h1 class="slide-title">Scientist Role In The Next Phase</h1>
+            <p class="slide-subtitle">The scientist team should own real responsibilities: benchmark design, weak-layer taxonomy, event arbitration, and promotion review.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip internal">Technical evidence</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+      <div class="card-grid reveal delay-1">
+        <article class="card">
+          <div class="section-label">Benchmark ownership</div>
+          <h3>Decide what counts</h3>
+          <p>Choose regions, slices, weak-layer cases, and acceptable benchmark deltas.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Evidence arbitration</div>
+          <h3>Review difficult labels</h3>
+          <p>Resolve ambiguous event records and define what counts as meaningful corroboration.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Governance authority</div>
+          <h3>Shape promotion criteria</h3>
+          <p>Keep candidate-model promotion tied to scientist-reviewed gates rather than engineering enthusiasm.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Publication role</div>
+          <h3>Co-author methods if warranted</h3>
+          <p>Use the pilot to generate defensible evidence, not just slideware.</p>
+        </article>
+      </div>
+      <div class="quote-band reveal delay-2">
+        <p>This role is operationally meaningful: not advisory theater, but responsibility over what becomes credible enough to claim.</p>
+        <small>Scientist-in-the-loop model</small>
+      </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 4</span>
+          <span>Validation role definition</span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-5">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 2</div>
+            <div class="eyebrow">Immediate work surface</div>
+            <h1 class="slide-title">Benchmark Pack v0</h1>
+            <p class="slide-subtitle">The first reviewable package already exists. It is deliberately small and explicitly not field-validation closure.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip internal">Technical evidence</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+      <div class="stack reveal delay-1">
+        <div class="matrix">
+          <h3 class="matrix-title">What v0 already includes</h3>
+          <div class="matrix-table">
+            <div class="matrix-row">
+              <div><strong>Case inventory</strong><p>Public route evidence, administration observability, inference manifest, stability summary, evaluation contracts, and governance contracts.</p></div>
+              <div><strong>Region slices</strong><p><code>cascades_wa</code>, <code>colorado_rockies</code>, <code>french_alps</code>, <code>himalayas_nepal</code>, <code>japanese_alps</code>, <code>swiss_alps</code>.</p></div>
+            </div>
+            <div class="matrix-row">
+              <div><strong>Failure slices</strong><p>Reduced confidence, source support gaps, candidate-gate failure, stability drift, narrow evidence mix, evaluation sparsity.</p></div>
+              <div><strong>Critical-layer questions</strong><p>Explicit prompts for weak-layer review, slice choice, and minimally credible benchmark deltas.</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="stack reveal delay-2">
+        <div class="warning-band">
+          <p><strong>v0 boundary:</strong> this pack makes the discussion disciplined. It does not pretend the review is complete, fresh, or field-validated yet.</p>
+        </div>
+      </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 5</span>
+          <span>Scientist benchmark pack v0</span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-6">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 2</div>
+            <div class="eyebrow">Review loop</div>
+            <h1 class="slide-title">Validation Protocol v0</h1>
+            <p class="slide-subtitle">The minimum scientist-in-the-loop protocol is already structured: event labels, critical layers, benchmark acceptance, and promotion review.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip internal">Technical evidence</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+      <div class="timeline reveal delay-1">
+        <div class="timeline-step">
+          <strong>01</strong>
+          <p>Review label confidence, training weights, and field-report linkage.</p>
+        </div>
+        <div class="timeline-step">
+          <strong>02</strong>
+          <p>Define weak-layer and critical-layer review expectations.</p>
+        </div>
+        <div class="timeline-step">
+          <strong>03</strong>
+          <p>Accept or reject benchmark artifacts and runtime traces.</p>
+        </div>
+        <div class="timeline-step">
+          <strong>04</strong>
+          <p>Check candidate-model gates and downgrade language if a gate fails.</p>
+        </div>
+        <div class="timeline-step">
+          <strong>05</strong>
+          <p>Carry sign-off checkpoints back into deck, docs, and release phrasing.</p>
+        </div>
+      </div>
+      <div class="stack reveal delay-2">
+        <div class="lead-panel">
+          <div class="section-label">Why this matters now</div>
+          <ul class="bullet-list">
+            <li>The protocol gives the scientist team a real review surface from day one.</li>
+            <li>It turns “validation” into explicit checkpoints instead of vague reassurance.</li>
+            <li>It keeps blocked claims blocked until someone can point to the supporting artifact.</li>
+          </ul>
+        </div>
+      </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 6</span>
+          <span>Scientist validation protocol v0</span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-7">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 2</div>
+            <div class="eyebrow">Hardest science gap</div>
+            <h1 class="slide-title">Critical-Layer And Weak-Layer Program</h1>
+            <p class="slide-subtitle">This is the hardest scientific question in the whole conversation, and the deck should say so plainly.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+      <div class="card-grid reveal delay-1">
+        <article class="card">
+          <div class="section-label">Known limitation</div>
+          <h3>Proxy wording is not closure</h3>
+          <p>Snowpack proxies and problem framing help, but they do not prove critical-layer fidelity.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Scientist need</div>
+          <h3>Weak-layer benchmark slices</h3>
+          <p>The scientist team needs to define the cases that actually matter before promotion is even discussed.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Why now</div>
+          <h3>This is where trust is earned</h3>
+          <p>Senior avalanche scientists will ask this early; answering it openly improves credibility.</p>
+        </article>
+      </div>
+      <div class="quote-band reveal delay-2">
+        <p>Persistent weak-layer periods are where stronger validation discipline becomes most valuable and most difficult.</p>
+        <small>Recent avalanche literature • used as a bounded scientific caution</small>
+      </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 7</span>
+          <span>Research synthesis • Top challenges</span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-8">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 2</div>
+            <div class="eyebrow">Autonomy roadmap</div>
+            <h1 class="slide-title">Governed Autonomy Roadmap And Promotion Logic</h1>
+            <p class="slide-subtitle">Autonomy should be framed as a gated progression: ingest, govern, benchmark, review, then promote only if evidence says so.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip internal">Technical evidence</span><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+      <div class="stack reveal delay-1">
+        <div class="diagram-shell">
+          <div class="section-label">Promotion logic</div>
+          <div class="flow">
+            <div class="flow-node"><strong>Governed ingest</strong><p>Evidence enters with confidence, source, corroboration, and decay metadata.</p></div>
+            <div class="flow-node"><strong>Benchmark review</strong><p>Scientists inspect narrow evidence mixes, failure slices, and drift signals.</p></div>
+            <div class="flow-node"><strong>Gate review</strong><p><code>pss_gate_passed</code>, shadow quality, SAR gates, and readiness remain explicit.</p></div>
+            <div class="flow-node"><strong>Promotion only if earned</strong><p>Activation follows artifacts and review, not model novelty alone.</p></div>
+          </div>
+        </div>
+      </div>
+      <div class="stack reveal delay-2">
+        <div class="warning-band">
+          <p><strong>Recommended framing:</strong> governed candidate evidence fusion. <strong>Avoid:</strong> finished autonomous avalanche intelligence.</p>
+        </div>
+      </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 8</span>
+          <span>Governance and promotion logic</span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-9">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 2</div>
+            <div class="eyebrow">Remote sensing path</div>
+            <h1 class="slide-title">SAR Qualification Path</h1>
+            <p class="slide-subtitle">Remote sensing is attractive to scientists, but the qualification blockers must be stated before the excitement outruns the evidence.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip internal">Technical evidence</span><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+      <div class="card-grid reveal delay-1">
+        <article class="card">
+          <div class="section-label">Data access</div>
+          <h3>Reliable scene access</h3>
+          <p>Qualification needs predictable multi-region scene availability and artifact bookkeeping.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Labels</div>
+          <h3>Reference scarcity</h3>
+          <p>Held-out avalanche labels remain too thin for strong regional promotion claims.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Terrain physics</div>
+          <h3>Shadow and layover</h3>
+          <p>Radar geometry creates real blind spots that need explicit treatment, not optimistic assumptions.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Weather regime</div>
+          <h3>Dry-snow detectability limits</h3>
+          <p>Some relevant avalanche signatures remain difficult or ambiguous in the current SAR path.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Operations</div>
+          <h3>Revisit timing</h3>
+          <p>The workflow must respect timing gaps before stronger operational claims are earned.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Qualification scope</div>
+          <h3>Region by region</h3>
+          <p>SAR should qualify per use case and region rather than via one global promotional statement.</p>
+        </article>
+      </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 9</span>
+          <span>SAR qualification analysis</span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-10">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 2</div>
+            <div class="eyebrow">Pilot design</div>
+            <h1 class="slide-title">Scientist-In-The-Loop Pilot Design</h1>
+            <p class="slide-subtitle">A credible near-term pilot is structured around benchmark ownership, review cadence, and explicit go or no-go gates.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+      <div class="timeline reveal delay-1">
+        <div class="timeline-step">
+          <strong>Week 0-2</strong>
+          <p>Lock benchmark scope, region slices, and critical-layer questions.</p>
+        </div>
+        <div class="timeline-step">
+          <strong>Week 3-6</strong>
+          <p>Run governed evidence and evaluation slices against the agreed case pack.</p>
+        </div>
+        <div class="timeline-step">
+          <strong>Week 7-10</strong>
+          <p>Review failures, drift, weak-layer misses, and candidate-model gate posture together.</p>
+        </div>
+        <div class="timeline-step">
+          <strong>Week 11-12</strong>
+          <p>Decide whether to extend, constrain, or terminate the next qualification loop.</p>
+        </div>
+        <div class="timeline-step">
+          <strong>Exit</strong>
+          <p>Produce a scientist-owned go, no-go, or narrow-pilot recommendation.</p>
+        </div>
+      </div>
+      <div class="warning-band reveal delay-2">
+        <p>Success is not “the model looked good.” Success is a benchmark result the scientist team is willing to stand behind narrowly and honestly.</p>
+      </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 10</span>
+          <span>Pilot design</span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-11">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 2</div>
+            <div class="eyebrow">Requirements</div>
+            <h1 class="slide-title">Data And Field Requirements</h1>
+            <p class="slide-subtitle">The next phase needs concrete contributions: case definitions, field context, weak-layer interpretation, and evidence-quality review.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+      <div class="card-grid reveal delay-1">
+        <article class="card">
+          <div class="section-label">Scientist input</div>
+          <h3>Weak-layer and critical-layer cases</h3>
+          <p>Choose the slices that matter before any promotion rhetoric returns.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Field context</div>
+          <h3>Local terrain interpretation</h3>
+          <p>Benchmark cases need ground-informed review, not purely remote or statistical interpretation.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Event curation</div>
+          <h3>Label arbitration support</h3>
+          <p>Ambiguous, duplicated, or thinly sourced avalanche events need shared review.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Honest caveat</div>
+          <h3>Offline report replay is not the same as field reliability</h3>
+          <p>The queue-and-replay mechanism exists, but the deck should not treat it as validated mountain-device robustness.</p>
+        </article>
+      </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 11</span>
+          <span>Field and data requirements</span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-12">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 2</div>
+            <div class="eyebrow">Execution realism</div>
+            <h1 class="slide-title">Engineering And Platform Workstreams Are Already Structured</h1>
+            <p class="slide-subtitle">The path forward is not abstract. The current program already breaks the next work into concrete, bounded streams.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip internal">Technical evidence</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+      <div class="card-grid reveal delay-1">
+        <article class="card">
+          <div class="section-label">Workstream</div>
+          <h3>Claim-state hardening</h3>
+          <p>Every major statement is now mapped to a clear evidence lane and blocked-claim rule.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Workstream</div>
+          <h3>Evidence-surface verification</h3>
+          <p>Every meaningful claim is tied to a route, artifact, test, or admin surface.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Workstream</div>
+          <h3>Governed autonomy reframing</h3>
+          <p>The story has shifted from autonomy rhetoric to governed candidate evidence fusion.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Workstream</div>
+          <h3>Benchmark and protocol packaging</h3>
+          <p>Benchmark pack v0 and validation protocol v0 are ready as discussion starters.</p>
+        </article>
+      </div>
+      <div class="warning-band reveal delay-2">
+        <p>These workstreams improve the next conversation and pilot design. They do not by themselves convert future research into present-day operating readiness.</p>
+      </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 12</span>
+          <span>Execution workstreams</span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-13">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 2</div>
+            <div class="eyebrow">Team model</div>
+            <h1 class="slide-title">Team Shape And Collaboration Model</h1>
+            <p class="slide-subtitle">The likely winning shape is an India-lean engineering core with selective scientist, geospatial, and MLOps depth added when the benchmark program demands it.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+      <div class="card-grid reveal delay-1">
+        <article class="card">
+          <div class="section-label">Core</div>
+          <h3>Full-stack and mapping engineers</h3>
+          <p>Own the public product shell, admin surfaces, map interactions, and evidence display quality.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Science and data</div>
+          <h3>ML or data engineer plus scientist review</h3>
+          <p>Own benchmark assembly, evaluation slices, governance logic, and failure analysis packaging.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Remote sensing</div>
+          <h3>Geospatial or SAR specialist as needed</h3>
+          <p>Engage selectively when the qualification path moves from schema to held-out regional evidence.</p>
+        </article>
+        <article class="card">
+          <div class="section-label">Authority center</div>
+          <h3>Scientist team at the center</h3>
+          <p>Owns benchmark authority, review cadence, and the final interpretation of what becomes credible enough to promote.</p>
+        </article>
+      </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 13</span>
+          <span>Team model</span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-14">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 2</div>
+            <div class="eyebrow">Decision-ready roadmap</div>
+            <h1 class="slide-title">Three-Phase Timeline, Budget, And Infrastructure</h1>
+            <p class="slide-subtitle">This main-deck roadmap uses only the 3-phase scientist collaboration model. The 5-phase commercialization path stays out of the core meeting arc.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+      <div class="phase-grid reveal delay-1">
+        <article class="phase-card">
+          <div class="phase-meta">Phase 1 • 0-3 months</div>
+          <h3 class="phase-title">Platform hardening</h3>
+          <p>Lock claim states, verify core evidence surfaces, and package benchmark intake.</p>
+          <p><strong>Budget:</strong> INR 25-40 lakh</p>
+        </article>
+        <article class="phase-card">
+          <div class="phase-meta">Phase 2 • 3-9 months</div>
+          <h3 class="phase-title">Scientist-in-the-loop pilot</h3>
+          <p>Scientists co-own benchmark design, acceptance thresholds, and review loops.</p>
+          <p><strong>Budget:</strong> INR 40-90 lakh</p>
+        </article>
+        <article class="phase-card">
+          <div class="phase-meta">Phase 3 • 9-18 months</div>
+          <h3 class="phase-title">Validation expansion</h3>
+          <p>Qualify SAR candidates, expand multi-region benchmarking, and publish pilot evidence if earned.</p>
+          <p><strong>Budget:</strong> INR 1.2-3.0 crore</p>
+        </article>
+      </div>
+      <div class="stack reveal delay-2">
+        <div class="lead-panel">
+          <div class="section-label">Infrastructure assumptions</div>
+          <ul class="bullet-list">
+            <li>Hosted web shell continues on the current React, Supabase, and Netlify baseline.</li>
+            <li>Modal.com and GPU spend stay tightly bounded to candidate-model and SAR qualification work.</li>
+            <li>Scientist time is budgeted as validation authority and benchmark ownership, not just occasional advisory review.</li>
+          </ul>
+        </div>
+      </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 14</span>
+          <span>Three-phase roadmap</span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-15">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 2</div>
+            <div class="eyebrow">Specific ask</div>
+            <h1 class="slide-title">Concrete Ask, Decision Options, And Next Steps</h1>
+            <p class="slide-subtitle">End the meeting with a choice, not with generic enthusiasm.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+      <div class="decision-grid reveal delay-1">
+        <article class="decision-card">
+          <div class="section-label">Option 1</div>
+          <h3>Benchmark-design workshop</h3>
+          <ul>
+            <li>Define cases, slices, and validation questions.</li>
+            <li>Low commitment, high clarity.</li>
+          </ul>
+        </article>
+        <article class="decision-card">
+          <div class="section-label">Option 2</div>
+          <h3>90-day pilot</h3>
+          <ul>
+            <li>Shared benchmark pack, review cadence, and go or no-go gates.</li>
+            <li>Turns curiosity into inspectable pilot evidence.</li>
+          </ul>
+        </article>
+        <article class="decision-card">
+          <div class="section-label">Option 3</div>
+          <h3>Deeper co-development track</h3>
+          <ul>
+            <li>Commit to validation authority, publication intent, and a longer program arc.</li>
+            <li>Best only if the scientist team wants to shape the roadmap materially.</li>
+          </ul>
+        </article>
+      </div>
+      <div class="quote-band reveal delay-2">
+        <p>The ideal immediate ask is a scientist-led benchmark-design session with selected regional cases and explicit validation criteria.</p>
+        <small>Close on a concrete next step, not on AI transformation language</small>
+      </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 15</span>
+          <span>Decision options</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+  <div class="keyboard-hint">Arrow keys • wheel • swipe</div>
+  <div class="progress-shell" aria-hidden="true">
+    <span class="progress-count" data-progress-count>01 / 15</span>
+    <span class="progress-bar"><span data-progress-fill></span></span>
+  </div>
+  <script>
+class DeckController {
+  constructor() {
+    this.slides = Array.from(document.querySelectorAll('.slide'));
+    this.index = 0;
+    this.locked = false;
+    this.touchStartY = 0;
+    this.progressFill = document.querySelector('[data-progress-fill]');
+    this.progressCount = document.querySelector('[data-progress-count]');
+    this.bind();
+    this.observe();
+    this.update(0);
+  }
+
+  bind() {
+    window.addEventListener('keydown', (event) => {
+      if (['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(event.key)) {
+        event.preventDefault();
+        this.next();
+      }
+      if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(event.key)) {
+        event.preventDefault();
+        this.prev();
+      }
+      if (event.key === 'Home') {
+        event.preventDefault();
+        this.go(0);
+      }
+      if (event.key === 'End') {
+        event.preventDefault();
+        this.go(this.slides.length - 1);
+      }
+    }, { passive: false });
+
+    window.addEventListener('wheel', (event) => {
+      if (this.locked) return;
+      if (Math.abs(event.deltaY) < 18) return;
+      this.locked = true;
+      if (event.deltaY > 0) this.next();
+      else this.prev();
+      window.setTimeout(() => { this.locked = false; }, 650);
+    }, { passive: true });
+
+    window.addEventListener('touchstart', (event) => {
+      this.touchStartY = event.changedTouches[0].clientY;
+    }, { passive: true });
+
+    window.addEventListener('touchend', (event) => {
+      const delta = this.touchStartY - event.changedTouches[0].clientY;
+      if (Math.abs(delta) < 36) return;
+      if (delta > 0) this.next();
+      else this.prev();
+    }, { passive: true });
+  }
+
+  observe() {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const nextIndex = this.slides.indexOf(entry.target);
+          if (nextIndex >= 0) this.update(nextIndex);
+          entry.target.classList.add('revealed');
+        }
+      });
+    }, { threshold: 0.65 });
+
+    this.slides.forEach((slide) => observer.observe(slide));
+  }
+
+  go(index) {
+    const next = Math.max(0, Math.min(index, this.slides.length - 1));
+    this.slides[next].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    this.update(next);
+  }
+
+  next() { this.go(this.index + 1); }
+  prev() { this.go(this.index - 1); }
+
+  update(index) {
+    this.index = index;
+    const progress = ((index + 1) / this.slides.length) * 100;
+    if (this.progressFill) this.progressFill.style.width = progress + '%';
+    if (this.progressCount) this.progressCount.textContent = String(index + 1).padStart(2, '0') + ' / ' + String(this.slides.length).padStart(2, '0');
+    window.location.hash = this.slides[index].id;
+  }
+
+  getIndex() {
+    return this.index;
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  window.deckController = new DeckController();
+});
+</script>
+</body>
+</html>

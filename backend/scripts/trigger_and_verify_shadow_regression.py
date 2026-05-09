@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +13,7 @@ from backend.scripts.trigger_and_poll_training import (
     DEFAULT_EPOCHS,
     DEFAULT_POLL_INTERVAL_SECONDS,
     DEFAULT_TIMEOUT_SECONDS,
+    _poll_until_terminal,
     apply_rollout_env,
     build_training_payload,
     poll_training_job,
@@ -23,6 +23,7 @@ from backend.scripts.trigger_and_poll_training import (
 
 DEFAULT_FORECAST_HOURS = 72
 DEFAULT_GRID_SIZE = 20
+DEFAULT_INFERENCE_TIMEOUT_SECONDS = 3600
 
 
 def build_inference_payload(
@@ -116,34 +117,6 @@ def poll_inference_job(
     )
     body = _response_payload(response)
     return response.status_code, body
-
-
-def _poll_until_terminal(
-    *,
-    job_name: str,
-    poller,
-    worker_url: str,
-    worker_token: str,
-    call_id: str,
-    poll_interval_seconds: int,
-    timeout_seconds: int,
-) -> dict[str, Any]:
-    deadline = time.monotonic() + max(int(timeout_seconds), 1)
-    while True:
-        if time.monotonic() > deadline:
-            raise TimeoutError(f'{job_name} polling timed out after {timeout_seconds} seconds for call_id={call_id}')
-        status_code, body = poller(
-            worker_url=worker_url,
-            worker_token=worker_token,
-            call_id=call_id,
-        )
-        if status_code == 202:
-            print(json.dumps(body, indent=2, sort_keys=True))
-            time.sleep(max(int(poll_interval_seconds), 1))
-            continue
-        if status_code != 200:
-            raise RuntimeError(f'{job_name} polling failed ({status_code}): {json.dumps(body, sort_keys=True)}')
-        return body
 
 
 def shadow_regression_passed(training_result: dict[str, Any], inference_result: dict[str, Any]) -> bool:
@@ -303,6 +276,7 @@ def trigger_and_verify_shadow_regression(
         ),
     )
     print(json.dumps(inference_submission, indent=2, sort_keys=True))
+    resolved_inference_timeout_seconds = min(max(int(timeout_seconds), 1), DEFAULT_INFERENCE_TIMEOUT_SECONDS)
     inference_result = _poll_until_terminal(
         job_name='infer-mtslstm',
         poller=poll_inference_job,
@@ -310,7 +284,7 @@ def trigger_and_verify_shadow_regression(
         worker_token=worker_token,
         call_id=str(inference_submission['call_id']),
         poll_interval_seconds=poll_interval_seconds,
-        timeout_seconds=timeout_seconds,
+        timeout_seconds=resolved_inference_timeout_seconds,
     )
     return {
         'training': training_result,

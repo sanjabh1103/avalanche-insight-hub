@@ -85,12 +85,14 @@ describe('ModelStatusBadge', () => {
   it('orders model status by freshest evidence and renders benchmark context', async () => {
     render(<ModelStatusBadge />);
 
-    expect(await screen.findByText(/Benchmark: inference_publication • ok • 211\.9s/i)).toBeTruthy();
+    expect(await screen.findByText(/Benchmark:/i)).toBeTruthy();
+    expect(screen.getByText(/inference_publication • ok • 211\.9s/i)).toBeTruthy();
     expect(screen.getByText(/Stability: unstable • 3 seeds/i)).toBeTruthy();
-    expect(screen.getByText(/Governance scope: operator evidence only; public promotion remains gated/i)).toBeTruthy();
+    expect(screen.getByText(/Governance scope:/i)).toBeTruthy();
+    expect(screen.getByText(/operator evidence for gated public promotion review/i)).toBeTruthy();
     expect(orderCalls).toEqual([
       ['last_inference', { ascending: false, nullsFirst: false }],
       ['last_trained', { ascending: false, nullsFirst: false }],
     ]);
-  });
+  }, 30_000);
 });

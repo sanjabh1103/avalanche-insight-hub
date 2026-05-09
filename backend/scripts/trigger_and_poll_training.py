@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import requests
 
@@ -20,6 +21,10 @@ DEFAULT_TIMEOUT_SECONDS = 14400
 
 def apply_rollout_env(env_file: Path) -> dict[str, str]:
     env = load_rollout_env(env_file)
+    if env.modal_token_id:
+        os.environ['MODAL_TOKEN_ID'] = env.modal_token_id
+    if env.modal_token_secret:
+        os.environ['MODAL_TOKEN_SECRET'] = env.modal_token_secret
     missing: list[str] = []
     if not env.modal_worker_url:
         missing.append('MODAL_WORKER_URL')
@@ -96,6 +101,56 @@ def poll_training_job(
     return response.status_code, body
 
 
+def cancel_modal_function_call(
+    call_id: str,
+    *,
+    terminate_containers: bool = True,
+) -> bool:
+    if not str(call_id or '').strip():
+        return False
+    if not (os.environ.get('MODAL_TOKEN_ID') or '').strip():
+        return False
+    if not (os.environ.get('MODAL_TOKEN_SECRET') or '').strip():
+        return False
+
+    try:
+        import modal
+
+        modal.FunctionCall.from_id(call_id).cancel(terminate_containers=terminate_containers)
+    except Exception:
+        return False
+    return True
+
+
+def _poll_until_terminal(
+    *,
+    job_name: str,
+    poller: Callable[..., tuple[int, dict[str, Any]]],
+    worker_url: str,
+    worker_token: str,
+    call_id: str,
+    poll_interval_seconds: int,
+    timeout_seconds: int,
+) -> dict[str, Any]:
+    deadline = time.monotonic() + max(int(timeout_seconds), 1)
+    while True:
+        if time.monotonic() > deadline:
+            cancel_modal_function_call(call_id, terminate_containers=True)
+            raise TimeoutError(f'{job_name} polling timed out after {timeout_seconds} seconds for call_id={call_id}')
+        status_code, body = poller(
+            worker_url=worker_url,
+            worker_token=worker_token,
+            call_id=call_id,
+        )
+        if status_code == 202:
+            print(json.dumps(body, indent=2, sort_keys=True))
+            time.sleep(max(int(poll_interval_seconds), 1))
+            continue
+        if status_code != 200:
+            raise RuntimeError(f'{job_name} polling failed ({status_code}): {json.dumps(body, sort_keys=True)}')
+        return body
+
+
 def trigger_and_poll_training(
     *,
     env_file: Path,
@@ -112,25 +167,15 @@ def trigger_and_poll_training(
     )
     print(json.dumps(submission, indent=2, sort_keys=True))
 
-    call_id = str(submission['call_id'])
-    deadline = time.monotonic() + max(int(timeout_seconds), 1)
-
-    while True:
-        if time.monotonic() > deadline:
-            raise TimeoutError(f'train-mtslstm polling timed out after {timeout_seconds} seconds for call_id={call_id}')
-
-        status_code, body = poll_training_job(
-            worker_url=env_values['modal_worker_url'],
-            worker_token=env_values['modal_worker_token'],
-            call_id=call_id,
-        )
-        if status_code == 202:
-            print(json.dumps(body, indent=2, sort_keys=True))
-            time.sleep(max(int(poll_interval_seconds), 1))
-            continue
-        if status_code != 200:
-            raise RuntimeError(f'train-mtslstm polling failed ({status_code}): {json.dumps(body, sort_keys=True)}')
-        return body
+    return _poll_until_terminal(
+        job_name='train-mtslstm',
+        poller=poll_training_job,
+        worker_url=env_values['modal_worker_url'],
+        worker_token=env_values['modal_worker_token'],
+        call_id=str(submission['call_id']),
+        poll_interval_seconds=poll_interval_seconds,
+        timeout_seconds=timeout_seconds,
+    )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

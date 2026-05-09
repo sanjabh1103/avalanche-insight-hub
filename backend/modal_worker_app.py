@@ -52,8 +52,8 @@ MODAL_PINNED_RUNTIME_PACKAGES = ('shap==0.51.0', 'scikit-learn==1.8.0')
 MODAL_MIN_CONTAINERS = int(os.environ.get('MODAL_MIN_CONTAINERS', '0'))
 MODAL_BUFFER_CONTAINERS = int(os.environ.get('MODAL_BUFFER_CONTAINERS', '0'))
 MODAL_SCALEDOWN_WINDOW_SECONDS = int(os.environ.get('MODAL_SCALEDOWN_WINDOW_SECONDS', '30'))
-MODAL_INFER_CPU = float(os.environ.get('MODAL_INFER_CPU', '8.0'))
-MODAL_INFER_MEMORY_MB = int(os.environ.get('MODAL_INFER_MEMORY_MB', '16384'))
+MODAL_INFER_CPU = float(os.environ.get('MODAL_INFER_CPU', '4.0'))
+MODAL_INFER_MEMORY_MB = int(os.environ.get('MODAL_INFER_MEMORY_MB', '8192'))
 
 
 def _artifact_root() -> Path:
@@ -738,6 +738,7 @@ if modal is not None:  # pragma: no cover - exercised in deployment, not local t
         secrets=_secrets,
         volumes={VOLUME_MOUNT: _artifact_volume},
         gpu='T4',
+        max_containers=1,
         min_containers=MODAL_MIN_CONTAINERS,
         buffer_containers=MODAL_BUFFER_CONTAINERS,
         scaledown_window=MODAL_SCALEDOWN_WINDOW_SECONDS,
@@ -758,6 +759,7 @@ if modal is not None:  # pragma: no cover - exercised in deployment, not local t
         secrets=_secrets,
         volumes={VOLUME_MOUNT: _artifact_volume},
         gpu='T4',
+        max_containers=1,
         min_containers=MODAL_MIN_CONTAINERS,
         buffer_containers=MODAL_BUFFER_CONTAINERS,
         scaledown_window=MODAL_SCALEDOWN_WINDOW_SECONDS,
@@ -778,6 +780,7 @@ if modal is not None:  # pragma: no cover - exercised in deployment, not local t
         secrets=_secrets,
         volumes={VOLUME_MOUNT: _artifact_volume},
         gpu='T4',
+        max_containers=1,
         min_containers=MODAL_MIN_CONTAINERS,
         buffer_containers=MODAL_BUFFER_CONTAINERS,
         scaledown_window=MODAL_SCALEDOWN_WINDOW_SECONDS,
@@ -798,10 +801,11 @@ if modal is not None:  # pragma: no cover - exercised in deployment, not local t
         volumes={VOLUME_MOUNT: _artifact_volume},
         cpu=MODAL_INFER_CPU,
         memory=MODAL_INFER_MEMORY_MB,
+        max_containers=1,
         min_containers=MODAL_MIN_CONTAINERS,
         buffer_containers=MODAL_BUFFER_CONTAINERS,
         scaledown_window=MODAL_SCALEDOWN_WINDOW_SECONDS,
-        timeout=28800,
+        timeout=3600,
         retries=0,
     )
     def infer_mts_lstm_remote(request: dict[str, Any]) -> dict[str, Any]:

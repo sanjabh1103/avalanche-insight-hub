@@ -1,6 +1,6 @@
 # Top 20 Features — Avalanche Insight Hub
 
-Updated: May 5, 2026
+Updated: May 8, 2026
 
 This file remains a broad current-repo feature map, not a pure public-demo list. It now separates four layers with explicit boundaries:
 
@@ -12,7 +12,10 @@ This file remains a broad current-repo feature map, not a pure public-demo list.
 Evidence baseline used for this refresh:
 
 - Repo truth: `src/App.tsx`, `src/pages/Index.tsx`, current UI components, `package.json`, backend requirements, and active operator paths.
-- Live truth: the canonical demo surface is `https://avalanche-insight-hub.netlify.app/`, with `/` and `/admin` as the only customer-safe route references.
+- Live truth: the canonical demo surface is `https://avalanche-insight-hub.netlify.app/`, with `/` and `/admin` as the only customer-safe route references. May 8 proof shows a same-day published `72h` Colorado Rockies full-grid cell artifact with `sameDayPublished=true`, `stale=false`, `forecastRunId=4822ecf8-defa-4479-ac86-cf9eb7cf2f08`, and `publishedAt=2026-05-08T14:31:50.594343+00:00`.
+- Admin truth: hosted authenticated `/admin` smoke succeeded on May 8, 2026 and showed the observability lane; the refreshed admin screenshot shows the exact active full-grid run id.
+- Publication caveat: the May 8 artifact is a technical full-grid publication (`20x20`, `400` ready cells, `0` stale cells, structured bulletin present, `13` dayparts, no synthetic inputs), not scientist field-validation closure.
+- Explanation/runout caveat: the active artifact reports `explainability_mode=heuristic_fallback`, `skipTreeShap=true`, and analytical Alpha-Beta fallback runout counts; TreeSHAP and WhiteboxTools remain hardening paths until a stronger active artifact proves them.
 - Research truth: client publications, peer-reviewed avalanche papers, EAWS material, and WMO guidance were used to validate or soften claims, not to inflate them.
 
 Proof levels used below:
@@ -38,25 +41,25 @@ Proof levels used below:
 
 | Rank | Demo story | Why it matters | Proof |
 |---|---|---|---|
-| 1 | Precomputed 72h forecast workspace | The public app already delivers a usable batch-first forecast experience instead of making the user wait for heavy compute. | `Live demo` |
-| 2 | EAWS-style experimental bulletin with explicit uncertainty | The app already frames danger by daypart, problem type, elevation/aspect, and reduced-confidence states. | `Live demo` |
+| 1 | Current published batch forecast workspace | The public app delivers a usable batch-first forecast experience instead of making the user wait for heavy compute; the May 8 proof is same-day published full-grid technical evidence. | `Live demo` |
+| 2 | EAWS-style experimental bulletin with explicit uncertainty | The app implements danger-by-daypart, problem type, elevation/aspect, and reduced-confidence framing; use the May 8 full-grid screenshots when showing this visually. | `Live demo` plus `Repo/admin verified` |
 | 3 | Honest operational decision support | Masked terrain, share/export/report actions, and expert overlays make the forecast easier to use without pretending the science is finished. | `Live demo` |
 
 ## Ranked Feature Map
 
 | Rank | Feature | What it does | Proof level | Maturity (1-5) | Why this matters to customer pain | Caveat |
 |---|---|---|---|---:|---|---|
-| 1 | Precomputed 72h forecast workspace | Loads the latest published batch artifact, exposes ready/partial/stale states, and lazy-hydrates hourly grids. | `Live demo` | 5 | Solves the customer pain of slow, brittle forecast delivery by moving heavy compute off the user path. | Batch-first delivery is real; true full-model reruns are not happening on every click. |
+| 1 | Current published batch forecast workspace | Loads the active published batch artifact, exposes ready/partial/stale states, and lazy-hydrates hourly grids. | `Live demo` | 5 | Solves the customer pain of slow, brittle forecast delivery by moving heavy compute off the user path. | Batch-first delivery is real; May 8 proof is same-day full-grid technical evidence, not scientist validation closure. |
 | 2 | EAWS-style experimental daypart bulletin | Shows danger level, avalanche problem, critical elevations/aspects, daypart chips, and peak-window framing. | `Live demo` | 5 | Converts model output into a structured public-facing forecast instead of a raw internal score. | It is explicitly `EAWS-style experimental`, not an official avalanche warning service bulletin. |
 | 3 | APT-gated masked terrain contract | Uses the `apt_30_50_v1` slope gate and public masking rules so irrelevant terrain is shown as masked rather than falsely low danger. | `Live demo` | 5 | Addresses a key trust pain: users are less likely to misread out-of-scope terrain as safe terrain. | APT gating improves honesty but does not fully solve snowline or snow-cover eligibility. |
 | 4 | Uncertainty and evidence-coverage signaling | Propagates `reduced confidence`, high-uncertainty counts, and thin-SAR-support warnings into the bulletin and dashboard. | `Live demo` | 5 | Answers the customer demand for transparent outputs rather than hidden model guesswork. | Coverage badges do not mean SAR is fully operational across all runs and regions. |
 | 5 | Shareable full-state forecast links | Encodes region, bbox, hour, forecast id, selected cell, expert mode, and 3D state in one URL. | `Live demo` | 5 | Solves coordination pain for guides, operators, and rescue-style reviews. | Restoring state depends on the referenced published forecast remaining resolvable. |
-| 6 | CSV and JSON export | Exports grid cells, uncertainty fields, SHAP values, metadata, and mapped events. | `Live demo` | 5 | Reduces friction for agency review, offline analysis, and scientific handoff. | Export works only after a forecast artifact is loaded. |
+| 6 | CSV and JSON export | Exports grid cells, uncertainty fields, available explanation fields, metadata, and mapped events. | `Live demo` | 5 | Reduces friction for agency review, offline analysis, and scientific handoff. | Export works only after a forecast artifact is loaded; the current active artifact uses heuristic explanation fallback rather than TreeSHAP proof. |
 | 7 | Field report capture in the public app | Lets users submit avalanche-related field observations from the forecast workspace and merges successful reports back into the event view. | `Live demo` | 5 | Creates a concrete path to reduce dependence on centralized observation programs alone. | Raw user reports still need downstream governance before they should influence model trust. |
 | 8 | Offline field-report sync and reconnect replay | Uses a service worker plus queued replay on startup or reconnect so reports can survive low-connectivity conditions. | `Repo/admin verified` | 4 | Targets the customer pain of sparse or unreliable mountain connectivity. | The mechanism is implemented, but each deployment still needs explicit offline smoke verification. |
 | 9 | Expert overlays with runout and asset warnings | Toggles roads, infrastructure, vector polygons, and runout intersection warnings. | `Live demo` | 5 | Moves the product closer to consequence-aware operations instead of map-only hazard viewing. | Overlay quality depends on available runout artifacts and OSM coverage. |
 | 10 | 3D voxel neighborhood view | Opens a 3D modal that extrudes terrain and mapped features while respecting masked and unavailable states. | `Repo/admin verified` | 4 | Helps advanced users inspect spatial structure when 2D views hide slope relationships. | Sparse OSM regions fall back to simpler terrain geometry. |
-| 11 | Admin operator lane | Provides an authenticated operator route with access gating and a lazily loaded admin dashboard. | `Repo/admin verified` | 4 | Separates public forecast consumption from internal release and monitoring work. | The live proof right now is the gate and route shell; the full dashboard requires an operator session. |
+| 11 | Admin operator lane | Provides an authenticated operator route with access gating and a lazily loaded admin dashboard. | `Repo/admin verified` | 4 | Separates public forecast consumption from internal release and monitoring work. | Hosted authenticated smoke succeeded on May 8, 2026, including a refreshed full-run-id screenshot; the dashboard remains an operator-session proof and should be rerun before later snapshot reuse. |
 | 12 | Model status and release-evidence surfaces | Shows version, freshness, candidate-shadow status, benchmark timing, and evidence volume in the sidebar and admin lane. | `Repo/admin verified` | 4 | Addresses the customer demand for objective release discipline instead of hand-wavy AI claims. | The readout is only as strong as the upstream `model_status` rows and jobs feeding it. |
 | 13 | Batch artifact delivery architecture | Serves published `forecast_runs` and `forecast_grids` through manifests and per-hour payload loading rather than giant one-shot responses. | `Repo/admin verified` | 4 | Makes the app more stable under heavy geospatial payloads and matches the compute-bottleneck reality in avalanche science. | This is a strong architectural capability, but most users experience it indirectly. |
 | 14 | Groundsource-style news and field-report ingestion | Uses `backend/news_ingest.py` and `ingest-event` to transform news and field reports into structured avalanche-event records. | `Repo/admin verified` | 4 | Directly addresses missing occurrence records in sparse-data regions. | This is inspired by Google’s flood-domain Groundsource approach; it is not avalanche-standard proof by itself. |

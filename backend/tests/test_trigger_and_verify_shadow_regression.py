@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from backend.scripts.trigger_and_verify_shadow_regression import (
+    DEFAULT_INFERENCE_TIMEOUT_SECONDS,
     build_inference_payload,
     calibration_expectation_passed,
     main,
@@ -103,7 +104,7 @@ class TriggerAndVerifyShadowRegressionTests(unittest.TestCase):
         self.assertFalse(strict['passed'])
         self.assertEqual(strict['reason'], 'calibrated_brier_not_improved')
 
-    @patch('backend.scripts.trigger_and_verify_shadow_regression.time.sleep')
+    @patch('backend.scripts.trigger_and_poll_training.time.sleep')
     @patch('backend.scripts.trigger_and_verify_shadow_regression.requests.get')
     @patch('backend.scripts.trigger_and_verify_shadow_regression.requests.post')
     def test_trigger_and_verify_shadow_regression_runs_train_then_infer(
@@ -206,7 +207,7 @@ class TriggerAndVerifyShadowRegressionTests(unittest.TestCase):
         self.assertFalse(infer_payload['allow_publish'])
         self.assertEqual(infer_payload['artifact_dir'], '/artifacts/run-1')
 
-    @patch('backend.scripts.trigger_and_verify_shadow_regression.time.sleep')
+    @patch('backend.scripts.trigger_and_poll_training.time.sleep')
     @patch('backend.scripts.trigger_and_verify_shadow_regression.requests.get')
     @patch('backend.scripts.trigger_and_verify_shadow_regression.requests.post')
     def test_trigger_and_verify_shadow_regression_allows_gate_failure_with_valid_shadow_artifact(
@@ -324,6 +325,71 @@ class TriggerAndVerifyShadowRegressionTests(unittest.TestCase):
                     timeout_seconds=10,
                 )
         self.assertEqual(requests_post_mock.call_count, 1)
+
+    @patch('backend.scripts.trigger_and_verify_shadow_regression._poll_until_terminal')
+    @patch('backend.scripts.trigger_and_verify_shadow_regression.submit_inference_job')
+    @patch('backend.scripts.trigger_and_verify_shadow_regression.submit_training_job')
+    def test_trigger_and_verify_shadow_regression_caps_inference_timeout_to_one_hour(
+        self,
+        submit_training_job_mock,
+        submit_inference_job_mock,
+        poll_until_terminal_mock,
+    ) -> None:
+        submit_training_job_mock.return_value = {
+            'status': 'accepted',
+            'call_id': 'fc-train',
+            'request_type': 'train_mtslstm',
+            'runtime_provider': 'modal',
+        }
+        submit_inference_job_mock.return_value = {
+            'status': 'accepted',
+            'call_id': 'fc-infer',
+            'request_type': 'infer_mtslstm',
+            'runtime_provider': 'modal',
+        }
+        poll_until_terminal_mock.side_effect = [
+            {
+                'status': 'ok',
+                'artifact_dir': '/artifacts/run-6',
+                'calibration_applied': True,
+                'calibration_method': 'isotonic',
+                'lstm_brier_uncalibrated': 0.24,
+                'lstm_brier_calibrated': 0.18,
+                'lstm_pss_uncalibrated': 0.41,
+                'lstm_pss_calibrated': 0.49,
+                'model_artifact_ref': '/artifacts/run-6/model.joblib',
+                'new_artifact_created': True,
+            },
+            {
+                'status': 'ok',
+                'regions_written': 1,
+                'total_cells_written': 400,
+                'cells_with_shap': 400,
+            },
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = Path(tmpdir) / '.env'
+            env_path.write_text(
+                '\n'.join([
+                    'MODAL_WORKER_URL=https://worker.modal.run',
+                    'MODAL_WORKER_TOKEN=secret-token',
+                ]) + '\n',
+                encoding='utf-8',
+            )
+            with patch('sys.stdout', new_callable=io.StringIO):
+                result = trigger_and_verify_shadow_regression(
+                    env_file=env_path,
+                    poll_interval_seconds=1,
+                    timeout_seconds=7200,
+                )
+
+        self.assertTrue(result['shadow_regression_passed'])
+        self.assertEqual(poll_until_terminal_mock.call_args_list[0].kwargs['timeout_seconds'], 7200)
+        self.assertEqual(
+            poll_until_terminal_mock.call_args_list[1].kwargs['timeout_seconds'],
+            DEFAULT_INFERENCE_TIMEOUT_SECONDS,
+        )
 
     @patch('backend.scripts.trigger_and_verify_shadow_regression.requests.get')
     @patch('backend.scripts.trigger_and_verify_shadow_regression.requests.post')

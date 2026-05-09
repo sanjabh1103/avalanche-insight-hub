@@ -14,6 +14,7 @@ from backend.scripts.trigger_and_poll_inference import (
     main,
     trigger_and_poll_inference,
 )
+from backend.scripts.trigger_and_verify_shadow_regression import DEFAULT_INFERENCE_TIMEOUT_SECONDS
 
 
 class TriggerAndPollInferenceTests(unittest.TestCase):
@@ -210,6 +211,49 @@ class TriggerAndPollInferenceTests(unittest.TestCase):
         self.assertEqual(
             poll_until_terminal_mock.call_args.kwargs['timeout_seconds'],
             DEFAULT_REATTACH_TIMEOUT_SECONDS,
+        )
+
+    @patch('backend.scripts.trigger_and_poll_inference._poll_until_terminal')
+    @patch('backend.scripts.trigger_and_poll_inference.submit_inference_job_http')
+    def test_trigger_and_poll_inference_defaults_new_submission_timeout_to_one_hour(
+        self,
+        submit_inference_job_http_mock,
+        poll_until_terminal_mock,
+    ) -> None:
+        submit_inference_job_http_mock.return_value = {
+            'status': 'accepted',
+            'call_id': 'fc-http',
+            'request_type': 'infer_mtslstm',
+            'runtime_provider': 'modal',
+        }
+        poll_until_terminal_mock.return_value = {
+            'status': 'ok',
+            'regions_written': 1,
+            'total_cells_written': 20,
+            'cells_with_shap': 20,
+            'surrogate_model_version': 'rf_surrogate_v1',
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = Path(tmpdir) / '.env'
+            env_path.write_text(
+                '\n'.join([
+                    'MODAL_WORKER_URL=https://worker.modal.run',
+                    'MODAL_WORKER_TOKEN=secret-token',
+                ]) + '\n',
+                encoding='utf-8',
+            )
+            with patch('sys.stdout', new_callable=io.StringIO):
+                result = trigger_and_poll_inference(
+                    env_file=env_path,
+                    artifact_dir='/artifacts/20260427T172132Z',
+                    transport='http',
+                )
+
+        self.assertTrue(result['inference_passed'])
+        self.assertEqual(
+            poll_until_terminal_mock.call_args.kwargs['timeout_seconds'],
+            DEFAULT_INFERENCE_TIMEOUT_SECONDS,
         )
 
     @patch('backend.scripts.trigger_and_poll_inference._poll_until_terminal')

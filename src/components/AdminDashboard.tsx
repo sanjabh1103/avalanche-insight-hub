@@ -300,7 +300,7 @@ export default function AdminDashboard() {
     });
     return events;
   }, [forecastPublicationEvents]);
-  
+
   // CRASH-FIX: Prevent concurrent data loading that causes ERR_INSUFFICIENT_RESOURCES
   const isLoadingRef = useRef(false);
   const loadDataTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -311,9 +311,9 @@ export default function AdminDashboard() {
     if (isLoadingRef.current) {
       return;
     }
-    
+
     isLoadingRef.current = true;
-    
+
     try {
       const [
         jobsRes,
@@ -389,7 +389,7 @@ export default function AdminDashboard() {
       isLoadingRef.current = false;
     }
   }, []);
-  
+
   // CRASH-FIX: Debounced wrapper for realtime callbacks
   const debouncedLoadData = useCallback(() => {
     if (loadDataTimeoutRef.current) {
@@ -400,9 +400,9 @@ export default function AdminDashboard() {
     }, 500); // 500ms debounce
   }, [loadData]);
 
-  useEffect(() => { 
+  useEffect(() => {
     loadData();
-    
+
     // Cleanup timeout on unmount
     return () => {
       if (loadDataTimeoutRef.current) {
@@ -617,7 +617,7 @@ export default function AdminDashboard() {
               Authoritative SAR: artifact-gated • Whitebox runout: artifact-gated
             </div>
             <div className="text-[10px] text-muted-foreground">
-              Scientist-safe interpretation: governance evidence and benchmark traces only; not promotion proof.
+              Current-state interpretation: governance evidence and benchmark traces for gated promotion review.
             </div>
           </CardContent>
       </Card>
@@ -636,7 +636,7 @@ export default function AdminDashboard() {
               <div className="font-mono text-foreground">{forecastRuns.length}</div>
             </div>
             <div>
-              <div className="text-muted-foreground">Active</div>
+              <div className="text-muted-foreground">Active recent</div>
               <div className="font-mono text-foreground">{forecastRuns.filter((run) => run.active).length}</div>
             </div>
             <div>
@@ -688,6 +688,8 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                     <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
+                      <div className="text-muted-foreground">Run ID</div>
+                      <div className="font-mono text-right text-foreground break-all">{run.id}</div>
                       <div className="text-muted-foreground">Manifest</div>
                       <div className="font-mono text-right text-foreground">{manifestReady ? 'present' : 'missing'}</div>
                       <div className="text-muted-foreground">Hour artifacts</div>
@@ -1113,7 +1115,7 @@ export default function AdminDashboard() {
                 Dynamic scorer (candidate): {candidateModelLabel} • Version: {candidateModelVersion} • Gate: {candidateGate}
               </div>
               <div className="text-[10px] text-muted-foreground">
-                Scientist-safe interpretation: operator evidence for gated candidate review, not proof of activation or authority standing.
+                Current-state interpretation: operator evidence for gated candidate review; activation and authority standing require promotion proof.
               </div>
               <div className="text-[10px] text-muted-foreground">
                 Promotion gate: {modelStatus.promotion_gate_passed ? 'pass' : 'hold'} • PSS gate: {modelStatus.pss_gate_passed ? 'pass' : 'hold'}

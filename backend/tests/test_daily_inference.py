@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import unittest
-from datetime import datetime
+import os
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -28,11 +29,348 @@ from backend.common.features import FEATURE_COLUMNS
 from backend.common.avalanche_problem_classifier import classify_avalanche_problem
 from backend.common.public_eligibility import apply_public_eligibility_metric
 from backend.common.snowpack_proxy import SnowpackProxy, SnowpackProxyBatchResult
-from backend.daily_inference import ProofModeOptions, build_cells, main, upsert_forecast_grid
+from backend.daily_inference import ProofModeOptions, build_cells, build_publication_proof, main, upsert_forecast_grid
 from backend.models.surrogate_rf import TreeShapUnavailableError
 
 
+class PublicationProofTests(unittest.TestCase):
+    def test_build_publication_proof_marks_same_day_published_region(self) -> None:
+        proof = build_publication_proof(
+            outputs=[
+                {
+                    'region_key': 'japanese_alps',
+                    'region_name': 'Japanese Alps',
+                    'forecast_date': '2026-05-08',
+                    'horizon_hours': 72,
+                    'status': 'ready',
+                    'ready_cell_count': 381,
+                    'stale_cell_count': 0,
+                    'forecast_bulletins': {'schema_version': 'forecast-bulletin/v1'},
+                    'published_at': '2026-05-08T02:00:00+00:00',
+                    'hourly_grids': [[] for _ in range(72)],
+                    'model_metadata': {
+                        'forecast_run_id': 'run-1',
+                        'manifest_storage_ref': 'forecast-products/avalanche/japanese_alps/run-1/manifest.json',
+                    },
+                },
+            ],
+            generated_at=datetime(2026, 5, 8, 4, 0, tzinfo=timezone.utc),
+            dry_run=False,
+            supabase_enabled=True,
+            expected_forecast_date='2026-05-08',
+            artifact_dir=Path('/tmp/artifacts/20260508T040000Z'),
+        )
+
+        self.assertEqual(proof['proof_status'], 'passed')
+        self.assertEqual(proof['same_day_published_count'], 1)
+        region = proof['regions'][0]
+        self.assertTrue(region['same_day_published'])
+        self.assertEqual(region['publication_status'], 'published')
+        self.assertEqual(region['freshness_hours'], 2)
+        self.assertEqual(region['hour_count'], 72)
+        self.assertFalse(region['full_grid_publication_ready'])
+
+    def test_build_publication_proof_fails_stale_or_unpublished_region(self) -> None:
+        proof = build_publication_proof(
+            outputs=[
+                {
+                    'region_key': 'japanese_alps',
+                    'region_name': 'Japanese Alps',
+                    'forecast_date': '2026-05-07',
+                    'horizon_hours': 72,
+                    'status': 'ready',
+                    'ready_cell_count': 381,
+                    'stale_cell_count': 0,
+                    'forecast_bulletins': {'schema_version': 'forecast-bulletin/v1'},
+                    'model_metadata': {
+                        'forecast_run_id': 'run-1',
+                        'manifest_storage_ref': 'forecast-products/avalanche/japanese_alps/run-1/manifest.json',
+                    },
+                },
+            ],
+            generated_at=datetime(2026, 5, 8, 4, 0, tzinfo=timezone.utc),
+            dry_run=False,
+            supabase_enabled=True,
+            expected_forecast_date='2026-05-08',
+            artifact_dir=Path('/tmp/artifacts/20260508T040000Z'),
+        )
+
+        self.assertEqual(proof['proof_status'], 'failed')
+        self.assertEqual(proof['failures'], ['japanese_alps'])
+        self.assertFalse(proof['regions'][0]['same_day_published'])
+
+    def test_build_publication_proof_requires_full_grid_and_structured_bulletin(self) -> None:
+        cells = [
+            {'status': 'ready', 'risk_score': 2}
+            for _ in range(16)
+        ]
+        proof = build_publication_proof(
+            outputs=[
+                {
+                    'region_key': 'colorado_rockies',
+                    'region_name': 'Colorado Rockies',
+                    'forecast_date': '2026-05-08',
+                    'horizon_hours': 2,
+                    'status': 'ready',
+                    'ready_cell_count': 16,
+                    'stale_cell_count': 0,
+                    'forecast_bulletins': {
+                        'schema_version': 'forecast-bulletin/v1',
+                        'danger_level': 2,
+                        'dayparts': [{'window': 'day_1_morning'}],
+                    },
+                    'published_at': '2026-05-08T02:00:00+00:00',
+                    'grid_geojson': cells,
+                    'hourly_grids': [cells, cells],
+                    'model_metadata': {
+                        'forecast_run_id': 'run-1',
+                        'manifest_storage_ref': 'forecast-products/avalanche/colorado_rockies/run-1/manifest.json',
+                    },
+                },
+            ],
+            generated_at=datetime(2026, 5, 8, 4, 0, tzinfo=timezone.utc),
+            dry_run=False,
+            supabase_enabled=True,
+            expected_forecast_date='2026-05-08',
+            artifact_dir=Path('/tmp/artifacts/20260508T040000Z'),
+            expected_grid_size=4,
+            require_full_grid=True,
+        )
+
+        self.assertEqual(proof['proof_status'], 'passed')
+        self.assertEqual(proof['full_grid_publication_ready_count'], 1)
+        region = proof['regions'][0]
+        self.assertTrue(region['full_grid_cells_present'])
+        self.assertTrue(region['full_grid_ready'])
+        self.assertTrue(region['structured_bulletin'])
+        self.assertTrue(region['full_grid_publication_ready'])
+
+    def test_build_publication_proof_rejects_proof_mode_without_bulletin_when_full_grid_required(self) -> None:
+        cells = [{'status': 'ready'} for _ in range(25)]
+        proof = build_publication_proof(
+            outputs=[
+                {
+                    'region_key': 'colorado_rockies',
+                    'region_name': 'Colorado Rockies',
+                    'forecast_date': '2026-05-08',
+                    'horizon_hours': 72,
+                    'status': 'ready',
+                    'ready_cell_count': 25,
+                    'stale_cell_count': 0,
+                    'forecast_bulletins': {},
+                    'published_at': '2026-05-08T02:00:00+00:00',
+                    'grid_geojson': cells,
+                    'hourly_grids': [cells for _ in range(72)],
+                    'model_metadata': {
+                        'forecast_run_id': 'run-1',
+                        'manifest_storage_ref': 'forecast-products/avalanche/colorado_rockies/run-1/manifest.json',
+                    },
+                },
+            ],
+            generated_at=datetime(2026, 5, 8, 4, 0, tzinfo=timezone.utc),
+            dry_run=False,
+            supabase_enabled=True,
+            expected_forecast_date='2026-05-08',
+            artifact_dir=Path('/tmp/artifacts/20260508T040000Z'),
+            expected_grid_size=20,
+            require_full_grid=True,
+        )
+
+        self.assertEqual(proof['proof_status'], 'failed')
+        self.assertEqual(proof['failures'], ['colorado_rockies'])
+        region = proof['regions'][0]
+        self.assertFalse(region['full_grid_cells_present'])
+        self.assertFalse(region['structured_bulletin'])
+        self.assertFalse(region['full_grid_publication_ready'])
+
+    def test_build_publication_proof_rejects_synthetic_full_grid_publication(self) -> None:
+        cells = [
+            {
+                'status': 'ready',
+                'risk_score': 2,
+                'snowpack_proxy': {'method': 'synthetic_full_grid_publication_v1'},
+            }
+            for _ in range(16)
+        ]
+        proof = build_publication_proof(
+            outputs=[
+                {
+                    'region_key': 'colorado_rockies',
+                    'region_name': 'Colorado Rockies',
+                    'forecast_date': '2026-05-08',
+                    'horizon_hours': 2,
+                    'status': 'ready',
+                    'ready_cell_count': 16,
+                    'stale_cell_count': 0,
+                    'forecast_bulletins': {
+                        'schema_version': 'forecast-bulletin/v1',
+                        'danger_level': 2,
+                        'dayparts': [{'window': 'day_1_morning'}],
+                    },
+                    'published_at': '2026-05-08T02:00:00+00:00',
+                    'grid_geojson': cells,
+                    'hourly_grids': [cells, cells],
+                    'model_metadata': {
+                        'forecast_run_id': 'run-1',
+                        'manifest_storage_ref': 'forecast-products/avalanche/colorado_rockies/run-1/manifest.json',
+                    },
+                },
+            ],
+            generated_at=datetime(2026, 5, 8, 4, 0, tzinfo=timezone.utc),
+            dry_run=False,
+            supabase_enabled=True,
+            expected_forecast_date='2026-05-08',
+            artifact_dir=Path('/tmp/artifacts/20260508T040000Z'),
+            expected_grid_size=4,
+            require_full_grid=True,
+        )
+
+        self.assertEqual(proof['proof_status'], 'failed')
+        self.assertEqual(proof['failures'], ['colorado_rockies'])
+        region = proof['regions'][0]
+        self.assertTrue(region['same_day_published'])
+        self.assertTrue(region['full_grid_ready'])
+        self.assertTrue(region['structured_bulletin'])
+        self.assertTrue(region['synthetic_inputs_present'])
+        self.assertEqual(region['synthetic_input_methods'], ['synthetic_full_grid_publication_v1'])
+        self.assertFalse(region['publish_eligible'])
+        self.assertFalse(region['full_grid_publication_ready'])
+
+
 class ForecastGridMetadataTests(unittest.TestCase):
+    @patch.dict(os.environ, {'ALLOW_SYNTHETIC_PUBLICATION': 'false'}, clear=False)
+    @patch('backend.daily_inference.promote_forecast_run')
+    @patch(
+        'backend.daily_inference.publish_forecast_run',
+        return_value={
+            'forecast_run_id': 'run-synthetic',
+            'manifest_storage_ref': 'forecast-products/avalanche/colorado_rockies/run-synthetic/manifest.json',
+            'runout_storage_ref': 'forecast-products/avalanche/colorado_rockies/run-synthetic/runouts.json.gz',
+            'hours': [],
+        },
+    )
+    @patch('backend.daily_inference.rest_insert')
+    @patch('backend.daily_inference.has_supabase_credentials', return_value=True)
+    @patch('backend.daily_inference.build_runout_polygons', return_value=[])
+    @patch('backend.daily_inference._fetch_region_sar_evidence', return_value={'mask_asset_refs': [], 'sar_event_geometries': []})
+    def test_upsert_forecast_grid_blocks_synthetic_publication(
+        self,
+        _fetch_sar_evidence_mock,
+        _build_runout_mock,
+        _has_creds_mock,
+        _rest_insert_mock,
+        publish_forecast_run_mock,
+        promote_forecast_run_mock,
+    ) -> None:
+        region = SimpleNamespace(
+            key='colorado_rockies',
+            name='Colorado Rockies',
+            bbox=(38.5, -107.5, 40.5, -105.5),
+        )
+        bundle = {
+            'created_at': '2026-04-25T00:00:00+00:00',
+            'dynamic_model_type': 'mts_lstm',
+            'dynamic_model_version': 'mts_lstm_shadow_v1',
+            'surrogate_model_version': 'rf_surrogate_v1',
+            'selected_features': ['snowfall_24h', 'wind_loading'],
+            'feature_columns': ['snowfall_24h', 'wind_loading'],
+            'calibration_method': 'isotonic_v1',
+            'resampling': 'kmeanssmote',
+            'tree_variance_policy': 'gaussian_95ci',
+            'metrics': {'pss': 0.48},
+            'cv_metrics': {'folds': 5},
+            'training_dataset_version': 'real_event_join_v1',
+        }
+        rows = [{
+            'row': 0,
+            'col': 0,
+            'status': 'ready',
+            'risk_score': 2,
+            'probability_risk_score': 2,
+            'weather_inputs': {'snowfall_24h_cm': 12.0, 'windspeed_10m': 8.0, 'downscaled_temperature_c': -6.0, 'precipitation_24h_mm': 5.0},
+            'terrain_inputs': {'slope': 0.5, 'slope_angle_deg': 35.0, 'aspect_deg': 15.0, 'elevation_m': 2410.0},
+            'snowpack_proxy': {'method': 'synthetic_fallback_v1'},
+            'shap_context': {'top_features': []},
+        }]
+
+        with self.assertRaisesRegex(RuntimeError, 'Synthetic inputs cannot be published'):
+            upsert_forecast_grid(
+                region,
+                bundle,
+                pd.Timestamp('2026-04-25T00:00:00Z'),
+                rows=rows,
+                horizon_hours=72,
+                grid_size=20,
+                proof_options=ProofModeOptions(
+                    skip_compatibility_write=True,
+                    skip_shap_cache=True,
+                    skip_runout_generation=True,
+                ),
+            )
+
+        publish_forecast_run_mock.assert_not_called()
+        promote_forecast_run_mock.assert_not_called()
+
+    @patch('backend.daily_inference.publish_forecast_run')
+    @patch('backend.daily_inference.has_supabase_credentials', return_value=True)
+    @patch('backend.daily_inference.build_runout_polygons', return_value=[])
+    @patch('backend.daily_inference._fetch_region_sar_evidence', return_value={'mask_asset_refs': [], 'sar_event_geometries': []})
+    def test_upsert_forecast_grid_allows_synthetic_dry_run_with_lineage_metadata(
+        self,
+        _fetch_sar_evidence_mock,
+        _build_runout_mock,
+        _has_creds_mock,
+        publish_forecast_run_mock,
+    ) -> None:
+        region = SimpleNamespace(
+            key='colorado_rockies',
+            name='Colorado Rockies',
+            bbox=(38.5, -107.5, 40.5, -105.5),
+        )
+        bundle = {
+            'created_at': '2026-04-25T00:00:00+00:00',
+            'dynamic_model_type': 'mts_lstm',
+            'dynamic_model_version': 'mts_lstm_shadow_v1',
+            'surrogate_model_version': 'rf_surrogate_v1',
+            'selected_features': ['snowfall_24h', 'wind_loading'],
+            'feature_columns': ['snowfall_24h', 'wind_loading'],
+            'calibration_method': 'isotonic_v1',
+            'resampling': 'kmeanssmote',
+            'tree_variance_policy': 'gaussian_95ci',
+            'metrics': {'pss': 0.48},
+            'cv_metrics': {'folds': 5},
+            'training_dataset_version': 'real_event_join_v1',
+        }
+        rows = [{
+            'row': 0,
+            'col': 0,
+            'status': 'ready',
+            'risk_score': 2,
+            'probability_risk_score': 2,
+            'weather_inputs': {'snowfall_24h_cm': 12.0, 'windspeed_10m': 8.0, 'downscaled_temperature_c': -6.0, 'precipitation_24h_mm': 5.0},
+            'terrain_inputs': {'slope': 0.5, 'slope_angle_deg': 35.0, 'aspect_deg': 15.0, 'elevation_m': 2410.0},
+            'snowpack_proxy': {'method': 'synthetic_fallback_v1'},
+            'shap_context': {'top_features': []},
+        }]
+
+        payload = upsert_forecast_grid(
+            region,
+            bundle,
+            pd.Timestamp('2026-04-25T00:00:00Z'),
+            rows=rows,
+            horizon_hours=72,
+            grid_size=20,
+            dry_run=True,
+            proof_options=ProofModeOptions(skip_runout_generation=True),
+        )
+
+        metadata = payload['model_metadata']
+        self.assertTrue(metadata['synthetic_inputs_present'])
+        self.assertEqual(metadata['synthetic_input_methods'], ['synthetic_fallback_v1'])
+        self.assertEqual(metadata['data_lineage'], 'synthetic_internal')
+        self.assertFalse(metadata['publish_eligible'])
+        publish_forecast_run_mock.assert_not_called()
+
     @patch('backend.daily_inference.promote_forecast_run')
     @patch('backend.daily_inference.attach_compatibility_forecast_grid')
     @patch('backend.daily_inference.rest_get')

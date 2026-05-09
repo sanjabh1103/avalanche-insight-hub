@@ -1,6 +1,6 @@
 # Top Challenges For Avalanche Prediction Customers
 
-Updated: May 5, 2026
+Updated: May 8, 2026
 
 This file stays focused on customer pain, but it is now aligned to the stricter demo-decision brief. Two scoring lenses are used:
 
@@ -31,6 +31,8 @@ Evidence shorthand:
 - `EAWS Matrix 2025` = accepted danger-scale and bulletin-structure reference
 - `Groundsource blog 2026` = flood-domain news-to-data methodology, useful only as inspiration
 
+Slide-source note: connect challenge-response claims to the current proof buckets in [Proof Status And Screenshot Manifest](../presentation/06_Proof_Status_And_Screenshot_Manifest.md). The public hosted proof is a May 8 same-day full-grid cell publication, while benchmark, SAR, candidate-model, and scientist-validation claims remain repo/admin, artifact-bound, or future-validation work.
+
 ## Section A — Top 20 Customer Challenges
 
 | Rank | Challenge | Why customers care | Evidence base | Severity (1-5) | Current repo response |
@@ -41,9 +43,9 @@ Evidence shorthand:
 | 4 | Rare-event class imbalance | A model can look “accurate” while still missing the avalanche days that matter most. | `Kala 2025` | 5 | Keeps outcome labeling, evaluation jobs, and optimization hooks oriented around PSS/Brier/ECE rather than raw accuracy alone. |
 | 5 | Weak layers and snowpack memory are hard to model | New snow totals alone are not enough for operational avalanche prediction, and the client’s own HIM-STRAT lineage reinforces that point. | `Mayer 2023`; `Joshi et al. 2020`; `Herla 2024` | 5 | Uses snowpack proxies, bulletin framing, and a candidate shadow-model path, but not a complete snowpack observatory. |
 | 6 | Feature sprawl and overfitting | Too many weakly useful variables make models slower, noisier, and harder to trust. | `Kaushik 2025` | 4 | Includes an optimization pathway that explicitly references SVM-RFE and curated feature handling. |
-| 7 | Spatial and temporal hazard must be fused | Users need to know both where risk sits and when it peaks. | `Mayer 2023`; `EAWS Matrix 2025` | 4 | Combines a 72 h grid workspace, timeline playback, daypart bulletin UI, and optional 3D inspection. |
+| 7 | Spatial and temporal hazard must be fused | Users need to know both where risk sits and when it peaks. | `Mayer 2023`; `EAWS Matrix 2025` | 4 | Combines a published-horizon grid workspace, timeline playback, daypart bulletin UI, and optional 3D inspection. |
 | 8 | Uncertainty must be explicit, not hidden | Forecast users change behavior when uncertainty is spelled out, and trust can increase when it is honest. | `ISSW Uncertainty 2024` | 5 | Shows reduced-confidence badges, high-uncertainty summaries, and SAR-coverage caveats in the public UI. |
-| 9 | Black-box trust deficits | Forecasters and advanced users want a second opinion they can inspect, not a magic score. | `Perez-Guillen 2025`; `Techel et al. 2025` | 5 | Exposes SHAP-driven reasoning, cell-level inspection, and operator provenance surfaces. |
+| 9 | Black-box trust deficits | Forecasters and advanced users want a second opinion they can inspect, not a magic score. | `Perez-Guillen 2025`; `Techel et al. 2025` | 5 | Exposes operator provenance and explanation surfaces; the current active artifact uses heuristic explanation fallback while TreeSHAP remains the hardening path. |
 | 10 | Terrain relevance must be honest | Customers are harmed when non-avalanche-prone terrain looks merely “low risk” instead of out-of-scope. | `Kaushik 2025`; `EAWS Matrix 2025` | 4 | Uses APT masking and public mask profiles to keep irrelevant terrain visually separate. |
 | 11 | Hazard output must connect to roads and settlements | Operators care about closures, access, and exposure, not just a cell color. | `EAWS Matrix 2025`; `WMO IBFWS` | 4 | Adds impact overlays and runout intersection warnings for roads and mapped assets. |
 | 12 | Forecast delivery must stay responsive under heavy compute | A useful tool cannot require full recalibration, full retraining, or heavy geospatial recompute for each user action. | `Singh et al. 2017`; `Singh et al. 2015`; `Kala 2025` | 4 | Uses precomputed batch artifacts, manifests, and lazy hour loading to keep the app responsive. |
@@ -68,12 +70,12 @@ This section keeps the solution-strength rating used in the earlier pack, but no
 | Severe class imbalance | `tackled` | 4 | 4 | The repo has explicit optimization, outcome-labeling, and evaluation surfaces oriented around rare-event metrics. | Strong backend/admin proof exists, but public users do not directly see this mitigation. |
 | Feature redundancy and overfitting | `tackled` | 4 | 4 | Optimization and model messaging explicitly reference SVM-RFE-style feature discipline. | The repo supports this direction, but it is not a public-facing demo feature. |
 | Complex physical processes | `partial` | 3 | 3 | Snowpack proxies, physics-aware runout seeding, and batch forecast logic show partial physics awareness that is directionally consistent with the older HIM-STRAT lineage. | The repo is not a complete snowpack-physics forecasting stack, and the published lineage still depended on observed stratigraphy. |
-| Spatial-temporal disconnect | `tackled` | 5 | 4 | Live 72 h workspace, timeline control, daypart bulletin UI, and optional 3D inspection are concrete. | Strong UI fusion exists, but “completely resolved” was too strong. |
+| Spatial-temporal disconnect | `tackled` | 5 | 4 | Live published-horizon workspace, timeline control, daypart bulletin UI, and optional 3D inspection are concrete. | Strong UI fusion exists, but deck copy should reflect the currently published horizon rather than assume a fixed `72h` artifact. |
 | Subjective parameter weighting | `partial` | 4 | 3 | The repo includes optimization references and release gates that reduce ad hoc promotion, matching a real historical weighting problem documented in the 2015 NN calibration paper. | Objective tuning exists more as a governed path than as a fully proven live scoring chain. |
 | Severe computational bottlenecks | `tackled` | 5 | 4 | Manifest-based batch delivery and artifact hydration clearly reduce heavy client/runtime load, which is directionally consistent with the 2017 paper's over-400-minute sequential calibration burden and GPU acceleration. | The architecture helps a lot, but not every heavy path is eliminated. |
 | Multiple optima in calibration | `partial` | 4 | 3 | PSS/Brier-oriented gates, benchmark readouts, and evaluation jobs are real operator safeguards against the type of multi-optima calibration problem described in the 2015 NN paper. | The repo shows governance, not proof that calibration ambiguity is fully solved. |
 | Disparate data integration | `tackled` | 5 | 4 | APT-gated public semantics, bulletin alignment, runout seeding, shared forecast artifacts, and governed events are concrete. | Integration is improved, but some evidence streams still remain partial or gated. |
-| Topographic radar shadowing | `partial` | 3 | 2 | SAR coverage flags and admin SAR summaries are implemented. | The prior draft overstated operational SAR maturity; this is still a constrained capability. |
+| Topographic radar shadowing | `partial` | 3 | 2 | SAR coverage flags and admin SAR summaries are implemented. | Earlier language overstated SAR maturity; this is still a constrained capability. |
 | Climate change concept drift | `partial` | 4 | 3 | Freshness surfaces, evidence loops, and candidate-model governance move in the right direction. | The repo does not prove fully adaptive climate-drift remediation. |
 | Micro-climate variability | `missing` | 3 | 2 | Regional grids and terrain modifiers help, and masking avoids some false precision. | Local heterogeneity remains a hard unsolved science problem. |
 | Black-box trust deficit | `tackled` | 5 | 4 | SHAP, cell inspection, uncertainty messaging, and operator provenance are real. | The trust gap is meaningfully reduced, not “eradicated”. |

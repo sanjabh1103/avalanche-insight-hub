@@ -36,6 +36,7 @@ type ForecastRunRow = {
   weather_summary: unknown;
   model_metadata: unknown;
   status?: string | null;
+  published_at?: string | null;
   created_at?: string | null;
 };
 
@@ -64,6 +65,7 @@ type ForecastLookupDeps = {
     params: ForecastLookupParams,
   ) => Promise<ForecastLookupResult>;
   getToday?: () => string;
+  getNow?: () => Date;
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -80,6 +82,34 @@ function normalizeForecastBulletin(value: unknown): unknown | null {
   return Object.keys(value as Record<string, unknown>).length > 0 ? value : null;
 }
 
+function freshnessHoursFrom(publishedAt: string | null | undefined, now: Date): number | null {
+  if (!publishedAt) return null;
+  const publishedMs = new Date(publishedAt).getTime();
+  if (!Number.isFinite(publishedMs)) return null;
+  return Math.max(0, (now.getTime() - publishedMs) / 3_600_000);
+}
+
+function buildFreshnessState(params: {
+  forecastDate: string | null | undefined;
+  today: string;
+  status: string;
+  publishedAt: string | null | undefined;
+  now: Date;
+}) {
+  const freshnessHours = freshnessHoursFrom(params.publishedAt, params.now);
+  const sameDayPublished =
+    params.forecastDate === params.today &&
+    params.status !== "stale" &&
+    freshnessHours !== null &&
+    freshnessHours <= 24;
+  return {
+    publishedAt: params.publishedAt ?? null,
+    freshnessHours,
+    sameDayPublished,
+    stale: !sameDayPublished || params.status === "stale",
+  };
+}
+
 function defaultDeps(): ForecastLookupDeps {
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -91,7 +121,7 @@ function defaultDeps(): ForecastLookupDeps {
       let query = supabase
         .from("forecast_active_runs")
         .select(
-          "id, region_name, region_key, forecast_date, horizon_hours, manifest_storage_ref, compatibility_forecast_grid_id, forecast_bulletins, weather_summary, model_metadata, status, created_at",
+          "id, region_name, region_key, forecast_date, horizon_hours, manifest_storage_ref, compatibility_forecast_grid_id, forecast_bulletins, weather_summary, model_metadata, status, published_at, created_at",
         )
         .eq("hazard_type", "avalanche")
         .eq("forecast_date", today)
@@ -107,7 +137,7 @@ function defaultDeps(): ForecastLookupDeps {
       let query = supabase
         .from("forecast_active_runs")
         .select(
-          "id, region_name, region_key, forecast_date, horizon_hours, manifest_storage_ref, compatibility_forecast_grid_id, forecast_bulletins, weather_summary, model_metadata, status, created_at",
+          "id, region_name, region_key, forecast_date, horizon_hours, manifest_storage_ref, compatibility_forecast_grid_id, forecast_bulletins, weather_summary, model_metadata, status, published_at, created_at",
         )
         .eq("hazard_type", "avalanche")
         .order("published_at", { ascending: false })
@@ -179,6 +209,7 @@ export async function handleRunForecast(
     }
 
     const today = deps.getToday?.() ?? new Date().toISOString().slice(0, 10);
+    const now = deps.getNow?.() ?? new Date();
     const { data: freshRun, error: freshRunError } = await deps.fetchFreshRun({
       regionName,
       regionKey,
@@ -190,9 +221,16 @@ export async function handleRunForecast(
       const runStatus = typeof freshRun.status === "string"
         ? freshRun.status
         : "ready";
+      const freshness = buildFreshnessState({
+        forecastDate: freshRun.forecast_date,
+        today,
+        status: runStatus,
+        publishedAt: freshRun.published_at ?? freshRun.created_at ?? null,
+        now,
+      });
       return jsonResponse({
         ok: true,
-        stale: runStatus === "stale",
+        stale: freshness.stale,
         status: runStatus,
         mode: "batch_only",
         source: "forecast_runs",
@@ -203,6 +241,9 @@ export async function handleRunForecast(
         regionName: freshRun.region_name,
         regionKey: freshRun.region_key,
         forecastDate: freshRun.forecast_date,
+        publishedAt: freshness.publishedAt,
+        freshnessHours: freshness.freshnessHours,
+        sameDayPublished: freshness.sameDayPublished,
         hours: freshRun.horizon_hours,
         weatherSummary: freshRun.weather_summary,
         modelMetadata: freshRun.model_metadata,
@@ -221,9 +262,16 @@ export async function handleRunForecast(
       const gridStatus = typeof freshGrid.status === "string"
         ? freshGrid.status
         : "ready";
+      const freshness = buildFreshnessState({
+        forecastDate: freshGrid.forecast_date,
+        today,
+        status: gridStatus,
+        publishedAt: freshGrid.created_at ?? null,
+        now,
+      });
       return jsonResponse({
         ok: true,
-        stale: gridStatus === "stale",
+        stale: freshness.stale,
         status: gridStatus,
         mode: "batch_only",
         source: "forecast_grids",
@@ -234,6 +282,9 @@ export async function handleRunForecast(
         regionName: freshGrid.region_name,
         regionKey: freshGrid.region_key,
         forecastDate: freshGrid.forecast_date,
+        publishedAt: freshness.publishedAt,
+        freshnessHours: freshness.freshnessHours,
+        sameDayPublished: freshness.sameDayPublished,
         hours: freshGrid.horizon_hours,
         weatherSummary: freshGrid.weather_summary,
         modelMetadata: freshGrid.model_metadata,
@@ -247,6 +298,13 @@ export async function handleRunForecast(
     if (latestRunError) throw new Error(latestRunError.message);
 
     if (latestRun) {
+      const freshness = buildFreshnessState({
+        forecastDate: latestRun.forecast_date,
+        today,
+        status: latestRun.status ?? "stale",
+        publishedAt: latestRun.published_at ?? latestRun.created_at ?? null,
+        now,
+      });
       return jsonResponse({
         ok: true,
         stale: true,
@@ -260,11 +318,14 @@ export async function handleRunForecast(
         regionName: latestRun.region_name,
         regionKey: latestRun.region_key,
         forecastDate: latestRun.forecast_date,
+        publishedAt: freshness.publishedAt,
+        freshnessHours: freshness.freshnessHours,
+        sameDayPublished: false,
         hours: latestRun.horizon_hours,
         weatherSummary: latestRun.weather_summary,
         modelMetadata: latestRun.model_metadata,
         capability_summary: "manifest-backed forecast_runs",
-        message: "No fresh precomputed run is available for today.",
+        message: "No same-day batch is published yet; returning the latest published run.",
       }, 200);
     }
 
@@ -272,6 +333,13 @@ export async function handleRunForecast(
       { regionName, regionKey, today },
     );
     if (latestError) throw new Error(latestError.message);
+    const latestGridFreshness = buildFreshnessState({
+      forecastDate: latestGrid?.forecast_date ?? null,
+      today,
+      status: latestGrid?.status ?? "stale",
+      publishedAt: latestGrid?.created_at ?? null,
+      now,
+    });
 
     return jsonResponse({
       ok: true,
@@ -286,13 +354,16 @@ export async function handleRunForecast(
       regionName: latestGrid?.region_name ?? regionName,
       regionKey: latestGrid?.region_key ?? regionKey,
       forecastDate: latestGrid?.forecast_date ?? null,
+      publishedAt: latestGridFreshness.publishedAt,
+      freshnessHours: latestGridFreshness.freshnessHours,
+      sameDayPublished: false,
       hours: latestGrid?.horizon_hours ?? null,
       weatherSummary: latestGrid?.weather_summary ?? null,
       modelMetadata: latestGrid?.model_metadata ?? null,
       capability_summary: "batch-only forecast_grids",
       message: latestGrid
-        ? "No fresh precomputed grid is available for today."
-        : "No precomputed forecast grid is available for this region.",
+        ? "No same-day grid is published yet; returning the latest published grid."
+        : "No published forecast grid is available for this region.",
     }, latestGrid ? 200 : 404);
   } catch (error) {
     return jsonResponse({ error: (error as Error).message }, 500);

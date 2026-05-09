@@ -21,11 +21,13 @@ Deno.test("handleRunForecast returns fresh batch row without stale fallback", as
           weather_summary: { snow: "moderate" },
           model_metadata: { source: "rf" },
           status: "ready",
+          created_at: "2026-05-01T03:00:00.000Z",
         },
         error: null,
       }),
       fetchLatestGrid: async () => ({ data: null, error: null }),
       getToday: () => "2026-05-01",
+      getNow: () => new Date("2026-05-01T04:00:00.000Z"),
     },
   );
 
@@ -43,6 +45,9 @@ Deno.test("handleRunForecast returns fresh batch row without stale fallback", as
     regionName: "Japanese Alps",
     regionKey: "japanese_alps",
     forecastDate: "2026-05-01",
+    publishedAt: "2026-05-01T03:00:00.000Z",
+    freshnessHours: 1,
+    sameDayPublished: true,
     hours: 72,
     weatherSummary: { snow: "moderate" },
     modelMetadata: { source: "rf" },
@@ -75,6 +80,7 @@ Deno.test("handleRunForecast returns fresh published run before legacy grid fall
           weather_summary: { snow: "fresh" },
           model_metadata: { source: "rf" },
           status: "ready",
+          published_at: "2026-05-01T02:30:00.000Z",
         },
         error: null,
       }),
@@ -84,6 +90,7 @@ Deno.test("handleRunForecast returns fresh published run before legacy grid fall
       },
       fetchLatestGrid: async () => ({ data: null, error: null }),
       getToday: () => "2026-05-01",
+      getNow: () => new Date("2026-05-01T04:00:00.000Z"),
     },
   );
 
@@ -106,6 +113,9 @@ Deno.test("handleRunForecast returns fresh published run before legacy grid fall
     regionName: "Japanese Alps",
     regionKey: "japanese_alps",
     forecastDate: "2026-05-01",
+    publishedAt: "2026-05-01T02:30:00.000Z",
+    freshnessHours: 1.5,
+    sameDayPublished: true,
     hours: 72,
     weatherSummary: { snow: "fresh" },
     modelMetadata: { source: "rf" },
@@ -139,6 +149,7 @@ Deno.test("handleRunForecast returns stale published run with forecast-runs capa
           weather_summary: { snow: "old" },
           model_metadata: { source: "rf" },
           status: "ready",
+          published_at: "2026-04-18T02:30:00.000Z",
         },
         error: null,
       }),
@@ -147,6 +158,7 @@ Deno.test("handleRunForecast returns stale published run with forecast-runs capa
         throw new Error("legacy grid fallback should not be queried when a stale run exists");
       },
       getToday: () => "2026-05-01",
+      getNow: () => new Date("2026-05-01T02:30:00.000Z"),
     },
   );
 
@@ -169,11 +181,14 @@ Deno.test("handleRunForecast returns stale published run with forecast-runs capa
     regionName: "Japanese Alps",
     regionKey: "japanese_alps",
     forecastDate: "2026-04-18",
+    publishedAt: "2026-04-18T02:30:00.000Z",
+    freshnessHours: 312,
+    sameDayPublished: false,
     hours: 72,
     weatherSummary: { snow: "old" },
     modelMetadata: { source: "rf" },
     capability_summary: "manifest-backed forecast_runs",
-    message: "No fresh precomputed run is available for today.",
+    message: "No same-day batch is published yet; returning the latest published run.",
   });
 });
 
@@ -210,7 +225,7 @@ Deno.test("handleRunForecast returns stale grid fallback instead of 500", async 
   assertEquals(payload.stale, true);
   assertEquals(
     payload.message,
-    "No fresh precomputed grid is available for today.",
+    "No same-day grid is published yet; returning the latest published grid.",
   );
   assertEquals(payload.capability_summary, "batch-only forecast_grids");
 });

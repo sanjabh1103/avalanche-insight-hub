@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -21,6 +22,24 @@ class TriggerAndPollTrainingTests(unittest.TestCase):
             env_path.write_text('', encoding='utf-8')
             with self.assertRaisesRegex(ValueError, 'MODAL_WORKER_URL'):
                 apply_rollout_env(env_path)
+
+    def test_apply_rollout_env_exports_modal_tokens_when_present(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = Path(tmpdir) / '.env'
+            env_path.write_text(
+                '\n'.join([
+                    'MODAL_WORKER_URL=https://worker.modal.run',
+                    'MODAL_WORKER_TOKEN=secret-token',
+                    'MODAL_TOKEN_ID=token-id',
+                    'MODAL_TOKEN_SECRET=token-secret',
+                ]) + '\n',
+                encoding='utf-8',
+            )
+            with patch.dict(os.environ, {}, clear=True):
+                values = apply_rollout_env(env_path)
+                self.assertEqual(values['modal_worker_url'], 'https://worker.modal.run')
+                self.assertEqual(os.environ.get('MODAL_TOKEN_ID'), 'token-id')
+                self.assertEqual(os.environ.get('MODAL_TOKEN_SECRET'), 'token-secret')
 
     def test_build_training_payload_forces_shadow_only_request(self) -> None:
         payload = build_training_payload(dataset_snapshot_id='snapshot-1', epochs=3)
@@ -91,6 +110,57 @@ class TriggerAndPollTrainingTests(unittest.TestCase):
         self.assertTrue(post_kwargs['json']['shadow_mode'])
         self.assertFalse(post_kwargs['json']['allow_publish'])
         self.assertEqual(requests_get_mock.call_count, 3)
+
+    @patch('backend.scripts.trigger_and_poll_training.cancel_modal_function_call')
+    @patch('backend.scripts.trigger_and_poll_training.time.sleep')
+    @patch('backend.scripts.trigger_and_poll_training.poll_training_job')
+    @patch('backend.scripts.trigger_and_poll_training.submit_training_job')
+    @patch('backend.scripts.trigger_and_poll_training.time.monotonic')
+    def test_trigger_and_poll_training_cancels_modal_call_on_timeout(
+        self,
+        monotonic_mock,
+        submit_training_job_mock,
+        poll_training_job_mock,
+        _sleep_mock,
+        cancel_modal_function_call_mock,
+    ) -> None:
+        monotonic_mock.side_effect = [0, 0, 2]
+        submit_training_job_mock.return_value = {
+            'status': 'accepted',
+            'call_id': 'fc-timeout',
+            'request_type': 'train_mtslstm',
+            'runtime_provider': 'modal',
+        }
+        poll_training_job_mock.return_value = (
+            202,
+            {
+                'status': 'pending',
+                'call_id': 'fc-timeout',
+                'request_type': 'train_mtslstm',
+                'runtime_provider': 'modal',
+            },
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = Path(tmpdir) / '.env'
+            env_path.write_text(
+                '\n'.join([
+                    'MODAL_WORKER_URL=https://worker.modal.run',
+                    'MODAL_WORKER_TOKEN=secret-token',
+                    'MODAL_TOKEN_ID=token-id',
+                    'MODAL_TOKEN_SECRET=token-secret',
+                ]) + '\n',
+                encoding='utf-8',
+            )
+            with patch.dict(os.environ, {}, clear=True), patch('sys.stdout', new_callable=io.StringIO):
+                with self.assertRaisesRegex(TimeoutError, 'train-mtslstm polling timed out'):
+                    trigger_and_poll_training(
+                        env_file=env_path,
+                        poll_interval_seconds=1,
+                        timeout_seconds=1,
+                    )
+
+        cancel_modal_function_call_mock.assert_called_once_with('fc-timeout', terminate_containers=True)
 
     @patch('backend.scripts.trigger_and_poll_training.time.sleep')
     @patch('backend.scripts.trigger_and_poll_training.requests.get')

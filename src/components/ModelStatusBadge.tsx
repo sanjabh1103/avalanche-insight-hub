@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { BrainCircuit } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -58,6 +59,14 @@ function timeAgo(dateStr: string | null): string {
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
+}
+
+function StatusLine({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <span className="text-[9px] text-muted-foreground font-mono pl-0.5 leading-tight">
+      <span className="text-emerald-300/90">{label}:</span> {children}
+    </span>
+  );
 }
 
 export default function ModelStatusBadge() {
@@ -127,33 +136,27 @@ export default function ModelStatusBadge() {
         <BrainCircuit className="h-3 w-3" />
         {status.version} • PSS {status.pss_reported?.toFixed(2) ?? '—'}
       </Badge>
-      <span className="text-[9px] text-muted-foreground font-mono pl-0.5 leading-tight">
-        Customer-serving scorer (active): {activeModelLabel} • Version: {activeModelVersion}
-      </span>
-      <span className="text-[9px] text-muted-foreground font-mono pl-0.5 leading-tight">
-        Dynamic scorer (candidate): {candidateModelLabel} • Version: {candidateModelVersion} • Gate: {candidateGate}
-      </span>
-      <span className="text-[9px] text-muted-foreground font-mono pl-0.5 leading-tight">
-        Last precomputed batch: {timeAgo(status.last_inference)} • Freshness: {freshnessLabel}
-      </span>
-      <span className="text-[9px] text-muted-foreground font-mono pl-0.5 leading-tight">
-        Release evidence: {releaseEvidence} • Backend: {status.inference_backend || 'edge_fallback'} • PSS gate: {status.pss_gate_passed ? 'pass' : 'hold'}
-      </span>
-      <span className="text-[9px] text-muted-foreground font-mono pl-0.5 leading-tight">
-        Confidence proxy: F1 {status.f1_score?.toFixed(2) ?? '—'} • Snowpack: {status.snowpack_model_version || 'edge-proxy'}
-      </span>
-      <span className="text-[9px] text-muted-foreground font-mono pl-0.5 leading-tight">
-        Evidence mix: auto {evidence?.autonomous_positive_count ?? 0}/{evidence?.positive_count ?? 0} • manual {evidence?.manual_positive_count ?? 0} • promoted SAR {evidence?.promoted_sar_volume?.sar_unet_promoted_count ?? 0}
-      </span>
-      <span className="text-[9px] text-muted-foreground font-mono pl-0.5 leading-tight">
-        Drift mode: {status.drift_mode_state || 'guarded_monitoring_only'} • Stability: {stabilityLabel}{typeof stabilitySeedCount === 'number' ? ` • ${stabilitySeedCount} seeds` : ''}
-      </span>
-      <span className="text-[9px] text-muted-foreground font-mono pl-0.5 leading-tight">
-        Benchmark: {benchmarkKind} • {benchmarkStatus} • {typeof status.latest_benchmark_summary?.total_seconds === 'number' ? `${status.latest_benchmark_summary.total_seconds.toFixed(1)}s` : 'n/a'}
-      </span>
-      <span className="text-[9px] text-muted-foreground font-mono pl-0.5 leading-tight">
-        Governance scope: operator evidence only; public promotion remains gated
-      </span>
+      <StatusLine label="Current proof">
+        active scorer {activeModelLabel} • Version: {activeModelVersion}
+      </StatusLine>
+      <StatusLine label="Publication state">
+        last batch {timeAgo(status.last_inference)} • Freshness: {freshnessLabel} • Backend: {status.inference_backend || 'edge_fallback'}
+      </StatusLine>
+      <StatusLine label="Candidate path">
+        {candidateModelLabel} • Version: {candidateModelVersion} • Gate: {candidateGate}
+      </StatusLine>
+      <StatusLine label="Release gates">
+        {releaseEvidence} • PSS gate: {status.pss_gate_passed ? 'pass' : 'hold'} • Stability: {stabilityLabel}{typeof stabilitySeedCount === 'number' ? ` • ${stabilitySeedCount} seeds` : ''}
+      </StatusLine>
+      <StatusLine label="Evidence mix">
+        auto {evidence?.autonomous_positive_count ?? 0}/{evidence?.positive_count ?? 0} • manual {evidence?.manual_positive_count ?? 0} • promoted SAR {evidence?.promoted_sar_volume?.sar_unet_promoted_count ?? 0}
+      </StatusLine>
+      <StatusLine label="Benchmark">
+        {benchmarkKind} • {benchmarkStatus} • {typeof status.latest_benchmark_summary?.total_seconds === 'number' ? `${status.latest_benchmark_summary.total_seconds.toFixed(1)}s` : 'n/a'}
+      </StatusLine>
+      <StatusLine label="Governance scope">
+        operator evidence for gated public promotion review
+      </StatusLine>
     </div>
   );
 }

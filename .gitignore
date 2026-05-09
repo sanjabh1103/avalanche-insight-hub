@@ -41,8 +41,13 @@ docs/key.json
 docs/*key*.json
 docs/*credentials*.json
 docs/*service-account*.json
+config/earth-engine-key.json
 *.pem
 gee-service-account*.json
+
+# Local browser automation/session artifacts
+.playwright-mcp/
+docs/MVP/presentation/rendered/assets/tmp/
 
 # Local DEM staging (raw pre-compression copies, if any)
 backend/data/dem/raw/

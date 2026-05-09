@@ -1,12 +1,14 @@
 # Avalanche Demo Research Pack — Research Base
 
-Updated: May 5, 2026
+Updated: May 7, 2026
 
 This file is the research base behind the demo-decision pack. It keeps the evidence tied to the repo questions that matter most:
 
 - what the client has already researched in the Himalaya
 - what recent international avalanche work now proves or cautions
 - which parts of our MVP are well aligned, only partially aligned, or still ahead of the evidence
+
+Deck-source note: use this file for research lineage, customer-science context, and blocked-claim grounding. It does not prove current hosted functionality on its own.
 
 ## Anchor Papers
 

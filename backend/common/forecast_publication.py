@@ -252,11 +252,14 @@ def attach_compatibility_forecast_grid(
     )
 
 
-def promote_forecast_run(*, forecast_run_id: str) -> None:
-    rest_rpc('promote_forecast_run', {'p_forecast_run_id': forecast_run_id}, timeout_seconds=120)
+def promote_forecast_run(*, forecast_run_id: str) -> dict[str, Any] | None:
+    promoted = rest_rpc('promote_forecast_run', {'p_forecast_run_id': forecast_run_id}, timeout_seconds=120)
     _record_event(
         run_id=forecast_run_id,
         stage='published',
         status='ok',
         detail={},
     )
+    if isinstance(promoted, list):
+        return promoted[0] if promoted and isinstance(promoted[0], dict) else None
+    return promoted if isinstance(promoted, dict) else None

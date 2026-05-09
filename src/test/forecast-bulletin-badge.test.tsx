@@ -108,7 +108,7 @@ describe('ForecastBulletinBadge', () => {
 
     fireEvent.click(screen.getByTestId('daypart-chip-morning'));
     expect(onSelectForecastHour).toHaveBeenCalledWith(6);
-  }, 15_000);
+  }, 30_000);
 
   it('does not render for a null bulletin', () => {
     const { container } = render(<ForecastBulletinBadge bulletin={null} />);

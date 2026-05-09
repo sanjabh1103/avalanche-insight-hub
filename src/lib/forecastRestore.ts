@@ -12,6 +12,7 @@ export interface SharedForecastRunRecord {
   weather_summary?: unknown;
   model_metadata?: unknown;
   status?: string | null;
+  published_at?: string | null;
   created_at?: string | null;
 }
 

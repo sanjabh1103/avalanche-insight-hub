@@ -62,6 +62,9 @@ type RunForecastResponse = {
   regionName: string | null;
   regionKey: string | null;
   forecastDate: string | null;
+  publishedAt?: string | null;
+  freshnessHours?: number | null;
+  sameDayPublished?: boolean;
   hours: number | null;
   weatherSummary: unknown;
   modelMetadata: unknown;
@@ -409,8 +412,8 @@ export default function Index() {
       nextAvailability === 'ready'
         ? null
         : nextAvailability === 'partial'
-          ? 'Using a partial precomputed forecast artifact. Some cells are unavailable in this batch run.'
-          : 'Using a stale precomputed forecast artifact. Freshness is below the current target.';
+          ? 'Current-state batch artifact is partial. Some cells are unavailable in this run.'
+          : 'Current-state view is using the latest published batch, but the publication is outside the freshness target.';
     const noticeParts = [
       baseNotice,
       options?.notice ?? null,
@@ -497,8 +500,11 @@ export default function Index() {
         manifest_storage_ref: response.manifestPath,
         runout_storage_ref: manifest.runoutStorageRef,
         compatibility_forecast_grid_id: response.forecastId,
+        published_at: response.publishedAt ?? null,
+        freshness_hours: response.freshnessHours ?? null,
+        same_day_published: response.sameDayPublished ?? false,
       },
-      status: response.status,
+      status: response.stale ? 'stale' : response.status,
       created_at: manifest.issueTime,
     };
     return {
@@ -688,7 +694,7 @@ export default function Index() {
           fetchRunById: async (forecastKey) => {
             const { data } = await supabase
               .from('forecast_runs')
-              .select('id, region_name, region_key, forecast_date, horizon_hours, manifest_storage_ref, compatibility_forecast_grid_id, forecast_bulletins, weather_summary, model_metadata, status, created_at')
+              .select('id, region_name, region_key, forecast_date, horizon_hours, manifest_storage_ref, compatibility_forecast_grid_id, forecast_bulletins, weather_summary, model_metadata, status, published_at, created_at')
               .eq('id', forecastKey)
               .maybeSingle();
             return (data as SharedForecastRunRecord | null) ?? null;
@@ -696,7 +702,7 @@ export default function Index() {
           fetchRunByCompatibilityForecastGridId: async (forecastKey) => {
             const { data } = await supabase
               .from('forecast_runs')
-              .select('id, region_name, region_key, forecast_date, horizon_hours, manifest_storage_ref, compatibility_forecast_grid_id, forecast_bulletins, weather_summary, model_metadata, status, created_at')
+              .select('id, region_name, region_key, forecast_date, horizon_hours, manifest_storage_ref, compatibility_forecast_grid_id, forecast_bulletins, weather_summary, model_metadata, status, published_at, created_at')
               .eq('compatibility_forecast_grid_id', forecastKey)
               .order('created_at', { ascending: false })
               .limit(1)
@@ -726,6 +732,9 @@ export default function Index() {
             regionName: activeRun.region_name,
             regionKey: activeRun.region_key,
             forecastDate: activeRun.forecast_date,
+            publishedAt: activeRun.published_at ?? null,
+            freshnessHours: null,
+            sameDayPublished: false,
             hours: activeRun.horizon_hours,
             weatherSummary: activeRun.weather_summary,
             modelMetadata: activeRun.model_metadata,
@@ -780,7 +789,7 @@ export default function Index() {
         }
         const activeRun = await supabase
           .from('forecast_runs')
-          .select('id, region_name, region_key, forecast_date, horizon_hours, manifest_storage_ref, compatibility_forecast_grid_id, forecast_bulletins, weather_summary, model_metadata, status, created_at')
+          .select('id, region_name, region_key, forecast_date, horizon_hours, manifest_storage_ref, compatibility_forecast_grid_id, forecast_bulletins, weather_summary, model_metadata, status, published_at, created_at')
           .eq('id', sharedForecast)
           .maybeSingle();
         if (activeRun.data?.manifest_storage_ref) {
@@ -796,6 +805,9 @@ export default function Index() {
             regionName: activeRun.data.region_name,
             regionKey: activeRun.data.region_key,
             forecastDate: activeRun.data.forecast_date,
+            publishedAt: activeRun.data.published_at ?? null,
+            freshnessHours: null,
+            sameDayPublished: false,
             hours: activeRun.data.horizon_hours,
             weatherSummary: activeRun.data.weather_summary,
             modelMetadata: activeRun.data.model_metadata,
@@ -881,7 +893,7 @@ export default function Index() {
             bulletin: latest.bulletin,
           });
         } else if (alive) {
-          setUnavailableForecast(`No fresh precomputed forecast is available for ${region.name}.`);
+          setUnavailableForecast(`No published forecast artifact is available for ${region.name} in the current hosted dataset.`);
         }
       } catch {
         if (alive) {
@@ -900,7 +912,7 @@ export default function Index() {
     setForecasting(true);
     setForecastSource(null);
     try {
-      toast.info('Refreshing precomputed forecast...');
+      toast.info('Checking the latest published forecast batch...');
       const latest = await loadLatestForecastProduct(region.name);
       if (latest) {
         setArtifactHourRefs(latest.artifactHours);
@@ -909,11 +921,11 @@ export default function Index() {
           notice: latest.notice,
           bulletin: latest.bulletin,
         });
-        toast.success(`Loaded precomputed forecast for ${region.name}`);
+        toast.success(`Loaded latest published forecast for ${region.name}`);
         return;
       }
-      setUnavailableForecast(`No fresh precomputed forecast is available for ${region.name}.`);
-      toast.error('No fresh precomputed forecast is available yet.');
+      setUnavailableForecast(`No published forecast artifact is available for ${region.name} in the current hosted dataset.`);
+      toast.error('No published forecast artifact is available yet.');
     } catch {
       setUnavailableForecast(`Failed to refresh the precomputed forecast for ${region.name}.`);
       toast.error('Failed to refresh the precomputed forecast.');
@@ -924,7 +936,7 @@ export default function Index() {
 
   const actionControls = (
     <>
-      <Button onClick={runForecast} disabled={forecasting} className="h-11 text-[11px] uppercase tracking-[0.18em] font-semibold gap-2 bg-emerald-500 text-black hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 rounded-2xl touch-manipulation whitespace-nowrap px-4" aria-label="Refresh precomputed forecast">
+      <Button onClick={runForecast} disabled={forecasting} className="h-11 text-[11px] uppercase tracking-[0.18em] font-semibold gap-2 bg-emerald-500 text-black hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 rounded-2xl touch-manipulation whitespace-nowrap px-4" aria-label="Refresh latest published forecast batch">
         {forecasting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mountain className="h-4 w-4" />}
         {isMobile ? 'Refresh Batch' : 'Refresh batch'}
       </Button>
@@ -940,7 +952,7 @@ export default function Index() {
         events={regionEvents}
         regionName={region.name}
         hour={timeOffset}
-        canExport={Boolean(forecastId)}
+        canExport={Boolean(forecastId && grid.cells.length > 0)}
       />
       <HistoricalEventsToggle
         className="justify-center sm:justify-start"
@@ -961,6 +973,31 @@ export default function Index() {
     }`}>
       ● {forecastSource === 'precomputed' ? `PRECOMPUTED BATCH • ${forecastAvailability.toUpperCase()}` : 'FORECAST DATA'} ({hourlyGrids.length}h)
     </span>
+  ) : null;
+
+  const fallbackForecastStatus = hourlyGrids && !forecastBulletin ? (
+    <div
+      data-testid="forecast-publication-status"
+      className="flex min-w-0 w-full flex-1 flex-col gap-1 rounded-2xl border border-border/70 bg-black/20 px-3 py-3 shadow-sm"
+    >
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${
+          forecastAvailability === 'ready'
+            ? 'bg-emerald-500/20 text-emerald-200'
+            : forecastAvailability === 'partial'
+              ? 'bg-amber-500/20 text-amber-200'
+              : 'bg-slate-500/20 text-slate-200'
+        }`}>
+          {forecastAvailability === 'ready' ? 'Current Published Forecast' : `${forecastAvailability} Published Forecast`}
+        </span>
+        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          {activeForecastRow?.forecast_date ?? 'date unavailable'} • {hourlyGrids.length}h
+        </span>
+      </div>
+      <div className="text-xs text-foreground">
+        {forecastNotice || 'Same-day publication proof is available; structured bulletin content is not present for this proof artifact.'}
+      </div>
+    </div>
   ) : null;
 
   useEffect(() => {
@@ -1067,7 +1104,13 @@ export default function Index() {
                   </Button>
                 </div>
                 <div className="mt-0 flex-1 overflow-y-auto px-2 pb-3">
-                  <RiskDashboard cell={selectedCell} weatherSummary={weatherSummary} />
+                  <RiskDashboard
+                    cell={selectedCell}
+                    weatherSummary={weatherSummary}
+                    hasForecastData={Boolean(hourlyGrids && grid.cells.length > 0)}
+                    forecastAvailability={forecastAvailability}
+                    forecastNotice={forecastNotice}
+                  />
                 </div>
               </div>
             </motion.aside>
@@ -1118,12 +1161,14 @@ export default function Index() {
                   </div>
 
                   <div className={`order-3 min-w-0 md:col-span-2 ${useWideTopControlLayout ? 'xl:order-2 xl:col-span-1' : ''}`}>
-                    <ForecastBulletinBadge
-                      bulletin={forecastBulletin}
-                      stale={forecastAvailability === 'stale'}
-                      timeOffset={timeOffset}
-                      onSelectForecastHour={setTimeOffset}
-                    />
+                    {forecastBulletin ? (
+                      <ForecastBulletinBadge
+                        bulletin={forecastBulletin}
+                        stale={forecastAvailability === 'stale'}
+                        timeOffset={timeOffset}
+                        onSelectForecastHour={setTimeOffset}
+                      />
+                    ) : fallbackForecastStatus}
                   </div>
                 </div>
               </div>
@@ -1160,9 +1205,9 @@ export default function Index() {
             {!hourlyGrids && (
               <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex justify-center">
                 <div className="max-w-xl rounded-2xl border border-amber-500/25 bg-black/65 px-4 py-3 text-center shadow-2xl shadow-black/25 backdrop-blur-xl">
-                  <div className="text-[10px] uppercase tracking-[0.24em] text-amber-300">Precomputed Forecast Unavailable</div>
+                  <div className="text-[10px] uppercase tracking-[0.24em] text-amber-300">Published Forecast Not Loaded</div>
                   <div className="mt-1 text-sm text-foreground">
-                    {forecastNotice || `No fresh precomputed forecast is available for ${region.name}.`}
+                    {forecastNotice || `No published forecast artifact is available for ${region.name} in the current hosted dataset.`}
                   </div>
                 </div>
               </div>
@@ -1184,7 +1229,7 @@ export default function Index() {
             <div className="absolute bottom-4 left-4 right-4 z-10 flex flex-col gap-3">
               <div data-testid="mobile-action-tray" className="pointer-events-auto rounded-[1.35rem] border border-border/70 bg-card/70 px-3 py-2.5 shadow-2xl shadow-black/20 backdrop-blur-2xl">
                 <div className="grid grid-cols-2 gap-2">
-                  <Button onClick={runForecast} disabled={forecasting} className="h-11 text-[11px] uppercase tracking-[0.18em] font-semibold gap-2 bg-emerald-500 text-black hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 rounded-2xl touch-manipulation px-4" aria-label="Refresh precomputed forecast">
+                  <Button onClick={runForecast} disabled={forecasting} className="h-11 text-[11px] uppercase tracking-[0.18em] font-semibold gap-2 bg-emerald-500 text-black hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 rounded-2xl touch-manipulation px-4" aria-label="Refresh latest published forecast batch">
                     {forecasting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mountain className="h-4 w-4" />}
                     Refresh batch
                   </Button>
@@ -1209,7 +1254,7 @@ export default function Index() {
                   events={regionEvents}
                   regionName={region.name}
                   hour={timeOffset}
-                  canExport={Boolean(forecastId)}
+                  canExport={Boolean(forecastId && grid.cells.length > 0)}
                 />
                 {forecastSourceBadge ? <div className="mt-2">{forecastSourceBadge}</div> : null}
               </div>
