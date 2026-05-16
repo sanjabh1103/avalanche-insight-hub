@@ -11,7 +11,22 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | Production guard | `backend/common/european_shadow_sources.py` | Blocks `production_scoring` for every European source, even after license review. |
 | Staged records | `normalize_staged_european_record` | Normalizes downloaded or externally staged records into a manifest-safe internal shape without database writes. |
 | SAR reuse | `build_sar_training_manifest_from_staged_records` | Converts reviewed AvalCD/Norway SAR staged records into the existing `sar_training_manifest_v1` contract. |
+| Updated recommendation ratings | `dataset_family_assessments` | Stores the 1-5 enhancement values, best-use guidance, cautions, implementation status, and remaining work for the seven European dataset families. |
 | Manifest CLI | `backend/scripts/build_european_shadow_manifest.py` | Emits a reviewable JSON manifest and usage-gate report for all or selected European sources. |
+
+## Updated Recommendation Status
+
+| Dataset family | Enhancement value /5 | Current implementation status | Still pending |
+|---|---:|---|---|
+| Norway 472k SAR detections | 5.0 | Registered as `norway_sar_activity_monitoring` with benchmark-only gates and production block. | Verify source package/license, stage detections with false-positive and temporal-uncertainty fields, build activity-rate benchmark. |
+| Swiss SPOT6 24,778 outlines | 4.5 | Registered as 2018 and 2019 SPOT6 sources with shadow occurrence staging and license gates. | Download/checksum EnviDat exports after review, normalize polygons, keep extreme-event split separate from normal-season validation. |
+| French EPA/CLPA | 4.5 | Registered as EPA event history and CLPA path-prior sources with benchmark/path-prior gates. | Verify avalanches.fr export terms, separate dated EPA labels from undated CLPA priors, add observability-bias audit slices. |
+| Swiss weather/snowpack/danger ratings | 4.0 | Registered as SLF weather/snowpack feature join and CAAML danger-rating benchmark source. | Build API connector, join covariates without relabeling forecasts as observations, add calibration slices. |
+| AvalCD | 4.0 | Registered as SAR benchmark source and convertible into existing `sar_training_manifest_v1`. | Verify Zenodo license, retrieve assets, stage scenes, run SAR detector benchmark in shadow mode. |
+| SLF accident datasets | 3.0 | Registered as `slf_accident_datasets` with benchmark-only gates. | Download all-accident and fatal-only exports after terms review, normalize location uncertainty and casualty fields, avoid using accidents as occurrence-frequency truth. |
+| EAWS/SLF bulletins | 2.5 | Registered as bulletin context and danger-rating benchmark sources. | Build context ingestion and semantic mapping while keeping bulletins out of observed-event labels. |
+
+Overall enhancement average across the seven families is `3.93 / 5`, with five families at `4.0 / 5` or higher. The strongest value is validation and shadow-model qualification, not immediate public production scoring.
 
 ## Usage
 

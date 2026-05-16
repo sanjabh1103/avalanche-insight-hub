@@ -10,9 +10,11 @@ from backend.common.european_shadow_sources import (
     STAGING_ROLE,
     build_european_shadow_manifest,
     build_sar_training_manifest_from_staged_records,
+    dataset_family_assessments,
     european_source_registry,
     normalize_staged_european_record,
     source_usage_issues,
+    summarize_dataset_family_assessments,
 )
 
 
@@ -27,6 +29,7 @@ class EuropeanShadowSourceTests(unittest.TestCase):
             'french_clpa_extent_priors',
             'norway_sar_fcn_labels',
             'avalcd_zenodo_v1',
+            'slf_accident_datasets',
             'slf_data_service_weather_snowpack',
             'slf_bulletin_caaml',
         }
@@ -41,6 +44,7 @@ class EuropeanShadowSourceTests(unittest.TestCase):
             'swiss_spot6_2019',
             'french_epa_historical',
             'norway_sar_fcn_labels',
+            'norway_sar_activity_monitoring',
             'slf_data_service_weather_snowpack',
         ])
 
@@ -51,8 +55,11 @@ class EuropeanShadowSourceTests(unittest.TestCase):
 
         self.assertEqual(occurrence['known_record_count'], 18737 + 6041 + 54641)
         self.assertEqual(sar['known_record_count'], 6345)
+        self.assertEqual(manifest['summary_by_lane']['sar_detection_activity']['known_record_count'], 472000)
         self.assertEqual(weather['known_record_count'], 0)
         self.assertIn('slf_data_service_weather_snowpack', weather['unknown_record_count_sources'])
+        self.assertEqual(manifest['dataset_family_summary']['family_count'], 4)
+        self.assertEqual(manifest['dataset_family_summary']['highest_enhancement_value'], 5.0)
 
     def test_license_gate_blocks_shadow_training_until_reviewed(self) -> None:
         source = european_source_registry()['swiss_spot6_2018']
@@ -181,6 +188,40 @@ class EuropeanShadowSourceTests(unittest.TestCase):
         )
 
         self.assertEqual(issues, [])
+
+    def test_updated_recommendation_dataset_family_assessments_are_manifested(self) -> None:
+        assessments = dataset_family_assessments()
+
+        self.assertEqual(len(assessments), 7)
+        self.assertEqual(assessments['norway_472k_sar_detections'].enhancement_value, 5.0)
+        self.assertEqual(assessments['swiss_spot6_24778_outlines'].enhancement_value, 4.5)
+        self.assertEqual(assessments['french_epa_clpa'].enhancement_value, 4.5)
+        self.assertEqual(assessments['swiss_weather_snowpack_danger'].enhancement_value, 4.0)
+        self.assertEqual(assessments['avalcd'].enhancement_value, 4.0)
+        self.assertEqual(assessments['slf_accident_datasets'].enhancement_value, 3.0)
+        self.assertEqual(assessments['eaws_slf_bulletins'].enhancement_value, 2.5)
+
+        summary = summarize_dataset_family_assessments(assessments.values())
+        self.assertEqual(summary['family_count'], 7)
+        self.assertEqual(summary['high_value_family_count'], 5)
+        self.assertEqual(summary['average_enhancement_value'], 3.93)
+
+    def test_slf_accident_dataset_is_benchmark_only_not_direct_shadow_training(self) -> None:
+        source = european_source_registry()['slf_accident_datasets']
+
+        benchmark_issues = source_usage_issues(
+            source,
+            requested_role=BENCHMARK_ROLE,
+            license_review_id='license-review-slf-accidents',
+        )
+        shadow_issues = source_usage_issues(
+            source,
+            requested_role=SHADOW_TRAINING_ROLE,
+            license_review_id='license-review-slf-accidents',
+        )
+
+        self.assertEqual(benchmark_issues, [])
+        self.assertTrue(any('does not allow role' in issue for issue in shadow_issues))
 
 
 if __name__ == '__main__':

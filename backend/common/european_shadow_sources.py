@@ -17,6 +17,7 @@ FEATURE_JOIN_ROLE = 'feature_join'
 PRODUCTION_SCORING_ROLE = 'production_scoring'
 
 OCCURRENCE_LABELS_LANE = 'occurrence_labels'
+ACCIDENT_EVENT_LABELS_LANE = 'accident_event_labels'
 SAR_MASKS_LANE = 'sar_masks'
 SAR_DETECTION_ACTIVITY_LANE = 'sar_detection_activity'
 DANGER_RATING_LABELS_LANE = 'danger_rating_labels'
@@ -76,6 +77,30 @@ class EuropeanSource:
             'default_training_role': self.default_training_role,
             'recommended_weight': self.recommended_weight,
             'risk_notes': list(self.risk_notes),
+        }
+
+
+@dataclass(frozen=True)
+class DatasetFamilyAssessment:
+    family_key: str
+    dataset_family: str
+    source_keys: tuple[str, ...]
+    best_use: str
+    enhancement_value: float
+    main_caution: str
+    implementation_status: str
+    remaining_work: tuple[str, ...]
+
+    def as_manifest_dict(self) -> dict[str, Any]:
+        return {
+            'family_key': self.family_key,
+            'dataset_family': self.dataset_family,
+            'source_keys': list(self.source_keys),
+            'best_use': self.best_use,
+            'enhancement_value': self.enhancement_value,
+            'main_caution': self.main_caution,
+            'implementation_status': self.implementation_status,
+            'remaining_work': list(self.remaining_work),
         }
 
 
@@ -229,11 +254,11 @@ def european_source_registry() -> dict[str, EuropeanSource]:
         ),
         _source(
             source_key='norway_sar_activity_monitoring',
-            label='Norwegian Sentinel-1 avalanche activity monitoring detections',
+            label='Norwegian 472k Sentinel-1 avalanche activity monitoring detections',
             region_keys=('scandinavia_norway',),
             data_lane=SAR_DETECTION_ACTIVITY_LANE,
-            record_count=500000,
-            record_count_kind='approximate automated detections reported for large-scale 2016-2020 monitoring',
+            record_count=472000,
+            record_count_kind='updated recommendation count for large-scale automated Sentinel-1 detections',
             curation_level='model/operational detections requiring source-package audit',
             license='operational/research availability varies by release; verify package and redistribution terms',
             source_url='https://www.researchgate.net/publication/344607890_Norway%27s_operational_avalanche_activity_monitoring_system_using_Sentinel-1',
@@ -265,7 +290,7 @@ def european_source_registry() -> dict[str, EuropeanSource]:
         ),
         _source(
             source_key='slf_data_service_weather_snowpack',
-            label='SLF data service weather, snow, and avalanche accident data',
+            label='SLF data service weather and snowpack data',
             region_keys=('swiss_alps',),
             data_lane=WEATHER_SNOWPACK_FEATURES_LANE,
             record_count=None,
@@ -302,6 +327,26 @@ def european_source_registry() -> dict[str, EuropeanSource]:
             ),
         ),
         _source(
+            source_key='slf_accident_datasets',
+            label='SLF avalanche accident datasets',
+            region_keys=('swiss_alps',),
+            data_lane=ACCIDENT_EVENT_LABELS_LANE,
+            record_count=None,
+            record_count_kind='two EnviDat accident datasets; exact rows depend on selected all-accident or fatal-only export',
+            curation_level='high-provenance accident/event records with person-involved or fatality filters',
+            license='SLF/EnviDat terms; CC BY 4.0 and product-specific DOI/terms must be verified before storage',
+            source_url='https://www.slf.ch/en/avalanches/avalanches-and-avalanche-accidents/accident-data/',
+            citation='WSL Institute for Snow and Avalanche Research SLF. Avalanche accidents since 1970/71 (doi:10.16904/envidat.411) and fatal avalanche accidents since 1936/37 (doi:10.16904/envidat.412).',
+            allowed_roles=(REGISTRY_ONLY_ROLE, STAGING_ROLE, BENCHMARK_ROLE),
+            default_training_role=BENCHMARK_ROLE,
+            recommended_weight=0.3,
+            risk_notes=(
+                'Accident-only labels are high provenance but not representative of all avalanches.',
+                'Use for benchmark spot checks, casualty-context analysis, and danger-rating calibration diagnostics.',
+                'Do not treat accident frequency as avalanche occurrence frequency.',
+            ),
+        ),
+        _source(
             source_key='eaws_bulletin_context',
             label='EAWS bulletin context and danger-scale harmonization',
             region_keys=('swiss_alps', 'french_alps', 'scandinavia_norway'),
@@ -322,6 +367,132 @@ def european_source_registry() -> dict[str, EuropeanSource]:
         ),
     ]
     return {source.source_key: source for source in sources}
+
+
+def dataset_family_assessments() -> dict[str, DatasetFamilyAssessment]:
+    assessments = [
+        DatasetFamilyAssessment(
+            family_key='norway_472k_sar_detections',
+            dataset_family='Norway 472k SAR detections',
+            source_keys=('norway_sar_activity_monitoring', 'norway_sar_fcn_labels'),
+            best_use='Sequence forecasting, SAR detector pretraining, avalanche activity priors',
+            enhancement_value=5.0,
+            main_caution='Automated detections need false-positive handling and temporal uncertainty.',
+            implementation_status='source registry and benchmark-only gates implemented',
+            remaining_work=(
+                'Verify source package, license, and exact row/scene schema.',
+                'Stage detections with temporal uncertainty and false-positive fields.',
+                'Build activity-rate benchmark before any detector pretraining use.',
+            ),
+        ),
+        DatasetFamilyAssessment(
+            family_key='swiss_spot6_24778_outlines',
+            dataset_family='Swiss SPOT6 24,778 outlines',
+            source_keys=('swiss_spot6_2018', 'swiss_spot6_2019'),
+            best_use='High-quality occurrence polygons and optical/SAR validation benchmark',
+            enhancement_value=4.5,
+            main_caution='Extreme-event bias; not continuous all-season data.',
+            implementation_status='source registry, license gates, and shadow occurrence staging contract implemented',
+            remaining_work=(
+                'Download and checksum EnviDat exports after license review.',
+                'Normalize polygons to staged records with event-date and geometry refs.',
+                'Build extreme-event benchmark split separate from normal-season validation.',
+            ),
+        ),
+        DatasetFamilyAssessment(
+            family_key='french_epa_clpa',
+            dataset_family='French EPA/CLPA',
+            source_keys=('french_epa_historical', 'french_clpa_extent_priors'),
+            best_use='Long-term event history and terrain/path priors',
+            enhancement_value=4.5,
+            main_caution='Site-selection and observability bias; not full spatial coverage.',
+            implementation_status='source registry and benchmark/path-prior gates implemented',
+            remaining_work=(
+                'Verify export terms and field schema from avalanches.fr.',
+                'Split dated EPA event history from undated CLPA terrain/path priors.',
+                'Create observability-bias audit slices before model fitting.',
+            ),
+        ),
+        DatasetFamilyAssessment(
+            family_key='swiss_weather_snowpack_danger',
+            dataset_family='Swiss weather/snowpack/danger ratings',
+            source_keys=('slf_data_service_weather_snowpack', 'slf_bulletin_caaml'),
+            best_use='Danger-level model benchmarking, calibration, feature engineering',
+            enhancement_value=4.0,
+            main_caution='Danger ratings are expert forecast labels, not direct avalanche occurrence truth.',
+            implementation_status='feature-join and benchmark gates implemented',
+            remaining_work=(
+                'Build API connector with station/date-range manifests and attribution metadata.',
+                'Join covariates to staged occurrence labels without relabeling forecasts as observations.',
+                'Add calibration slices comparing model danger outputs to SLF danger ratings.',
+            ),
+        ),
+        DatasetFamilyAssessment(
+            family_key='avalcd',
+            dataset_family='AvalCD',
+            source_keys=('avalcd_zenodo_v1',),
+            best_use='SAR change-detection benchmark and repo-native 4-channel SAR path',
+            enhancement_value=4.0,
+            main_caution='Smaller occurrence count than the note implies; best for detector benchmarking.',
+            implementation_status='source registry and conversion into existing sar_training_manifest_v1 implemented',
+            remaining_work=(
+                'Verify Zenodo license and retrieve the source manifest/assets.',
+                'Stage AvalCD scenes with reviewed license IDs and storage refs.',
+                'Run SAR detector benchmark and keep outputs shadow-only until gates pass.',
+            ),
+        ),
+        DatasetFamilyAssessment(
+            family_key='slf_accident_datasets',
+            dataset_family='SLF accident datasets',
+            source_keys=('slf_accident_datasets',),
+            best_use='High-provenance event labels',
+            enhancement_value=3.0,
+            main_caution='Accident-only bias; not representative of all avalanches.',
+            implementation_status='benchmark-only source registry and license gates implemented',
+            remaining_work=(
+                'Download all-accident and fatal-only EnviDat exports after terms review.',
+                'Normalize caught/fatality fields and location uncertainty.',
+                'Use as benchmark spot checks, not as occurrence-frequency training truth.',
+            ),
+        ),
+        DatasetFamilyAssessment(
+            family_key='eaws_slf_bulletins',
+            dataset_family='EAWS/SLF bulletins',
+            source_keys=('eaws_bulletin_context', 'slf_bulletin_caaml'),
+            best_use='Evaluation context and warning semantics',
+            enhancement_value=2.5,
+            main_caution='Should not be used as observed event labels.',
+            implementation_status='context and benchmark source gates implemented',
+            remaining_work=(
+                'Build bulletin-context ingestion with source attribution and no occurrence-label promotion.',
+                'Map danger semantics to evaluation context fields.',
+                'Keep public wording as EAWS-style experimental, not official warning equivalence.',
+            ),
+        ),
+    ]
+    return {assessment.family_key: assessment for assessment in assessments}
+
+
+def summarize_dataset_family_assessments(
+    assessments: Iterable[DatasetFamilyAssessment] | None = None,
+) -> dict[str, Any]:
+    values = [
+        float(assessment.enhancement_value)
+        for assessment in (list(assessments) if assessments is not None else dataset_family_assessments().values())
+    ]
+    if not values:
+        return {
+            'family_count': 0,
+            'average_enhancement_value': None,
+            'high_value_family_count': 0,
+            'highest_enhancement_value': None,
+        }
+    return {
+        'family_count': len(values),
+        'average_enhancement_value': round(sum(values) / len(values), 2),
+        'high_value_family_count': sum(1 for value in values if value >= 4.0),
+        'highest_enhancement_value': max(values),
+    }
 
 
 def get_european_source(source_key: str) -> EuropeanSource:
@@ -438,6 +609,12 @@ def build_european_shadow_manifest(
         raise KeyError(f'unknown European source(s): {", ".join(missing)}')
     review_ids = license_review_ids or {}
     sources = [registry[key] for key in keys]
+    selected_key_set = set(keys)
+    family_assessments = [
+        assessment
+        for assessment in dataset_family_assessments().values()
+        if set(assessment.source_keys).intersection(selected_key_set)
+    ]
     generated_at = datetime.now(timezone.utc).isoformat()
     return {
         'version': EUROPEAN_SHADOW_MANIFEST_VERSION,
@@ -446,6 +623,11 @@ def build_european_shadow_manifest(
         'source_count': len(sources),
         'sources': [source.as_manifest_dict() for source in sources],
         'summary_by_lane': summarize_sources_by_lane(sources),
+        'dataset_family_assessments': [
+            assessment.as_manifest_dict()
+            for assessment in family_assessments
+        ],
+        'dataset_family_summary': summarize_dataset_family_assessments(family_assessments),
         'usage_gates': {
             source.source_key: {
                 role: {
