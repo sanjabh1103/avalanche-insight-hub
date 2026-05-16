@@ -274,7 +274,7 @@ def european_source_registry() -> dict[str, EuropeanSource]:
         _source(
             source_key='avalcd_zenodo_v1',
             label='AvalCD bi-temporal Sentinel-1 avalanche change-detection scenes',
-            region_keys=('swiss_alps', 'scandinavia_norway'),
+            region_keys=('italian_alps', 'greenland_nuuk', 'tajikistan_pamir', 'scandinavia_norway'),
             data_lane=SAR_MASKS_LANE,
             record_count=None,
             record_count_kind='scene and patch count comes from downloaded AvalCD manifest',
@@ -284,6 +284,7 @@ def european_source_registry() -> dict[str, EuropeanSource]:
             citation='AvalCD benchmark dataset, Zenodo DOI 10.5281/zenodo.15863589.',
             recommended_weight=0.7,
             risk_notes=(
+                'AvalCD regions are Livigno, Nuuk, Pish/Shughnon, and Tromso; region transfer must be measured explicitly.',
                 'Keep as SAR shadow-training input through the existing sar_training_manifest_v1 contract.',
                 'Do not publish SAR outputs until held-out SAR and RF baseline promotion gates pass.',
             ),
