@@ -12,6 +12,8 @@ os.environ.setdefault('AVALANCHE_SKIP_MODAL_IMPORT', '1')
 
 from backend.modal_worker_app import (
     MODAL_PINNED_RUNTIME_PACKAGES,
+    _request_model_path,
+    _require_volume_path,
     authorize_bearer_request,
     dispatch_modal_route,
     handle_evaluate_release,
@@ -27,6 +29,7 @@ from backend.modal_worker_app import (
     poll_train_mtslstm_job,
     poll_train_mtslstm_job_async,
     run_remote_evaluate_release,
+    run_remote_evaluate_sar_checkpoint,
     run_remote_sar_segment,
     run_remote_train_sar_unet,
     run_remote_infer_mtslstm,
@@ -103,6 +106,19 @@ class ModalWorkerAppTests(unittest.TestCase):
         self.assertEqual(call_args.args[0], 'evaluate-release')
         self.assertTrue(call_args.args[1]['dry_run'])
         self.assertTrue(call_args.kwargs['dry_run'])
+
+    def test_request_model_path_requires_artifact_volume_path(self) -> None:
+        self.assertEqual(_request_model_path({'model_path': '/artifacts/20260516T164730Z/sar_model.pt'}), Path('/artifacts/20260516T164730Z/sar_model.pt'))
+        with self.assertRaisesRegex(ValueError, 'under /artifacts'):
+            _request_model_path({'model_path': '/tmp/sar_model.pt'})
+
+    def test_require_volume_path_rejects_non_artifact_path(self) -> None:
+        self.assertEqual(
+            _require_volume_path({'checkpoint_path': '/artifacts/run/sar_model.pt'}, ('checkpoint_path',)),
+            Path('/artifacts/run/sar_model.pt'),
+        )
+        with self.assertRaisesRegex(ValueError, 'under /artifacts'):
+            _require_volume_path({'checkpoint_path': '/tmp/sar_model.pt'}, ('checkpoint_path',))
 
     @patch.dict('os.environ', {'MODAL_WORKER_TOKEN': 'secret-token'}, clear=False)
     def test_authorize_bearer_request_rejects_missing_token(self) -> None:
@@ -777,6 +793,45 @@ class ModalWorkerAppTests(unittest.TestCase):
             artifact_root=Path('/artifacts'),
             device='cuda',
         )
+
+    @patch('backend.modal_worker_app.evaluate_sar_checkpoint', return_value={'status': 'ok', 'quality_gate': {'passed': True}})
+    def test_run_remote_evaluate_sar_checkpoint_reloads_and_commits_volume(self, evaluate_mock) -> None:
+        calls: list[str] = []
+        payload = {
+            'training_manifest_path': '/artifacts/european-shadow-sar/manifest.json',
+            'checkpoint_path': '/artifacts/20260516T164730Z/sar_model.pt',
+        }
+
+        def _reload() -> None:
+            calls.append('reload')
+
+        def _commit() -> None:
+            calls.append('commit')
+
+        result = run_remote_evaluate_sar_checkpoint(
+            payload,
+            artifact_root=Path('/artifacts'),
+            device='cuda',
+            volume_reload=_reload,
+            volume_commit=_commit,
+        )
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(calls, ['reload', 'commit'])
+        evaluate_mock.assert_called_once_with(payload, artifact_root=Path('/artifacts'), device='cuda')
+
+    @patch('backend.modal_worker_app.build_sar_validation_error_diagnostics', return_value={'status': 'ok'})
+    def test_run_remote_evaluate_sar_checkpoint_diagnostics_branch(self, diagnostics_mock) -> None:
+        payload = {
+            'training_manifest_path': '/artifacts/european-shadow-sar/manifest.json',
+            'checkpoint_path': '/artifacts/20260516T164730Z/sar_model.pt',
+            'diagnostics': True,
+        }
+
+        result = run_remote_evaluate_sar_checkpoint(payload, artifact_root=Path('/artifacts'), device='cuda')
+
+        self.assertEqual(result['status'], 'ok')
+        diagnostics_mock.assert_called_once_with(payload, artifact_root=Path('/artifacts'), device='cuda')
 
     @patch('backend.modal_worker_app.handle_infer_mtslstm', return_value={'status': 'ok', 'cells_with_shap': 5})
     def test_run_remote_infer_mtslstm_reloads_and_commits_volume(self, handle_infer_mock) -> None:

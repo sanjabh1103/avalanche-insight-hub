@@ -34,6 +34,7 @@ DEFAULT_MAX_VALIDATION_POSITIVE_RATE_RATIO = 20.0
 DEFAULT_MAX_VALIDATION_POSITIVE_RATE_ABSOLUTE = 0.15
 DEFAULT_POSTPROCESS_RECALL_FLOOR = 0.50
 EUROPEAN_SAR_PREDICTION_ARTIFACT_VERSION = 'european_sar_prediction_artifact_v1'
+SAR_VALIDATION_ERROR_DIAGNOSTICS_VERSION = 'sar_validation_error_diagnostics_v1'
 
 
 class DiceLoss(nn.Module):
@@ -294,6 +295,39 @@ def _postprocess_binary_mask(
             processed = keep[labeled]
 
     return np.asarray(processed, dtype=bool)
+
+
+def _component_summaries(
+    mask: np.ndarray,
+    *,
+    scene_id: str,
+    patch_id: str,
+    component_type: str,
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    binary = np.asarray(mask, dtype=bool)
+    if not np.any(binary):
+        return []
+    try:
+        from scipy import ndimage
+    except ImportError as exc:  # pragma: no cover - scipy is part of backend requirements
+        raise RuntimeError('scipy is required for SAR validation component diagnostics') from exc
+    labeled, component_count = ndimage.label(binary)
+    if component_count <= 0:
+        return []
+    sizes = np.bincount(labeled.ravel())
+    rows = [
+        {
+            'scene_id': scene_id,
+            'patch_id': patch_id,
+            'component_type': component_type,
+            'component_index': int(index),
+            'pixel_count': int(sizes[index]),
+        }
+        for index in range(1, component_count + 1)
+        if int(sizes[index]) > 0
+    ]
+    return sorted(rows, key=lambda row: row['pixel_count'], reverse=True)[:limit]
 
 
 def _postprocess_candidates(config: PostprocessConfig | None) -> list[dict[str, int]]:
@@ -628,6 +662,89 @@ def _validation_quality_gate(
     }
 
 
+def _checkpoint_payload(checkpoint_path: Path, *, device: str) -> dict[str, Any]:
+    payload = torch.load(checkpoint_path, map_location=device)
+    if not isinstance(payload, dict):
+        raise RuntimeError('SAR checkpoint payload must be a dictionary')
+    return payload
+
+
+def _checkpoint_metadata(payload: dict[str, Any]) -> dict[str, Any]:
+    metadata = payload.get('metadata')
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _normalization_from_checkpoint(payload: dict[str, Any]) -> dict[str, torch.Tensor] | None:
+    metadata = _checkpoint_metadata(payload)
+    normalization = metadata.get('normalization')
+    if not isinstance(normalization, dict):
+        return None
+    mean = normalization.get('img_mean')
+    std = normalization.get('img_std')
+    if mean is None or std is None:
+        return None
+    return {
+        'img_mean': torch.as_tensor(mean, dtype=torch.float32),
+        'img_std': torch.clamp(torch.as_tensor(std, dtype=torch.float32), min=1e-6),
+    }
+
+
+def _load_strict_checkpoint_model(
+    *,
+    checkpoint_path: Path,
+    model_family: str,
+    patch_size: int,
+    device: str,
+) -> tuple[nn.Module, dict[str, Any]]:
+    payload = _checkpoint_payload(checkpoint_path, device=device)
+    model = build_model_architecture(model_family, image_size=patch_size).to(device)
+    state_dict = _state_dict_from_payload(payload)
+    load_result = model.load_state_dict(state_dict, strict=True)
+    if getattr(load_result, 'missing_keys', None) or getattr(load_result, 'unexpected_keys', None):
+        raise RuntimeError('SAR checkpoint failed strict validation load')
+    return model, payload
+
+
+def _checkpoint_path_from_request(request: dict[str, Any]) -> Path:
+    raw_path = (
+        request.get('checkpoint_path')
+        or request.get('model_checkpoint_path')
+        or request.get('initial_checkpoint_path')
+    )
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        raise ValueError('SAR checkpoint evaluation requires checkpoint_path, model_checkpoint_path, or initial_checkpoint_path')
+    checkpoint_path = Path(raw_path.strip()).expanduser()
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(f'SAR checkpoint not found: {checkpoint_path}')
+    return checkpoint_path
+
+
+def _dataset_for_checkpoint_evaluation(
+    request: dict[str, Any],
+    *,
+    artifact_dir: Path,
+    config: TrainingConfig,
+    checkpoint_payload: dict[str, Any],
+) -> tuple[dict[str, Any], Path, SarPatchDataset, SarPatchDataset | None, dict[str, torch.Tensor]]:
+    training_manifest_source = request.get('training_manifest') or request.get('training_manifest_path')
+    if not training_manifest_source:
+        raise ValueError('SAR checkpoint evaluation requires training_manifest or training_manifest_path')
+    dataset_root = _materialized_dataset_root(request, artifact_dir)
+    dataset_audit = materialize_sar_training_dataset(
+        manifest_source=training_manifest_source,
+        output_root=dataset_root,
+        patch_size=config.patch_size,
+        stride=config.stride,
+    )
+    train_dataset: SarPatchDataset | None = None
+    normalization = _normalization_from_checkpoint(checkpoint_payload)
+    if normalization is None:
+        train_dataset = SarPatchDataset(dataset_root, split='train', augment=False)
+        normalization = compute_sar_normalization(train_dataset)
+    val_dataset = SarPatchDataset(dataset_root, split='val', normalization=normalization, augment=False)
+    return dataset_audit, dataset_root, val_dataset, train_dataset, normalization
+
+
 def _save_checkpoint(
     model: nn.Module,
     *,
@@ -868,6 +985,296 @@ def _build_validation_prediction_artifact(
         'val_events': dataset_audit['val_events'],
         'quality_gate': quality_gate,
     }
+
+
+def evaluate_sar_checkpoint(
+    request: dict[str, Any],
+    *,
+    artifact_root: Path,
+    device: str = 'cpu',
+) -> dict[str, Any]:
+    if not torch:
+        raise RuntimeError('torch is required for SAR checkpoint evaluation')
+    checkpoint_path = _checkpoint_path_from_request(request)
+    config = _training_config_from_request(request)
+    artifact_dir = create_artifact_dir(artifact_root)
+    model, checkpoint_payload = _load_strict_checkpoint_model(
+        checkpoint_path=checkpoint_path,
+        model_family=config.model_family,
+        patch_size=config.patch_size,
+        device=device,
+    )
+    dataset_audit, dataset_root, val_dataset, _train_dataset, normalization = _dataset_for_checkpoint_evaluation(
+        request,
+        artifact_dir=artifact_dir,
+        config=config,
+        checkpoint_payload=checkpoint_payload,
+    )
+    val_loader = DataLoader(val_dataset, batch_size=max(1, config.batch_size), shuffle=False, num_workers=0)
+    criterion = _loss_from_name(
+        config.loss_name,
+        focal_tversky_alpha=config.focal_tversky_alpha,
+        focal_tversky_beta=config.focal_tversky_beta,
+        focal_tversky_gamma=config.focal_tversky_gamma,
+    ).to(device)
+    validation = _validate(
+        val_loader,
+        model,
+        device=device,
+        criterion=criterion,
+        threshold_grid=config.threshold_grid,
+        f_beta=config.f_beta,
+        precision_floor=config.precision_floor,
+        postprocess=config.postprocess,
+    )
+    scene_breakdown = _scene_breakdown(
+        val_loader,
+        model,
+        device=device,
+        threshold=float(validation['best_threshold']),
+        min_component_area_px=int(validation['best_metrics'].get('postprocess_min_component_area_px') or 0),
+        opening_size_px=int(validation['best_metrics'].get('postprocess_opening_size_px') or 0),
+    )
+    quality_gate = _validation_quality_gate(
+        scene_breakdown,
+        max_positive_rate_ratio=config.max_validation_positive_rate_ratio,
+        max_positive_rate_absolute=config.max_validation_positive_rate_absolute,
+        threshold_metrics=validation['threshold_metrics'],
+        validation_metrics=validation['best_metrics'],
+        precision_floor=config.precision_floor,
+        recall_floor=(
+            config.postprocess.recall_floor
+            if config.postprocess is not None
+            and config.postprocess.enabled
+            and config.postprocess.apply_to_threshold_selection
+            else None
+        ),
+        selection_floor_met=validation.get('precision_floor_met'),
+    )
+    metrics_payload = {
+        'status': 'ok' if quality_gate['passed'] else 'completed_with_validation_gate_failure',
+        'request_type': 'evaluate_sar_checkpoint',
+        'model_family': config.model_family,
+        'candidate_model_version': config.candidate_model_version,
+        'checkpoint_path': str(checkpoint_path),
+        'dataset_version': dataset_audit['dataset_version'],
+        'epochs_completed': 0,
+        'epochs_requested': 0,
+        'loss': config.loss_name,
+        'patch_size': config.patch_size,
+        'stride': config.stride,
+        'best_threshold': float(validation['best_threshold']),
+        'validation_metrics': validation['best_metrics'],
+        'validation_auprc': float(validation['auprc']),
+        'threshold_metrics': validation['threshold_metrics'],
+        'postprocess_evaluation': validation['postprocess_evaluation'],
+        'scene_breakdown': scene_breakdown,
+        'quality_gate': quality_gate,
+        'dataset_audit': dataset_audit,
+        'materialized_dataset_root': str(dataset_root),
+        'normalization_source': 'checkpoint' if _normalization_from_checkpoint(checkpoint_payload) is not None else 'train_split',
+        'normalization': {
+            'img_mean': normalization['img_mean'].tolist(),
+            'img_std': normalization['img_std'].tolist(),
+        },
+    }
+    prediction_artifact_path: str | None = None
+    if bool(request.get('export_validation_prediction_artifact')):
+        prediction_artifact = _build_validation_prediction_artifact(
+            request=request,
+            config=config,
+            dataset_audit=dataset_audit,
+            best_validation=validation,
+            scene_breakdown=scene_breakdown,
+            quality_gate=quality_gate,
+        )
+        prediction_artifact_path = str(artifact_dir / 'european_sar_prediction_artifact.json')
+        dump_json(Path(prediction_artifact_path), prediction_artifact)
+        metrics_payload['sar_prediction_artifact_path'] = prediction_artifact_path
+        metrics_payload['sar_prediction_artifact'] = prediction_artifact
+    dump_json(artifact_dir / 'sar_training_metrics.json', metrics_payload)
+    report = {
+        'status': metrics_payload['status'],
+        'request_type': 'evaluate_sar_checkpoint',
+        'artifact_dir': str(artifact_dir),
+        'candidate_model_version': config.candidate_model_version,
+        'model_family': config.model_family,
+        'checkpoint_path': str(checkpoint_path),
+        'best_threshold': float(validation['best_threshold']),
+        'validation_auprc': float(validation['auprc']),
+        'validation_metrics': validation['best_metrics'],
+        'postprocess_evaluation': validation['postprocess_evaluation'],
+        'quality_gate_passed': bool(quality_gate['passed']),
+        'blocked_gate': quality_gate['blocked_gate'],
+        'scene_gate_failures': quality_gate['failures'],
+        'dataset_version': dataset_audit['dataset_version'],
+        'train_events': dataset_audit['train_events'],
+        'val_events': dataset_audit['val_events'],
+        'materialized_dataset_root': str(dataset_root),
+    }
+    if prediction_artifact_path is not None:
+        report['sar_prediction_artifact_path'] = prediction_artifact_path
+    dump_json(artifact_dir / 'evaluate_sar_checkpoint_manifest.json', report)
+    return report
+
+
+def build_sar_validation_error_diagnostics(
+    request: dict[str, Any],
+    *,
+    artifact_root: Path,
+    device: str = 'cpu',
+    max_components: int = 10,
+) -> dict[str, Any]:
+    checkpoint_path = _checkpoint_path_from_request(request)
+    config = _training_config_from_request(request)
+    artifact_dir = create_artifact_dir(artifact_root)
+    model, checkpoint_payload = _load_strict_checkpoint_model(
+        checkpoint_path=checkpoint_path,
+        model_family=config.model_family,
+        patch_size=config.patch_size,
+        device=device,
+    )
+    dataset_audit, dataset_root, val_dataset, _train_dataset, _normalization = _dataset_for_checkpoint_evaluation(
+        request,
+        artifact_dir=artifact_dir,
+        config=config,
+        checkpoint_payload=checkpoint_payload,
+    )
+    threshold = float(request.get('threshold') or request.get('best_threshold') or 0.5)
+    min_component_area_px = int(request.get('postprocess_min_component_area_px') or 0)
+    opening_size_px = int(request.get('postprocess_opening_size_px') or 0)
+    loader = DataLoader(val_dataset, batch_size=max(1, config.batch_size), shuffle=False, num_workers=0)
+    scene_counts: dict[str, dict[str, Any]] = {}
+    largest_fn_components: list[dict[str, Any]] = []
+    largest_fp_components: list[dict[str, Any]] = []
+    model.eval()
+    with torch.no_grad():
+        for batch in loader:
+            pre = batch['pre'].to(device)
+            post = batch['post'].to(device)
+            logits = model(pre, post)
+            probabilities = torch.sigmoid(logits).detach().cpu().numpy()[:, 0]
+            targets = batch['mask'].detach().cpu().numpy()[:, 0] >= 0.5
+            scene_ids = batch['scene_id']
+            patch_ids = batch['patch_id']
+            region_keys = batch.get('region_key') or ['unknown'] * len(scene_ids)
+            for index, scene_id_value in enumerate(scene_ids):
+                scene_id = str(scene_id_value)
+                patch_id = str(patch_ids[index])
+                target = targets[index]
+                prediction = probabilities[index] >= threshold
+                prediction = _postprocess_binary_mask(
+                    prediction,
+                    min_component_area_px=min_component_area_px,
+                    opening_size_px=opening_size_px,
+                )
+                false_negative = ~prediction & target
+                false_positive = prediction & ~target
+                stats = scene_counts.setdefault(scene_id, {
+                    'scene_id': scene_id,
+                    'region_key': str(region_keys[index]),
+                    'tp': 0,
+                    'fp': 0,
+                    'fn': 0,
+                    'tn': 0,
+                    'positive_pixels': 0,
+                    'predicted_pixels': 0,
+                    'total_pixels': 0,
+                    'patch_count': 0,
+                    'patches_with_false_negatives': 0,
+                    'patches_with_false_positives': 0,
+                })
+                tp = int(np.sum(prediction & target))
+                fp = int(np.sum(false_positive))
+                fn = int(np.sum(false_negative))
+                tn = int(np.sum(~prediction & ~target))
+                stats['tp'] += tp
+                stats['fp'] += fp
+                stats['fn'] += fn
+                stats['tn'] += tn
+                stats['positive_pixels'] += int(np.sum(target))
+                stats['predicted_pixels'] += int(np.sum(prediction))
+                stats['total_pixels'] += int(target.size)
+                stats['patch_count'] += 1
+                stats['patches_with_false_negatives'] += int(fn > 0)
+                stats['patches_with_false_positives'] += int(fp > 0)
+                largest_fn_components.extend(_component_summaries(
+                    false_negative,
+                    scene_id=scene_id,
+                    patch_id=patch_id,
+                    component_type='false_negative',
+                    limit=max_components,
+                ))
+                largest_fp_components.extend(_component_summaries(
+                    false_positive,
+                    scene_id=scene_id,
+                    patch_id=patch_id,
+                    component_type='false_positive',
+                    limit=max_components,
+                ))
+    scene_diagnostics: list[dict[str, Any]] = []
+    for stats in scene_counts.values():
+        metrics = _metrics_from_counts({key: int(stats[key]) for key in ('tp', 'fp', 'fn', 'tn')})
+        positive_pixels = int(stats['positive_pixels'])
+        predicted_pixels = int(stats['predicted_pixels'])
+        total_pixels = int(stats['total_pixels'])
+        scene_diagnostics.append({
+            **stats,
+            **metrics,
+            'false_negative_share_of_truth': int(stats['fn']) / max(positive_pixels, 1),
+            'false_positive_share_of_predictions': int(stats['fp']) / max(predicted_pixels, 1),
+            'truth_positive_rate': positive_pixels / max(total_pixels, 1),
+            'predicted_positive_rate': predicted_pixels / max(total_pixels, 1),
+        })
+    scene_diagnostics = sorted(scene_diagnostics, key=lambda row: (int(row['fn']), int(row['fp'])), reverse=True)
+    largest_fn_components = sorted(largest_fn_components, key=lambda row: row['pixel_count'], reverse=True)[:max_components]
+    largest_fp_components = sorted(largest_fp_components, key=lambda row: row['pixel_count'], reverse=True)[:max_components]
+    aggregate = {'tp': 0, 'fp': 0, 'fn': 0, 'tn': 0}
+    for scene in scene_diagnostics:
+        for key in aggregate:
+            aggregate[key] += int(scene[key])
+    metrics = _metrics_from_counts(aggregate)
+    precision_floor = float(request.get('precision_floor') or config.precision_floor)
+    recall_floor = float(request.get('postprocess_recall_floor') or DEFAULT_POSTPROCESS_RECALL_FLOOR)
+    recommended_next_step = (
+        'lower_threshold_or_recall_balanced_finetune'
+        if metrics['precision'] >= precision_floor and metrics['recall'] < recall_floor
+        else 'precision_first_diagnostics'
+        if metrics['precision'] < precision_floor
+        else 'eligible_for_heldout_check'
+    )
+    diagnostics = {
+        'version': SAR_VALIDATION_ERROR_DIAGNOSTICS_VERSION,
+        'generated_at': datetime.now(timezone.utc).isoformat(),
+        'model_family': config.model_family,
+        'model_version': config.candidate_model_version,
+        'checkpoint_path': str(checkpoint_path),
+        'dataset_version': dataset_audit['dataset_version'],
+        'threshold': threshold,
+        'postprocess_min_component_area_px': min_component_area_px,
+        'postprocess_opening_size_px': opening_size_px,
+        'precision_floor': precision_floor,
+        'recall_floor': recall_floor,
+        'metrics': metrics,
+        'recommended_next_step': recommended_next_step,
+        'scene_diagnostics': scene_diagnostics,
+        'largest_false_negative_components': largest_fn_components,
+        'largest_false_positive_components': largest_fp_components,
+        'materialized_dataset_root': str(dataset_root),
+    }
+    dump_json(artifact_dir / 'sar_validation_error_diagnostics.json', diagnostics)
+    manifest = {
+        'status': 'ok',
+        'request_type': 'sar_validation_error_diagnostics',
+        'artifact_dir': str(artifact_dir),
+        'diagnostics_path': str(artifact_dir / 'sar_validation_error_diagnostics.json'),
+        'model_version': config.candidate_model_version,
+        'threshold': threshold,
+        'metrics': metrics,
+        'recommended_next_step': recommended_next_step,
+    }
+    dump_json(artifact_dir / 'sar_validation_error_diagnostics_manifest.json', manifest)
+    return manifest
 
 
 def train_sar_unet(

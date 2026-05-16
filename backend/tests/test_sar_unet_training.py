@@ -11,8 +11,11 @@ import torch
 import torch.nn as nn
 
 from backend.sar_unet_training import (
+    _component_summaries,
     _postprocess_binary_mask,
     _validation_quality_gate,
+    build_sar_validation_error_diagnostics,
+    evaluate_sar_checkpoint,
     train_sar_unet,
 )
 
@@ -112,6 +115,23 @@ class SarUnetTrainingTests(unittest.TestCase):
 
         self.assertFalse(bool(processed[0, 0]))
         self.assertEqual(int(processed.sum()), 4)
+
+    def test_component_summaries_rank_largest_components(self) -> None:
+        mask = np.zeros((6, 6), dtype=bool)
+        mask[0, 0] = True
+        mask[2:5, 2:5] = True
+
+        summaries = _component_summaries(
+            mask,
+            scene_id='scene-1',
+            patch_id='patch-1',
+            component_type='false_negative',
+            limit=2,
+        )
+
+        self.assertEqual([row['pixel_count'] for row in summaries], [9, 1])
+        self.assertEqual(summaries[0]['scene_id'], 'scene-1')
+        self.assertEqual(summaries[0]['component_type'], 'false_negative')
 
     def test_train_sar_unet_persists_checkpoint_metadata_and_report(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -221,6 +241,38 @@ class SarUnetTrainingTests(unittest.TestCase):
             self.assertEqual(prediction_artifact['license_review_id'], 'license-review-unit')
             self.assertIn('tp', prediction_artifact['metrics'])
             self.assertEqual(prediction_artifact['evaluated_scene_ids'], ['evt-val-1'])
+
+            eval_request = {
+                **request,
+                'checkpoint_path': report['model_checkpoint_path'],
+                'candidate_model_version': 'swin-shadow-unit-v1-eval',
+                'materialized_dataset_root': str(root / 'eval_sar_training_dataset'),
+                'threshold_grid': [0.5],
+                'precision_floor': 0.0,
+                'postprocess_min_component_area_px': 0,
+                'postprocess_apply_to_threshold_selection': True,
+            }
+            with patch('backend.sar_unet_training.build_model_architecture', side_effect=lambda *args, **kwargs: _TinyBiTemporalModel()):
+                eval_report = evaluate_sar_checkpoint(
+                    eval_request,
+                    artifact_root=root / 'eval_artifacts',
+                    device='cpu',
+                )
+            self.assertEqual(eval_report['request_type'], 'evaluate_sar_checkpoint')
+            self.assertEqual(eval_report['candidate_model_version'], 'swin-shadow-unit-v1-eval')
+            self.assertTrue(Path(eval_report['sar_prediction_artifact_path']).exists())
+
+            with patch('backend.sar_unet_training.build_model_architecture', side_effect=lambda *args, **kwargs: _TinyBiTemporalModel()):
+                diagnostics_report = build_sar_validation_error_diagnostics(
+                    {
+                        **eval_request,
+                        'threshold': eval_report['best_threshold'],
+                    },
+                    artifact_root=root / 'diagnostic_artifacts',
+                    device='cpu',
+                )
+            self.assertEqual(diagnostics_report['request_type'], 'sar_validation_error_diagnostics')
+            self.assertTrue(Path(diagnostics_report['diagnostics_path']).exists())
 
 
 if __name__ == '__main__':

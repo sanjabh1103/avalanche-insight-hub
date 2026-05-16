@@ -623,6 +623,24 @@ class SarUnetWorkerTests(unittest.TestCase):
         self.assertEqual(report['f1'], 1.0)
         self.assertFalse(report['beats_baseline'])
 
+    def test_evaluate_scene_manifest_honors_prediction_threshold(self) -> None:
+        report = evaluate_scene_manifest({
+            'baseline_f1_floor': 0.1,
+            'threshold': 0.997,
+            'scenes': [{
+                'region_key': 'colorado_rockies',
+                'prediction_mask': np.asarray([[0.996, 0.0], [0.0, 0.0]], dtype=np.float32),
+                'truth_mask': np.asarray([[1.0, 0.0], [0.0, 0.0]], dtype=np.float32),
+            }],
+        })
+
+        self.assertEqual(report['status'], 'ok')
+        self.assertEqual(report['prediction_threshold'], 0.997)
+        self.assertEqual(report['truth_threshold'], 0.5)
+        self.assertEqual(report['tp'], 0)
+        self.assertEqual(report['fn'], 1)
+        self.assertEqual(report['recall'], 0.0)
+
     @patch('backend.sar_release_manifest.build_release_manifest_from_reference_set')
     @patch('backend.sar_unet_worker.dump_json')
     @patch('backend.sar_unet_worker.create_artifact_dir')

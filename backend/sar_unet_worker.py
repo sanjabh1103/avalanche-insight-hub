@@ -1063,6 +1063,12 @@ def evaluate_scene_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
             'beats_baseline': False,
             'baseline_f1_floor_used': None,
         }
+    prediction_threshold = float(
+        manifest.get('prediction_threshold')
+        or manifest.get('threshold')
+        or SAR_UNET_SEGMENTATION_THRESHOLD
+    )
+    truth_threshold = float(manifest.get('truth_threshold') or 0.5)
     predictions: list[np.ndarray] = []
     truths: list[np.ndarray] = []
     baselines: list[np.ndarray] = []
@@ -1076,10 +1082,10 @@ def evaluate_scene_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
             continue
         if scene.get('prediction_mask') is None or scene.get('truth_mask') is None:
             continue
-        predictions.append(_load_mask_array(scene['prediction_mask']) >= SAR_UNET_SEGMENTATION_THRESHOLD)
-        truths.append(_load_mask_array(scene['truth_mask']) >= SAR_UNET_SEGMENTATION_THRESHOLD)
+        predictions.append(_load_mask_array(scene['prediction_mask']) >= prediction_threshold)
+        truths.append(_load_mask_array(scene['truth_mask']) >= truth_threshold)
         if scene.get('baseline_mask') is not None:
-            baselines.append(_load_mask_array(scene['baseline_mask']) >= SAR_UNET_SEGMENTATION_THRESHOLD)
+            baselines.append(_load_mask_array(scene['baseline_mask']) >= truth_threshold)
 
     if not predictions or len(predictions) != len(truths):
         return {
@@ -1118,6 +1124,8 @@ def evaluate_scene_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
             'baseline_f1_floor_used': None,
         }
     metrics['status'] = 'ok'
+    metrics['prediction_threshold'] = prediction_threshold
+    metrics['truth_threshold'] = truth_threshold
     metrics['baseline_f1_floor_used'] = baseline_f1_floor_used
     metrics['baseline_margin'] = baseline_margin
     if derived_baseline_metrics is not None:
@@ -1808,6 +1816,12 @@ def run_worker_request(
                     authoritative_only=_flag_from_payload(manifest.get('authoritative_only'), True),
                 ),
             )
+            if manifest.get('threshold') is not None:
+                evaluation_manifest['threshold'] = manifest.get('threshold')
+            if manifest.get('prediction_threshold') is not None:
+                evaluation_manifest['prediction_threshold'] = manifest.get('prediction_threshold')
+            if manifest.get('truth_threshold') is not None:
+                evaluation_manifest['truth_threshold'] = manifest.get('truth_threshold')
         artifact_dir = create_artifact_dir(artifact_root)
         report = evaluate_scene_manifest(evaluation_manifest)
         report.update({

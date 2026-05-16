@@ -18,6 +18,10 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | SAR prediction artifacts | `european_sar_prediction_artifact_v1`, `--sar-prediction-artifact` | Allows AvalCD/SAR reports to compute real precision, recall, F1, IoU, false-positive rate, and confusion counts when validation predictions are attached. |
 | AvalCD governed split | `backend/scripts/build_avalcd_shadow_split_manifest.py` | Builds the deterministic train5/val2 AvalCD shadow split and the matching remote `train_sar_unet_request.json`. |
 | Remote-safe SAR training | `backend/sar_unet_training.py`, `backend/scripts/trigger_and_poll_sar_training.py`, `backend/scripts/run_modal_sar_training_direct.py` | Supports scratch materialization outside persistent artifacts and emits validation prediction artifacts for benchmark consumption. Direct Modal invocation is available when the HTTP worker bearer-token path is not aligned. |
+| SAR checkpoint evaluation | `backend/scripts/evaluate_sar_checkpoint.py`, `backend/scripts/run_modal_sar_checkpoint_evaluation_direct.py` | Re-evaluates an existing SAR checkpoint against dense threshold/post-processing grids without another training run, locally or through the direct Modal.com function path. |
+| SAR validation error diagnostics | `sar_validation_error_diagnostics_v1` | Reports scene-level false-negative/false-positive burden and largest missed components before any new training spend. |
+| SnowSlide materialization guard | `backend/scripts/run_modal_sar_prediction_materialization_direct.py` | Refuses held-out prediction-mask uploads until AvalCD precision and recall gates pass. |
+| Modal cost guard | `backend/scripts/modal_cost_guard.py` | Reasserts zero warm containers for GPU Modal functions so GPU is used only when a job is running. |
 
 ## Updated Recommendation Status
 
@@ -232,7 +236,100 @@ python3 -m backend.scripts.build_sar_precision_diagnostics \
   --recall-floor 0.50
 ```
 
-Current v2 diagnostics show `precision_floor_met=false`, `max_precision=0.3783384251502907`, weakest precision scene `livigno_20250318`, and largest false-positive volume scene `nuuk_20210411`. A v3 request artifact may be prepared under `backend/artifacts/.../precision-v3/`, but should not be launched until diagnostics and post-processing settings are reviewed.
+Historical v2 diagnostics showed `precision_floor_met=false`, `max_precision=0.3783384251502907`, weakest precision scene `livigno_20250318`, and largest false-positive volume scene `nuuk_20210411`. That evidence justified a bounded v3 precision run, not an open-ended sweep.
+
+Evaluate an existing checkpoint without another training run:
+
+```bash
+python3 -m backend.scripts.evaluate_sar_checkpoint \
+  --training-manifest backend/artifacts/european-shadow-sar-manifests/avalcd-shadow-train5-val2-2026-05-16/sar_training_manifest.json \
+  --checkpoint-path backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/precision-v3/20260516T164730Z/sar_model.pt \
+  --output-root backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/eval-only-v3 \
+  --materialized-dataset-root backend/artifacts/european-shadow-sar-materialized/eval-only-v3 \
+  --candidate-model-version avalcd_swinunet_tiny_diff_precision_shadow_20260516_v3_eval \
+  --license-review license-review-avalcd-zenodo-cc-by-nc-2026-05-16 \
+  --precision-floor 0.60 \
+  --postprocess-recall-floor 0.50 \
+  --postprocess-min-component-area-px 32 \
+  --threshold-grid 0.990,0.991,0.992,0.993,0.994,0.995,0.996,0.997 \
+  --device cpu
+```
+
+Build false-negative diagnostics for the selected checkpoint threshold:
+
+```bash
+python3 -m backend.scripts.evaluate_sar_checkpoint \
+  --diagnostics \
+  --training-manifest backend/artifacts/european-shadow-sar-manifests/avalcd-shadow-train5-val2-2026-05-16/sar_training_manifest.json \
+  --checkpoint-path backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/precision-v3/20260516T164730Z/sar_model.pt \
+  --output-root backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/diagnostics-v3 \
+  --materialized-dataset-root backend/artifacts/european-shadow-sar-materialized/diagnostics-v3 \
+  --candidate-model-version avalcd_swinunet_tiny_diff_precision_shadow_20260516_v3 \
+  --license-review license-review-avalcd-zenodo-cc-by-nc-2026-05-16 \
+  --threshold 0.996999979019165 \
+  --precision-floor 0.60 \
+  --postprocess-recall-floor 0.50 \
+  --postprocess-min-component-area-px 64 \
+  --device cpu
+```
+
+For Modal.com execution, use the direct checkpoint-evaluation function rather than the HTTP bearer-token route:
+
+```bash
+python3 -m backend.scripts.run_modal_sar_checkpoint_evaluation_direct \
+  --modal-profile sanjabh1103_limit30 \
+  --request backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/eval-only-v3-remote/evaluate_sar_checkpoint_request.json \
+  --output backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/eval-only-v3-remote/evaluate_sar_checkpoint_result.json
+```
+
+If the evaluation-only report still has `quality_gate.passed=false`, run at most one bounded recall-balanced fine-tune. Do not launch additional sweeps without a new checkpoint decision.
+
+```json
+{
+  "training_manifest_path": "/artifacts/european-shadow-sar/avalcd-shadow-v1/manifests/avalcd_shadow_train5_val2.json",
+  "source_key": "avalcd_zenodo_v1",
+  "model_family": "swinunet_tiny_diff",
+  "candidate_model_version": "avalcd_swinunet_tiny_diff_recall_balanced_shadow_20260517_v4",
+  "initial_checkpoint_path": "/artifacts/20260516T164730Z/sar_model.pt",
+  "patch_size": 128,
+  "stride": 64,
+  "epochs": 6,
+  "patience": 3,
+  "batch_size": 8,
+  "learning_rate": 0.00002,
+  "negative_ratio": 4,
+  "loss": "focal_tversky",
+  "focal_tversky_alpha": 0.45,
+  "focal_tversky_beta": 0.55,
+  "focal_tversky_gamma": 1.33,
+  "f_beta": 0.75,
+  "precision_floor": 0.60,
+  "threshold_grid": [0.990, 0.991, 0.992, 0.993, 0.994, 0.995, 0.996, 0.997],
+  "postprocess_min_component_area_px": 32,
+  "postprocess_opening_size_px": 0,
+  "postprocess_recall_floor": 0.50,
+  "postprocess_apply_to_threshold_selection": true,
+  "materialized_dataset_root": "/tmp/avalcd-shadow-train5-val2-v4",
+  "license_review_id": "license-review-avalcd-zenodo-cc-by-nc-2026-05-16",
+  "export_validation_prediction_artifact": true
+}
+```
+
+Current bounded-run outcome:
+
+| Candidate | Threshold/postprocess | Precision | Recall | F1 | Gate result |
+|---|---:|---:|---:|---:|---|
+| v3 eval-only | `0.996999979`, area `32` | `0.5997` | `0.4681` | `0.5258` | Failed: just below precision floor and below recall floor. |
+| v4 recall-balanced | `0.996999979`, area `32` | `0.5071` | `0.5620` | `0.5331` | Failed: recall recovered, precision regressed below floor. |
+
+The standard v4 European shadow benchmark was rebuilt at `backend/artifacts/european-shadow-real-benchmarks/european-shadow-real-avalcd-predictions-v4-2026-05-16/european_shadow_benchmark_report.json`; it remains `production_scoring_allowed=false` with `decision=blocked_shadow_only`.
+
+Reassert Modal.com zero-warm GPU settings before and after remote jobs:
+
+```bash
+python3 -m backend.scripts.modal_cost_guard \
+  --modal-profile sanjabh1103_limit30
+```
 
 Run the SnowSlide/non-European held-out check only as a dry-run. The direct Modal path avoids the HTTP bearer-token route and never performs promotion:
 
@@ -242,6 +339,18 @@ python3 -m backend.scripts.run_modal_sar_release_evaluation_direct \
   --request backend/artifacts/european-shadow-heldout/snowslide-dry-run/evaluate_release_request.json \
   --output backend/artifacts/european-shadow-heldout/snowslide-dry-run/evaluate_release_result.json
 ```
+
+SnowSlide prediction masks may be materialized only after an AvalCD benchmark report has `quality_gate.passed=true`, `precision_floor_met=true`, and `recall_floor_met=true`:
+
+```bash
+python3 -m backend.scripts.run_modal_sar_prediction_materialization_direct \
+  --modal-profile sanjabh1103_limit30 \
+  --request backend/artifacts/european-shadow-heldout/snowslide-materialization/materialize_prediction_masks_request.json \
+  --avalcd-benchmark-report backend/artifacts/european-shadow-real-benchmarks/european-shadow-real-avalcd-predictions-v4-2026-05-17/european_shadow_benchmark_report.json \
+  --output backend/artifacts/european-shadow-heldout/snowslide-materialization/materialize_prediction_masks_result.json
+```
+
+The current v4-blocked guard run correctly wrote `status=blocked_prediction_materialization`, so SnowSlide prediction masks were not uploaded and the dry-run should not be rerun yet.
 
 ## Promotion Rule
 
