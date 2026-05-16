@@ -17,7 +17,7 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | Shadow benchmarks | `backend/common/european_shadow_benchmarks.py`, `backend/scripts/run_european_shadow_benchmarks.py` | Builds source-quality, bias-audit, readiness, calibration, SAR-compatibility, and promotion-blocker reports without changing public scoring. |
 | SAR prediction artifacts | `european_sar_prediction_artifact_v1`, `--sar-prediction-artifact` | Allows AvalCD/SAR reports to compute real precision, recall, F1, IoU, false-positive rate, and confusion counts when validation predictions are attached. |
 | AvalCD governed split | `backend/scripts/build_avalcd_shadow_split_manifest.py` | Builds the deterministic train5/val2 AvalCD shadow split and the matching remote `train_sar_unet_request.json`. |
-| Remote-safe SAR training | `backend/sar_unet_training.py`, `backend/scripts/trigger_and_poll_sar_training.py` | Supports scratch materialization outside persistent artifacts and emits validation prediction artifacts for benchmark consumption. |
+| Remote-safe SAR training | `backend/sar_unet_training.py`, `backend/scripts/trigger_and_poll_sar_training.py`, `backend/scripts/run_modal_sar_training_direct.py` | Supports scratch materialization outside persistent artifacts and emits validation prediction artifacts for benchmark consumption. Direct Modal invocation is available when the HTTP worker bearer-token path is not aligned. |
 
 ## Updated Recommendation Status
 
@@ -209,6 +209,15 @@ python3 -m backend.scripts.trigger_and_poll_sar_training \
   --env-file .env \
   --request backend/artifacts/european-shadow-sar-manifests/avalcd-shadow-train5-val2-2026-05-16/train_sar_unet_request.json \
   --output backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/train_sar_unet_result.json
+```
+
+If the HTTP worker route returns `401` because the Modal UI secret and local operator token are not aligned, use the governed direct Modal function path instead. This path uses the selected Modal profile and does not require `MODAL_WORKER_TOKEN`:
+
+```bash
+MODAL_PROFILE=sanjabh1103_limit30 python3 -m backend.scripts.run_modal_sar_training_direct \
+  --modal-profile sanjabh1103_limit30 \
+  --request backend/artifacts/european-shadow-sar-manifests/avalcd-shadow-train5-val2-2026-05-16/train_sar_unet_request.json \
+  --output backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/train_sar_unet_result_direct.json
 ```
 
 The request defaults are intentionally remote-safe: SAR patches materialize under `/tmp/avalcd-shadow-train5-val2`, while the model checkpoint, metrics, and prediction artifact remain in the persistent artifact directory.
