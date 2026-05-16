@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -66,6 +67,7 @@ class SarUnetTrainingTests(unittest.TestCase):
             val_mask = np.zeros((8, 8), dtype=np.float32)
             train_mask[:4, :4] = 1.0
             val_mask[4:, 4:] = 1.0
+            scratch_dataset_root = root / 'scratch_sar_training_dataset'
 
             np.savez_compressed(train_stack_path, stack=train_stack)
             np.savez_compressed(train_mask_path, mask=train_mask)
@@ -107,6 +109,10 @@ class SarUnetTrainingTests(unittest.TestCase):
                 'candidate_model_version': 'swin-shadow-unit-v1',
                 'loss': 'focal_tversky',
                 'seed': 7,
+                'source_key': 'avalcd_zenodo_v1',
+                'license_review_id': 'license-review-unit',
+                'materialized_dataset_root': str(scratch_dataset_root),
+                'export_validation_prediction_artifact': True,
             }
 
             with patch('backend.sar_unet_training.build_model_architecture', side_effect=lambda *args, **kwargs: _TinyBiTemporalModel()), \
@@ -125,8 +131,12 @@ class SarUnetTrainingTests(unittest.TestCase):
             self.assertEqual(report['dataset_version'], 'sar-train-unit-v1')
             self.assertEqual(report['train_events'], ['evt-train-1'])
             self.assertEqual(report['val_events'], ['evt-val-1'])
+            self.assertEqual(report['materialized_dataset_root'], str(scratch_dataset_root))
+            self.assertTrue(scratch_dataset_root.exists())
+            self.assertFalse((Path(report['artifact_dir']) / 'sar_training_dataset').exists())
             self.assertGreaterEqual(report['best_threshold'], 0.05)
             self.assertLessEqual(report['best_threshold'], 0.95)
+            self.assertTrue(Path(report['sar_prediction_artifact_path']).exists())
 
             checkpoint_payload = torch.load(report['model_checkpoint_path'], map_location='cpu')
             metadata = checkpoint_payload['metadata']
@@ -135,6 +145,12 @@ class SarUnetTrainingTests(unittest.TestCase):
             self.assertEqual(metadata['dataset_version'], 'sar-train-unit-v1')
             self.assertIn('best_threshold', metadata)
             self.assertIn('validation_auprc', metadata)
+            prediction_artifact = json.loads(Path(report['sar_prediction_artifact_path']).read_text(encoding='utf-8'))
+            self.assertEqual(prediction_artifact['version'], 'european_sar_prediction_artifact_v1')
+            self.assertEqual(prediction_artifact['source_key'], 'avalcd_zenodo_v1')
+            self.assertEqual(prediction_artifact['license_review_id'], 'license-review-unit')
+            self.assertIn('tp', prediction_artifact['metrics'])
+            self.assertEqual(prediction_artifact['evaluated_scene_ids'], ['evt-val-1'])
 
 
 if __name__ == '__main__':

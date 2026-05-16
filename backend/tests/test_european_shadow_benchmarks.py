@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 from backend.common.european_shadow_benchmarks import build_european_shadow_benchmark_report
 from backend.common.european_shadow_ingest import stage_european_source
 from backend.scripts.run_european_shadow_benchmarks import main as benchmark_main
@@ -87,12 +89,172 @@ class EuropeanShadowBenchmarkTests(unittest.TestCase):
             self.assertEqual(statuses['slf_bulletin_caaml'], 'pending_predictions')
             self.assertTrue(any('prediction benchmarks' in blocker for blocker in report['promotion_gate_report']['blockers']))
 
+    def test_sar_prediction_artifact_computes_metrics_and_keeps_production_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            avalcd_raw = root / 'avalcd.json'
+            stack_ref = root / 'stack.json'
+            truth_ref = root / 'truth.npy'
+            prediction_ref = root / 'prediction.npy'
+            np.save(truth_ref, np.asarray([[1, 0], [0, 0]], dtype=np.float32))
+            np.save(prediction_ref, np.asarray([[1, 0], [1, 0]], dtype=np.float32))
+            avalcd_raw.write_text(json.dumps({
+                'scenes': [{
+                    'scene_id': 'tromso-scene-1',
+                    'region_key': 'scandinavia_norway',
+                    'stack_ref': str(stack_ref),
+                    'truth_mask_ref': str(truth_ref),
+                }],
+            }), encoding='utf-8')
+            manifest = stage_european_source(
+                source_key='avalcd_zenodo_v1',
+                raw_path=avalcd_raw,
+                license_review_id='license-review-avalcd',
+                output_root=root / 'out',
+                snapshot_id='snapshot-predictions',
+            )
+            artifact = {
+                'version': 'european_sar_prediction_artifact_v1',
+                'source_key': 'avalcd_zenodo_v1',
+                'dataset_version': 'unit-sar',
+                'model_family': 'swinunet_tiny_diff',
+                'model_version': 'unit-shadow',
+                'split': 'val',
+                'threshold': 0.5,
+                'license_review_id': 'license-review-avalcd',
+                'evaluated_scene_ids': ['tromso-scene-1'],
+                'predictions': [{
+                    'scene_id': 'tromso-scene-1',
+                    'region_key': 'scandinavia_norway',
+                    'prediction_mask_ref': str(prediction_ref),
+                    'truth_mask_ref': str(truth_ref),
+                }],
+            }
+
+            report = build_european_shadow_benchmark_report(
+                staging_manifests=[manifest],
+                sar_prediction_artifacts=[artifact],
+                snapshot_id='benchmark-predictions',
+            )
+            source_report = report['source_reports'][0]
+            metrics = source_report['sar_prediction_metrics']['metrics']
+
+            self.assertEqual(source_report['benchmark_status']['status'], 'computed')
+            self.assertFalse(report['production_scoring_allowed'])
+            self.assertEqual(report['promotion_gate_report']['decision'], 'blocked_shadow_only')
+            self.assertEqual(metrics['tp'], 1)
+            self.assertEqual(metrics['fp'], 1)
+            self.assertEqual(metrics['fn'], 0)
+            self.assertEqual(metrics['tn'], 2)
+            self.assertAlmostEqual(metrics['precision'], 0.5)
+            self.assertAlmostEqual(metrics['recall'], 1.0)
+            self.assertAlmostEqual(metrics['f1'], 2.0 / 3.0)
+
+    def test_sar_prediction_artifact_missing_coverage_stays_pending(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            avalcd_raw = root / 'avalcd.json'
+            truth_ref = root / 'truth.npy'
+            prediction_ref = root / 'prediction.npy'
+            np.save(truth_ref, np.ones((2, 2), dtype=np.float32))
+            np.save(prediction_ref, np.ones((2, 2), dtype=np.float32))
+            avalcd_raw.write_text(json.dumps({
+                'scenes': [{
+                    'scene_id': 'scene-1',
+                    'region_key': 'italian_alps',
+                    'stack_ref': str(root / 'stack.json'),
+                    'truth_mask_ref': str(truth_ref),
+                }],
+            }), encoding='utf-8')
+            manifest = stage_european_source(
+                source_key='avalcd_zenodo_v1',
+                raw_path=avalcd_raw,
+                license_review_id='license-review-avalcd',
+                output_root=root / 'out',
+                snapshot_id='snapshot-missing-predictions',
+            )
+            artifact = {
+                'version': 'european_sar_prediction_artifact_v1',
+                'source_key': 'avalcd_zenodo_v1',
+                'dataset_version': 'unit-sar',
+                'model_family': 'swinunet_tiny_diff',
+                'model_version': 'unit-shadow',
+                'split': 'val',
+                'threshold': 0.5,
+                'license_review_id': 'license-review-avalcd',
+                'evaluated_scene_ids': ['scene-1', 'scene-2'],
+                'predictions': [{
+                    'scene_id': 'scene-1',
+                    'region_key': 'italian_alps',
+                    'prediction_mask_ref': str(prediction_ref),
+                    'truth_mask_ref': str(truth_ref),
+                }],
+            }
+
+            report = build_european_shadow_benchmark_report(
+                staging_manifests=[manifest],
+                sar_prediction_artifacts=[artifact],
+                snapshot_id='benchmark-missing-predictions',
+            )
+            source_report = report['source_reports'][0]
+
+            self.assertEqual(source_report['benchmark_status']['status'], 'pending_predictions')
+            self.assertEqual(source_report['sar_prediction_metrics']['coverage']['missing_scene_ids'], ['scene-2'])
+            self.assertTrue(any('prediction benchmarks' in blocker for blocker in report['promotion_gate_report']['blockers']))
+
+    def test_blocked_remote_sar_training_artifact_surfaces_pending_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            avalcd_raw = root / 'avalcd.json'
+            avalcd_raw.write_text(json.dumps({
+                'scenes': [{
+                    'scene_id': 'livigno_20250318',
+                    'region_key': 'italian_alps',
+                    'stack_ref': str(root / 'stack.json'),
+                    'truth_mask_ref': str(root / 'truth.npy'),
+                }],
+            }), encoding='utf-8')
+            manifest = stage_european_source(
+                source_key='avalcd_zenodo_v1',
+                raw_path=avalcd_raw,
+                license_review_id='license-review-avalcd',
+                output_root=root / 'out',
+                snapshot_id='snapshot-blocked-remote',
+            )
+            artifact = {
+                'version': 'european_sar_prediction_artifact_v1',
+                'source_key': 'avalcd_zenodo_v1',
+                'model_family': 'swinunet_tiny_diff',
+                'model_version': 'avalcd-shadow-unit',
+                'split': 'val',
+                'license_review_id': 'license-review-avalcd',
+                'status': 'blocked_remote_training',
+                'reason': 'workspace billing cycle spend limit reached',
+                'evaluated_scene_ids': ['livigno_20250318'],
+            }
+
+            report = build_european_shadow_benchmark_report(
+                staging_manifests=[manifest],
+                sar_prediction_artifacts=[artifact],
+                snapshot_id='benchmark-blocked-remote',
+            )
+            source_report = report['source_reports'][0]
+
+            self.assertEqual(source_report['benchmark_status']['status'], 'pending_predictions')
+            self.assertIn('spend limit', source_report['benchmark_status']['reason'])
+            self.assertIn('spend limit', source_report['sar_prediction_metrics']['reason'])
+
     def test_accident_and_bulletin_audits_block_occurrence_label_claims(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             accident_raw = root / 'accidents.csv'
             bulletin_raw = root / 'eaws.json'
-            accident_raw.write_text('event_id,date,region_key,dead_count\nacc-1,2022-01-01,swiss_alps,1\n', encoding='utf-8')
+            accident_raw.write_text(
+                'event_id,date,region_key,caught_count,dead_count\n'
+                'acc-1,2022-01-01,swiss_alps,2,1\n'
+                'acc-2,2022-01-02,swiss_alps,1,0\n',
+                encoding='utf-8',
+            )
             bulletin_raw.write_text(json.dumps({
                 'items': [{
                     'id': 'ctx-1',
@@ -124,6 +286,13 @@ class EuropeanShadowBenchmarkTests(unittest.TestCase):
 
             self.assertEqual(audits['slf_accident_datasets']['accident_only_bias'], 'blocked_for_frequency_training')
             self.assertEqual(audits['eaws_bulletin_context']['forecast_not_observation'], 'blocked_for_occurrence_labels')
+            accident_report = next(
+                source_report
+                for source_report in report['source_reports']
+                if source_report['source_key'] == 'slf_accident_datasets'
+            )
+            self.assertEqual(accident_report['accident_event_audit']['caught_record_count'], 2)
+            self.assertEqual(accident_report['accident_event_audit']['fatality_record_count'], 1)
 
     def test_cli_benchmark_writes_output_report(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

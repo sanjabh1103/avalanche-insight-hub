@@ -4,6 +4,7 @@ import json
 import math
 import random
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,7 @@ DEFAULT_PRECISION_FLOOR = 0.05
 DEFAULT_THRESHOLD_GRID = np.linspace(0.05, 0.95, 19, dtype=np.float32)
 DEFAULT_MAX_VALIDATION_POSITIVE_RATE_RATIO = 20.0
 DEFAULT_MAX_VALIDATION_POSITIVE_RATE_ABSOLUTE = 0.15
+EUROPEAN_SAR_PREDICTION_ARTIFACT_VERSION = 'european_sar_prediction_artifact_v1'
 
 
 class DiceLoss(nn.Module):
@@ -212,6 +214,10 @@ def _metrics_from_counts(counts: dict[str, int]) -> dict[str, float]:
     false_positive_rate = fp / max(fp + tn, 1)
     iou = tp / max(tp + fp + fn, 1)
     return {
+        'tp': tp,
+        'fp': fp,
+        'fn': fn,
+        'tn': tn,
         'precision': float(precision),
         'recall': float(recall),
         'f1': float(f1),
@@ -268,6 +274,8 @@ def _scene_breakdown(
     threshold: float,
 ) -> list[dict[str, Any]]:
     scene_counts: dict[str, dict[str, int]] = {}
+    scene_regions: dict[str, str] = {}
+    scene_sources: dict[str, str] = {}
     model.eval()
     with torch.no_grad():
         for batch in loader:
@@ -277,9 +285,13 @@ def _scene_breakdown(
             probabilities = torch.sigmoid(logits).detach().cpu().numpy()[:, 0]
             targets = batch['mask'].detach().cpu().numpy()[:, 0] >= 0.5
             scene_ids = batch['scene_id']
+            region_keys = batch.get('region_key') or ['unknown'] * len(scene_ids)
+            source_datasets = batch.get('source_dataset') or ['unknown'] * len(scene_ids)
             for index, scene_id in enumerate(scene_ids):
                 key = str(scene_id)
                 counts = scene_counts.setdefault(key, {'tp': 0, 'fp': 0, 'fn': 0, 'tn': 0, 'positive_pixels': 0, 'predicted_pixels': 0, 'total_pixels': 0})
+                scene_regions.setdefault(key, str(region_keys[index]))
+                scene_sources.setdefault(key, str(source_datasets[index]))
                 predictions = probabilities[index] >= threshold
                 target = targets[index]
                 counts['tp'] += int(np.sum(predictions & target))
@@ -297,6 +309,8 @@ def _scene_breakdown(
         positive_rate_ratio = predicted_positive_rate / max(truth_positive_rate, 1e-6)
         breakdown.append({
             'scene_id': scene_id,
+            'region_key': scene_regions.get(scene_id, 'unknown'),
+            'source_dataset': scene_sources.get(scene_id, 'unknown'),
             **metrics,
             'truth_positive_rate': float(truth_positive_rate),
             'predicted_positive_rate': float(predicted_positive_rate),
@@ -453,6 +467,73 @@ def _training_config_from_request(request: dict[str, Any]) -> TrainingConfig:
     )
 
 
+def _materialized_dataset_root(request: dict[str, Any], artifact_dir: Path) -> Path:
+    raw_root = request.get('materialized_dataset_root')
+    if not isinstance(raw_root, str) or not raw_root.strip():
+        return artifact_dir / 'sar_training_dataset'
+    candidate = Path(raw_root.strip()).expanduser()
+    if candidate.is_absolute():
+        return candidate
+    return artifact_dir / candidate
+
+
+def _source_key_from_dataset_audit(dataset_audit: dict[str, Any]) -> str | None:
+    source_counts = dataset_audit.get('source_dataset_scene_counts')
+    if isinstance(source_counts, dict) and len(source_counts) == 1:
+        return str(next(iter(source_counts))).strip() or None
+    return None
+
+
+def _region_metrics(scene_breakdown: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    region_counts: dict[str, dict[str, int]] = {}
+    for scene in scene_breakdown:
+        region = str(scene.get('region_key') or 'unknown')
+        counts = region_counts.setdefault(region, {'tp': 0, 'fp': 0, 'fn': 0, 'tn': 0})
+        for key in counts:
+            counts[key] += int(scene.get(key) or 0)
+    return {
+        region: _metrics_from_counts(counts)
+        for region, counts in sorted(region_counts.items())
+    }
+
+
+def _build_validation_prediction_artifact(
+    *,
+    request: dict[str, Any],
+    config: TrainingConfig,
+    dataset_audit: dict[str, Any],
+    best_validation: dict[str, Any],
+    scene_breakdown: list[dict[str, Any]],
+    quality_gate: dict[str, Any],
+) -> dict[str, Any]:
+    source_key = str(request.get('source_key') or '').strip() or _source_key_from_dataset_audit(dataset_audit)
+    metrics = best_validation['best_metrics']
+    return {
+        'version': EUROPEAN_SAR_PREDICTION_ARTIFACT_VERSION,
+        'source_key': source_key,
+        'dataset_version': dataset_audit['dataset_version'],
+        'model_family': config.model_family,
+        'model_version': config.candidate_model_version,
+        'candidate_model_version': config.candidate_model_version,
+        'split': 'val',
+        'threshold': float(best_validation['best_threshold']),
+        'generated_at': datetime.now(timezone.utc).isoformat(),
+        'license_review_id': str(request.get('license_review_id') or '').strip() or None,
+        'status': 'computed',
+        'metrics': {
+            'threshold': float(best_validation['best_threshold']),
+            'auprc': float(best_validation['auprc']),
+            **metrics,
+        },
+        'scene_breakdown': scene_breakdown,
+        'region_breakdown': _region_metrics(scene_breakdown),
+        'evaluated_scene_ids': dataset_audit['val_events'],
+        'train_events': dataset_audit['train_events'],
+        'val_events': dataset_audit['val_events'],
+        'quality_gate': quality_gate,
+    }
+
+
 def train_sar_unet(
     request: dict[str, Any],
     *,
@@ -467,7 +548,7 @@ def train_sar_unet(
 
     config = _training_config_from_request(request)
     artifact_dir = create_artifact_dir(artifact_root)
-    dataset_root = artifact_dir / 'sar_training_dataset'
+    dataset_root = _materialized_dataset_root(request, artifact_dir)
     seed = int(request.get('seed') or 42)
     _set_seed(seed)
 
@@ -595,9 +676,24 @@ def train_sar_unet(
         'train_loss_history': train_loss_history,
         'val_loss_history': val_loss_history,
         'dataset_audit': dataset_audit,
+        'materialized_dataset_root': str(dataset_root),
         'initial_checkpoint': initial_checkpoint,
         'model_checkpoint_path': str(checkpoint_path),
     }
+    prediction_artifact_path: str | None = None
+    if bool(request.get('export_validation_prediction_artifact')):
+        prediction_artifact = _build_validation_prediction_artifact(
+            request=request,
+            config=config,
+            dataset_audit=dataset_audit,
+            best_validation=best_validation,
+            scene_breakdown=scene_breakdown,
+            quality_gate=quality_gate,
+        )
+        prediction_artifact_path = str(artifact_dir / 'european_sar_prediction_artifact.json')
+        dump_json(Path(prediction_artifact_path), prediction_artifact)
+        metrics_payload['sar_prediction_artifact_path'] = prediction_artifact_path
+        metrics_payload['sar_prediction_artifact'] = prediction_artifact
     dump_json(artifact_dir / 'sar_training_metrics.json', metrics_payload)
     status = 'ok' if quality_gate['passed'] else 'completed_with_validation_gate_failure'
     report = {
@@ -616,7 +712,10 @@ def train_sar_unet(
         'dataset_version': dataset_audit['dataset_version'],
         'train_events': dataset_audit['train_events'],
         'val_events': dataset_audit['val_events'],
+        'materialized_dataset_root': str(dataset_root),
     }
+    if prediction_artifact_path is not None:
+        report['sar_prediction_artifact_path'] = prediction_artifact_path
     dump_json(artifact_dir / 'train_sar_unet_manifest.json', report)
     return report
 
@@ -639,4 +738,12 @@ def build_cli_request(args: Any) -> dict[str, Any]:
     }
     if args.initial_checkpoint_path:
         request['initial_checkpoint_path'] = str(args.initial_checkpoint_path)
+    if getattr(args, 'materialized_dataset_root', None):
+        request['materialized_dataset_root'] = str(args.materialized_dataset_root)
+    if getattr(args, 'source_key', None):
+        request['source_key'] = str(args.source_key)
+    if getattr(args, 'license_review_id', None):
+        request['license_review_id'] = str(args.license_review_id)
+    if getattr(args, 'export_validation_prediction_artifact', False):
+        request['export_validation_prediction_artifact'] = True
     return request

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
+from backend.common.avalcd_manifest import AVALCD_SCENE_MANIFEST_FILENAME
 from backend.common.european_shadow_sources import (
     SAR_MANIFEST_LANES,
     build_sar_training_manifest_from_staged_records,
@@ -179,6 +180,13 @@ def load_staged_records(manifest: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _iter_source_rows(raw_path: Path, *, source_key: str) -> Iterator[dict[str, Any]]:
     if raw_path.is_dir():
+        if source_key == 'avalcd_zenodo_v1':
+            emitted = False
+            for row in _iter_avalcd_assembled_scene_rows(raw_path):
+                emitted = True
+                yield row
+            if emitted:
+                return
         for file_path in sorted(item for item in raw_path.rglob('*') if item.is_file()):
             yield from _iter_file_rows(file_path, source_key=source_key, asset_prefix=str(file_path))
         return
@@ -239,13 +247,42 @@ def _iter_zip_rows(path: Path, *, source_key: str) -> Iterator[dict[str, Any]]:
 
 
 def _rows_from_csv(text: str, *, asset_ref: str) -> Iterator[dict[str, Any]]:
-    reader = csv.DictReader(io.StringIO(text))
+    header_rows = _csv_rows_from_first_header_line(text)
+    reader = header_rows if header_rows is not None else csv.DictReader(io.StringIO(text))
     for index, row in enumerate(reader, start=1):
         yield {
             **{str(key): value for key, value in row.items() if key is not None},
             '__asset_ref': f'{asset_ref}#row-{index}',
             '__source_format': 'csv',
         }
+
+
+def _csv_rows_from_first_header_line(text: str) -> Iterator[dict[str, str]] | None:
+    lines = text.splitlines()
+    for header_index, line in enumerate(lines):
+        fields = _parse_possibly_wrapped_csv_line(line)
+        normalized = {field.strip().lower() for field in fields}
+        if len(fields) > 1 and normalized.intersection({'id', 'event_id', 'avalanche.id', 'date'}):
+            return _dict_rows_from_csv_lines(fields, lines[header_index + 1:])
+    return None
+
+
+def _dict_rows_from_csv_lines(headers: list[str], lines: list[str]) -> Iterator[dict[str, str]]:
+    clean_headers = [header.strip() for header in headers]
+    for line in lines:
+        if not line.strip():
+            continue
+        values = _parse_possibly_wrapped_csv_line(line)
+        if len(values) < len(clean_headers):
+            values = [*values, *([''] * (len(clean_headers) - len(values)))]
+        yield {header: values[index] if index < len(values) else '' for index, header in enumerate(clean_headers)}
+
+
+def _parse_possibly_wrapped_csv_line(line: str) -> list[str]:
+    values = next(csv.reader([line]))
+    if len(values) == 1 and ',' in values[0]:
+        return next(csv.reader([values[0]]))
+    return values
 
 
 def _rows_from_json(payload: Any, *, asset_ref: str) -> Iterator[dict[str, Any]]:
@@ -352,11 +389,42 @@ def _avalcd_archive_records(names: Iterable[str], *, asset_ref: str) -> Iterator
             }
 
 
+def _iter_avalcd_assembled_scene_rows(root: Path) -> Iterator[dict[str, Any]]:
+    for manifest_path in sorted(root.rglob(AVALCD_SCENE_MANIFEST_FILENAME)):
+        scene_root = manifest_path.parent
+        truth_mask_path = scene_root / 'truth_mask.tif'
+        if not truth_mask_path.exists():
+            continue
+        scene_id = scene_root.name
+        region_key = scene_root.parent.name if scene_root.parent != root else ''
+        split = scene_root.parent.parent.name if scene_root.parent.parent != root else ''
+        yield {
+            'scene_id': scene_id,
+            'external_id': scene_id,
+            'event_id': scene_id,
+            'region_key': region_key,
+            'event_time': _event_time_from_avalcd_scene_id(scene_id),
+            'stack_ref': str(manifest_path.resolve()),
+            'truth_mask_ref': str(truth_mask_path.resolve()),
+            'dataset_kind': 'assembled_avalcd_scene',
+            'avalcd_split': split,
+            '__asset_ref': str(scene_root.resolve()),
+            '__source_format': 'avalcd_assembled_scene',
+        }
+
+
 def _scene_id_from_path(value: str) -> str:
     parts = [part for part in Path(value).parts if part not in {'.', ''}]
     if len(parts) >= 2:
         return _slug(parts[-2])
     return _slug(Path(value).stem)
+
+
+def _event_time_from_avalcd_scene_id(scene_id: str) -> str | None:
+    token = str(scene_id or '').strip().split('_')[-1]
+    if len(token) == 8 and token.isdigit():
+        return f'{token[:4]}-{token[4:6]}-{token[6:8]}T00:00:00Z'
+    return None
 
 
 def _build_normalization_payload(
@@ -370,7 +438,7 @@ def _build_normalization_payload(
     external_id = _first_string(
         raw,
         'external_id', 'event_id', 'scene_id', 'id', 'ID', 'objectid', 'OBJECTID',
-        'fid', 'FID', 'avalanche_id', 'AvalancheID', 'nr', 'Nr', 'numero',
+        'fid', 'FID', 'avalanche_id', 'AvalancheID', 'avalanche.id', 'nr', 'Nr', 'numero',
     ) or f'{source_key}-{index:06d}'
     event_time = _event_time_for_source(source_key, raw)
     geometry = raw.get('__geometry') if isinstance(raw.get('__geometry'), dict) else None
@@ -379,7 +447,7 @@ def _build_normalization_payload(
     payload: dict[str, Any] = {
         'source_key': source_key,
         'external_id': external_id,
-        'event_id': _first_string(raw, 'event_id', 'avalanche_id', 'AvalancheID') or external_id,
+        'event_id': _first_string(raw, 'event_id', 'avalanche_id', 'AvalancheID', 'avalanche.id') or external_id,
         'scene_id': _first_string(raw, 'scene_id', 'SceneID', 'scene') or external_id,
         'region_key': _infer_region_key(source_regions, raw),
         'event_time': event_time,
@@ -429,10 +497,30 @@ def _metadata_for_source(
         'location_accuracy_m', 'coordinate_accuracy', 'caught_count',
         'dead_count', 'fatality_count', 'buried_count', 'detection_probability',
         'confidence', 'temporal_uncertainty_hours', 'false_positive_review_status',
-        'dataset_kind',
+        'dataset_kind', 'avalcd_split',
     ):
         if key in raw and raw.get(key) not in (None, ''):
             metadata[key] = _json_safe(raw.get(key))
+    for target, aliases in {
+        'date_accuracy': ('date.quality',),
+        'location_accuracy_m': ('coordinates.quality', 'start.zone.coordinates.quality'),
+        'caught_count': ('number.caught',),
+        'dead_count': ('number.dead',),
+        'buried_count': ('number.fully.buried',),
+        'elevation_m': ('start.zone.elevation',),
+        'aspect': ('start.zone.slope.aspect',),
+        'slope_angle': ('start.zone.inclination',),
+        'predicted_danger_level': ('forecasted.dangerlevel.rating1',),
+        'forecasted_danger_level_2': ('forecasted.dangerlevel.rating2',),
+        'hydrological_year': ('hydrological.year',),
+        'start_zone_latitude': ('start.zone.coordinates.latitude',),
+        'start_zone_longitude': ('start.zone.coordinates.longitude',),
+        'activity': ('activity',),
+    }.items():
+        if target not in metadata:
+            value = _first_value(raw, *aliases)
+            if value not in (None, ''):
+                metadata[target] = _json_safe(value)
     if source_key in {'swiss_spot6_2018', 'swiss_spot6_2019'}:
         metadata['extreme_event_split'] = source_key
         metadata['event_type'] = 'extreme_avalanche_period'
@@ -501,6 +589,13 @@ def _first_string(row: dict[str, Any], *keys: str) -> str:
         if cleaned:
             return cleaned
     return ''
+
+
+def _first_value(row: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in row and row.get(key) not in (None, ''):
+            return row.get(key)
+    return None
 
 
 def _clean_string(value: Any) -> str:

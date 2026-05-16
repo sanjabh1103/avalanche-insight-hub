@@ -93,6 +93,47 @@ class EuropeanShadowIngestTests(unittest.TestCase):
             self.assertEqual(records[0]['metadata']['label_semantics'], 'accident_event_not_occurrence_frequency')
             self.assertEqual(records[0]['metadata']['caught_count'], '2')
 
+    def test_stage_slf_official_csv_with_preamble_and_dotted_headers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            raw_path = root / 'slf_official_accidents.csv'
+            raw_path.write_text(
+                'WSL Institute for Snow and Avalanche Research SLF\n'
+                'Avalanche accidents in Switzerland since 1970-1971\n'
+                'Update: 2025-02-10 08:56 (UTC)\n'
+                '"avalanche.id,date,date.quality,hydrological.year,canton,municipality,'
+                '""start.zone.coordinates.latitude"",""start.zone.coordinates.longitude"",'
+                'coordinates.quality,start.zone.elevation,start.zone.slope.aspect,'
+                'start.zone.inclination,number.dead,number.caught,number.fully.buried,activity"\n'
+                '"acc-official-1,1971-01-31,0,1970/71,BE,""Erlenbach im Simmental"",'
+                '46.68375705,7.51640995,100,1790,NE,35_40,1,2,1,tour"\n',
+                encoding='utf-8',
+            )
+
+            manifest = stage_european_source(
+                source_key='slf_accident_datasets',
+                raw_path=raw_path,
+                license_review_id='license-review-slf-accidents',
+                output_root=root / 'out',
+                snapshot_id='snapshot-slf-official',
+            )
+            records = load_staged_records(manifest)
+
+            self.assertEqual(manifest['record_count'], 1)
+            self.assertEqual(records[0]['event_id'], 'acc-official-1')
+            self.assertEqual(records[0]['event_time'], '1971-01-31')
+            self.assertFalse(records[0]['training_eligible'])
+            self.assertEqual(records[0]['metadata']['date_accuracy'], '0')
+            self.assertEqual(records[0]['metadata']['location_accuracy_m'], '100')
+            self.assertEqual(records[0]['metadata']['caught_count'], '2')
+            self.assertEqual(records[0]['metadata']['dead_count'], '1')
+            self.assertEqual(records[0]['metadata']['buried_count'], '1')
+            self.assertEqual(records[0]['metadata']['municipality'], 'Erlenbach im Simmental')
+            self.assertEqual(records[0]['metadata']['elevation_m'], '1790')
+            self.assertEqual(records[0]['metadata']['aspect'], 'NE')
+            self.assertEqual(records[0]['metadata']['slope_angle'], '35_40')
+            self.assertEqual(records[0]['metadata']['label_semantics'], 'accident_event_not_occurrence_frequency')
+
     def test_stage_avalcd_records_can_emit_sar_training_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -124,6 +165,39 @@ class EuropeanShadowIngestTests(unittest.TestCase):
             self.assertEqual(manifest['sar_training_manifest_scene_count'], 1)
             self.assertEqual(sar_manifest['version'], 'sar_training_manifest_v1')
             self.assertEqual(sar_manifest['scenes'][0]['split'], 'val')
+
+    def test_stage_assembled_avalcd_directory_emits_sar_training_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            scene_root = root / 'assembled' / 'val' / 'italian_alps' / 'livigno_20250129'
+            scene_root.mkdir(parents=True)
+            stack_manifest_path = scene_root / 'stack_manifest.json'
+            truth_mask_path = scene_root / 'truth_mask.tif'
+            stack_manifest_path.write_text('{}\n', encoding='utf-8')
+            truth_mask_path.write_bytes(b'tiff-placeholder')
+
+            manifest = stage_european_source(
+                source_key='avalcd_zenodo_v1',
+                raw_path=root / 'assembled',
+                license_review_id='license-review-avalcd',
+                output_root=root / 'out',
+                snapshot_id='snapshot-assembled-avalcd',
+                sar_split='val',
+            )
+            records = load_staged_records(manifest)
+            sar_manifest = json.loads(Path(manifest['sar_training_manifest_path']).read_text(encoding='utf-8'))
+
+            self.assertEqual(manifest['record_count'], 1)
+            self.assertEqual(manifest['sar_training_manifest_scene_count'], 1)
+            self.assertEqual(records[0]['source_key'], 'avalcd_zenodo_v1')
+            self.assertEqual(records[0]['event_time'], '2025-01-29T00:00:00Z')
+            self.assertEqual(records[0]['asset_refs']['stack_ref'], str(stack_manifest_path.resolve()))
+            self.assertEqual(records[0]['asset_refs']['truth_mask_ref'], str(truth_mask_path.resolve()))
+            self.assertEqual(records[0]['metadata']['dataset_kind'], 'assembled_avalcd_scene')
+            self.assertEqual(records[0]['metadata']['avalcd_split'], 'val')
+            self.assertEqual(sar_manifest['version'], 'sar_training_manifest_v1')
+            self.assertEqual(sar_manifest['scenes'][0]['scene_id'], 'livigno_20250129')
+            self.assertEqual(sar_manifest['scenes'][0]['stack_ref'], str(stack_manifest_path.resolve()))
 
     def test_cli_stage_writes_requested_output_copy(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
