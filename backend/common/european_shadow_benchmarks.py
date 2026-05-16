@@ -440,7 +440,7 @@ def _sar_prediction_report_from_metrics_artifact(
         'scene_breakdown': scene_breakdown,
         'region_breakdown': artifact.get('region_breakdown') or _region_breakdown_from_scenes(scene_breakdown),
         'coverage': _prediction_coverage(records, expected_scene_ids, actual_scene_ids, missing),
-        'quality_gate': artifact.get('quality_gate'),
+        'quality_gate': _sar_quality_gate_for_report(artifact, metrics),
     }
 
 
@@ -522,6 +522,70 @@ def _compute_mask_row_metrics(rows: list[dict[str, Any]], *, threshold: float) -
         })
     metrics = compute_mask_metrics(prediction_masks, truth_masks)
     return metrics, scene_breakdown
+
+
+def _sar_quality_gate_for_report(artifact: dict[str, Any], metrics: dict[str, Any]) -> dict[str, Any] | None:
+    raw_gate = artifact.get('quality_gate')
+    quality_gate = dict(raw_gate) if isinstance(raw_gate, dict) else None
+    postprocess = artifact.get('postprocess_evaluation')
+    if not isinstance(postprocess, dict) or not postprocess.get('enabled'):
+        return quality_gate
+
+    precision_floor = _coerce_float(
+        postprocess.get('precision_floor')
+        or (quality_gate or {}).get('precision_floor')
+    )
+    recall_floor = _coerce_float(postprocess.get('recall_floor'))
+    if precision_floor is None or recall_floor is None:
+        return quality_gate
+
+    precision = _coerce_float(metrics.get('precision')) or 0.0
+    recall = _coerce_float(metrics.get('recall')) or 0.0
+    selection_reason = str(postprocess.get('selection_reason') or '').strip()
+    floors_met = (
+        precision >= precision_floor
+        and recall >= recall_floor
+        and selection_reason == 'precision_floor_and_recall_floor_met'
+    )
+    if floors_met:
+        if quality_gate is None:
+            return {
+                'passed': True,
+                'blocked_gate': None,
+                'failures': [],
+                'precision_floor': precision_floor,
+                'recall_floor': recall_floor,
+                'precision_floor_met': True,
+                'recall_floor_met': True,
+            }
+        quality_gate['recall_floor'] = recall_floor
+        quality_gate['recall_floor_met'] = True
+        return quality_gate
+
+    blocked_gate = 'recall_floor' if precision >= precision_floor and recall < recall_floor else 'precision_floor'
+    if blocked_gate == 'recall_floor' and selection_reason == 'best_f0_5_without_precision_floor':
+        selection_reason = 'best_f0_5_without_precision_and_recall_floor'
+    repaired_gate = dict(quality_gate or {})
+    failures = list(repaired_gate.get('failures') or [])
+    failures.append({
+        'scene_id': None,
+        'reason': 'recall_floor_not_met' if blocked_gate == 'recall_floor' else 'precision_floor_not_met',
+        'precision_floor': precision_floor,
+        'recall_floor': recall_floor,
+        'precision': precision,
+        'recall': recall,
+        'selection_reason': selection_reason,
+    })
+    repaired_gate.update({
+        'passed': False,
+        'blocked_gate': blocked_gate,
+        'failures': failures,
+        'precision_floor': precision_floor,
+        'recall_floor': recall_floor,
+        'precision_floor_met': precision >= precision_floor,
+        'recall_floor_met': recall >= recall_floor,
+    })
+    return repaired_gate
 
 
 def _expected_prediction_scene_ids(artifact: dict[str, Any]) -> list[str]:

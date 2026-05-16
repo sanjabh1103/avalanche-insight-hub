@@ -70,6 +70,32 @@ class SarUnetTrainingTests(unittest.TestCase):
         self.assertEqual(gate['max_precision'], 0.41)
         self.assertEqual(gate['best_precision_threshold'], 0.99)
 
+    def test_validation_quality_gate_rejects_recall_floor_after_postprocess_selection(self) -> None:
+        gate = _validation_quality_gate(
+            [{
+                'scene_id': 'scene-1',
+                'predicted_positive_rate': 0.01,
+                'truth_positive_rate': 0.01,
+                'positive_rate_ratio': 1.0,
+            }],
+            max_positive_rate_ratio=20.0,
+            max_positive_rate_absolute=0.15,
+            threshold_metrics=[
+                {'threshold': 0.997, 'precision': 0.65, 'recall': 0.45},
+                {'threshold': 0.999, 'precision': 0.80, 'recall': 0.20},
+            ],
+            precision_floor=0.60,
+            recall_floor=0.50,
+            selection_floor_met=False,
+        )
+
+        self.assertFalse(gate['passed'])
+        self.assertEqual(gate['blocked_gate'], 'recall_floor')
+        self.assertTrue(gate['precision_floor_met'])
+        self.assertFalse(gate['recall_floor_met'])
+        self.assertEqual(gate['failures'][0]['reason'], 'recall_floor_not_met')
+        self.assertEqual(gate['best_precision_recall'], 0.20)
+
     def test_postprocess_binary_mask_noops_when_disabled(self) -> None:
         predictions = np.array([[True, False], [True, True]])
 

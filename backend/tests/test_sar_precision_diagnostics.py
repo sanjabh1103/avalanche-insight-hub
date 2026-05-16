@@ -54,6 +54,7 @@ class SarPrecisionDiagnosticsTests(unittest.TestCase):
         diagnostics = build_sar_precision_diagnostics(payload, precision_floor=0.60)
 
         self.assertFalse(diagnostics['precision_floor_met'])
+        self.assertFalse(diagnostics['precision_recall_floor_met'])
         self.assertEqual(diagnostics['failure_reason'], 'no_threshold_met_precision_floor')
         self.assertEqual(diagnostics['max_precision'], 0.38)
         self.assertEqual(diagnostics['flags']['weakest_precision_scene_id'], 'livigno_20250318')
@@ -61,6 +62,38 @@ class SarPrecisionDiagnosticsTests(unittest.TestCase):
         self.assertEqual(diagnostics['scene_diagnostics']['weakest_precision_scene']['precision'], 0.18)
         self.assertEqual(diagnostics['scene_diagnostics']['largest_fp_volume_scene']['fp'], 340)
         self.assertFalse(diagnostics['threshold_curve'][0]['precision_floor_met'])
+
+    def test_diagnostics_flags_precision_recall_floor_failure(self) -> None:
+        payload = {
+            'candidate_model_version': 'avalcd-test-v3',
+            'model_family': 'swinunet_tiny_diff',
+            'dataset_audit': {'dataset_version': 'avalcd-test-sar'},
+            'validation_metrics': {
+                'threshold': 0.997,
+                'precision': 0.65,
+                'recall': 0.45,
+                'f1': 0.53,
+                'fp': 85,
+                'tp': 160,
+            },
+            'threshold_metrics': [
+                {'threshold': 0.997, 'precision': 0.65, 'recall': 0.45, 'f1': 0.53, 'fp': 85, 'tp': 160},
+                {'threshold': 0.999, 'precision': 0.80, 'recall': 0.20, 'f1': 0.32, 'fp': 20, 'tp': 70},
+            ],
+            'scene_breakdown': [],
+        }
+
+        diagnostics = build_sar_precision_diagnostics(
+            payload,
+            precision_floor=0.60,
+            recall_floor=0.50,
+        )
+
+        self.assertTrue(diagnostics['precision_floor_met'])
+        self.assertFalse(diagnostics['precision_recall_floor_met'])
+        self.assertEqual(diagnostics['failure_reason'], 'no_threshold_met_precision_and_recall_floor')
+        self.assertEqual(diagnostics['flags']['recommended_next_step'], 'diagnostic_first_no_blind_training')
+        self.assertFalse(diagnostics['threshold_curve'][0]['precision_recall_floor_met'])
 
 
 if __name__ == '__main__':

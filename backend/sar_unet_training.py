@@ -426,7 +426,7 @@ def _select_best_postprocessed_threshold(
             ),
         )
         selected_metrics = dict(selected['best_f0_5_metrics'])
-        selection_reason = 'best_f0_5_without_precision_floor'
+        selection_reason = 'best_f0_5_without_precision_and_recall_floor'
         precision_floor_met = False
 
     selected_metrics['postprocess_opening_size_px'] = int(selected['opening_size_px'])
@@ -539,6 +539,8 @@ def _validation_quality_gate(
     threshold_metrics: list[dict[str, Any]] | None = None,
     validation_metrics: dict[str, Any] | None = None,
     precision_floor: float = DEFAULT_PRECISION_FLOOR,
+    recall_floor: float | None = None,
+    selection_floor_met: bool | None = None,
 ) -> dict[str, Any]:
     failures = [
         {
@@ -566,25 +568,48 @@ def _validation_quality_gate(
         )
         max_precision = float(best_precision.get('precision') or 0.0)
         best_precision_threshold = float(best_precision.get('threshold') or 0.0)
+        best_precision_recall = float(best_precision.get('recall') or 0.0)
         precision_floor_met = max_precision >= float(precision_floor)
+        if selection_floor_met is not None:
+            combined_floor_met = bool(selection_floor_met)
+        elif recall_floor is not None:
+            combined_floor_met = any(
+                float(row.get('precision') or 0.0) >= float(precision_floor)
+                and float(row.get('recall') or 0.0) >= float(recall_floor)
+                for row in metric_candidates
+            )
+        else:
+            combined_floor_met = precision_floor_met
+        recall_floor_met = combined_floor_met if recall_floor is not None else True
     else:
         max_precision = 0.0
         best_precision_threshold = 0.0
+        best_precision_recall = 0.0
         precision_floor_met = True
-    if not precision_floor_met:
+        combined_floor_met = True
+        recall_floor_met = True
+    if not combined_floor_met:
+        reason = 'precision_floor_not_met'
+        if recall_floor is not None and max_precision >= float(precision_floor):
+            reason = 'recall_floor_not_met'
         failures.append({
             'scene_id': None,
-            'reason': 'precision_floor_not_met',
+            'reason': reason,
             'precision_floor': float(precision_floor),
+            'recall_floor': float(recall_floor) if recall_floor is not None else None,
             'max_precision': max_precision,
             'best_precision_threshold': best_precision_threshold,
-            'precision_floor_met': False,
+            'best_precision_recall': best_precision_recall,
+            'precision_floor_met': bool(precision_floor_met),
+            'recall_floor_met': bool(recall_floor_met),
         })
     blocked_gate = None
     if failures:
         reasons = {str(failure.get('reason')) for failure in failures}
         if reasons == {'precision_floor_not_met'}:
             blocked_gate = 'precision_floor'
+        elif reasons == {'recall_floor_not_met'}:
+            blocked_gate = 'recall_floor'
         elif reasons == {'inflated_positive_rate'}:
             blocked_gate = 'validation_positive_rate'
         else:
@@ -594,9 +619,12 @@ def _validation_quality_gate(
         'blocked_gate': blocked_gate,
         'failures': failures,
         'precision_floor': float(precision_floor),
+        'recall_floor': float(recall_floor) if recall_floor is not None else None,
         'precision_floor_met': bool(precision_floor_met),
+        'recall_floor_met': bool(recall_floor_met),
         'max_precision': max_precision,
         'best_precision_threshold': best_precision_threshold,
+        'best_precision_recall': best_precision_recall,
     }
 
 
@@ -952,6 +980,14 @@ def train_sar_unet(
         threshold_metrics=best_validation['threshold_metrics'],
         validation_metrics=best_validation['best_metrics'],
         precision_floor=config.precision_floor,
+        recall_floor=(
+            config.postprocess.recall_floor
+            if config.postprocess is not None
+            and config.postprocess.enabled
+            and config.postprocess.apply_to_threshold_selection
+            else None
+        ),
+        selection_floor_met=best_validation.get('precision_floor_met'),
     )
     checkpoint_metadata = {
         'model_family': config.model_family,

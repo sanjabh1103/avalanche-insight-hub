@@ -150,6 +150,85 @@ class EuropeanShadowBenchmarkTests(unittest.TestCase):
             self.assertAlmostEqual(metrics['recall'], 1.0)
             self.assertAlmostEqual(metrics['f1'], 2.0 / 3.0)
 
+    def test_sar_prediction_metrics_repairs_postprocess_recall_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            avalcd_raw = root / 'avalcd.json'
+            stack_ref = root / 'stack.json'
+            truth_ref = root / 'truth.npy'
+            np.save(truth_ref, np.asarray([[1, 0], [0, 0]], dtype=np.float32))
+            avalcd_raw.write_text(json.dumps({
+                'scenes': [{
+                    'scene_id': 'tromso-scene-1',
+                    'region_key': 'scandinavia_norway',
+                    'stack_ref': str(stack_ref),
+                    'truth_mask_ref': str(truth_ref),
+                }],
+            }), encoding='utf-8')
+            manifest = stage_european_source(
+                source_key='avalcd_zenodo_v1',
+                raw_path=avalcd_raw,
+                license_review_id='license-review-avalcd',
+                output_root=root / 'out',
+                snapshot_id='snapshot-predictions',
+            )
+            artifact = {
+                'version': 'european_sar_prediction_artifact_v1',
+                'source_key': 'avalcd_zenodo_v1',
+                'dataset_version': 'unit-sar',
+                'model_family': 'swinunet_tiny_diff',
+                'model_version': 'unit-shadow-v3',
+                'split': 'val',
+                'threshold': 0.997,
+                'license_review_id': 'license-review-avalcd',
+                'evaluated_scene_ids': ['tromso-scene-1'],
+                'metrics': {
+                    'threshold': 0.997,
+                    'precision': 0.65,
+                    'recall': 0.45,
+                    'f1': 0.53,
+                    'fp': 85,
+                    'tp': 160,
+                    'fn': 194,
+                    'tn': 1000,
+                },
+                'scene_breakdown': [{
+                    'scene_id': 'tromso-scene-1',
+                    'region_key': 'scandinavia_norway',
+                    'precision': 0.65,
+                    'recall': 0.45,
+                    'fp': 85,
+                    'tp': 160,
+                    'fn': 194,
+                    'tn': 1000,
+                }],
+                'postprocess_evaluation': {
+                    'enabled': True,
+                    'precision_floor': 0.60,
+                    'recall_floor': 0.50,
+                    'selection_reason': 'best_f0_5_without_precision_and_recall_floor',
+                },
+                'quality_gate': {
+                    'passed': True,
+                    'blocked_gate': None,
+                    'failures': [],
+                    'precision_floor': 0.60,
+                    'precision_floor_met': True,
+                },
+            }
+
+            report = build_european_shadow_benchmark_report(
+                staging_manifests=[manifest],
+                sar_prediction_artifacts=[artifact],
+                snapshot_id='benchmark-predictions',
+            )
+
+            quality_gate = report['source_reports'][0]['sar_prediction_metrics']['quality_gate']
+            self.assertFalse(quality_gate['passed'])
+            self.assertEqual(quality_gate['blocked_gate'], 'recall_floor')
+            self.assertTrue(quality_gate['precision_floor_met'])
+            self.assertFalse(quality_gate['recall_floor_met'])
+
     def test_sar_prediction_artifact_missing_coverage_stays_pending(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

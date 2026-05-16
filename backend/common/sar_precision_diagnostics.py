@@ -124,6 +124,7 @@ def build_sar_precision_diagnostics(
     for row in threshold_metrics:
         row['precision_floor_met'] = _as_float(row.get('precision')) >= float(precision_floor)
         row['recall_floor_met'] = _as_float(row.get('recall')) >= float(recall_floor)
+        row['precision_recall_floor_met'] = bool(row['precision_floor_met'] and row['recall_floor_met'])
         row['f0_5'] = _f_beta(_as_float(row.get('precision')), _as_float(row.get('recall')), 0.5)
 
     validation_metrics = dict(metrics_payload.get('validation_metrics') or {})
@@ -138,6 +139,20 @@ def build_sar_precision_diagnostics(
     precision_floor_met = any(row['precision_floor_met'] for row in threshold_metrics) or (
         not threshold_metrics and _as_float(validation_metrics.get('precision')) >= float(precision_floor)
     )
+    precision_recall_floor_met = any(row['precision_recall_floor_met'] for row in threshold_metrics) or (
+        not threshold_metrics
+        and _as_float(validation_metrics.get('precision')) >= float(precision_floor)
+        and _as_float(validation_metrics.get('recall')) >= float(recall_floor)
+    )
+    recall_floor_met = any(row['precision_recall_floor_met'] for row in threshold_metrics) or (
+        not threshold_metrics and _as_float(validation_metrics.get('recall')) >= float(recall_floor)
+    )
+    if not precision_floor_met:
+        failure_reason = 'no_threshold_met_precision_floor'
+    elif not precision_recall_floor_met:
+        failure_reason = 'no_threshold_met_precision_and_recall_floor'
+    else:
+        failure_reason = None
 
     scene_breakdown = [
         dict(row)
@@ -156,7 +171,9 @@ def build_sar_precision_diagnostics(
         'precision_floor': float(precision_floor),
         'recall_floor': float(recall_floor),
         'precision_floor_met': bool(precision_floor_met),
-        'failure_reason': None if precision_floor_met else 'no_threshold_met_precision_floor',
+        'recall_floor_met': bool(recall_floor_met),
+        'precision_recall_floor_met': bool(precision_recall_floor_met),
+        'failure_reason': failure_reason,
         'selected_validation_metrics': validation_metrics,
         'max_precision': _as_float(max_precision_row.get('precision')),
         'best_precision_threshold': _as_float(max_precision_row.get('threshold')),
@@ -175,6 +192,10 @@ def build_sar_precision_diagnostics(
                 scene_ranking['largest_fp_volume_scene']['scene_id']
                 if scene_ranking['largest_fp_volume_scene'] else None
             ),
-            'recommended_next_step': 'diagnostic_first_no_blind_training' if not precision_floor_met else 'eligible_for_heldout_check',
+            'recommended_next_step': (
+                'diagnostic_first_no_blind_training'
+                if not precision_recall_floor_met
+                else 'eligible_for_heldout_check'
+            ),
         },
     }
