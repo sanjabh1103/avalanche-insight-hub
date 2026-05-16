@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 os.environ.setdefault('AVALANCHE_SKIP_MODAL_IMPORT', '1')
 
@@ -26,6 +26,7 @@ from backend.modal_worker_app import (
     poll_train_sar_unet_job_async,
     poll_train_mtslstm_job,
     poll_train_mtslstm_job_async,
+    run_remote_evaluate_release,
     run_remote_sar_segment,
     run_remote_train_sar_unet,
     run_remote_infer_mtslstm,
@@ -82,6 +83,26 @@ class ModalWorkerAppTests(unittest.TestCase):
         payload = {'hazard_type': 'avalanche', 'scenes': [{'scene_id': 'S1A_001'}]}
         handle_evaluate_release(payload)
         dispatch_mock.assert_called_once_with('evaluate-release', payload)
+
+    @patch('backend.modal_worker_app.run_worker_request', return_value={'status': 'ok', 'beats_baseline': False})
+    def test_run_remote_evaluate_release_forces_dry_run(self, worker_mock) -> None:
+        reload_mock = Mock()
+        commit_mock = Mock()
+        with TemporaryDirectory() as tmpdir:
+            result = run_remote_evaluate_release(
+                {'reference_set_key': 'snowslide-heldout-v1', 'dry_run': False},
+                artifact_root=Path(tmpdir),
+                volume_reload=reload_mock,
+                volume_commit=commit_mock,
+            )
+
+        self.assertEqual(result['status'], 'ok')
+        reload_mock.assert_called_once()
+        commit_mock.assert_called_once()
+        call_args = worker_mock.call_args
+        self.assertEqual(call_args.args[0], 'evaluate-release')
+        self.assertTrue(call_args.args[1]['dry_run'])
+        self.assertTrue(call_args.kwargs['dry_run'])
 
     @patch.dict('os.environ', {'MODAL_WORKER_TOKEN': 'secret-token'}, clear=False)
     def test_authorize_bearer_request_rejects_missing_token(self) -> None:

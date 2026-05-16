@@ -31,6 +31,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--f-beta', type=float, default=1.5)
     parser.add_argument('--precision-floor', type=float, default=0.05)
+    parser.add_argument('--focal-tversky-alpha', type=float)
+    parser.add_argument('--focal-tversky-beta', type=float)
+    parser.add_argument('--focal-tversky-gamma', type=float)
+    parser.add_argument('--postprocess-min-component-area-px', type=int)
+    parser.add_argument('--postprocess-opening-size-px', type=int)
+    parser.add_argument('--postprocess-recall-floor', type=float, default=0.50)
+    parser.add_argument('--postprocess-apply-to-threshold-selection', action='store_true')
     return parser.parse_args(argv)
 
 

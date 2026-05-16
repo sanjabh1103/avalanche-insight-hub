@@ -10,7 +10,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from backend.sar_unet_training import _validation_quality_gate, train_sar_unet
+from backend.sar_unet_training import (
+    _postprocess_binary_mask,
+    _validation_quality_gate,
+    train_sar_unet,
+)
 
 
 class _TinyBiTemporalModel(nn.Module):
@@ -42,6 +46,46 @@ class SarUnetTrainingTests(unittest.TestCase):
         self.assertFalse(gate['passed'])
         self.assertEqual(gate['blocked_gate'], 'validation_positive_rate')
         self.assertEqual(gate['failures'][0]['scene_id'], 'scene-1')
+
+    def test_validation_quality_gate_rejects_missing_precision_floor(self) -> None:
+        gate = _validation_quality_gate(
+            [{
+                'scene_id': 'scene-1',
+                'predicted_positive_rate': 0.01,
+                'truth_positive_rate': 0.01,
+                'positive_rate_ratio': 1.0,
+            }],
+            max_positive_rate_ratio=20.0,
+            max_positive_rate_absolute=0.15,
+            threshold_metrics=[
+                {'threshold': 0.95, 'precision': 0.38, 'recall': 0.72},
+                {'threshold': 0.99, 'precision': 0.41, 'recall': 0.60},
+            ],
+            precision_floor=0.60,
+        )
+
+        self.assertFalse(gate['passed'])
+        self.assertEqual(gate['blocked_gate'], 'precision_floor')
+        self.assertFalse(gate['precision_floor_met'])
+        self.assertEqual(gate['max_precision'], 0.41)
+        self.assertEqual(gate['best_precision_threshold'], 0.99)
+
+    def test_postprocess_binary_mask_noops_when_disabled(self) -> None:
+        predictions = np.array([[True, False], [True, True]])
+
+        processed = _postprocess_binary_mask(predictions)
+
+        np.testing.assert_array_equal(processed, predictions)
+
+    def test_postprocess_binary_mask_removes_small_components(self) -> None:
+        predictions = np.zeros((5, 5), dtype=bool)
+        predictions[0, 0] = True
+        predictions[2:4, 2:4] = True
+
+        processed = _postprocess_binary_mask(predictions, min_component_area_px=3)
+
+        self.assertFalse(bool(processed[0, 0]))
+        self.assertEqual(int(processed.sum()), 4)
 
     def test_train_sar_unet_persists_checkpoint_metadata_and_report(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

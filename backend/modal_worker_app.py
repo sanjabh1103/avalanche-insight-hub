@@ -46,6 +46,7 @@ WORKER_TOKEN_ENV = 'MODAL_WORKER_TOKEN'
 MODAL_APP_NAME = 'avalanche-modal-worker'
 MODAL_REMOTE_SEGMENT_FUNCTION = 'sar_segment_remote'
 MODAL_REMOTE_TRAIN_SAR_FUNCTION = 'train_sar_unet_remote'
+MODAL_REMOTE_EVALUATE_RELEASE_FUNCTION = 'evaluate_release_remote'
 MODAL_REMOTE_TRAIN_FUNCTION = 'train_mts_lstm_remote'
 MODAL_REMOTE_INFER_FUNCTION = 'infer_mts_lstm_remote'
 MODAL_PINNED_RUNTIME_PACKAGES = ('shap==0.51.0', 'scikit-learn==1.8.0')
@@ -113,6 +114,31 @@ def run_remote_train_sar_unet(
     if volume_reload is not None:
         volume_reload()
     report = run_train_sar_unet(payload, artifact_root=artifact_root, device=device)
+    if volume_commit is not None:
+        volume_commit()
+    return report
+
+
+def run_remote_evaluate_release(
+    payload: dict[str, Any],
+    *,
+    artifact_root: Path,
+    volume_reload: Callable[[], None] | None = None,
+    volume_commit: Callable[[], None] | None = None,
+) -> dict[str, Any]:
+    if volume_reload is not None:
+        volume_reload()
+    safe_payload = {**payload, 'dry_run': True}
+    report = run_worker_request(
+        'evaluate-release',
+        safe_payload,
+        artifact_root=artifact_root,
+        model_path=_model_path(),
+        device=os.environ.get('SAR_UNET_DEVICE', 'cpu'),
+        threshold=float(os.environ.get('SAR_UNET_SEGMENTATION_THRESHOLD', str(SAR_UNET_SEGMENTATION_THRESHOLD))),
+        hazard_type=str(safe_payload.get('hazard_type') or load_settings().hazard_type or 'avalanche'),
+        dry_run=True,
+    )
     if volume_commit is not None:
         volume_commit()
     return report
@@ -771,6 +797,27 @@ if modal is not None:  # pragma: no cover - exercised in deployment, not local t
             request,
             artifact_root=Path(VOLUME_MOUNT),
             device='cuda',
+            volume_reload=_artifact_volume.reload,
+            volume_commit=_artifact_volume.commit,
+        )
+
+    @app.function(
+        image=image,
+        secrets=_secrets,
+        volumes={VOLUME_MOUNT: _artifact_volume},
+        cpu=MODAL_INFER_CPU,
+        memory=MODAL_INFER_MEMORY_MB,
+        max_containers=1,
+        min_containers=MODAL_MIN_CONTAINERS,
+        buffer_containers=MODAL_BUFFER_CONTAINERS,
+        scaledown_window=MODAL_SCALEDOWN_WINDOW_SECONDS,
+        timeout=3600,
+        retries=0,
+    )
+    def evaluate_release_remote(request: dict[str, Any]) -> dict[str, Any]:
+        return run_remote_evaluate_release(
+            request,
+            artifact_root=Path(VOLUME_MOUNT),
             volume_reload=_artifact_volume.reload,
             volume_commit=_artifact_volume.commit,
         )

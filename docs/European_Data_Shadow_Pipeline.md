@@ -222,6 +222,27 @@ MODAL_PROFILE=sanjabh1103_limit30 python3 -m backend.scripts.run_modal_sar_train
 
 The request defaults are intentionally remote-safe: SAR patches materialize under `/tmp/avalcd-shadow-train5-val2`, while the model checkpoint, metrics, and prediction artifact remain in the persistent artifact directory.
 
+Build precision diagnostics before any additional training run:
+
+```bash
+python3 -m backend.scripts.build_sar_precision_diagnostics \
+  --metrics backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/precision-v2/20260516T153431Z/sar_training_metrics.json \
+  --output backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/precision-v2/20260516T153431Z/sar_precision_diagnostics.json \
+  --precision-floor 0.60 \
+  --recall-floor 0.50
+```
+
+Current v2 diagnostics show `precision_floor_met=false`, `max_precision=0.3783384251502907`, weakest precision scene `livigno_20250318`, and largest false-positive volume scene `nuuk_20210411`. A v3 request artifact may be prepared under `backend/artifacts/.../precision-v3/`, but should not be launched until diagnostics and post-processing settings are reviewed.
+
+Run the SnowSlide/non-European held-out check only as a dry-run. The direct Modal path avoids the HTTP bearer-token route and never performs promotion:
+
+```bash
+python3 -m backend.scripts.run_modal_sar_release_evaluation_direct \
+  --modal-profile sanjabh1103_limit30 \
+  --request backend/artifacts/european-shadow-heldout/snowslide-dry-run/evaluate_release_request.json \
+  --output backend/artifacts/european-shadow-heldout/snowslide-dry-run/evaluate_release_result.json
+```
+
 ## Promotion Rule
 
 European data can support shadow validation, benchmark reconstruction, SAR candidate training, and calibration diagnostics. It must not change public production scoring until all of these are true:

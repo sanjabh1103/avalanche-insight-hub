@@ -32,6 +32,7 @@ DEFAULT_PRECISION_FLOOR = 0.05
 DEFAULT_THRESHOLD_GRID = np.linspace(0.05, 0.95, 19, dtype=np.float32)
 DEFAULT_MAX_VALIDATION_POSITIVE_RATE_RATIO = 20.0
 DEFAULT_MAX_VALIDATION_POSITIVE_RATE_ABSOLUTE = 0.15
+DEFAULT_POSTPROCESS_RECALL_FLOOR = 0.50
 EUROPEAN_SAR_PREDICTION_ARTIFACT_VERSION = 'european_sar_prediction_artifact_v1'
 
 
@@ -105,6 +106,18 @@ class FocalTverskyLoss(nn.Module):
 
 
 @dataclass(frozen=True)
+class PostprocessConfig:
+    min_component_area_px: int = 0
+    opening_size_px: int = 0
+    apply_to_threshold_selection: bool = False
+    recall_floor: float = DEFAULT_POSTPROCESS_RECALL_FLOOR
+
+    @property
+    def enabled(self) -> bool:
+        return self.min_component_area_px > 0 or self.opening_size_px > 1
+
+
+@dataclass(frozen=True)
 class TrainingConfig:
     model_family: str
     patch_size: int
@@ -120,6 +133,10 @@ class TrainingConfig:
     threshold_grid: np.ndarray
     max_validation_positive_rate_ratio: float
     max_validation_positive_rate_absolute: float
+    focal_tversky_alpha: float
+    focal_tversky_beta: float
+    focal_tversky_gamma: float
+    postprocess: PostprocessConfig
 
 
 def _set_seed(seed: int) -> None:
@@ -136,9 +153,19 @@ def _timestamp_slug() -> str:
     return datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
 
 
-def _loss_from_name(loss_name: str) -> nn.Module:
+def _loss_from_name(
+    loss_name: str,
+    *,
+    focal_tversky_alpha: float = 0.7,
+    focal_tversky_beta: float = 0.3,
+    focal_tversky_gamma: float = 1.33,
+) -> nn.Module:
     if loss_name == 'focal_tversky':
-        return FocalTverskyLoss()
+        return FocalTverskyLoss(
+            alpha=focal_tversky_alpha,
+            beta=focal_tversky_beta,
+            gamma=focal_tversky_gamma,
+        )
     if loss_name == 'bce_dice':
         return BCEDiceLoss(ignore_empty=True)
     if loss_name == 'bce':
@@ -192,11 +219,19 @@ def _update_threshold_counts(
     counts: dict[float, dict[str, int]],
     probabilities: np.ndarray,
     targets: np.ndarray,
+    *,
+    min_component_area_px: int = 0,
+    opening_size_px: int = 0,
 ) -> None:
     probabilities = np.asarray(probabilities, dtype=np.float32)
     targets = np.asarray(targets, dtype=bool)
     for threshold, aggregate in counts.items():
         predictions = probabilities >= float(threshold)
+        predictions = _postprocess_binary_mask(
+            predictions,
+            min_component_area_px=min_component_area_px,
+            opening_size_px=opening_size_px,
+        )
         aggregate['tp'] += int(np.sum(predictions & targets))
         aggregate['fp'] += int(np.sum(predictions & ~targets))
         aggregate['fn'] += int(np.sum(~predictions & targets))
@@ -226,25 +261,84 @@ def _metrics_from_counts(counts: dict[str, int]) -> dict[str, float]:
     }
 
 
+def _f_beta_score(precision: float, recall: float, beta: float) -> float:
+    beta_sq = float(beta) ** 2
+    return (1.0 + beta_sq) * precision * recall / max((beta_sq * precision) + recall, 1e-9)
+
+
+def _postprocess_binary_mask(
+    predictions: np.ndarray,
+    *,
+    min_component_area_px: int = 0,
+    opening_size_px: int = 0,
+) -> np.ndarray:
+    processed = np.asarray(predictions, dtype=bool)
+    if opening_size_px <= 1 and min_component_area_px <= 0:
+        return processed
+
+    try:
+        from scipy import ndimage
+    except ImportError as exc:  # pragma: no cover - scipy is part of backend requirements
+        raise RuntimeError('scipy is required for SAR validation post-processing') from exc
+
+    if opening_size_px > 1:
+        structure = np.ones((int(opening_size_px), int(opening_size_px)), dtype=bool)
+        processed = ndimage.binary_opening(processed, structure=structure)
+
+    if min_component_area_px > 0:
+        labeled, component_count = ndimage.label(processed)
+        if component_count:
+            sizes = np.bincount(labeled.ravel())
+            keep = sizes >= int(min_component_area_px)
+            keep[0] = False
+            processed = keep[labeled]
+
+    return np.asarray(processed, dtype=bool)
+
+
+def _postprocess_candidates(config: PostprocessConfig | None) -> list[dict[str, int]]:
+    if config is None or not config.enabled or not config.apply_to_threshold_selection:
+        return [{'opening_size_px': 0, 'min_component_area_px': 0}]
+
+    opening_candidates = [0]
+    if config.opening_size_px > 1:
+        opening_candidates.append(int(config.opening_size_px))
+
+    area_candidates = [0]
+    if config.min_component_area_px > 0:
+        area_candidates.extend([
+            max(1, int(config.min_component_area_px) // 4),
+            max(1, int(config.min_component_area_px) // 2),
+            int(config.min_component_area_px),
+        ])
+
+    candidates: list[dict[str, int]] = []
+    for opening_size_px in sorted(set(opening_candidates)):
+        for min_component_area_px in sorted(set(area_candidates)):
+            candidates.append({
+                'opening_size_px': opening_size_px,
+                'min_component_area_px': min_component_area_px,
+            })
+    return candidates
+
+
 def _select_best_threshold(
     counts: dict[float, dict[str, int]],
     *,
     f_beta: float,
     precision_floor: float,
 ) -> tuple[float, dict[str, Any]]:
-    beta_sq = float(f_beta) ** 2
     metrics_by_threshold: list[dict[str, Any]] = []
     for threshold, threshold_counts in sorted(counts.items()):
         metrics = _metrics_from_counts(threshold_counts)
         precision = metrics['precision']
         recall = metrics['recall']
-        f_beta_score = (
-            (1.0 + beta_sq) * precision * recall / max((beta_sq * precision) + recall, 1e-9)
-        )
+        f_beta_score = _f_beta_score(precision, recall, f_beta)
         metrics_by_threshold.append({
             'threshold': float(threshold),
             **metrics,
             'f_beta': float(f_beta_score),
+            'f0_5': float(_f_beta_score(precision, recall, 0.5)),
         })
     eligible = [entry for entry in metrics_by_threshold if entry['precision'] >= precision_floor]
     if eligible:
@@ -263,6 +357,117 @@ def _select_best_threshold(
         'best': best,
         'auprc': auprc,
         'threshold_metrics': metrics_by_threshold,
+        'precision_floor_met': bool(eligible),
+        'max_precision': float(max(metrics_by_threshold, key=lambda entry: entry['precision'])['precision']),
+        'best_precision_threshold': float(max(metrics_by_threshold, key=lambda entry: entry['precision'])['threshold']),
+    }
+
+
+def _select_best_postprocessed_threshold(
+    counts_by_candidate: dict[tuple[int, int], dict[float, dict[str, int]]],
+    *,
+    f_beta: float,
+    precision_floor: float,
+    recall_floor: float,
+) -> tuple[float, dict[str, Any]]:
+    candidate_results: list[dict[str, Any]] = []
+    eligible_results: list[dict[str, Any]] = []
+    for (opening_size_px, min_component_area_px), counts in sorted(counts_by_candidate.items()):
+        threshold, selection = _select_best_threshold(
+            counts,
+            f_beta=f_beta,
+            precision_floor=precision_floor,
+        )
+        threshold_metrics = selection['threshold_metrics']
+        eligible_rows = [
+            row
+            for row in threshold_metrics
+            if float(row['precision']) >= float(precision_floor)
+            and float(row['recall']) >= float(recall_floor)
+        ]
+        best_candidate_row = max(threshold_metrics, key=lambda row: (float(row['f0_5']), float(row['precision']), float(row['recall'])))
+        candidate_summary = {
+            'opening_size_px': int(opening_size_px),
+            'min_component_area_px': int(min_component_area_px),
+            'best_threshold': float(threshold),
+            'best_metrics': selection['best'],
+            'best_f0_5_metrics': best_candidate_row,
+            'auprc': float(selection['auprc']),
+            'precision_floor_met': bool(eligible_rows),
+            'recall_floor_met': bool(eligible_rows),
+            'max_precision': selection['max_precision'],
+            'best_precision_threshold': selection['best_precision_threshold'],
+            'threshold_metrics': threshold_metrics,
+        }
+        candidate_results.append(candidate_summary)
+        if eligible_rows:
+            selected_row = max(eligible_rows, key=lambda row: (float(row['f0_5']), float(row['recall']), float(row['precision'])))
+            eligible_results.append({**candidate_summary, 'selected_metrics': selected_row})
+
+    if eligible_results:
+        selected = min(
+            eligible_results,
+            key=lambda item: (
+                int(item['opening_size_px']),
+                int(item['min_component_area_px']),
+                -float(item['selected_metrics']['f0_5']),
+            ),
+        )
+        selected_metrics = dict(selected['selected_metrics'])
+        selection_reason = 'precision_floor_and_recall_floor_met'
+        precision_floor_met = True
+    else:
+        selected = max(
+            candidate_results,
+            key=lambda item: (
+                float(item['best_f0_5_metrics']['f0_5']),
+                float(item['best_f0_5_metrics']['precision']),
+                float(item['best_f0_5_metrics']['recall']),
+            ),
+        )
+        selected_metrics = dict(selected['best_f0_5_metrics'])
+        selection_reason = 'best_f0_5_without_precision_floor'
+        precision_floor_met = False
+
+    selected_metrics['postprocess_opening_size_px'] = int(selected['opening_size_px'])
+    selected_metrics['postprocess_min_component_area_px'] = int(selected['min_component_area_px'])
+    max_precision_result = max(candidate_results, key=lambda item: float(item['max_precision']))
+    return float(selected_metrics['threshold']), {
+        'best': selected_metrics,
+        'auprc': float(selected['auprc']),
+        'threshold_metrics': selected['threshold_metrics'],
+        'precision_floor_met': precision_floor_met,
+        'max_precision': float(max_precision_result['max_precision']),
+        'best_precision_threshold': float(max_precision_result['best_precision_threshold']),
+        'postprocess_evaluation': {
+            'enabled': True,
+            'selection_reason': selection_reason,
+            'precision_floor': float(precision_floor),
+            'recall_floor': float(recall_floor),
+            'selected': {
+                'opening_size_px': int(selected['opening_size_px']),
+                'min_component_area_px': int(selected['min_component_area_px']),
+                'threshold': float(selected_metrics['threshold']),
+                'precision': float(selected_metrics['precision']),
+                'recall': float(selected_metrics['recall']),
+                'f0_5': float(selected_metrics['f0_5']),
+            },
+            'candidate_count': len(candidate_results),
+            'candidates': [
+                {
+                    'opening_size_px': int(item['opening_size_px']),
+                    'min_component_area_px': int(item['min_component_area_px']),
+                    'best_threshold': float(item['best_threshold']),
+                    'max_precision': float(item['max_precision']),
+                    'best_precision_threshold': float(item['best_precision_threshold']),
+                    'best_f0_5': float(item['best_f0_5_metrics']['f0_5']),
+                    'best_f0_5_threshold': float(item['best_f0_5_metrics']['threshold']),
+                    'auprc': float(item['auprc']),
+                    'precision_floor_met': bool(item['precision_floor_met']),
+                }
+                for item in candidate_results
+            ],
+        },
     }
 
 
@@ -272,6 +477,8 @@ def _scene_breakdown(
     *,
     device: str,
     threshold: float,
+    min_component_area_px: int = 0,
+    opening_size_px: int = 0,
 ) -> list[dict[str, Any]]:
     scene_counts: dict[str, dict[str, int]] = {}
     scene_regions: dict[str, str] = {}
@@ -293,6 +500,11 @@ def _scene_breakdown(
                 scene_regions.setdefault(key, str(region_keys[index]))
                 scene_sources.setdefault(key, str(source_datasets[index]))
                 predictions = probabilities[index] >= threshold
+                predictions = _postprocess_binary_mask(
+                    predictions,
+                    min_component_area_px=min_component_area_px,
+                    opening_size_px=opening_size_px,
+                )
                 target = targets[index]
                 counts['tp'] += int(np.sum(predictions & target))
                 counts['fp'] += int(np.sum(predictions & ~target))
@@ -324,6 +536,9 @@ def _validation_quality_gate(
     *,
     max_positive_rate_ratio: float,
     max_positive_rate_absolute: float,
+    threshold_metrics: list[dict[str, Any]] | None = None,
+    validation_metrics: dict[str, Any] | None = None,
+    precision_floor: float = DEFAULT_PRECISION_FLOOR,
 ) -> dict[str, Any]:
     failures = [
         {
@@ -337,10 +552,51 @@ def _validation_quality_gate(
         if float(scene['predicted_positive_rate']) > max_positive_rate_absolute
         and float(scene['positive_rate_ratio']) > max_positive_rate_ratio
     ]
+    metric_candidates = [
+        row
+        for row in (threshold_metrics or [])
+        if isinstance(row, dict)
+    ]
+    if not metric_candidates and isinstance(validation_metrics, dict):
+        metric_candidates = [validation_metrics]
+    if metric_candidates:
+        best_precision = max(
+            metric_candidates,
+            key=lambda row: (float(row.get('precision') or 0.0), float(row.get('recall') or 0.0)),
+        )
+        max_precision = float(best_precision.get('precision') or 0.0)
+        best_precision_threshold = float(best_precision.get('threshold') or 0.0)
+        precision_floor_met = max_precision >= float(precision_floor)
+    else:
+        max_precision = 0.0
+        best_precision_threshold = 0.0
+        precision_floor_met = True
+    if not precision_floor_met:
+        failures.append({
+            'scene_id': None,
+            'reason': 'precision_floor_not_met',
+            'precision_floor': float(precision_floor),
+            'max_precision': max_precision,
+            'best_precision_threshold': best_precision_threshold,
+            'precision_floor_met': False,
+        })
+    blocked_gate = None
+    if failures:
+        reasons = {str(failure.get('reason')) for failure in failures}
+        if reasons == {'precision_floor_not_met'}:
+            blocked_gate = 'precision_floor'
+        elif reasons == {'inflated_positive_rate'}:
+            blocked_gate = 'validation_positive_rate'
+        else:
+            blocked_gate = 'multiple_validation_gates'
     return {
         'passed': not failures,
-        'blocked_gate': None if not failures else 'validation_positive_rate',
+        'blocked_gate': blocked_gate,
         'failures': failures,
+        'precision_floor': float(precision_floor),
+        'precision_floor_met': bool(precision_floor_met),
+        'max_precision': max_precision,
+        'best_precision_threshold': best_precision_threshold,
     }
 
 
@@ -406,9 +662,14 @@ def _validate(
     threshold_grid: np.ndarray,
     f_beta: float,
     precision_floor: float,
+    postprocess: PostprocessConfig | None = None,
 ) -> dict[str, Any]:
     model.eval()
-    threshold_counts = _build_counts_template(threshold_grid)
+    candidates = _postprocess_candidates(postprocess)
+    counts_by_candidate = {
+        (int(candidate['opening_size_px']), int(candidate['min_component_area_px'])): _build_counts_template(threshold_grid)
+        for candidate in candidates
+    }
     running_loss = 0.0
     seen = 0
     with torch.no_grad():
@@ -421,21 +682,57 @@ def _validate(
             probabilities = torch.sigmoid(logits).detach().cpu().numpy()[:, 0]
             targets = mask.detach().cpu().numpy()[:, 0] >= 0.5
             for index in range(probabilities.shape[0]):
-                _update_threshold_counts(threshold_counts, probabilities[index], targets[index])
+                for (opening_size_px, min_component_area_px), threshold_counts in counts_by_candidate.items():
+                    _update_threshold_counts(
+                        threshold_counts,
+                        probabilities[index],
+                        targets[index],
+                        min_component_area_px=min_component_area_px,
+                        opening_size_px=opening_size_px,
+                    )
             batch_size = int(mask.shape[0])
             running_loss += float(loss.item()) * batch_size
             seen += batch_size
-    best_threshold, selection = _select_best_threshold(
-        threshold_counts,
-        f_beta=f_beta,
-        precision_floor=precision_floor,
-    )
+    if postprocess is not None and postprocess.enabled and postprocess.apply_to_threshold_selection:
+        best_threshold, selection = _select_best_postprocessed_threshold(
+            counts_by_candidate,
+            f_beta=f_beta,
+            precision_floor=precision_floor,
+            recall_floor=postprocess.recall_floor,
+        )
+    else:
+        threshold_counts = counts_by_candidate[(0, 0)]
+        best_threshold, selection = _select_best_threshold(
+            threshold_counts,
+            f_beta=f_beta,
+            precision_floor=precision_floor,
+        )
+        selection['postprocess_evaluation'] = {
+            'enabled': False,
+            'selection_reason': 'disabled',
+            'precision_floor': float(precision_floor),
+            'recall_floor': float(postprocess.recall_floor if postprocess is not None else DEFAULT_POSTPROCESS_RECALL_FLOOR),
+            'selected': {
+                'opening_size_px': 0,
+                'min_component_area_px': 0,
+                'threshold': float(best_threshold),
+                'precision': float(selection['best']['precision']),
+                'recall': float(selection['best']['recall']),
+                'f0_5': float(selection['best']['f0_5']),
+            },
+            'candidate_count': 1,
+            'candidates': [],
+        }
     return {
         'loss': running_loss / max(seen, 1),
         'best_threshold': best_threshold,
         'auprc': float(selection['auprc']),
         'best_metrics': selection['best'],
         'threshold_metrics': selection['threshold_metrics'],
+        'postprocess_evaluation': selection['postprocess_evaluation'],
+        'precision_floor_met': bool(selection['precision_floor_met']),
+        'max_precision': float(selection['max_precision']),
+        'best_precision_threshold': float(selection['best_precision_threshold']),
     }
 
 
@@ -445,6 +742,12 @@ def _training_config_from_request(request: dict[str, Any]) -> TrainingConfig:
     stride = int(request.get('stride') or 64)
     candidate_model_version = str(request.get('candidate_model_version') or f'{model_family}_shadow_candidate_{_timestamp_slug()}')
     threshold_grid = np.asarray(request.get('threshold_grid') or DEFAULT_THRESHOLD_GRID.tolist(), dtype=np.float32)
+    postprocess = PostprocessConfig(
+        min_component_area_px=max(0, int(request.get('postprocess_min_component_area_px') or 0)),
+        opening_size_px=max(0, int(request.get('postprocess_opening_size_px') or 0)),
+        apply_to_threshold_selection=bool(request.get('postprocess_apply_to_threshold_selection')),
+        recall_floor=float(request.get('postprocess_recall_floor') or DEFAULT_POSTPROCESS_RECALL_FLOOR),
+    )
     return TrainingConfig(
         model_family=model_family,
         patch_size=patch_size,
@@ -464,6 +767,10 @@ def _training_config_from_request(request: dict[str, Any]) -> TrainingConfig:
         max_validation_positive_rate_absolute=float(
             request.get('max_validation_positive_rate_absolute') or DEFAULT_MAX_VALIDATION_POSITIVE_RATE_ABSOLUTE
         ),
+        focal_tversky_alpha=float(request.get('focal_tversky_alpha') or 0.7),
+        focal_tversky_beta=float(request.get('focal_tversky_beta') or 0.3),
+        focal_tversky_gamma=float(request.get('focal_tversky_gamma') or 1.33),
+        postprocess=postprocess,
     )
 
 
@@ -525,6 +832,7 @@ def _build_validation_prediction_artifact(
             'auprc': float(best_validation['auprc']),
             **metrics,
         },
+        'postprocess_evaluation': best_validation.get('postprocess_evaluation'),
         'scene_breakdown': scene_breakdown,
         'region_breakdown': _region_metrics(scene_breakdown),
         'evaluated_scene_ids': dataset_audit['val_events'],
@@ -583,7 +891,12 @@ def train_sar_unet(
     )
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate, weight_decay=1e-4)
-    criterion = _loss_from_name(config.loss_name).to(device)
+    criterion = _loss_from_name(
+        config.loss_name,
+        focal_tversky_alpha=config.focal_tversky_alpha,
+        focal_tversky_beta=config.focal_tversky_beta,
+        focal_tversky_gamma=config.focal_tversky_gamma,
+    ).to(device)
     best_validation: dict[str, Any] | None = None
     best_state_dict: dict[str, Any] | None = None
     epochs_without_improvement = 0
@@ -606,6 +919,7 @@ def train_sar_unet(
             threshold_grid=config.threshold_grid,
             f_beta=config.f_beta,
             precision_floor=config.precision_floor,
+            postprocess=config.postprocess,
         )
         train_loss_history.append(float(train_loss))
         val_loss_history.append(float(validation['loss']))
@@ -628,11 +942,16 @@ def train_sar_unet(
         model,
         device=device,
         threshold=float(best_validation['best_threshold']),
+        min_component_area_px=int(best_validation['best_metrics'].get('postprocess_min_component_area_px') or 0),
+        opening_size_px=int(best_validation['best_metrics'].get('postprocess_opening_size_px') or 0),
     )
     quality_gate = _validation_quality_gate(
         scene_breakdown,
         max_positive_rate_ratio=config.max_validation_positive_rate_ratio,
         max_positive_rate_absolute=config.max_validation_positive_rate_absolute,
+        threshold_metrics=best_validation['threshold_metrics'],
+        validation_metrics=best_validation['best_metrics'],
+        precision_floor=config.precision_floor,
     )
     checkpoint_metadata = {
         'model_family': config.model_family,
@@ -641,9 +960,15 @@ def train_sar_unet(
         'train_events': dataset_audit['train_events'],
         'val_events': dataset_audit['val_events'],
         'loss': config.loss_name,
+        'loss_parameters': {
+            'focal_tversky_alpha': config.focal_tversky_alpha,
+            'focal_tversky_beta': config.focal_tversky_beta,
+            'focal_tversky_gamma': config.focal_tversky_gamma,
+        },
         'best_threshold': float(best_validation['best_threshold']),
         'validation_metrics': best_validation['best_metrics'],
         'validation_auprc': float(best_validation['auprc']),
+        'postprocess_evaluation': best_validation['postprocess_evaluation'],
         'initial_checkpoint': initial_checkpoint,
         'normalization': {
             'img_mean': normalization['img_mean'].tolist(),
@@ -667,10 +992,16 @@ def train_sar_unet(
         'epochs_requested': config.epochs,
         'epochs_completed': len(train_loss_history),
         'loss': config.loss_name,
+        'loss_parameters': {
+            'focal_tversky_alpha': config.focal_tversky_alpha,
+            'focal_tversky_beta': config.focal_tversky_beta,
+            'focal_tversky_gamma': config.focal_tversky_gamma,
+        },
         'best_threshold': float(best_validation['best_threshold']),
         'validation_auprc': float(best_validation['auprc']),
         'validation_metrics': best_validation['best_metrics'],
         'threshold_metrics': best_validation['threshold_metrics'],
+        'postprocess_evaluation': best_validation['postprocess_evaluation'],
         'scene_breakdown': scene_breakdown,
         'quality_gate': quality_gate,
         'train_loss_history': train_loss_history,
@@ -706,6 +1037,7 @@ def train_sar_unet(
         'best_threshold': float(best_validation['best_threshold']),
         'validation_auprc': float(best_validation['auprc']),
         'validation_metrics': best_validation['best_metrics'],
+        'postprocess_evaluation': best_validation['postprocess_evaluation'],
         'quality_gate_passed': bool(quality_gate['passed']),
         'blocked_gate': quality_gate['blocked_gate'],
         'scene_gate_failures': quality_gate['failures'],
@@ -736,6 +1068,20 @@ def build_cli_request(args: Any) -> dict[str, Any]:
         'f_beta': args.f_beta,
         'precision_floor': args.precision_floor,
     }
+    for arg_name in (
+        'focal_tversky_alpha',
+        'focal_tversky_beta',
+        'focal_tversky_gamma',
+        'postprocess_min_component_area_px',
+        'postprocess_opening_size_px',
+        'postprocess_recall_floor',
+    ):
+        if hasattr(args, arg_name):
+            value = getattr(args, arg_name)
+            if value is not None:
+                request[arg_name] = value
+    if getattr(args, 'postprocess_apply_to_threshold_selection', False):
+        request['postprocess_apply_to_threshold_selection'] = True
     if args.initial_checkpoint_path:
         request['initial_checkpoint_path'] = str(args.initial_checkpoint_path)
     if getattr(args, 'materialized_dataset_root', None):
