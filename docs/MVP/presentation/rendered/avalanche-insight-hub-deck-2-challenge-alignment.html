@@ -1,0 +1,1904 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Avalanche Insight Hub — Deck 2 Top 15 Challenge Alignment</title>
+  <meta name="description" content="Evidence-gated mapping of systemic avalanche forecasting challenges to current MVP response.">
+  <style>
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap');
+
+html, body {
+  height: 100%;
+  overflow-x: hidden;
+}
+
+html {
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --title-size: clamp(1.8rem, 4.8vw, 4.4rem);
+  --h2-size: clamp(1.25rem, 2.8vw, 2.4rem);
+  --h3-size: clamp(0.95rem, 1.9vw, 1.4rem);
+  --body-size: clamp(0.8rem, 1.15vw, 1.05rem);
+  --small-size: clamp(0.64rem, 0.9vw, 0.82rem);
+  --slide-padding: clamp(1rem, 3vw, 3.2rem);
+  --content-gap: clamp(0.7rem, 1.5vw, 1.5rem);
+  --element-gap: clamp(0.45rem, 1vw, 0.95rem);
+  --radius-lg: 1.6rem;
+  --radius-md: 1rem;
+  --radius-sm: 0.7rem;
+  --shell-bg: #f4f1ea;
+  --text-main: #0e1318;
+  --text-soft: #48505a;
+  --line-soft: rgba(14, 19, 24, 0.12);
+  --line-strong: rgba(14, 19, 24, 0.22);
+  --surface: rgba(255, 255, 255, 0.84);
+  --surface-strong: rgba(255, 255, 255, 0.93);
+  --ink-grid: rgba(14, 19, 24, 0.05);
+  --shadow-soft: 0 24px 60px rgba(7, 10, 14, 0.08);
+  --proof-live: #9f1d1d;
+  --proof-internal: #134055;
+  --proof-future: #0b6a61;
+  --accent-main: #a11919;
+  --accent-soft: rgba(161, 25, 25, 0.13);
+  --accent-alt: #0b6a61;
+  --accent-alt-soft: rgba(11, 106, 97, 0.14);
+}
+
+body {
+  margin: 0;
+  font-family: 'Nunito', 'Avenir Next', system-ui, sans-serif;
+  color: var(--text-main);
+  background:
+    radial-gradient(circle at top left, rgba(161, 25, 25, 0.07), transparent 28%),
+    radial-gradient(circle at top right, rgba(11, 106, 97, 0.06), transparent 24%),
+    linear-gradient(180deg, #f7f4ee 0%, #f0ebe2 100%);
+}
+
+body.deck-collaboration {
+  background:
+    radial-gradient(circle at top left, rgba(11, 106, 97, 0.09), transparent 32%),
+    radial-gradient(circle at top right, rgba(82, 112, 143, 0.06), transparent 24%),
+    linear-gradient(180deg, #f6f3ed 0%, #eef2f0 100%);
+}
+
+body.deck-technical {
+  --proof-live: #1c7c74;
+  --proof-internal: #26373a;
+  --proof-future: #7e9f35;
+  --accent-main: #1c7c74;
+  --accent-soft: rgba(28, 124, 116, 0.14);
+  --accent-alt: #7e9f35;
+  --accent-alt-soft: rgba(126, 159, 53, 0.15);
+  background:
+    radial-gradient(circle at top left, rgba(28, 124, 116, 0.10), transparent 30%),
+    radial-gradient(circle at top right, rgba(126, 159, 53, 0.08), transparent 25%),
+    linear-gradient(180deg, #f4f8f7 0%, #e9f0ee 100%);
+}
+
+body.deck-challenges {
+  --proof-live: #2a7fa3;
+  --proof-internal: #1f3340;
+  --proof-future: #c9862b;
+  --accent-main: #c9862b;
+  --accent-soft: rgba(201, 134, 43, 0.14);
+  --accent-alt: #2a7fa3;
+  --accent-alt-soft: rgba(42, 127, 163, 0.14);
+  background:
+    radial-gradient(circle at top left, rgba(201, 134, 43, 0.10), transparent 30%),
+    radial-gradient(circle at top right, rgba(42, 127, 163, 0.08), transparent 25%),
+    linear-gradient(180deg, #f7fafb 0%, #edf4f6 100%);
+}
+
+body.deck-terms {
+  --proof-live: #1c7c74;
+  --proof-internal: #1e2a31;
+  --proof-future: #c9862b;
+  --accent-main: #1c7c74;
+  --accent-soft: rgba(28, 124, 116, 0.13);
+  --accent-alt: #c9862b;
+  --accent-alt-soft: rgba(201, 134, 43, 0.14);
+  background:
+    radial-gradient(circle at top left, rgba(28, 124, 116, 0.08), transparent 30%),
+    radial-gradient(circle at top right, rgba(201, 134, 43, 0.08), transparent 24%),
+    linear-gradient(180deg, #f8f6f0 0%, #efece4 100%);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--ink-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--ink-grid) 1px, transparent 1px);
+  background-size: 44px 44px;
+  opacity: 0.45;
+}
+
+.slide {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  isolation: isolate;
+}
+
+.slide::after {
+  content: '';
+  position: absolute;
+  inset: clamp(0.7rem, 1.8vw, 1.2rem);
+  border: 1px solid rgba(14, 19, 24, 0.08);
+  border-radius: 1.8rem;
+  pointer-events: none;
+}
+
+.slide-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  overflow: hidden;
+  padding: var(--slide-padding);
+  padding-bottom: calc(var(--slide-padding) + 1.65rem);
+  gap: var(--content-gap);
+  position: relative;
+  z-index: 1;
+}
+
+.slide-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--content-gap);
+}
+
+.kicker-stack {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.kicker {
+  font-family: 'Archivo', 'Avenir Next Condensed', sans-serif;
+  font-size: var(--small-size);
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--accent-main);
+}
+
+.deck-collaboration .kicker {
+  color: var(--accent-alt);
+}
+
+.eyebrow {
+  font-size: var(--small-size);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.slide-title {
+  margin: 0;
+  font-family: 'Archivo', 'Avenir Next Condensed', sans-serif;
+  font-size: var(--title-size);
+  line-height: 0.94;
+  max-width: 11ch;
+}
+
+.slide-subtitle {
+  margin: 0;
+  max-width: min(66ch, 94%);
+  font-size: clamp(0.94rem, 1.4vw, 1.15rem);
+  line-height: 1.48;
+  color: var(--text-soft);
+}
+
+.proof-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  max-width: min(34rem, 48vw);
+}
+
+.proof-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0.78rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: var(--small-size);
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  background: var(--surface-strong);
+  box-shadow: 0 8px 24px rgba(15, 19, 24, 0.08);
+}
+
+.proof-chip::before {
+  content: '';
+  width: 0.56rem;
+  height: 0.56rem;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.proof-chip.live {
+  color: var(--proof-live);
+  border-color: rgba(159, 29, 29, 0.22);
+}
+
+.proof-chip.internal {
+  color: var(--proof-internal);
+  border-color: rgba(19, 64, 85, 0.22);
+}
+
+.proof-chip.future {
+  color: var(--proof-future);
+  border-color: rgba(11, 106, 97, 0.22);
+}
+
+.content-shell {
+  flex: 1;
+  display: grid;
+  gap: var(--content-gap);
+  min-height: 0;
+}
+
+.content-shell.split-2 {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
+.content-shell.split-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.stack {
+  display: grid;
+  gap: var(--element-gap);
+  min-height: 0;
+}
+
+.stack.loose {
+  gap: clamp(0.7rem, 1.3vw, 1.2rem);
+}
+
+.lead-panel,
+.card,
+.frame,
+.matrix,
+.metric-strip,
+.timeline,
+.diagram-shell {
+  border: 1px solid var(--line-soft);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+}
+
+.lead-panel,
+.matrix,
+.diagram-shell {
+  padding: clamp(0.9rem, 1.8vw, 1.2rem);
+}
+
+.lead-panel strong,
+.card strong,
+.matrix strong {
+  font-weight: 800;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: clamp(0.55rem, 1.1vw, 0.9rem);
+}
+
+.card {
+  padding: 0.95rem 1rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.card h3,
+.card h4,
+.section-label,
+.stat-number,
+.matrix-title,
+.phase-title {
+  font-family: 'Archivo', 'Avenir Next Condensed', sans-serif;
+}
+
+.card h3,
+.card h4 {
+  margin: 0;
+  font-size: var(--h3-size);
+  line-height: 1.06;
+}
+
+.card p,
+.card li,
+.lead-panel p,
+.matrix p,
+.matrix li {
+  margin: 0;
+  font-size: var(--body-size);
+  line-height: 1.42;
+  color: var(--text-soft);
+}
+
+.bullet-list,
+.compact-list {
+  margin: 0;
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 0.42rem;
+}
+
+.bullet-list li,
+.compact-list li {
+  font-size: var(--body-size);
+  line-height: 1.42;
+}
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 165px), 1fr));
+  gap: 0.7rem;
+}
+
+.stat {
+  padding: 0.85rem 0.95rem;
+  border-radius: 1rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(250, 247, 241, 0.84));
+  border: 1px solid var(--line-soft);
+  display: grid;
+  gap: 0.25rem;
+}
+
+.deck-collaboration .stat {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(241, 248, 246, 0.84));
+}
+
+.stat-number {
+  font-size: clamp(1.1rem, 2.4vw, 2.15rem);
+  line-height: 0.96;
+}
+
+.stat-label {
+  font-size: var(--small-size);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.frame {
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+
+.frame img {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  object-fit: cover;
+  display: block;
+}
+
+.frame--wide {
+  min-height: 41vh;
+}
+
+.frame--tall {
+  min-height: 53vh;
+}
+
+.frame--public img {
+  object-position: center top;
+}
+
+.frame--workspace img {
+  object-position: 72% 24%;
+}
+
+.frame--bulletin img {
+  object-position: 76% 18%;
+}
+
+.frame--workflow img {
+  object-position: 78% 18%;
+}
+
+.frame--admin img {
+  object-position: center top;
+}
+
+.frame-label {
+  position: absolute;
+  left: 1rem;
+  bottom: 1rem;
+  padding: 0.5rem 0.72rem;
+  border-radius: 999px;
+  font-size: var(--small-size);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(9, 11, 16, 0.74);
+  color: #f6f4ef;
+}
+
+.link-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.link-chip,
+.note-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.62rem 0.82rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: var(--surface-strong);
+  text-decoration: none;
+  color: inherit;
+  font-size: var(--small-size);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.link-chip:hover,
+.link-chip:focus-visible {
+  border-color: var(--line-strong);
+}
+
+.matrix {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.matrix-title {
+  font-size: var(--h3-size);
+  margin: 0;
+}
+
+.matrix-table {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.matrix-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 0.75rem;
+  padding: 0.72rem 0.78rem;
+  border-radius: 0.95rem;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.matrix-row strong {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.matrix-row p {
+  margin: 0;
+  font-size: var(--body-size);
+  line-height: 1.38;
+}
+
+.diagram-shell {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+  align-items: stretch;
+}
+
+.flow-node {
+  border-radius: 1rem;
+  border: 1px solid var(--line-soft);
+  padding: 0.72rem;
+  background: rgba(255, 255, 255, 0.75);
+  display: grid;
+  gap: 0.35rem;
+}
+
+.flow-node strong {
+  font-size: var(--small-size);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.flow-node p {
+  margin: 0;
+  font-size: var(--body-size);
+  color: var(--text-soft);
+  line-height: 1.38;
+}
+
+.flow-arrow {
+  display: grid;
+  place-items: center;
+  color: var(--accent-main);
+  font-family: 'Archivo', sans-serif;
+  font-size: clamp(1.1rem, 2vw, 1.6rem);
+}
+
+.deck-collaboration .flow-arrow {
+  color: var(--accent-alt);
+}
+
+.timeline {
+  padding: 0.9rem 1rem;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.timeline-step {
+  display: grid;
+  gap: 0.35rem;
+  position: relative;
+  padding-top: 0.75rem;
+}
+
+.timeline-step::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2.2rem;
+  height: 0.28rem;
+  border-radius: 999px;
+  background: var(--accent-main);
+}
+
+.deck-collaboration .timeline-step::before {
+  background: var(--accent-alt);
+}
+
+.timeline-step strong {
+  font-size: var(--small-size);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.timeline-step p {
+  margin: 0;
+  font-size: var(--body-size);
+  line-height: 1.35;
+  color: var(--text-soft);
+}
+
+.section-label {
+  font-size: var(--small-size);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.quote-band {
+  padding: 0.9rem 1rem;
+  border-radius: 1rem;
+  border-left: 0.4rem solid var(--accent-main);
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: var(--shadow-soft);
+}
+
+.deck-collaboration .quote-band {
+  border-left-color: var(--accent-alt);
+}
+
+.quote-band p,
+.quote-band small {
+  margin: 0;
+}
+
+.quote-band p {
+  font-size: clamp(0.95rem, 1.55vw, 1.15rem);
+  line-height: 1.45;
+}
+
+.quote-band small {
+  display: block;
+  margin-top: 0.45rem;
+  font-size: var(--small-size);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.footer {
+  position: absolute;
+  left: var(--slide-padding);
+  right: var(--slide-padding);
+  bottom: max(0.55rem, calc(var(--slide-padding) * 0.48));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: var(--small-size);
+  color: var(--text-soft);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.footer .slide-id {
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.progress-shell {
+  position: fixed;
+  right: clamp(0.8rem, 1.4vw, 1.4rem);
+  bottom: clamp(0.8rem, 1.4vw, 1.4rem);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(246, 242, 236, 0.86);
+  border: 1px solid rgba(14, 19, 24, 0.1);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-soft);
+}
+
+.progress-count {
+  font-family: 'Archivo', sans-serif;
+  font-size: var(--small-size);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.progress-bar {
+  width: min(24vw, 180px);
+  height: 0.36rem;
+  border-radius: 999px;
+  background: rgba(14, 19, 24, 0.12);
+  overflow: hidden;
+}
+
+.progress-bar span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent-main), rgba(241, 172, 95, 0.95));
+}
+
+.deck-collaboration .progress-bar span {
+  background: linear-gradient(90deg, var(--accent-alt), rgba(98, 151, 147, 0.95));
+}
+
+.keyboard-hint {
+  position: fixed;
+  left: clamp(0.8rem, 1.4vw, 1.4rem);
+  bottom: clamp(0.8rem, 1.4vw, 1.4rem);
+  z-index: 20;
+  padding: 0.52rem 0.72rem;
+  border-radius: 999px;
+  background: rgba(246, 242, 236, 0.84);
+  border: 1px solid rgba(14, 19, 24, 0.1);
+  font-size: var(--small-size);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.row-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.row-item {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 0.75rem;
+  padding: 0.72rem 0.82rem;
+  border-radius: 0.95rem;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--line-soft);
+}
+
+.row-item strong {
+  font-size: var(--small-size);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.row-item p {
+  margin: 0;
+  font-size: var(--body-size);
+  color: var(--text-soft);
+  line-height: 1.38;
+}
+
+.phase-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.phase-card {
+  padding: 0.9rem 0.95rem;
+  border-radius: 1rem;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.75);
+  display: grid;
+  gap: 0.42rem;
+}
+
+.phase-title {
+  margin: 0;
+  font-size: var(--h3-size);
+  line-height: 1.08;
+}
+
+.phase-meta {
+  font-size: var(--small-size);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.warning-band {
+  padding: 0.72rem 0.86rem;
+  border-radius: 1rem;
+  background: rgba(161, 25, 25, 0.08);
+  border: 1px solid rgba(161, 25, 25, 0.14);
+}
+
+.deck-collaboration .warning-band {
+  background: rgba(11, 106, 97, 0.08);
+  border-color: rgba(11, 106, 97, 0.14);
+}
+
+.warning-band p {
+  margin: 0;
+  font-size: var(--body-size);
+  line-height: 1.4;
+}
+
+.decision-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.decision-card {
+  padding: 0.95rem;
+  border-radius: 1rem;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.78);
+  display: grid;
+  gap: 0.45rem;
+}
+
+.decision-card h3 {
+  margin: 0;
+  font-size: var(--h3-size);
+  line-height: 1.04;
+}
+
+.decision-card p,
+.decision-card li {
+  margin: 0;
+  font-size: var(--body-size);
+  color: var(--text-soft);
+  line-height: 1.38;
+}
+
+.decision-card ul {
+  margin: 0;
+  padding-left: 1rem;
+  display: grid;
+  gap: 0.38rem;
+}
+
+.slide.revealed .reveal {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+
+.delay-1 { transition-delay: 0.06s; }
+.delay-2 { transition-delay: 0.12s; }
+.delay-3 { transition-delay: 0.18s; }
+.delay-4 { transition-delay: 0.24s; }
+
+a {
+  color: inherit;
+}
+
+@media (max-height: 760px) {
+  :root {
+    --slide-padding: clamp(0.8rem, 2.2vw, 2rem);
+    --title-size: clamp(1.45rem, 4.1vw, 3rem);
+    --h2-size: clamp(1.05rem, 2.3vw, 1.75rem);
+    --body-size: clamp(0.72rem, 1vw, 0.94rem);
+  }
+
+  .slide-subtitle {
+    display: none;
+  }
+
+  .quote-band,
+  .warning-band,
+  .lead-panel,
+  .matrix,
+  .card,
+  .phase-card,
+  .decision-card,
+  .stat,
+  .flow-node {
+    padding: 0.72rem 0.8rem;
+  }
+
+  .card p,
+  .lead-panel p,
+  .matrix p,
+  .matrix li,
+  .decision-card p,
+  .decision-card li,
+  .flow-node p,
+  .timeline-step p,
+  .row-item p,
+  .phase-card p,
+  .stat p {
+    line-height: 1.33;
+  }
+
+  .card-grid,
+  .phase-grid,
+  .decision-grid,
+  .timeline,
+  .flow,
+  .matrix-table,
+  .row-list {
+    gap: 0.48rem;
+  }
+
+  .bullet-list,
+  .compact-list {
+    gap: 0.28rem;
+  }
+
+  .frame--wide { min-height: 34vh; }
+  .frame--tall { min-height: 44vh; }
+}
+
+@media (max-height: 620px) {
+  :root {
+    --slide-padding: clamp(0.6rem, 2vw, 1.3rem);
+    --title-size: clamp(1.2rem, 3.6vw, 2rem);
+  }
+
+  .progress-shell,
+  .keyboard-hint {
+    display: none;
+  }
+}
+
+@media (max-height: 720px) {
+  .quote-band {
+    display: none;
+  }
+}
+
+@media (max-height: 680px) {
+  .slide-subtitle,
+  .eyebrow {
+    display: none;
+  }
+}
+
+@media (max-width: 980px) {
+  .content-shell.split-2,
+  .content-shell.split-3,
+  .phase-grid,
+  .decision-grid,
+  .flow,
+  .timeline {
+    grid-template-columns: 1fr;
+  }
+
+  .slide-top,
+  .footer {
+    gap: 0.8rem;
+  }
+
+  .proof-row {
+    justify-content: flex-start;
+    max-width: 100%;
+  }
+
+  .slide-title {
+    max-width: 100%;
+  }
+
+  .matrix-row,
+  .row-item {
+    grid-template-columns: 1fr;
+  }
+
+  .frame--wide { min-height: 30vh; }
+  .frame--tall { min-height: 38vh; }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --title-size: clamp(1.05rem, 6vw, 1.55rem);
+    --h2-size: clamp(0.82rem, 3.4vw, 1.1rem);
+    --h3-size: clamp(0.72rem, 2.9vw, 0.92rem);
+    --body-size: clamp(0.58rem, 2.25vw, 0.72rem);
+    --small-size: clamp(0.5rem, 1.9vw, 0.62rem);
+    --slide-padding: clamp(0.42rem, 2.8vw, 0.75rem);
+    --content-gap: clamp(0.28rem, 1.45vw, 0.45rem);
+    --element-gap: clamp(0.22rem, 1.1vw, 0.36rem);
+  }
+
+  .slide-subtitle {
+    display: none;
+  }
+
+  .slide-content {
+    padding-bottom: var(--slide-padding);
+  }
+
+  .footer,
+  .progress-shell,
+  .keyboard-hint,
+  .frame-label {
+    display: none;
+  }
+
+  .slide-title {
+    line-height: 0.98;
+  }
+
+  .slide-top {
+    align-items: flex-start;
+  }
+
+  .quote-band {
+    display: none;
+  }
+
+  .warning-band,
+  .lead-panel,
+  .matrix,
+  .card,
+  .phase-card,
+  .decision-card,
+  .stat,
+  .flow-node {
+    padding: 0.48rem;
+  }
+
+  .card p,
+  .card li,
+  .lead-panel p,
+  .matrix p,
+  .matrix li,
+  .bullet-list li,
+  .compact-list li,
+  .decision-card p,
+  .decision-card li,
+  .flow-node p,
+  .timeline-step p,
+  .row-item p,
+  .phase-card p,
+  .stat p {
+    line-height: 1.22;
+  }
+
+  .frame--wide { min-height: 18vh; }
+  .frame--tall { min-height: 22vh; }
+}
+
+@media (max-width: 640px) and (max-height: 760px) {
+  .quote-band,
+  .slide-subtitle,
+  .eyebrow {
+    display: none;
+  }
+
+  .frame--wide,
+  .frame--tall {
+    min-height: 16vh;
+  }
+}
+
+@media (max-width: 480px) {
+  .eyebrow {
+    display: none;
+  }
+
+  .proof-row {
+    gap: 0.3rem;
+  }
+
+  .proof-chip {
+    padding: 0.38rem 0.6rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.15s !important;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+@media print {
+  @page { size: 13.333in 7.5in; margin: 0; }
+
+  html, body {
+    width: 13.333in;
+    overflow: visible;
+    background: white !important;
+  }
+
+  body::before,
+  .progress-shell,
+  .keyboard-hint {
+    display: none !important;
+  }
+
+  .slide {
+    width: 13.333in;
+    height: 7.5in;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .footer {
+    position: absolute;
+  }
+}
+</style>
+</head>
+<body class="deck-challenges">
+  <main>
+
+    <section class="slide" id="d2-1">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 5</div>
+            <div class="eyebrow">Challenge alignment</div>
+            <h1 class="slide-title">Challenge Alignment Contract</h1>
+            <p class="slide-subtitle">This deck maps the top systemic avalanche-forecasting challenges to the current MVP response, without converting partial progress into completed science.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+          <div class="stack reveal delay-1">
+            <div class="lead-panel">
+              <div class="section-label">Current state and future strategy</div>
+              <ul class="bullet-list">
+                <li>Ratings use the stricter evidence-gated source table</li>
+<li>Current state is separated from future strategy</li>
+<li>Hosted proof is same-day full-grid technical publication, not scientist validation closure</li>
+<li>Candidate methods stay gated until supporting evidence exists</li>
+              </ul>
+            </div>
+            <div class="warning-band">
+              <p><strong>Evidence level:</strong> <code>Artifact/doc proof only</code></p>
+            </div>
+          </div>
+          <div class="stack reveal delay-2">
+            <div class="diagram-shell">
+                  <div class="section-label">Interpretation</div>
+                  <div class="phase-grid">
+                    <article class="phase-card"><div class="phase-meta">Current state</div><h3 class="phase-title">Evidence now</h3><p>Use only hosted, admin, repo, and artifact proof that exists today.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Gated</div><h3 class="phase-title">Promotion rules</h3><p>MTS-LSTM, SAR, TreeSHAP refresh, and runout physics require explicit evidence before promotion.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Future strategy</div><h3 class="phase-title">Validation program</h3><p>Scientist review decides which technical paths become stronger operational claims.</p></article>
+                  </div>
+                </div>
+          </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 1</span>
+          <span><a href="../../source/Top_challanges.md">Top Challenges</a>, <a href="../../source/Scientist_claim_ledger.md">Claim Ledger</a></span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-2">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 5</div>
+            <div class="eyebrow">Challenge alignment</div>
+            <h1 class="slide-title">Data Collection And Observation Scarcity</h1>
+            <p class="slide-subtitle">The MVP reduces dependence on manual observations, but it does not replace field snowpack truth.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+          <div class="stack reveal delay-1">
+            <div class="lead-panel">
+              <div class="section-label">Current state and future strategy</div>
+              <ul class="bullet-list">
+                <li>Dangerous manual collection: revised rating <code>3/5</code></li>
+<li>Sparse AWS networks: revised rating <code>3/5</code></li>
+<li>Field reports and news ingest augment the evidence base</li>
+<li>Open-Meteo and snowpack proxies reduce dependence on dense local stations</li>
+<li>Future strategy: scientist-reviewed field and observatory data integration</li>
+              </ul>
+            </div>
+            <div class="warning-band">
+              <p><strong>Evidence level:</strong> <code>Artifact/doc proof only</code></p>
+            </div>
+          </div>
+          <div class="stack reveal delay-2">
+            <div class="diagram-shell">
+                  <div class="section-label">Interpretation</div>
+                  <div class="phase-grid">
+                    <article class="phase-card"><div class="phase-meta">Current state</div><h3 class="phase-title">Evidence now</h3><p>Use only hosted, admin, repo, and artifact proof that exists today.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Gated</div><h3 class="phase-title">Promotion rules</h3><p>MTS-LSTM, SAR, TreeSHAP refresh, and runout physics require explicit evidence before promotion.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Future strategy</div><h3 class="phase-title">Validation program</h3><p>Scientist review decides which technical paths become stronger operational claims.</p></article>
+                  </div>
+                </div>
+          </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 2</span>
+          <span><a href="../../source/Top_challanges.md">Top Challenges</a>, <a href="../../source/Reserches.md">Research Base</a></span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-3">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 5</div>
+            <div class="eyebrow">Challenge alignment</div>
+            <h1 class="slide-title">Occurrence Records And Autonomous Evidence</h1>
+            <p class="slide-subtitle">Governed evidence fusion is useful because avalanche occurrence records are incomplete, delayed, and noisy.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip internal">Technical evidence</span><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+          <div class="stack reveal delay-1">
+            <div class="lead-panel">
+              <div class="section-label">Current state and future strategy</div>
+              <ul class="bullet-list">
+                <li>Uncertainty in occurrence records: revised rating <code>3/5</code></li>
+<li>Current evidence: deduplication, <code>label_confidence</code>, and <code>training_weight</code></li>
+<li>News and field reports are staged before they influence training or review</li>
+<li>Future strategy: scientist-owned adjudication rules and regional gold cases</li>
+              </ul>
+            </div>
+            <div class="warning-band">
+              <p><strong>Evidence level:</strong> <code>Repo/admin verified</code> plus <code>Artifact/doc proof only</code></p>
+            </div>
+          </div>
+          <div class="stack reveal delay-2">
+            <div class="diagram-shell">
+                  <div class="section-label">Interpretation</div>
+                  <div class="phase-grid">
+                    <article class="phase-card"><div class="phase-meta">Current state</div><h3 class="phase-title">Evidence now</h3><p>Use only hosted, admin, repo, and artifact proof that exists today.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Gated</div><h3 class="phase-title">Promotion rules</h3><p>MTS-LSTM, SAR, TreeSHAP refresh, and runout physics require explicit evidence before promotion.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Future strategy</div><h3 class="phase-title">Validation program</h3><p>Scientist review decides which technical paths become stronger operational claims.</p></article>
+                  </div>
+                </div>
+          </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 3</span>
+          <span><a href="../../source/Governed_autonomy_evidence_fusion_note.md">Governed Autonomy Note</a>, <a href="../../source/Top_challanges.md">Top Challenges</a></span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-4">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 5</div>
+            <div class="eyebrow">Challenge alignment</div>
+            <h1 class="slide-title">Rare Events And Feature Discipline</h1>
+            <p class="slide-subtitle">The current pipeline addresses class imbalance and feature sprawl better than a generic accuracy-led model story.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip internal">Technical evidence</span><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+          <div class="stack reveal delay-1">
+            <div class="lead-panel">
+              <div class="section-label">Current state and future strategy</div>
+              <ul class="bullet-list">
+                <li>Severe class imbalance: revised rating <code>4/5</code></li>
+<li>Feature redundancy and overfitting: revised rating <code>4/5</code></li>
+<li>Current technical path references rare-event metrics, KMeansSMOTE, and Recursive Feature Elimination</li>
+<li>Public users do not directly see this mitigation, so it remains technical evidence</li>
+<li>Future strategy: benchmark slices that expose miss, false-alarm, and calibration behavior</li>
+              </ul>
+            </div>
+            <div class="warning-band">
+              <p><strong>Evidence level:</strong> <code>Repo/admin verified</code> plus <code>Artifact/doc proof only</code></p>
+            </div>
+          </div>
+          <div class="stack reveal delay-2">
+            <div class="diagram-shell">
+                  <div class="section-label">Interpretation</div>
+                  <div class="phase-grid">
+                    <article class="phase-card"><div class="phase-meta">Current state</div><h3 class="phase-title">Evidence now</h3><p>Use only hosted, admin, repo, and artifact proof that exists today.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Gated</div><h3 class="phase-title">Promotion rules</h3><p>MTS-LSTM, SAR, TreeSHAP refresh, and runout physics require explicit evidence before promotion.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Future strategy</div><h3 class="phase-title">Validation program</h3><p>Scientist review decides which technical paths become stronger operational claims.</p></article>
+                  </div>
+                </div>
+          </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 4</span>
+          <span><a href="../../source/Technical_Architecture_Current_Platform.md">Current Architecture</a>, <a href="../../source/Scientist_benchmark_pack_v0.md">Benchmark Pack</a></span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-5">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 5</div>
+            <div class="eyebrow">Challenge alignment</div>
+            <h1 class="slide-title">Physical Processes And Weak Layers</h1>
+            <p class="slide-subtitle">The MVP is physics-aware, but not a complete snowpack-physics forecasting stack.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+          <div class="stack reveal delay-1">
+            <div class="lead-panel">
+              <div class="section-label">Current state and future strategy</div>
+              <ul class="bullet-list">
+                <li>Complex physical processes: revised rating <code>3/5</code></li>
+<li>Current state: snowpack proxies, terrain masks, runout seeding, and bulletin framing</li>
+<li>Current active runout proof is analytical Alpha-Beta fallback</li>
+<li>Future strategy: weak-layer plausibility review and validated WhiteboxTools runout path</li>
+              </ul>
+            </div>
+            <div class="warning-band">
+              <p><strong>Evidence level:</strong> <code>Artifact/doc proof only</code></p>
+            </div>
+          </div>
+          <div class="stack reveal delay-2">
+            <div class="diagram-shell">
+                  <div class="section-label">Interpretation</div>
+                  <div class="phase-grid">
+                    <article class="phase-card"><div class="phase-meta">Current state</div><h3 class="phase-title">Evidence now</h3><p>Use only hosted, admin, repo, and artifact proof that exists today.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Gated</div><h3 class="phase-title">Promotion rules</h3><p>MTS-LSTM, SAR, TreeSHAP refresh, and runout physics require explicit evidence before promotion.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Future strategy</div><h3 class="phase-title">Validation program</h3><p>Scientist review decides which technical paths become stronger operational claims.</p></article>
+                  </div>
+                </div>
+          </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 5</span>
+          <span><a href="../../source/Top_challanges.md">Top Challenges</a>, <a href="../../source/Scientist_validation_protocol_v0.md">Validation Protocol</a></span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-6">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 5</div>
+            <div class="eyebrow">Challenge alignment</div>
+            <h1 class="slide-title">Spatial And Temporal Hazard Fusion</h1>
+            <p class="slide-subtitle">The hosted workspace meaningfully fuses where and when risk changes, while still requiring scientific review of the forecast content.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip live">Live platform</span><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+          <div class="stack reveal delay-1">
+            <div class="lead-panel">
+              <div class="section-label">Current state and future strategy</div>
+              <ul class="bullet-list">
+                <li>Spatial-temporal disconnect: revised rating <code>4/5</code></li>
+<li>Current state: published grid, timeline, daypart bulletin, and optional 3D inspection</li>
+<li>Hosted proof: same-day <code>20x20</code> / <code>72h</code> full-grid technical publication</li>
+<li>Future strategy: region-specific validation cases and scientist review of daypart shifts</li>
+              </ul>
+            </div>
+            <div class="warning-band">
+              <p><strong>Evidence level:</strong> <code>Hosted production</code> plus <code>Artifact/doc proof only</code></p>
+            </div>
+          </div>
+          <div class="stack reveal delay-2">
+
+    <figure class="frame frame--wide frame--workspace">
+      <img src="assets/screenshots/2026-05-08_hosted-public_cell-full-grid-after-refresh.png" alt="Hosted public full-grid proof">
+      <figcaption class="frame-label">Hosted route proof</figcaption>
+    </figure>
+
+          </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 6</span>
+          <span><a href="../06_Proof_Status_And_Screenshot_Manifest.md">Proof Manifest</a>, <a href="../../source/Top_challanges.md">Top Challenges</a></span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-7">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 5</div>
+            <div class="eyebrow">Challenge alignment</div>
+            <h1 class="slide-title">Weighting, Calibration, And Multiple Optima</h1>
+            <p class="slide-subtitle">The platform reduces ad hoc promotion decisions with gates, but it does not eliminate calibration ambiguity.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip internal">Technical evidence</span><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+          <div class="stack reveal delay-1">
+            <div class="lead-panel">
+              <div class="section-label">Current state and future strategy</div>
+              <ul class="bullet-list">
+                <li>Subjective parameter weighting: revised rating <code>3/5</code></li>
+<li>Multiple optima in calibration: revised rating <code>3/5</code></li>
+<li>Current state: benchmark summaries, PSS/Brier gates, and stability summaries</li>
+<li>Current stability evidence is conservative and should not be framed as closure</li>
+<li>Future strategy: scientist-owned threshold and calibration review</li>
+              </ul>
+            </div>
+            <div class="warning-band">
+              <p><strong>Evidence level:</strong> <code>Repo/admin verified</code> plus <code>Artifact/doc proof only</code></p>
+            </div>
+          </div>
+          <div class="stack reveal delay-2">
+            <div class="diagram-shell">
+                  <div class="section-label">Interpretation</div>
+                  <div class="phase-grid">
+                    <article class="phase-card"><div class="phase-meta">Current state</div><h3 class="phase-title">Evidence now</h3><p>Use only hosted, admin, repo, and artifact proof that exists today.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Gated</div><h3 class="phase-title">Promotion rules</h3><p>MTS-LSTM, SAR, TreeSHAP refresh, and runout physics require explicit evidence before promotion.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Future strategy</div><h3 class="phase-title">Validation program</h3><p>Scientist review decides which technical paths become stronger operational claims.</p></article>
+                  </div>
+                </div>
+          </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 7</span>
+          <span><a href="../../source/Scientist_benchmark_pack_v0.md">Benchmark Pack</a>, <a href="../../source/Scientist_discussion_framework.md">Scientist Discussion Framework</a></span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-8">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 5</div>
+            <div class="eyebrow">Challenge alignment</div>
+            <h1 class="slide-title">Compute Bottlenecks And Batch Delivery</h1>
+            <p class="slide-subtitle">The strongest engineering response is batch-first artifact delivery, which keeps the live website responsive while heavy computation remains upstream.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip live">Live platform</span><span class="proof-chip internal">Technical evidence</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+          <div class="stack reveal delay-1">
+            <div class="lead-panel">
+              <div class="section-label">Current state and future strategy</div>
+              <ul class="bullet-list">
+                <li>Severe computational bottlenecks: revised rating <code>4/5</code></li>
+<li>Current state: manifests, hourly payloads, lazy loading, and Supabase-backed publication metadata</li>
+<li>Modal.com remains off-path candidate compute, not the active public scorer proof</li>
+<li>Future strategy: GitHub Actions or lightweight VPS for repeatable offline publication</li>
+              </ul>
+            </div>
+            <div class="warning-band">
+              <p><strong>Evidence level:</strong> <code>Hosted production</code> plus <code>Repo/admin verified</code></p>
+            </div>
+          </div>
+          <div class="stack reveal delay-2">
+            <div class="diagram-shell">
+                  <div class="section-label">Interpretation</div>
+                  <div class="phase-grid">
+                    <article class="phase-card"><div class="phase-meta">Current state</div><h3 class="phase-title">Evidence now</h3><p>Use only hosted, admin, repo, and artifact proof that exists today.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Gated</div><h3 class="phase-title">Promotion rules</h3><p>MTS-LSTM, SAR, TreeSHAP refresh, and runout physics require explicit evidence before promotion.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Future strategy</div><h3 class="phase-title">Validation program</h3><p>Scientist review decides which technical paths become stronger operational claims.</p></article>
+                  </div>
+                </div>
+          </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 8</span>
+          <span><a href="../../source/Technical_Architecture_Current_Platform.md">Current Architecture</a>, <a href="../../../prd_add3.md">PRD Addendum</a></span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-9">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 5</div>
+            <div class="eyebrow">Challenge alignment</div>
+            <h1 class="slide-title">Disparate Data Integration And Terrain Semantics</h1>
+            <p class="slide-subtitle">The MVP is strongest when it integrates forecast grids, bulletin semantics, terrain masking, and workflow controls into one current-state product.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip live">Live platform</span><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+          <div class="stack reveal delay-1">
+            <div class="lead-panel">
+              <div class="section-label">Current state and future strategy</div>
+              <ul class="bullet-list">
+                <li>Disparate data integration: revised rating <code>4/5</code></li>
+<li>APT masking prevents out-of-scope terrain from looking like ordinary low risk</li>
+<li>Shared artifacts connect map, bulletin, timeline, and review workflows</li>
+<li>Future strategy: PostGIS and richer geospatial contracts after validation needs are fixed</li>
+              </ul>
+            </div>
+            <div class="warning-band">
+              <p><strong>Evidence level:</strong> <code>Hosted production</code> plus <code>Artifact/doc proof only</code></p>
+            </div>
+          </div>
+          <div class="stack reveal delay-2">
+            <div class="diagram-shell">
+                  <div class="section-label">Interpretation</div>
+                  <div class="phase-grid">
+                    <article class="phase-card"><div class="phase-meta">Current state</div><h3 class="phase-title">Evidence now</h3><p>Use only hosted, admin, repo, and artifact proof that exists today.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Gated</div><h3 class="phase-title">Promotion rules</h3><p>MTS-LSTM, SAR, TreeSHAP refresh, and runout physics require explicit evidence before promotion.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Future strategy</div><h3 class="phase-title">Validation program</h3><p>Scientist review decides which technical paths become stronger operational claims.</p></article>
+                  </div>
+                </div>
+          </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 9</span>
+          <span><a href="../../source/Top20_features.md">Top 20 Features</a>, <a href="../../source/Technical_Glossary_And_Acronyms.md">Technical Glossary</a></span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-10">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 5</div>
+            <div class="eyebrow">Challenge alignment</div>
+            <h1 class="slide-title">SAR And Remote Sensing Limits</h1>
+            <p class="slide-subtitle">SAR is an important future evidence stream, but it remains candidate-gated in the current MVP.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip internal">Technical evidence</span><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+          <div class="stack reveal delay-1">
+            <div class="lead-panel">
+              <div class="section-label">Current state and future strategy</div>
+              <ul class="bullet-list">
+                <li>Topographic radar shadowing: revised rating <code>2/5</code></li>
+<li>Current state: SAR coverage flags and candidate worker paths</li>
+<li>Do not describe SAR as operational or promoted</li>
+<li>Future strategy: labels, revisit-aware handling, shadow/layover review, and held-out qualification</li>
+              </ul>
+            </div>
+            <div class="warning-band">
+              <p><strong>Evidence level:</strong> <code>Repo/admin verified</code> plus <code>Artifact/doc proof only</code></p>
+            </div>
+          </div>
+          <div class="stack reveal delay-2">
+            <div class="diagram-shell">
+                  <div class="section-label">Interpretation</div>
+                  <div class="phase-grid">
+                    <article class="phase-card"><div class="phase-meta">Current state</div><h3 class="phase-title">Evidence now</h3><p>Use only hosted, admin, repo, and artifact proof that exists today.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Gated</div><h3 class="phase-title">Promotion rules</h3><p>MTS-LSTM, SAR, TreeSHAP refresh, and runout physics require explicit evidence before promotion.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Future strategy</div><h3 class="phase-title">Validation program</h3><p>Scientist review decides which technical paths become stronger operational claims.</p></article>
+                  </div>
+                </div>
+          </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 10</span>
+          <span><a href="../../source/Demo_research_appendix.md">Research Appendix</a>, <a href="../../source/Modal_GPU_ML_Inventory.md">Modal/GPU Inventory</a></span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-11">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 5</div>
+            <div class="eyebrow">Challenge alignment</div>
+            <h1 class="slide-title">Climate Drift And Micro-Climate Variability</h1>
+            <p class="slide-subtitle">Freshness surfaces help, but the MVP does not yet prove full adaptive climate-drift or micro-climate remediation.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+          <div class="stack reveal delay-1">
+            <div class="lead-panel">
+              <div class="section-label">Current state and future strategy</div>
+              <ul class="bullet-list">
+                <li>Climate change concept drift: revised rating <code>3/5</code></li>
+<li>Micro-climate variability: revised rating <code>2/5</code></li>
+<li>Current state: freshness metadata, regional grids, terrain modifiers, and uncertainty cues</li>
+<li>Future strategy: local validation slices and continuous benchmark refresh</li>
+              </ul>
+            </div>
+            <div class="warning-band">
+              <p><strong>Evidence level:</strong> <code>Artifact/doc proof only</code></p>
+            </div>
+          </div>
+          <div class="stack reveal delay-2">
+            <div class="diagram-shell">
+                  <div class="section-label">Interpretation</div>
+                  <div class="phase-grid">
+                    <article class="phase-card"><div class="phase-meta">Current state</div><h3 class="phase-title">Evidence now</h3><p>Use only hosted, admin, repo, and artifact proof that exists today.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Gated</div><h3 class="phase-title">Promotion rules</h3><p>MTS-LSTM, SAR, TreeSHAP refresh, and runout physics require explicit evidence before promotion.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Future strategy</div><h3 class="phase-title">Validation program</h3><p>Scientist review decides which technical paths become stronger operational claims.</p></article>
+                  </div>
+                </div>
+          </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 11</span>
+          <span><a href="../../source/Top_challanges.md">Top Challenges</a>, <a href="../../source/Scientist_validation_protocol_v0.md">Validation Protocol</a></span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-12">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 5</div>
+            <div class="eyebrow">Challenge alignment</div>
+            <h1 class="slide-title">Trust, Explainability, And Reviewability</h1>
+            <p class="slide-subtitle">The platform reduces the black-box trust gap through provenance and explanation surfaces, but the current active artifact still uses heuristic explanation fallback.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip internal">Technical evidence</span><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+          <div class="stack reveal delay-1">
+            <div class="lead-panel">
+              <div class="section-label">Current state and future strategy</div>
+              <ul class="bullet-list">
+                <li>Black-box trust deficit: revised rating <code>4/5</code></li>
+<li>Current state: cell inspection, admin provenance, uncertainty messaging, and implemented TreeSHAP path</li>
+<li>Active full-grid run: <code>heuristic_fallback</code></li>
+<li>Future strategy: refresh active-run TreeSHAP evidence before stronger explanation claims</li>
+              </ul>
+            </div>
+            <div class="warning-band">
+              <p><strong>Evidence level:</strong> <code>Repo/admin verified</code> plus <code>Artifact/doc proof only</code></p>
+            </div>
+          </div>
+          <div class="stack reveal delay-2">
+            <div class="diagram-shell">
+                  <div class="section-label">Interpretation</div>
+                  <div class="phase-grid">
+                    <article class="phase-card"><div class="phase-meta">Current state</div><h3 class="phase-title">Evidence now</h3><p>Use only hosted, admin, repo, and artifact proof that exists today.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Gated</div><h3 class="phase-title">Promotion rules</h3><p>MTS-LSTM, SAR, TreeSHAP refresh, and runout physics require explicit evidence before promotion.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Future strategy</div><h3 class="phase-title">Validation program</h3><p>Scientist review decides which technical paths become stronger operational claims.</p></article>
+                  </div>
+                </div>
+          </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 12</span>
+          <span><a href="../../source/Modal_GPU_ML_Inventory.md">Modal/GPU Inventory</a>, <a href="../../source/Scientist_claim_ledger.md">Claim Ledger</a></span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-13">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 5</div>
+            <div class="eyebrow">Challenge alignment</div>
+            <h1 class="slide-title">Customer Alignment Summary</h1>
+            <p class="slide-subtitle">The strongest customer proposition is not that every hard problem is solved; it is that the MVP makes the hard problems visible, governable, and ready for focused validation.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip live">Live platform</span><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+          <div class="stack reveal delay-1">
+            <div class="lead-panel">
+              <div class="section-label">Current state and future strategy</div>
+              <ul class="bullet-list">
+                <li>Current state: public route, admin route, full-grid publication proof, workflow controls</li>
+<li>Current state: masked terrain, uncertainty, and current-state bulletin semantics</li>
+<li>Technical evidence: rare-event training discipline and benchmark gates</li>
+<li>Future strategy: scientist-led validation, SAR qualification, and candidate-model promotion rules</li>
+              </ul>
+            </div>
+            <div class="warning-band">
+              <p><strong>Evidence level:</strong> <code>Hosted production</code> plus <code>Artifact/doc proof only</code></p>
+            </div>
+          </div>
+          <div class="stack reveal delay-2">
+            <div class="diagram-shell">
+                  <div class="section-label">Interpretation</div>
+                  <div class="phase-grid">
+                    <article class="phase-card"><div class="phase-meta">Current state</div><h3 class="phase-title">Evidence now</h3><p>Use only hosted, admin, repo, and artifact proof that exists today.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Gated</div><h3 class="phase-title">Promotion rules</h3><p>MTS-LSTM, SAR, TreeSHAP refresh, and runout physics require explicit evidence before promotion.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Future strategy</div><h3 class="phase-title">Validation program</h3><p>Scientist review decides which technical paths become stronger operational claims.</p></article>
+                  </div>
+                </div>
+          </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 13</span>
+          <span><a href="../../source/Demo_decision_brief.md">Demo Decision Brief</a>, <a href="../../source/Scientist_discussion_framework.md">Scientist Discussion Framework</a></span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-14">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 5</div>
+            <div class="eyebrow">Challenge alignment</div>
+            <h1 class="slide-title">Immediate Improvement Areas</h1>
+            <p class="slide-subtitle">The next work should concentrate on the gaps that most affect scientific credibility and customer confidence.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+          <div class="stack reveal delay-1">
+            <div class="lead-panel">
+              <div class="section-label">Current state and future strategy</div>
+              <ul class="bullet-list">
+                <li>Full-grid scientist validation over selected regional cases</li>
+<li>TreeSHAP refresh for active full-grid artifacts</li>
+<li>WhiteboxTools runout qualification beyond smoke proof</li>
+<li>SAR held-out evidence and promotion gates</li>
+<li>Field-report and occurrence-record adjudication pack</li>
+              </ul>
+            </div>
+            <div class="warning-band">
+              <p><strong>Evidence level:</strong> <code>Artifact/doc proof only</code></p>
+            </div>
+          </div>
+          <div class="stack reveal delay-2">
+            <div class="diagram-shell">
+                  <div class="section-label">Interpretation</div>
+                  <div class="phase-grid">
+                    <article class="phase-card"><div class="phase-meta">Current state</div><h3 class="phase-title">Evidence now</h3><p>Use only hosted, admin, repo, and artifact proof that exists today.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Gated</div><h3 class="phase-title">Promotion rules</h3><p>MTS-LSTM, SAR, TreeSHAP refresh, and runout physics require explicit evidence before promotion.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Future strategy</div><h3 class="phase-title">Validation program</h3><p>Scientist review decides which technical paths become stronger operational claims.</p></article>
+                  </div>
+                </div>
+          </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 14</span>
+          <span><a href="../../source/Scientist_validation_protocol_v0.md">Validation Protocol</a>, <a href="../../source/Scientist_meeting_checklist.md">Scientist Meeting Checklist</a></span>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="slide" id="d2-15">
+      <div class="slide-content">
+        <div class="slide-top reveal">
+          <div class="kicker-stack">
+            <div class="kicker">Deck 2 of 5</div>
+            <div class="eyebrow">Challenge alignment</div>
+            <h1 class="slide-title">Discussion Close</h1>
+            <p class="slide-subtitle">The decision is whether to use the current MVP as the shared workbench for the validation program.</p>
+          </div>
+          <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
+        </div>
+        <div class="content-shell split-2">
+
+          <div class="stack reveal delay-1">
+            <div class="lead-panel">
+              <div class="section-label">Current state and future strategy</div>
+              <ul class="bullet-list">
+                <li>Approve the current-state MVP as the validation workbench</li>
+<li>Select priority regions and challenge categories</li>
+<li>Agree benchmark and release-gate ownership</li>
+<li>Keep customer-facing claims tied to proof buckets</li>
+              </ul>
+            </div>
+            <div class="warning-band">
+              <p><strong>Evidence level:</strong> <code>Artifact/doc proof only</code></p>
+            </div>
+          </div>
+          <div class="stack reveal delay-2">
+            <div class="diagram-shell">
+                  <div class="section-label">Interpretation</div>
+                  <div class="phase-grid">
+                    <article class="phase-card"><div class="phase-meta">Current state</div><h3 class="phase-title">Evidence now</h3><p>Use only hosted, admin, repo, and artifact proof that exists today.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Gated</div><h3 class="phase-title">Promotion rules</h3><p>MTS-LSTM, SAR, TreeSHAP refresh, and runout physics require explicit evidence before promotion.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Future strategy</div><h3 class="phase-title">Validation program</h3><p>Scientist review decides which technical paths become stronger operational claims.</p></article>
+                  </div>
+                </div>
+          </div>
+
+        </div>
+        <div class="footer">
+          <span class="slide-id">D2 15</span>
+          <span><a href="../../source/Scientist_discussion_framework.md">Scientist Discussion Framework</a>, <a href="../../source/Top_challanges.md">Top Challenges</a></span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+  <div class="keyboard-hint">Arrow keys • wheel • swipe</div>
+  <div class="progress-shell" aria-hidden="true">
+    <span class="progress-count" data-progress-count>01 / 15</span>
+    <span class="progress-bar"><span data-progress-fill></span></span>
+  </div>
+  <script>
+class DeckController {
+  constructor() {
+    this.slides = Array.from(document.querySelectorAll('.slide'));
+    this.index = 0;
+    this.locked = false;
+    this.touchStartY = 0;
+    this.progressFill = document.querySelector('[data-progress-fill]');
+    this.progressCount = document.querySelector('[data-progress-count]');
+    this.bind();
+    this.observe();
+    this.update(0);
+  }
+
+  bind() {
+    window.addEventListener('keydown', (event) => {
+      if (['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(event.key)) {
+        event.preventDefault();
+        this.next();
+      }
+      if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(event.key)) {
+        event.preventDefault();
+        this.prev();
+      }
+      if (event.key === 'Home') {
+        event.preventDefault();
+        this.go(0);
+      }
+      if (event.key === 'End') {
+        event.preventDefault();
+        this.go(this.slides.length - 1);
+      }
+    }, { passive: false });
+
+    window.addEventListener('wheel', (event) => {
+      if (this.locked) return;
+      if (Math.abs(event.deltaY) < 18) return;
+      this.locked = true;
+      if (event.deltaY > 0) this.next();
+      else this.prev();
+      window.setTimeout(() => { this.locked = false; }, 650);
+    }, { passive: true });
+
+    window.addEventListener('touchstart', (event) => {
+      this.touchStartY = event.changedTouches[0].clientY;
+    }, { passive: true });
+
+    window.addEventListener('touchend', (event) => {
+      const delta = this.touchStartY - event.changedTouches[0].clientY;
+      if (Math.abs(delta) < 36) return;
+      if (delta > 0) this.next();
+      else this.prev();
+    }, { passive: true });
+  }
+
+  observe() {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const nextIndex = this.slides.indexOf(entry.target);
+          if (nextIndex >= 0) this.update(nextIndex);
+          entry.target.classList.add('revealed');
+        }
+      });
+    }, { threshold: 0.65 });
+
+    this.slides.forEach((slide) => observer.observe(slide));
+  }
+
+  go(index) {
+    const next = Math.max(0, Math.min(index, this.slides.length - 1));
+    this.slides[next].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    this.update(next);
+  }
+
+  next() { this.go(this.index + 1); }
+  prev() { this.go(this.index - 1); }
+
+  update(index) {
+    this.index = index;
+    const progress = ((index + 1) / this.slides.length) * 100;
+    if (this.progressFill) this.progressFill.style.width = progress + '%';
+    if (this.progressCount) this.progressCount.textContent = String(index + 1).padStart(2, '0') + ' / ' + String(this.slides.length).padStart(2, '0');
+    window.location.hash = this.slides[index].id;
+  }
+
+  getIndex() {
+    return this.index;
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  window.deckController = new DeckController();
+});
+</script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-# Technical Deck Final: Architecture Addendum
+# Deck 4 Final: Technical Architecture
 
 Updated: May 8, 2026
 

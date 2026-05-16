@@ -6,7 +6,7 @@ import { chromium } from 'playwright';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const baseUrl = process.env.DECK_BASE_URL || 'http://127.0.0.1:4380';
 const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const today = '2026-05-08';
+const today = '2026-05-09';
 
 const decks = [
   {
@@ -19,19 +19,35 @@ const decks = [
   },
   {
     slug: 'deck-2',
-    label: 'Deck 2 — Collaboration',
-    html: 'avalanche-insight-hub-deck-2-collaboration.html',
-    pdf: 'avalanche-insight-hub-deck-2-collaboration.pdf',
+    label: 'Deck 2 — Challenge Alignment',
+    html: 'avalanche-insight-hub-deck-2-challenge-alignment.html',
+    pdf: 'avalanche-insight-hub-deck-2-challenge-alignment.pdf',
     slideCount: 15,
-    requiredProofSlides: ['d2-8', 'd2-9', 'd2-14'],
+    requiredProofSlides: ['d2-6', 'd2-8', 'd2-13'],
+  },
+  {
+    slug: 'deck-3',
+    label: 'Deck 3 — Collaboration',
+    html: 'avalanche-insight-hub-deck-3-scientist-validation.html',
+    pdf: 'avalanche-insight-hub-deck-3-scientist-validation.pdf',
+    slideCount: 15,
+    requiredProofSlides: ['d3-8', 'd3-9', 'd3-14'],
   },
   {
     slug: 'tech',
-    label: 'Technical Architecture',
-    html: 'avalanche-insight-hub-technical-architecture.html',
-    pdf: 'avalanche-insight-hub-technical-architecture.pdf',
+    label: 'Deck 4 — Technical Architecture',
+    html: 'avalanche-insight-hub-deck-4-technical-architecture.html',
+    pdf: 'avalanche-insight-hub-deck-4-technical-architecture.pdf',
     slideCount: 15,
     requiredProofSlides: ['t-1', 't-5', 't-8'],
+  },
+  {
+    slug: 'technology-glossary',
+    label: 'Deck 5 — Technology Glossary',
+    html: 'avalanche-insight-hub-deck-5-technology-glossary.html',
+    pdf: 'avalanche-insight-hub-deck-5-technology-glossary.pdf',
+    slideCount: 15,
+    requiredProofSlides: ['d5-2', 'd5-6', 'd5-11'],
   },
 ];
 
@@ -188,7 +204,7 @@ function markdownSummary(results) {
   lines.push('## Hosted Authenticated Admin Proof');
   lines.push('');
   lines.push('- Fresh hosted-authenticated admin smoke succeeded on May 8, 2026.');
-  lines.push('- D1-9 uses hosted authenticated admin observability, so no local fallback label is required on that slide for this build.');
+  lines.push('- D1-9 and Technical Deck slide 8 use hosted authenticated admin observability, so no local fallback label is required on those slides for this build.');
   lines.push('');
   lines.push('## Viewport Results');
   lines.push('');
@@ -209,12 +225,14 @@ function markdownSummary(results) {
   lines.push('## Fallback Decisions Used');
   lines.push('');
   lines.push('- D1-10 through D1-12 use reconstructed tables and diagrams only, never raw admin/doc screenshots.');
-  lines.push('- D2 uses reconstructed roadmap, validation, and qualification visuals rather than screenshot-heavy slides.');
-  lines.push('- The hosted admin gate screenshot remains in the bundle as a fallback, but the current deck build uses hosted authenticated admin proof for D1-9.');
+  lines.push('- D3 uses reconstructed roadmap, validation, and qualification visuals rather than screenshot-heavy slides.');
+  lines.push('- D2 uses the strict challenge ratings from `Top_challanges.md`, not the inflated Gemini draft ratings.');
+  lines.push('- D5 uses proof-bucket labels for current, repo/admin verified, candidate/gated, and future-strategy terms.');
+  lines.push('- The hosted admin gate screenshot remains in the bundle as a fallback, but the current deck build uses hosted authenticated admin proof for D1-9 and Technical Deck slide 8.');
   lines.push('');
   lines.push('## Manual QA Follow-Up');
   lines.push('');
-  lines.push('- Open all three decks in Google Chrome at `http://127.0.0.1:4380/` and verify first, mid, and final slides with native keyboard navigation.');
+  lines.push('- Open all five decks in Google Chrome at `http://127.0.0.1:4380/` and verify first, mid, and final slides with native keyboard navigation.');
   lines.push('- If meeting-day hosted auth fails in a later rerun, replace D1-9 authenticated imagery with the gate screenshot or a reconstructed evidence table.');
   lines.push('');
   return lines.join('\n');

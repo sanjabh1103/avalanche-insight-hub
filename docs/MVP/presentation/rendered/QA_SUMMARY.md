@@ -1,16 +1,22 @@
 # Deck QA Summary
 
-Updated: 2026-05-08
+Updated: 2026-05-09
 
 ## Outputs
 
 - Deck 1 — Credibility: `avalanche-insight-hub-deck-1-credibility.html` and `avalanche-insight-hub-deck-1-credibility.pdf`
   - slide count: `15`
   - pdf pages: `15`
-- Deck 2 — Collaboration: `avalanche-insight-hub-deck-2-collaboration.html` and `avalanche-insight-hub-deck-2-collaboration.pdf`
+- Deck 2 — Challenge Alignment: `avalanche-insight-hub-deck-2-challenge-alignment.html` and `avalanche-insight-hub-deck-2-challenge-alignment.pdf`
   - slide count: `15`
   - pdf pages: `15`
-- Technical Architecture: `avalanche-insight-hub-technical-architecture.html` and `avalanche-insight-hub-technical-architecture.pdf`
+- Deck 3 — Collaboration: `avalanche-insight-hub-deck-3-scientist-validation.html` and `avalanche-insight-hub-deck-3-scientist-validation.pdf`
+  - slide count: `15`
+  - pdf pages: `15`
+- Deck 4 — Technical Architecture: `avalanche-insight-hub-deck-4-technical-architecture.html` and `avalanche-insight-hub-deck-4-technical-architecture.pdf`
+  - slide count: `15`
+  - pdf pages: `15`
+- Deck 5 — Technology Glossary: `avalanche-insight-hub-deck-5-technology-glossary.html` and `avalanche-insight-hub-deck-5-technology-glossary.pdf`
   - slide count: `15`
   - pdf pages: `15`
 
@@ -29,7 +35,7 @@ Updated: 2026-05-08
 ## Hosted Authenticated Admin Proof
 
 - Fresh hosted-authenticated admin smoke succeeded on May 8, 2026.
-- D1-9 uses hosted authenticated admin observability, so no local fallback label is required on that slide for this build.
+- D1-9 and Technical Deck slide 8 use hosted authenticated admin observability, so no local fallback label is required on those slides for this build.
 
 ## Viewport Results
 
@@ -39,22 +45,32 @@ Updated: 2026-05-08
 | Deck 1 — Credibility | `1280x720` | pass | no overflow; navigation ok; proof chips visible |
 | Deck 1 — Credibility | `768x1024` | pass | no overflow; navigation ok; proof chips visible |
 | Deck 1 — Credibility | `390x844` | pass | no overflow; navigation ok; proof chips visible |
-| Deck 2 — Collaboration | `1920x1080` | pass | no overflow; navigation ok; proof chips visible |
-| Deck 2 — Collaboration | `1280x720` | pass | no overflow; navigation ok; proof chips visible |
-| Deck 2 — Collaboration | `768x1024` | pass | no overflow; navigation ok; proof chips visible |
-| Deck 2 — Collaboration | `390x844` | pass | no overflow; navigation ok; proof chips visible |
-| Technical Architecture | `1920x1080` | pass | no overflow; navigation ok; proof chips visible |
-| Technical Architecture | `1280x720` | pass | no overflow; navigation ok; proof chips visible |
-| Technical Architecture | `768x1024` | pass | no overflow; navigation ok; proof chips visible |
-| Technical Architecture | `390x844` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 2 — Challenge Alignment | `1920x1080` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 2 — Challenge Alignment | `1280x720` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 2 — Challenge Alignment | `768x1024` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 2 — Challenge Alignment | `390x844` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 3 — Collaboration | `1920x1080` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 3 — Collaboration | `1280x720` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 3 — Collaboration | `768x1024` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 3 — Collaboration | `390x844` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 4 — Technical Architecture | `1920x1080` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 4 — Technical Architecture | `1280x720` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 4 — Technical Architecture | `768x1024` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 4 — Technical Architecture | `390x844` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 5 — Technology Glossary | `1920x1080` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 5 — Technology Glossary | `1280x720` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 5 — Technology Glossary | `768x1024` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 5 — Technology Glossary | `390x844` | pass | no overflow; navigation ok; proof chips visible |
 
 ## Fallback Decisions Used
 
 - D1-10 through D1-12 use reconstructed tables and diagrams only, never raw admin/doc screenshots.
-- D2 uses reconstructed roadmap, validation, and qualification visuals rather than screenshot-heavy slides.
-- The hosted admin gate screenshot remains in the bundle as a fallback, but the current deck build uses hosted authenticated admin proof for D1-9.
+- D3 uses reconstructed roadmap, validation, and qualification visuals rather than screenshot-heavy slides.
+- D2 uses the strict challenge ratings from `Top_challanges.md`, not the inflated Gemini draft ratings.
+- D5 uses proof-bucket labels for current, repo/admin verified, candidate/gated, and future-strategy terms.
+- The hosted admin gate screenshot remains in the bundle as a fallback, but the current deck build uses hosted authenticated admin proof for D1-9 and Technical Deck slide 8.
 
 ## Manual QA Follow-Up
 
-- Open all three decks in Google Chrome at `http://127.0.0.1:4380/` and verify first, mid, and final slides with native keyboard navigation.
+- Open all five decks in Google Chrome at `http://127.0.0.1:4380/` and verify first, mid, and final slides with native keyboard navigation.
 - If meeting-day hosted auth fails in a later rerun, replace D1-9 authenticated imagery with the gate screenshot or a reconstructed evidence table.

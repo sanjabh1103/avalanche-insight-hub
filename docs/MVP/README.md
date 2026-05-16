@@ -1,6 +1,6 @@
 # MVP Markdown Source Pack
 
-Updated: May 8, 2026
+Updated: May 9, 2026
 
 This folder is the slide-source workspace for the Avalanche Insight Hub MVP decks. Treat the Markdown files here as the source of truth for deck generation, presenter notes, proof chips, and screenshot selection.
 
@@ -54,14 +54,27 @@ Use only the PNGs in `presentation/rendered/assets/screenshots/` as deck-source 
 
 Do not use `presentation/rendered/assets/tmp/*.png` in fresh deck-source Markdown.
 
+## Five-Deck Discussion Pack
+
+| Order | Deck name | Final Markdown source | Primary purpose |
+|---:|---|---|---|
+| 1 | Current MVP Proof And Customer Value | [deck1_final.md](presentation/rendered/deck1_final.md) | Hosted proof, current product value, admin proof, ML truth, and claim boundaries. |
+| 2 | Top 15 Avalanche Forecasting Challenges And MVP Alignment | [deck_challenge_alignment_final.md](presentation/rendered/deck_challenge_alignment_final.md) | Evidence-gated challenge alignment using revised ratings from the current source pack. |
+| 3 | Scientist Validation And Collaboration Plan | [deck2_final.md](presentation/rendered/deck2_final.md) | Scientist role, benchmark pack, validation protocol, workstreams, and decision options. |
+| 4 | Technical Architecture: Current Platform And Future Core Model | [Tech_deck_final.md](presentation/rendered/Tech_deck_final.md) | Current architecture, offline-batch split, RF scorer, candidate paths, and proposed architecture gates. |
+| 5 | Technology Glossary, Release Gates, And Future Strategy | [deck_technology_terms_final.md](presentation/rendered/deck_technology_terms_final.md) | Plain-English technology terms with current, candidate/gated, and future-strategy labels. |
+
+Each deck is capped at 15 slides for NotebookLM and rendered-deck generation.
+
 ## Recommended Source Order
 
 1. Start with [01_Agenda.md](presentation/01_Agenda.md) to choose the deck flow.
-2. Use [02_Deck1_Outline_Draft.md](presentation/02_Deck1_Outline_Draft.md), [03_Deck2_Outline_Draft.md](presentation/03_Deck2_Outline_Draft.md), and [08_Deck3_Architecture_Addendum_Outline.md](presentation/08_Deck3_Architecture_Addendum_Outline.md) as slide-outline inputs.
-3. Validate proof buckets and screenshots through [06_Proof_Status_And_Screenshot_Manifest.md](presentation/06_Proof_Status_And_Screenshot_Manifest.md).
-4. Validate slide claims through [05_Slide_Evidence_Map.md](presentation/05_Slide_Evidence_Map.md).
-5. Pull citations and external grounding from [04_Appendix_References_Quotes.md](presentation/04_Appendix_References_Quotes.md) and [Reserches.md](source/Reserches.md).
-6. Use [Technical_Architecture_Current_Platform.md](source/Technical_Architecture_Current_Platform.md), [Technical_Architecture_Future_Core_Model.md](source/Technical_Architecture_Future_Core_Model.md), and [Technical_Glossary_And_Acronyms.md](source/Technical_Glossary_And_Acronyms.md) for the architecture deck.
+2. Use the five final rendered Markdown sources listed above as the direct NotebookLM deck inputs.
+3. Use [02_Deck1_Outline_Draft.md](presentation/02_Deck1_Outline_Draft.md), [03_Deck2_Outline_Draft.md](presentation/03_Deck2_Outline_Draft.md), and [08_Deck3_Architecture_Addendum_Outline.md](presentation/08_Deck3_Architecture_Addendum_Outline.md) as supporting outline inputs.
+4. Validate proof buckets and screenshots through [06_Proof_Status_And_Screenshot_Manifest.md](presentation/06_Proof_Status_And_Screenshot_Manifest.md).
+5. Validate slide claims through [05_Slide_Evidence_Map.md](presentation/05_Slide_Evidence_Map.md).
+6. Pull citations and external grounding from [04_Appendix_References_Quotes.md](presentation/04_Appendix_References_Quotes.md) and [Reserches.md](source/Reserches.md).
+7. Use [Technical_Architecture_Current_Platform.md](source/Technical_Architecture_Current_Platform.md), [Technical_Architecture_Future_Core_Model.md](source/Technical_Architecture_Future_Core_Model.md), and [Technical_Glossary_And_Acronyms.md](source/Technical_Glossary_And_Acronyms.md) for architecture and terminology backup.
 
 ## Source Boundaries
 

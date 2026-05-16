@@ -1,6 +1,6 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Loader2, Mountain, Settings2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Mountain, PanelLeft, Settings2 } from 'lucide-react';
 
 import AdminAccessGate from '@/components/AdminAccessGate';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,8 @@ function AdminDashboardFallback() {
 }
 
 export default function AdminPage() {
+  const [showForecastContext, setShowForecastContext] = useState(false);
+
   return (
     <div className="min-h-screen overflow-hidden bg-background text-foreground">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_hsl(156_74%_45%_/_0.14),_transparent_30%),radial-gradient(circle_at_80%_0%,_hsl(199_90%_60%_/_0.09),_transparent_24%)]" />
@@ -50,12 +52,26 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <Button asChild variant="outline" className="h-11 justify-center gap-2 rounded-2xl border-border/70 bg-black/10 text-[11px] font-semibold uppercase tracking-[0.18em]">
                 <Link to="/">
                   <ArrowLeft className="h-4 w-4" />
-                  Dashboard
+                  Return To Forecast
                 </Link>
+              </Button>
+              <Button
+                type="button"
+                variant={showForecastContext ? 'default' : 'outline'}
+                className={`h-11 justify-center gap-2 rounded-2xl text-[11px] font-semibold uppercase tracking-[0.18em] ${
+                  showForecastContext
+                    ? 'bg-sky-400 text-black hover:bg-sky-300'
+                    : 'border-border/70 bg-black/10'
+                }`}
+                aria-pressed={showForecastContext}
+                onClick={() => setShowForecastContext((current) => !current)}
+              >
+                <PanelLeft className="h-4 w-4" />
+                {showForecastContext ? 'Admin Only' : 'Split View'}
               </Button>
               <Button type="button" disabled className="h-11 justify-center gap-2 rounded-2xl bg-emerald-500 text-[11px] font-semibold uppercase tracking-[0.18em] text-black opacity-100 disabled:pointer-events-none disabled:opacity-100">
                 <Settings2 className="h-4 w-4" />
@@ -66,12 +82,38 @@ export default function AdminPage() {
         </header>
 
         <main className="relative flex-1 overflow-y-auto py-4">
-          <div className="rounded-[1.75rem] border border-border/70 bg-card/50 p-4 shadow-2xl shadow-black/20 backdrop-blur-2xl sm:p-5 lg:p-6">
-            <AdminAccessGate>
-              <Suspense fallback={<AdminDashboardFallback />}>
-                <LazyAdminDashboard />
-              </Suspense>
-            </AdminAccessGate>
+          <div className={showForecastContext ? 'grid gap-4 xl:grid-cols-[minmax(24rem,0.9fr)_minmax(0,1.1fr)]' : ''}>
+            {showForecastContext ? (
+              <section
+                aria-label="Forecast context preview"
+                className="min-h-[38rem] overflow-hidden rounded-[1.75rem] border border-border/70 bg-card/50 shadow-2xl shadow-black/20 backdrop-blur-2xl"
+              >
+                <div className="flex flex-col gap-2 border-b border-border/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.22em] text-foreground">Forecast Context</div>
+                    <div className="text-xs text-muted-foreground">Live public workspace beside admin evidence.</div>
+                  </div>
+                  <Button asChild variant="outline" size="sm" className="rounded-xl border-border/70 bg-black/10 text-[10px] uppercase tracking-[0.16em]">
+                    <Link to="/">
+                      Open full forecast
+                    </Link>
+                  </Button>
+                </div>
+                <iframe
+                  title="Avalanche forecast context"
+                  src="/"
+                  className="h-[70vh] min-h-[34rem] w-full bg-background"
+                  loading="lazy"
+                />
+              </section>
+            ) : null}
+            <div className="rounded-[1.75rem] border border-border/70 bg-card/50 p-4 shadow-2xl shadow-black/20 backdrop-blur-2xl sm:p-5 lg:p-6">
+              <AdminAccessGate>
+                <Suspense fallback={<AdminDashboardFallback />}>
+                  <LazyAdminDashboard />
+                </Suspense>
+              </AdminAccessGate>
+            </div>
           </div>
         </main>
       </div>

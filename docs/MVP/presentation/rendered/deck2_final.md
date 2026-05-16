@@ -1,4 +1,4 @@
-# Deck 2 Final: Scientist Validation And Collaboration Path
+# Deck 3 Final: Scientist Validation And Collaboration Plan
 
 Updated: May 8, 2026
 

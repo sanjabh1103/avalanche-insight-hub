@@ -117,7 +117,7 @@ export default defineConfig(({ mode }) => ({
     VitePWA({
       registerType: "autoUpdate",
       strategies: "generateSW",
-      includeAssets: ["favicon.ico", "robots.txt"],
+      includeAssets: ["avalanche-favicon.svg", "avalanche-insight-hub-preview.png", "robots.txt"],
       manifest: {
         name: "Avalanche Hub",
         short_name: "AvalancheHub",
@@ -127,7 +127,8 @@ export default defineConfig(({ mode }) => ({
         background_color: "#0f1724",
         theme_color: "#0ea5e9",
         icons: [
-          { src: "/favicon.ico", sizes: "64x64", type: "image/x-icon" },
+          { src: "/avalanche-favicon.svg", sizes: "any", type: "image/svg+xml", purpose: "any maskable" },
+          { src: "/avalanche-insight-hub-preview.png", sizes: "1440x1000", type: "image/png" },
         ],
       },
       workbox: {

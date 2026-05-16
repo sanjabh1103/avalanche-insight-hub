@@ -85,7 +85,7 @@ Authority risk is real
 Danger messaging, masking, and consequence framing matter as much as the raw score.
 
 What this means for the platform:
-batch-first delivery, reduced-confidence cues, masked terrain semantics, and governed claims are features of scientific honesty.
+batch-first delivery, reduced-confidence cues, masked terrain semantics, and governed claims are features of scientific discipline.
 
 Operational pressure that is still live
 
@@ -201,7 +201,7 @@ Next research program
 
 _Current platform view_
 
-This is the live proof surface: a forecast workspace, same-day full-grid technical publication, explicit uncertainty cues, and honest masking.
+This is the live proof surface: a forecast workspace, same-day full-grid technical publication, explicit uncertainty cues, and terrain-aware masking.
 
 Evidence lanes: Live platform
 
@@ -230,7 +230,7 @@ Live platform • 2026-05-08
 
 _Operational shell_
 
-The platform is honest about compute: heavy work happens upstream, while the user sees the currently published horizon and freshness state on the hosted route.
+The platform is clear about compute: heavy work happens upstream, while the user sees the currently published horizon and freshness state on the hosted route.
 
 Evidence lanes: Live platform
 
@@ -260,7 +260,7 @@ Why batch-first matters
 
 _Credibility wedge_
 
-This is where public trust posture becomes visible: structured danger framing, explicit reduced confidence, and terrain honesty.
+This is where public trust posture becomes visible: structured danger framing, explicit reduced confidence, and terrain discipline.
 
 Evidence lanes: Live platform
 
@@ -475,7 +475,7 @@ Avoid saying:
 
 _The real wedge_
 
-The differentiation is not any single algorithm. It is the honesty-first integration of forecast UX, evidence governance, masking, and scientist-ready surfaces.
+The differentiation is not any single algorithm. It is the evidence-bounded integration of forecast UX, evidence governance, masking, and scientist-ready surfaces.
 
 Evidence lanes: Live platform; Technical evidence
 
@@ -485,7 +485,7 @@ Published-horizon workspace
 
 A usable forecast shell exists today, not just a model notebook or a static bulletin mockup.
 
-Semantic honesty
+Semantic discipline
 
 Masked terrain and reduced confidence
 
@@ -503,7 +503,7 @@ Blocked until evidence is earned
 
 The platform keeps candidate activation and evidence lanes explicit instead of flattening them into one story.
 
-The compelling story is integration under sparse-data honesty, not algorithm novelty by itself.
+The compelling story is integration under sparse-data discipline, not algorithm novelty by itself.
 
 Current strongest proposition for scientist trust
 

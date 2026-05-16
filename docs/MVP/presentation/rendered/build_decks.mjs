@@ -98,6 +98,34 @@ body.deck-technical {
     linear-gradient(180deg, #f4f8f7 0%, #e9f0ee 100%);
 }
 
+body.deck-challenges {
+  --proof-live: #2a7fa3;
+  --proof-internal: #1f3340;
+  --proof-future: #c9862b;
+  --accent-main: #c9862b;
+  --accent-soft: rgba(201, 134, 43, 0.14);
+  --accent-alt: #2a7fa3;
+  --accent-alt-soft: rgba(42, 127, 163, 0.14);
+  background:
+    radial-gradient(circle at top left, rgba(201, 134, 43, 0.10), transparent 30%),
+    radial-gradient(circle at top right, rgba(42, 127, 163, 0.08), transparent 25%),
+    linear-gradient(180deg, #f7fafb 0%, #edf4f6 100%);
+}
+
+body.deck-terms {
+  --proof-live: #1c7c74;
+  --proof-internal: #1e2a31;
+  --proof-future: #c9862b;
+  --accent-main: #1c7c74;
+  --accent-soft: rgba(28, 124, 116, 0.13);
+  --accent-alt: #c9862b;
+  --accent-alt-soft: rgba(201, 134, 43, 0.14);
+  background:
+    radial-gradient(circle at top left, rgba(28, 124, 116, 0.08), transparent 30%),
+    radial-gradient(circle at top right, rgba(201, 134, 43, 0.08), transparent 24%),
+    linear-gradient(180deg, #f8f6f0 0%, #efece4 100%);
+}
+
 body::before {
   content: '';
   position: fixed;
@@ -1253,7 +1281,12 @@ function extractSectionUntilAny(block, startLabel, endLabels) {
   return block.slice(contentStart, end >= 0 ? end : undefined).trim();
 }
 
-function renderTechnicalSlides(markdown) {
+function renderMarkdownSlides(markdown, {
+  idPrefix,
+  kicker,
+  eyebrow,
+  defaultSource = 'MVP source pack',
+}) {
   return markdown
     .split(/\n---\n/g)
     .filter((block) => /^## Slide \d+:/m.test(block))
@@ -1275,13 +1308,13 @@ function renderTechnicalSlides(markdown) {
         .map((line) => line.slice(2).trim());
 
       return slideSection({
-        id: `t-${index + 1}`,
-        kicker: 'Technical deck',
-        eyebrow: 'Architecture addendum',
+        id: `${idPrefix}-${index + 1}`,
+        kicker,
+        eyebrow,
         title,
         subtitle: inlineMarkdownToHtml(message),
         proof: proofFromEvidenceLevel(evidenceLevel),
-        source: inlineMarkdownToHtml(source),
+        source: inlineMarkdownToHtml(source || defaultSource),
         shellClass: screenshot ? 'split-2' : 'split-2',
         content: `
           <div class="stack reveal delay-1">
@@ -1299,11 +1332,11 @@ function renderTechnicalSlides(markdown) {
             ${screenshot
               ? frame(screenshot[2], screenshot[1] || title, 'frame--wide frame--workspace', 'Hosted route proof')
               : `<div class="diagram-shell">
-                  <div class="section-label">Architecture interpretation</div>
+                  <div class="section-label">Interpretation</div>
                   <div class="phase-grid">
-                    <article class="phase-card"><div class="phase-meta">Current</div><h3 class="phase-title">Deployed platform</h3><p>Public route, admin route, Supabase records, and artifact hydration stay separate from future claims.</p></article>
-                    <article class="phase-card"><div class="phase-meta">Gated</div><h3 class="phase-title">Candidate paths</h3><p>MTS-LSTM, SAR, TreeSHAP refresh, and runout physics require explicit evidence before promotion.</p></article>
-                    <article class="phase-card"><div class="phase-meta">Future</div><h3 class="phase-title">Validation program</h3><p>Scientist review decides which technical paths become stronger operational claims.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Current state</div><h3 class="phase-title">Evidence now</h3><p>Use only hosted, admin, repo, and artifact proof that exists today.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Gated</div><h3 class="phase-title">Promotion rules</h3><p>MTS-LSTM, SAR, TreeSHAP refresh, and runout physics require explicit evidence before promotion.</p></article>
+                    <article class="phase-card"><div class="phase-meta">Future strategy</div><h3 class="phase-title">Validation program</h3><p>Scientist review decides which technical paths become stronger operational claims.</p></article>
                   </div>
                 </div>`}
           </div>
@@ -1312,10 +1345,19 @@ function renderTechnicalSlides(markdown) {
     });
 }
 
+function renderTechnicalSlides(markdown) {
+  return renderMarkdownSlides(markdown, {
+    idPrefix: 't',
+    kicker: 'Technical deck',
+    eyebrow: 'Architecture addendum',
+    defaultSource: 'Technical architecture source pack',
+  });
+}
+
 const deck1Slides = [
   slideSection({
     id: 'd1-1',
-    kicker: 'Deck 1 of 2',
+    kicker: 'Deck 1 of 5',
     eyebrow: 'Credibility arc • scientist-first contract',
     title: 'Avalanche Insight Hub',
     subtitle: 'A governed decision-support platform for avalanche forecasting, review, and scientific collaboration.',
@@ -1374,7 +1416,7 @@ const deck1Slides = [
   }),
   slideSection({
     id: 'd1-2',
-    kicker: 'Deck 1 of 2',
+    kicker: 'Deck 1 of 5',
     eyebrow: 'Why the problem is still hard',
     title: 'Avalanche Forecasting Remains Hard',
     subtitle: 'The discussion only matters if it starts from the real sparse-data and validation bottlenecks.',
@@ -1407,7 +1449,7 @@ const deck1Slides = [
           </article>
         </div>
         <div class="warning-band">
-          <p><strong>What this means for the platform:</strong> batch-first delivery, reduced-confidence cues, masked terrain semantics, and governed claims are features of scientific honesty.</p>
+          <p><strong>What this means for the platform:</strong> batch-first delivery, reduced-confidence cues, masked terrain semantics, and governed claims are features of scientific discipline.</p>
         </div>
       </div>
       <div class="stack reveal delay-2">
@@ -1437,7 +1479,7 @@ const deck1Slides = [
   }),
   slideSection({
     id: 'd1-3',
-    kicker: 'Deck 1 of 2',
+    kicker: 'Deck 1 of 5',
     eyebrow: 'Research lineage',
     title: 'The Client’s Research Lineage',
     subtitle: 'This platform is building around a long avalanche-forecasting history, not pretending to have invented the science.',
@@ -1494,7 +1536,7 @@ const deck1Slides = [
   }),
   slideSection({
     id: 'd1-4',
-    kicker: 'Deck 1 of 2',
+    kicker: 'Deck 1 of 5',
     eyebrow: 'Discovery ledger',
     title: 'What Earlier Research Solved, And What It Did Not',
     subtitle: 'The slide that separates scientific precedent from current implementation and from what still needs scientist co-development.',
@@ -1541,10 +1583,10 @@ const deck1Slides = [
   }),
   slideSection({
     id: 'd1-5',
-    kicker: 'Deck 1 of 2',
+    kicker: 'Deck 1 of 5',
     eyebrow: 'First live-proof slide',
     title: 'What The Current Live Platform Proves Today',
-    subtitle: 'This is the live proof surface: a forecast workspace, same-day full-grid technical publication, explicit uncertainty cues, and honest masking.',
+    subtitle: 'This is the live proof surface: a forecast workspace, same-day full-grid technical publication, explicit uncertainty cues, and terrain-aware masking.',
     proof: [
       { label: 'Live platform', kind: 'live' },
     ],
@@ -1578,10 +1620,10 @@ const deck1Slides = [
   }),
   slideSection({
     id: 'd1-6',
-    kicker: 'Deck 1 of 2',
+    kicker: 'Deck 1 of 5',
     eyebrow: 'Operational shell',
     title: 'Forecast Workspace And Batch-First Delivery',
-    subtitle: 'The platform is honest about compute: heavy work happens upstream, while the user sees the currently published horizon and freshness state on the hosted route.',
+    subtitle: 'The platform is clear about compute: heavy work happens upstream, while the user sees the currently published horizon and freshness state on the hosted route.',
     proof: [
       { label: 'Live platform', kind: 'live' },
     ],
@@ -1615,10 +1657,10 @@ const deck1Slides = [
   }),
   slideSection({
     id: 'd1-7',
-    kicker: 'Deck 1 of 2',
+    kicker: 'Deck 1 of 5',
     eyebrow: 'Credibility wedge',
     title: 'Bulletin Structure, Uncertainty, And Masking',
-    subtitle: 'This is where public trust posture becomes visible: structured danger framing, explicit reduced confidence, and terrain honesty.',
+    subtitle: 'This is where public trust posture becomes visible: structured danger framing, explicit reduced confidence, and terrain discipline.',
     proof: [
       { label: 'Live platform', kind: 'live' },
     ],
@@ -1645,7 +1687,7 @@ const deck1Slides = [
   }),
   slideSection({
     id: 'd1-8',
-    kicker: 'Deck 1 of 2',
+    kicker: 'Deck 1 of 5',
     eyebrow: 'Workflow value',
     title: 'Share, Export, Report, And Expert Review',
     subtitle: 'The platform is not just a model display. It already supports team handoff, field reporting, and expert-facing review actions on the public route.',
@@ -1685,7 +1727,7 @@ const deck1Slides = [
   }),
   slideSection({
     id: 'd1-9',
-    kicker: 'Deck 1 of 2',
+    kicker: 'Deck 1 of 5',
     eyebrow: 'Operator lane',
     title: 'Admin Evidence Surfaces And Evidence Rules',
     subtitle: 'Hosted-authenticated review on May 8, 2026 allows a real admin observability view as validated internal evidence.',
@@ -1720,7 +1762,7 @@ const deck1Slides = [
   }),
   slideSection({
     id: 'd1-10',
-    kicker: 'Deck 1 of 2',
+    kicker: 'Deck 1 of 5',
     eyebrow: 'Current ML truth',
     title: 'RF Baseline, Explanation Fallback, And Modal.com Compute Split',
     subtitle: 'The live platform is anchored on the Random Forest baseline. The current active publication uses heuristic explanation fallback; TreeSHAP refresh remains a technical hardening gate.',
@@ -1768,7 +1810,7 @@ const deck1Slides = [
   }),
   slideSection({
     id: 'd1-11',
-    kicker: 'Deck 1 of 2',
+    kicker: 'Deck 1 of 5',
     eyebrow: 'Governed autonomy reframing',
     title: 'Governed Evidence Fusion, Not Autonomous Truth Generation',
     subtitle: 'Weighting, corroboration, decay, and blocked-gate discipline are real. Scientist-grade truth generation is not yet proven and must stay framed that way.',
@@ -1808,7 +1850,7 @@ const deck1Slides = [
   }),
   slideSection({
     id: 'd1-12',
-    kicker: 'Deck 1 of 2',
+    kicker: 'Deck 1 of 5',
     eyebrow: 'Release-gate posture',
     title: 'Benchmark, Stability, And Release Gates',
     subtitle: 'This slide is about discipline, not theater. The current evidence should be read as governance metadata and bounded observability, not as broad robustness closure.',
@@ -1858,10 +1900,10 @@ const deck1Slides = [
   }),
   slideSection({
     id: 'd1-13',
-    kicker: 'Deck 1 of 2',
+    kicker: 'Deck 1 of 5',
     eyebrow: 'The real wedge',
     title: 'What Is Genuinely Unique Now',
-    subtitle: 'The differentiation is not any single algorithm. It is the honesty-first integration of forecast UX, evidence governance, masking, and scientist-ready surfaces.',
+    subtitle: 'The differentiation is not any single algorithm. It is the evidence-bounded integration of forecast UX, evidence governance, masking, and scientist-ready surfaces.',
     proof: [
       { label: 'Live platform', kind: 'live' },
       { label: 'Validated internal evidence', kind: 'internal' },
@@ -1875,7 +1917,7 @@ const deck1Slides = [
           <p>A usable forecast shell exists today, not just a model notebook or a static bulletin mockup.</p>
         </article>
         <article class="card">
-          <div class="section-label">Semantic honesty</div>
+          <div class="section-label">Semantic discipline</div>
           <h3>Masked terrain and reduced confidence</h3>
           <p>The UI refuses to translate missing support into cosmetic low risk.</p>
         </article>
@@ -1891,14 +1933,14 @@ const deck1Slides = [
         </article>
       </div>
       <div class="quote-band reveal delay-2">
-        <p>The compelling story is integration under sparse-data honesty, not algorithm novelty by itself.</p>
+        <p>The compelling story is integration under sparse-data discipline, not algorithm novelty by itself.</p>
         <small>Current strongest proposition for scientist trust</small>
       </div>
     `,
   }),
   slideSection({
     id: 'd1-14',
-    kicker: 'Deck 1 of 2',
+    kicker: 'Deck 1 of 5',
     eyebrow: 'Boundary slide',
     title: 'What Is Not Unique, And Must Not Be Overclaimed',
     subtitle: 'Trust increases when we draw the line before the scientist has to do it for us.',
@@ -1941,7 +1983,7 @@ const deck1Slides = [
   }),
   slideSection({
     id: 'd1-15',
-    kicker: 'Deck 1 of 2',
+    kicker: 'Deck 1 of 5',
     eyebrow: 'Conditional close',
     title: 'Current Gaps, Blocked Claims, And The Real Question',
     subtitle: 'The right close is not certainty. It is whether the next scientist-owned validation step is worth doing now.',
@@ -1986,8 +2028,8 @@ const deck1Slides = [
 
 const deck2Slides = [
   slideSection({
-    id: 'd2-1',
-    kicker: 'Deck 2 of 2',
+    id: 'd3-1',
+    kicker: 'Deck 3 of 5',
     eyebrow: 'Collaboration arc',
     title: 'Why Scientist Co-Development Is Necessary Now',
     subtitle: 'The platform proves enough to justify a serious discussion. It does not prove enough to skip scientist-owned validation.',
@@ -2028,8 +2070,8 @@ const deck2Slides = [
     `,
   }),
   slideSection({
-    id: 'd2-2',
-    kicker: 'Deck 2 of 2',
+    id: 'd3-2',
+    kicker: 'Deck 3 of 5',
     eyebrow: 'Attraction layer',
     title: 'Why This Is Worth The Scientist Team’s Time',
     subtitle: 'The program becomes attractive when scientists gain ownership, benchmark authority, and publishable pilot leverage instead of being asked to bless a black box.',
@@ -2066,8 +2108,8 @@ const deck2Slides = [
     `,
   }),
   slideSection({
-    id: 'd2-3',
-    kicker: 'Deck 2 of 2',
+    id: 'd3-3',
+    kicker: 'Deck 3 of 5',
     eyebrow: 'Relationship contract',
     title: 'Ground Rules: Claim Discipline, Evidence Discipline, Validation Authority',
     subtitle: 'This collaboration only works if live-platform truth, validated internal evidence, and future ambition remain visibly separate throughout the program.',
@@ -2104,8 +2146,8 @@ const deck2Slides = [
     `,
   }),
   slideSection({
-    id: 'd2-4',
-    kicker: 'Deck 2 of 2',
+    id: 'd3-4',
+    kicker: 'Deck 3 of 5',
     eyebrow: 'Scientist role',
     title: 'Scientist Role In The Next Phase',
     subtitle: 'The scientist team should own real responsibilities: benchmark design, weak-layer taxonomy, event arbitration, and promotion review.',
@@ -2143,8 +2185,8 @@ const deck2Slides = [
     `,
   }),
   slideSection({
-    id: 'd2-5',
-    kicker: 'Deck 2 of 2',
+    id: 'd3-5',
+    kicker: 'Deck 3 of 5',
     eyebrow: 'Immediate work surface',
     title: 'Benchmark Pack v0',
     subtitle: 'The first reviewable package already exists. It is deliberately small and explicitly not field-validation closure.',
@@ -2176,8 +2218,8 @@ const deck2Slides = [
     `,
   }),
   slideSection({
-    id: 'd2-6',
-    kicker: 'Deck 2 of 2',
+    id: 'd3-6',
+    kicker: 'Deck 3 of 5',
     eyebrow: 'Review loop',
     title: 'Validation Protocol v0',
     subtitle: 'The minimum scientist-in-the-loop protocol is already structured: event labels, critical layers, benchmark acceptance, and promotion review.',
@@ -2221,8 +2263,8 @@ const deck2Slides = [
     `,
   }),
   slideSection({
-    id: 'd2-7',
-    kicker: 'Deck 2 of 2',
+    id: 'd3-7',
+    kicker: 'Deck 3 of 5',
     eyebrow: 'Hardest science gap',
     title: 'Critical-Layer And Weak-Layer Program',
     subtitle: 'This is the hardest scientific question in the whole conversation, and the deck should say so plainly.',
@@ -2255,8 +2297,8 @@ const deck2Slides = [
     `,
   }),
   slideSection({
-    id: 'd2-8',
-    kicker: 'Deck 2 of 2',
+    id: 'd3-8',
+    kicker: 'Deck 3 of 5',
     eyebrow: 'Autonomy roadmap',
     title: 'Governed Autonomy Roadmap And Promotion Logic',
     subtitle: 'Autonomy should be framed as a gated progression: ingest, govern, benchmark, review, then promote only if evidence says so.',
@@ -2285,8 +2327,8 @@ const deck2Slides = [
     `,
   }),
   slideSection({
-    id: 'd2-9',
-    kicker: 'Deck 2 of 2',
+    id: 'd3-9',
+    kicker: 'Deck 3 of 5',
     eyebrow: 'Remote sensing path',
     title: 'SAR Qualification Path',
     subtitle: 'Remote sensing is attractive to scientists, but the qualification blockers must be stated before the excitement outruns the evidence.',
@@ -2331,8 +2373,8 @@ const deck2Slides = [
     `,
   }),
   slideSection({
-    id: 'd2-10',
-    kicker: 'Deck 2 of 2',
+    id: 'd3-10',
+    kicker: 'Deck 3 of 5',
     eyebrow: 'Pilot design',
     title: 'Scientist-In-The-Loop Pilot Design',
     subtitle: 'A credible near-term pilot is structured around benchmark ownership, review cadence, and explicit go or no-go gates.',
@@ -2364,13 +2406,13 @@ const deck2Slides = [
         </div>
       </div>
       <div class="warning-band reveal delay-2">
-        <p>Success is not “the model looked good.” Success is a benchmark result the scientist team is willing to stand behind narrowly and honestly.</p>
+        <p>Success is not “the model looked good.” Success is a benchmark result the scientist team is willing to stand behind narrowly and carefully.</p>
       </div>
     `,
   }),
   slideSection({
-    id: 'd2-11',
-    kicker: 'Deck 2 of 2',
+    id: 'd3-11',
+    kicker: 'Deck 3 of 5',
     eyebrow: 'Requirements',
     title: 'Data And Field Requirements',
     subtitle: 'The next phase needs concrete contributions: case definitions, field context, weak-layer interpretation, and evidence-quality review.',
@@ -2404,8 +2446,8 @@ const deck2Slides = [
     `,
   }),
   slideSection({
-    id: 'd2-12',
-    kicker: 'Deck 2 of 2',
+    id: 'd3-12',
+    kicker: 'Deck 3 of 5',
     eyebrow: 'Execution realism',
     title: 'Engineering And Platform Workstreams Are Already Structured',
     subtitle: 'The path forward is not abstract. The current program already breaks the next work into concrete, bounded streams.',
@@ -2442,8 +2484,8 @@ const deck2Slides = [
     `,
   }),
   slideSection({
-    id: 'd2-13',
-    kicker: 'Deck 2 of 2',
+    id: 'd3-13',
+    kicker: 'Deck 3 of 5',
     eyebrow: 'Team model',
     title: 'Team Shape And Collaboration Model',
     subtitle: 'The likely winning shape is an India-lean engineering core with selective scientist, geospatial, and MLOps depth added when the benchmark program demands it.',
@@ -2477,8 +2519,8 @@ const deck2Slides = [
     `,
   }),
   slideSection({
-    id: 'd2-14',
-    kicker: 'Deck 2 of 2',
+    id: 'd3-14',
+    kicker: 'Deck 3 of 5',
     eyebrow: 'Decision-ready roadmap',
     title: 'Three-Phase Timeline, Budget, And Infrastructure',
     subtitle: 'This main-deck roadmap uses only the 3-phase scientist collaboration model. The 5-phase commercialization path stays out of the core meeting arc.',
@@ -2520,8 +2562,8 @@ const deck2Slides = [
     `,
   }),
   slideSection({
-    id: 'd2-15',
-    kicker: 'Deck 2 of 2',
+    id: 'd3-15',
+    kicker: 'Deck 3 of 5',
     eyebrow: 'Specific ask',
     title: 'Concrete Ask, Decision Options, And Next Steps',
     subtitle: 'End the meeting with a choice, not with generic enthusiasm.',
@@ -2601,7 +2643,7 @@ function sanitizeClientFacingHtml(html) {
     ['Public route screenshots plus hosted <code>/admin</code> route/auth smoke from May 8, 2026.', 'Public route screenshots and hosted <code>/admin</code> access checks from May 8, 2026.'],
     ['First live-proof slide', 'Current platform view'],
     ['What The Current Live Platform Proves Today', 'What The Live Platform Shows Today'],
-    ['This is the live proof surface: a forecast workspace, structured bulletin layer, explicit uncertainty cues, and honest masking.', 'This is the current live platform surface: a forecast workspace, structured bulletin, explicit uncertainty cues, and honest masking.'],
+    ['This is the live proof surface: a forecast workspace, structured bulletin layer, explicit uncertainty cues, and terrain-aware masking.', 'This is the current live platform surface: a forecast workspace, structured bulletin, explicit uncertainty cues, and terrain-aware masking.'],
     ['The deck uses what the hosted screenshot proves, not a hard-coded horizon claim.', 'The deck uses what the hosted screenshot shows, not a fixed horizon claim.'],
     ['Live route showing share workflow confirmation.', 'Live route showing share workflow panel.'],
     ['Operator lane', 'Administration view'],
@@ -2719,11 +2761,11 @@ function renderTranscriptMarkdown(deckTitle, html) {
 }
 
 async function writeDeck(fileName, html) {
-  await fs.writeFile(path.join(__dirname, fileName), html, 'utf8');
+  await fs.writeFile(path.join(__dirname, fileName), html.replace(/[ \t]+$/gm, ''), 'utf8');
 }
 
 async function writeTranscript(fileName, markdown) {
-  await fs.writeFile(path.join(__dirname, fileName), markdown, 'utf8');
+  await fs.writeFile(path.join(__dirname, fileName), markdown.replace(/[ \t]+$/gm, ''), 'utf8');
 }
 
 async function main() {
@@ -2747,17 +2789,17 @@ async function main() {
   const deck2Html = sanitizeClientFacingHtml(
     renderHtml({
       bodyClass: 'deck-collaboration',
-      deckName: 'Avalanche Insight Hub — Collaboration Roadmap',
+      deckName: 'Avalanche Insight Hub — Deck 3 Scientist Validation',
       deckSubtitle: 'Scientist collaboration model, validation path, and roadmap.',
       slides: deck2Slides,
     }),
   );
   await writeDeck(
-    'avalanche-insight-hub-deck-2-collaboration.html',
+    'avalanche-insight-hub-deck-3-scientist-validation.html',
     deck2Html,
   );
   await writeTranscript(
-    'avalanche-insight-hub-deck-2-collaboration-transcript.md',
+    'avalanche-insight-hub-deck-3-scientist-validation-transcript.md',
     renderTranscriptMarkdown('Avalanche Insight Hub — Collaboration', deck2Html),
   );
 
@@ -2765,18 +2807,64 @@ async function main() {
   const techHtml = sanitizeClientFacingHtml(
     renderHtml({
       bodyClass: 'deck-technical',
-      deckName: 'Avalanche Insight Hub — Technical Architecture',
+      deckName: 'Avalanche Insight Hub — Deck 4 Technical Architecture',
       deckSubtitle: 'Current platform architecture, proof boundaries, and future technical strategy.',
       slides: renderTechnicalSlides(techMarkdown),
     }),
   );
   await writeDeck(
-    'avalanche-insight-hub-technical-architecture.html',
+    'avalanche-insight-hub-deck-4-technical-architecture.html',
     techHtml,
   );
   await writeTranscript(
-    'avalanche-insight-hub-technical-architecture-transcript.md',
+    'avalanche-insight-hub-deck-4-technical-architecture-transcript.md',
     renderTranscriptMarkdown('Avalanche Insight Hub — Technical Architecture', techHtml),
+  );
+
+  const challengeMarkdown = await fs.readFile(path.join(__dirname, 'deck_challenge_alignment_final.md'), 'utf8');
+  const challengeHtml = sanitizeClientFacingHtml(
+    renderHtml({
+      bodyClass: 'deck-challenges',
+      deckName: 'Avalanche Insight Hub — Deck 2 Top 15 Challenge Alignment',
+      deckSubtitle: 'Evidence-gated mapping of systemic avalanche forecasting challenges to current MVP response.',
+      slides: renderMarkdownSlides(challengeMarkdown, {
+        idPrefix: 'd2',
+        kicker: 'Deck 2 of 5',
+        eyebrow: 'Challenge alignment',
+        defaultSource: 'Top challenges source pack',
+      }),
+    }),
+  );
+  await writeDeck(
+    'avalanche-insight-hub-deck-2-challenge-alignment.html',
+    challengeHtml,
+  );
+  await writeTranscript(
+    'avalanche-insight-hub-deck-2-challenge-alignment-transcript.md',
+    renderTranscriptMarkdown('Avalanche Insight Hub — Challenge Alignment', challengeHtml),
+  );
+
+  const termsMarkdown = await fs.readFile(path.join(__dirname, 'deck_technology_terms_final.md'), 'utf8');
+  const termsHtml = sanitizeClientFacingHtml(
+    renderHtml({
+      bodyClass: 'deck-terms',
+      deckName: 'Avalanche Insight Hub — Technology Glossary And Future Strategy',
+      deckSubtitle: 'Plain-English technical glossary, release gates, and future strategy boundaries.',
+      slides: renderMarkdownSlides(termsMarkdown, {
+        idPrefix: 'd5',
+        kicker: 'Deck 5 of 5',
+        eyebrow: 'Technical field guide',
+        defaultSource: 'Technical glossary source pack',
+      }),
+    }),
+  );
+  await writeDeck(
+    'avalanche-insight-hub-deck-5-technology-glossary.html',
+    termsHtml,
+  );
+  await writeTranscript(
+    'avalanche-insight-hub-deck-5-technology-glossary-transcript.md',
+    renderTranscriptMarkdown('Avalanche Insight Hub — Technology Glossary', termsHtml),
   );
 }
 
