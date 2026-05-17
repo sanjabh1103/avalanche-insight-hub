@@ -31,7 +31,7 @@ from backend.common.sar_release_refs import load_reference_bundle, parse_storage
 from backend.common.sar_artifacts import persist_sar_artifacts
 from backend.common.storage_io import storage_download_bytes, storage_upload_bytes
 from backend.common.supabase_io import has_supabase_credentials, rest_insert, rest_upsert
-from backend.sar_unet_training import train_sar_unet
+from backend.sar_unet_training import _postprocess_binary_mask, train_sar_unet
 
 try:  # pragma: no cover - optional dependency
     import torch
@@ -1120,6 +1120,8 @@ def evaluate_scene_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         or SAR_UNET_SEGMENTATION_THRESHOLD
     )
     truth_threshold = float(manifest.get('truth_threshold') or 0.5)
+    postprocess_min_component_area_px = int(manifest.get('postprocess_min_component_area_px') or 0)
+    postprocess_opening_size_px = int(manifest.get('postprocess_opening_size_px') or 0)
     predictions: list[np.ndarray] = []
     truths: list[np.ndarray] = []
     baselines: list[np.ndarray] = []
@@ -1133,7 +1135,14 @@ def evaluate_scene_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
             continue
         if scene.get('prediction_mask') is None or scene.get('truth_mask') is None:
             continue
-        predictions.append(_load_mask_array(scene['prediction_mask']) >= prediction_threshold)
+        prediction = _load_mask_array(scene['prediction_mask']) >= prediction_threshold
+        if postprocess_min_component_area_px > 0 or postprocess_opening_size_px > 0:
+            prediction = _postprocess_binary_mask(
+                prediction,
+                min_component_area_px=postprocess_min_component_area_px,
+                opening_size_px=postprocess_opening_size_px,
+            )
+        predictions.append(prediction)
         truths.append(_load_mask_array(scene['truth_mask']) >= truth_threshold)
         if scene.get('baseline_mask') is not None:
             baselines.append(_load_mask_array(scene['baseline_mask']) >= truth_threshold)
@@ -1177,6 +1186,8 @@ def evaluate_scene_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     metrics['status'] = 'ok'
     metrics['prediction_threshold'] = prediction_threshold
     metrics['truth_threshold'] = truth_threshold
+    metrics['postprocess_min_component_area_px'] = postprocess_min_component_area_px
+    metrics['postprocess_opening_size_px'] = postprocess_opening_size_px
     metrics['baseline_f1_floor_used'] = baseline_f1_floor_used
     metrics['baseline_margin'] = baseline_margin
     if derived_baseline_metrics is not None:
@@ -1873,6 +1884,10 @@ def run_worker_request(
                 evaluation_manifest['prediction_threshold'] = manifest.get('prediction_threshold')
             if manifest.get('truth_threshold') is not None:
                 evaluation_manifest['truth_threshold'] = manifest.get('truth_threshold')
+            if manifest.get('postprocess_min_component_area_px') is not None:
+                evaluation_manifest['postprocess_min_component_area_px'] = manifest.get('postprocess_min_component_area_px')
+            if manifest.get('postprocess_opening_size_px') is not None:
+                evaluation_manifest['postprocess_opening_size_px'] = manifest.get('postprocess_opening_size_px')
         artifact_dir = create_artifact_dir(artifact_root)
         report = evaluate_scene_manifest(evaluation_manifest)
         report.update({

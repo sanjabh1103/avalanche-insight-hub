@@ -70,6 +70,10 @@ def _artifact_root() -> Path:
     return load_settings().artifact_root
 
 
+def _truthy(value: Any) -> bool:
+    return str(value or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
 def _model_path() -> Path | None:
     raw = os.environ.get('SAR_UNET_MODEL_PATH')
     return Path(raw) if raw else None
@@ -245,6 +249,20 @@ def run_remote_sar_segment(
     )
     if volume_commit is not None:
         volume_commit()
+    if _truthy(payload.get('compact_response')):
+        return {
+            'status': report.get('status'),
+            'shadow_mode': report.get('shadow_mode'),
+            'model_family': report.get('model_family'),
+            'model_version': report.get('model_version'),
+            'scene_count': report.get('scene_count'),
+            'detections_count': report.get('detections_count'),
+            'persisted_events': report.get('persisted_events'),
+            'artifact_rows_persisted': report.get('artifact_rows_persisted'),
+            'mask_asset_ref_count': len(report.get('mask_asset_refs') or []),
+            'mask_asset_refs': report.get('mask_asset_refs') or [],
+            'compact_response': True,
+        }
     return report
 
 

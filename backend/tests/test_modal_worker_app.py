@@ -894,6 +894,30 @@ class ModalWorkerAppTests(unittest.TestCase):
         self.assertEqual(run_worker_request_mock.call_args.args[1], {'reference_set_key': 'snowslide-heldout-v1', 'shadow_mode': True})
         self.assertEqual(run_worker_request_mock.call_args.kwargs['device'], 'cuda')
 
+    @patch(
+        'backend.modal_worker_app.run_worker_request',
+        return_value={
+            'status': 'ok',
+            'scene_count': 2,
+            'detections_count': 2,
+            'mask_asset_refs': ['sar-masks/a.tif', 'sar-masks/b.tif'],
+            'detections': [{'large': 'geometry'}],
+        },
+    )
+    def test_run_remote_sar_segment_compact_response_omits_detection_payload(self, run_worker_request_mock) -> None:
+        result = run_remote_sar_segment(
+            {'reference_set_key': 'snowslide-heldout-v1', 'compact_response': True},
+            artifact_root=Path('/artifacts'),
+            device='cuda',
+        )
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertTrue(result['compact_response'])
+        self.assertEqual(result['mask_asset_ref_count'], 2)
+        self.assertEqual(result['mask_asset_refs'], ['sar-masks/a.tif', 'sar-masks/b.tif'])
+        self.assertNotIn('detections', result)
+        run_worker_request_mock.assert_called_once()
+
     def test_seed_dem_directory_copies_missing_dems_only(self) -> None:
         with TemporaryDirectory() as tmpdir:
             source = Path(tmpdir) / 'source'

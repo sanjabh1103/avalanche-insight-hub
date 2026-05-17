@@ -31,7 +31,7 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | Swiss SPOT6 24,778 outlines | 4.5 | Local polygon staging, archive checksums, fixed event dates, bbox extraction, and extreme-event split reporting implemented. | Download/checksum EnviDat exports only after license review; keep extreme-event split separate from normal-season validation. |
 | French EPA/CLPA | 4.5 | EPA dated-event staging, CLPA path-prior staging, and observability-bias audit reporting implemented. | Verify avalanches.fr export terms and field schema before staging real exports. |
 | Swiss weather/snowpack/danger ratings | 4.0 | Local API/export staging, feature refs, danger-rating records, and calibration-slice reporting implemented. | Forecast ratings remain benchmark/context labels, not observed avalanche occurrence truth. |
-| AvalCD | 4.0 | Local scene/archive staging, corrected region keys, `sar_training_manifest_v1` emission, patch-level SAR metrics, and scene-blended SAR checkpoint evaluation implemented. | Current scene-blended v3/v4 candidates do not pass both precision and recall floors; SnowSlide remains blocked. |
+| AvalCD | 4.0 | Local scene/archive staging, corrected region keys, `sar_training_manifest_v1` emission, patch-level SAR metrics, scene-blended SAR checkpoint evaluation, and gated SnowSlide dry-run execution implemented. | v3 with area-64 postprocessing passes the aggregate AvalCD scene-blended floor and beats the SnowSlide baseline, but promotion remains blocked pending stricter held-out policy review and non-European regression sign-off. |
 | SLF accident datasets | 3.0 | Accident export staging, uncertainty/casualty metadata, and accident-only bias audit reporting implemented. | Accident frequency remains blocked from avalanche occurrence-frequency training. |
 | EAWS/SLF bulletins | 2.5 | Bulletin/context staging and warning-semantics audit reporting implemented. | Bulletin text and danger scales remain context/calibration surfaces only. |
 
@@ -324,6 +324,7 @@ Current scene-blended bounded-run outcome:
 |---|---|---:|---:|---:|---:|---|
 | v3 precision candidate | `scene_blended` | `0.996999979`, area `32` | `0.6099` | `0.4674` | `0.5292` | Failed: precision passed, recall below `0.50`. |
 | v4 recall-balanced | `scene_blended` | `0.996999979`, area `32` | `0.5208` | `0.5509` | `0.5354` | Failed: recall passed, precision below `0.60`. |
+| v3 area-64 evaluation-only | `scene_blended` | `0.991999984`, area `64` | `0.6073` | `0.5022` | `0.5498` | Passed aggregate AvalCD scene-blended precision and recall floors. |
 
 The scene-blended European shadow benchmarks were rebuilt at:
 
@@ -331,10 +332,11 @@ The scene-blended European shadow benchmarks were rebuilt at:
 |---|---|
 | v3 | `backend/artifacts/european-shadow-real-benchmarks/european-shadow-real-avalcd-scene-blended-v3-2026-05-17/european_shadow_benchmark_report.json` |
 | v4 | `backend/artifacts/european-shadow-real-benchmarks/european-shadow-real-avalcd-scene-blended-v4-2026-05-17/european_shadow_benchmark_report.json` |
+| v3 area-64 | `backend/artifacts/european-shadow-real-benchmarks/european-shadow-real-avalcd-scene-blended-v3-area64-2026-05-17/european_shadow_benchmark_report.json` |
 
-Both reports remain `production_scoring_allowed=false` with `decision=blocked_shadow_only`. Because neither existing candidate passes both scene-blended floors, no SnowSlide prediction masks should be materialized and no new training sweep should be launched without a new checkpoint decision.
+All reports remain `production_scoring_allowed=false` with `decision=blocked_shadow_only`. The v3 area-64 run is the first aggregate AvalCD scene-blended pass, so SnowSlide prediction masks were materialized scene-by-scene through the guarded direct Modal path. No new training sweep should be launched without a new checkpoint decision.
 
-Build the consolidated blocked-state operator packet:
+Build the historical blocked-state operator packet for the pre-area64 v3/v4 comparison:
 
 ```bash
 python3 -m backend.scripts.build_avalcd_blocked_state_summary \
@@ -346,7 +348,7 @@ python3 -m backend.scripts.build_avalcd_blocked_state_summary \
   --output-markdown backend/artifacts/european-shadow-qualification/avalcd-blocked-state-2026-05-17/qualification_summary.md
 ```
 
-The packet must report `final_decision=blocked_shadow_only`, `snow_slide_materialization_allowed=false`, `training_freeze=true`, no active Modal containers, and no validation violations.
+That packet reports `final_decision=blocked_shadow_only`, `snow_slide_materialization_allowed=false`, `training_freeze=true`, no active Modal containers, and no validation violations for the earlier v3/v4 checkpoint. The current v3 area-64 checkpoint supersedes only the AvalCD prerequisite; production scoring remains blocked.
 
 Reassert Modal.com zero-warm GPU settings before and after remote jobs:
 
@@ -370,11 +372,20 @@ SnowSlide prediction masks may be materialized only after an AvalCD benchmark re
 python3 -m backend.scripts.run_modal_sar_prediction_materialization_direct \
   --modal-profile sanjabh1103_limit30 \
   --request backend/artifacts/european-shadow-heldout/snowslide-materialization/materialize_prediction_masks_request.json \
-  --avalcd-benchmark-report backend/artifacts/european-shadow-real-benchmarks/european-shadow-real-avalcd-scene-blended-v4-2026-05-17/european_shadow_benchmark_report.json \
+  --avalcd-benchmark-report backend/artifacts/european-shadow-real-benchmarks/european-shadow-real-avalcd-scene-blended-v3-area64-2026-05-17/european_shadow_benchmark_report.json \
   --output backend/artifacts/european-shadow-heldout/snowslide-materialization/materialize_prediction_masks_result.json
 ```
 
-The current guard run against the scene-blended v3 benchmark correctly wrote `status=blocked_prediction_materialization`, so SnowSlide prediction masks were not uploaded and the dry-run should not be rerun yet. This is now the explicit stop condition for the infrastructure-only closure.
+Current SnowSlide v3 area-64 dry-run checkpoint:
+
+| Check | Result |
+|---|---|
+| Materialization mode | Scene-by-scene guarded direct Modal calls, compact response enabled. |
+| Prediction masks | 7 / 7 held-out scenes uploaded under `sar-masks/heldout/snowslide/2026-04-29/.../predictions/avalcd_swinunet_tiny_diff_precision_shadow_20260516_v3_scene_blended_area64/prediction_mask.tif`. |
+| Dry-run status | `ok`; no production promotion or event persistence. |
+| SnowSlide metrics | Precision `0.5859`, recall `0.4327`, F1 `0.4978`, IoU `0.3314`, false-positive rate `0.001605`. |
+| Baseline comparison | `beats_baseline=true`; baseline F1 floor used `0.05008`. |
+| Decision | Keep `blocked_shadow_only`; do not promote because held-out precision/recall policy and non-European regression sign-off are still not complete. |
 
 ## Promotion Rule
 

@@ -690,6 +690,30 @@ class SarUnetWorkerTests(unittest.TestCase):
         self.assertEqual(report['fn'], 1)
         self.assertEqual(report['recall'], 0.0)
 
+    def test_evaluate_scene_manifest_applies_prediction_postprocess(self) -> None:
+        report = evaluate_scene_manifest({
+            'baseline_f1_floor': 0.1,
+            'threshold': 0.5,
+            'postprocess_min_component_area_px': 2,
+            'scenes': [{
+                'region_key': 'colorado_rockies',
+                'prediction_mask': np.asarray(
+                    [[0.9, 0.9, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.9]],
+                    dtype=np.float32,
+                ),
+                'truth_mask': np.asarray(
+                    [[1.0, 1.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+                    dtype=np.float32,
+                ),
+            }],
+        })
+
+        self.assertEqual(report['status'], 'ok')
+        self.assertEqual(report['postprocess_min_component_area_px'], 2)
+        self.assertEqual(report['tp'], 2)
+        self.assertEqual(report['fp'], 0)
+        self.assertEqual(report['precision'], 1.0)
+
     @patch('backend.sar_release_manifest.build_release_manifest_from_reference_set')
     @patch('backend.sar_unet_worker.dump_json')
     @patch('backend.sar_unet_worker.create_artifact_dir')
@@ -725,6 +749,49 @@ class SarUnetWorkerTests(unittest.TestCase):
 
         self.assertEqual(report['status'], 'ok')
         self.assertTrue(build_manifest_mock.called)
+        dump_json_mock.assert_called_once()
+
+    @patch('backend.sar_release_manifest.build_release_manifest_from_reference_set')
+    @patch('backend.sar_unet_worker.dump_json')
+    @patch('backend.sar_unet_worker.create_artifact_dir')
+    def test_run_worker_request_evaluate_release_preserves_postprocess_from_reference_set_request(
+        self,
+        create_artifact_dir_mock,
+        dump_json_mock,
+        build_manifest_mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir) / '20260425T020000Z'
+            artifact_dir.mkdir()
+            create_artifact_dir_mock.return_value = artifact_dir
+            build_manifest_mock.return_value = {
+                'baseline_f1_floor': 0.1,
+                'scenes': [{
+                    'region_key': 'colorado_rockies',
+                    'prediction_mask': np.asarray(
+                        [[0.9, 0.9, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.9]],
+                        dtype=np.float32,
+                    ),
+                    'truth_mask': np.asarray(
+                        [[1.0, 1.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+                        dtype=np.float32,
+                    ),
+                }],
+            }
+
+            report = run_worker_request(
+                'evaluate-release',
+                {
+                    'reference_set_key': 'snowslide-validation-v1',
+                    'prediction_model_version': 'sar_unet_resnet34_shadow_v1',
+                    'postprocess_min_component_area_px': 2,
+                },
+                artifact_root=Path(tmpdir),
+            )
+
+        self.assertEqual(report['status'], 'ok')
+        self.assertEqual(report['postprocess_min_component_area_px'], 2)
+        self.assertEqual(report['fp'], 0)
         dump_json_mock.assert_called_once()
 
     @patch('backend.sar_unet_worker.run_segmentation')
