@@ -15,13 +15,14 @@ from backend.scripts.run_modal_sar_prediction_materialization_direct import (
 )
 
 
-def _benchmark_report(*, gate_passed: bool) -> dict:
+def _benchmark_report(*, gate_passed: bool, evaluation_mode: str = 'scene_blended') -> dict:
     return {
         'production_scoring_allowed': False,
         'promotion_gate_report': {'decision': 'blocked_shadow_only'},
         'source_reports': [{
             'source_key': 'avalcd_zenodo_v1',
             'sar_prediction_metrics': {
+                'evaluation_mode': evaluation_mode,
                 'quality_gate': {
                     'passed': gate_passed,
                     'precision_floor_met': gate_passed,
@@ -48,6 +49,12 @@ class RunModalSarPredictionMaterializationDirectTests(unittest.TestCase):
     def test_gate_blocks_when_avalcd_quality_gate_fails(self) -> None:
         with self.assertRaisesRegex(ValueError, 'quality gate passes'):
             assert_avalcd_gate_allows_materialization(_benchmark_report(gate_passed=False))
+
+    def test_gate_blocks_when_avalcd_evaluation_is_not_scene_blended(self) -> None:
+        with self.assertRaisesRegex(ValueError, 'scene_blended'):
+            assert_avalcd_gate_allows_materialization(
+                _benchmark_report(gate_passed=True, evaluation_mode='patch_level'),
+            )
 
     def test_main_invokes_sar_segment_remote_when_gate_passes(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

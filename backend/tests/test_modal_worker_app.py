@@ -833,6 +833,19 @@ class ModalWorkerAppTests(unittest.TestCase):
         self.assertEqual(result['status'], 'ok')
         diagnostics_mock.assert_called_once_with(payload, artifact_root=Path('/artifacts'), device='cuda')
 
+    @patch('backend.modal_worker_app.evaluate_sar_checkpoint_scene_blended', return_value={'status': 'ok', 'evaluation_mode': 'scene_blended'})
+    def test_run_remote_evaluate_sar_checkpoint_scene_blended_branch(self, scene_blended_mock) -> None:
+        payload = {
+            'training_manifest_path': '/artifacts/european-shadow-sar/manifest.json',
+            'checkpoint_path': '/artifacts/20260516T164730Z/sar_model.pt',
+            'evaluation_mode': 'scene_blended',
+        }
+
+        result = run_remote_evaluate_sar_checkpoint(payload, artifact_root=Path('/artifacts'), device='cuda')
+
+        self.assertEqual(result['status'], 'ok')
+        scene_blended_mock.assert_called_once_with(payload, artifact_root=Path('/artifacts'), device='cuda')
+
     @patch('backend.modal_worker_app.handle_infer_mtslstm', return_value={'status': 'ok', 'cells_with_shap': 5})
     def test_run_remote_infer_mtslstm_reloads_and_commits_volume(self, handle_infer_mock) -> None:
         calls: list[str] = []

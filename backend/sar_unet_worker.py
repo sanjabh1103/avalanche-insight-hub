@@ -97,6 +97,7 @@ class LoadedUnetModel:
     model: Any
     checkpoint_key_mismatch: dict[str, Any]
     model_family: str
+    normalization: dict[str, np.ndarray] | None = None
 
 
 def _utc_now_iso() -> str:
@@ -388,6 +389,51 @@ def _extract_state_dict(payload: Any) -> dict[str, Any]:
     raise RuntimeError('checkpoint payload must be a dict or contain a nested state_dict')
 
 
+def _checkpoint_normalization(payload: Any) -> dict[str, np.ndarray] | None:
+    if not isinstance(payload, dict):
+        return None
+    metadata = payload.get('metadata')
+    if not isinstance(metadata, dict):
+        return None
+    normalization = metadata.get('normalization')
+    if not isinstance(normalization, dict):
+        return None
+    mean = normalization.get('img_mean')
+    std = normalization.get('img_std')
+    if mean is None or std is None:
+        return None
+    mean_array = np.asarray(mean, dtype=np.float32)
+    std_array = np.maximum(np.asarray(std, dtype=np.float32), np.float32(1e-6))
+    if mean_array.shape != (2,) or std_array.shape != (2,):
+        raise ValueError(
+            'SAR checkpoint normalization must contain img_mean/img_std arrays with exactly two channels',
+        )
+    return {'img_mean': mean_array, 'img_std': std_array}
+
+
+def _apply_loaded_normalization(
+    pre_stack: np.ndarray,
+    post_stack: np.ndarray,
+    normalization: dict[str, np.ndarray] | None,
+) -> tuple[np.ndarray, np.ndarray]:
+    if normalization is None:
+        return pre_stack, post_stack
+    mean = np.asarray(normalization['img_mean'], dtype=np.float32)
+    std = np.maximum(np.asarray(normalization['img_std'], dtype=np.float32), np.float32(1e-6))
+    if pre_stack.ndim == 4:
+        shape = (1, mean.shape[0], 1, 1)
+    elif pre_stack.ndim == 3:
+        shape = (mean.shape[0], 1, 1)
+    else:
+        raise ValueError(f'expected SAR pre_stack with 3 or 4 dimensions, received {pre_stack.shape}')
+    mean = mean.reshape(shape)
+    std = std.reshape(shape)
+    return (
+        (np.asarray(pre_stack, dtype=np.float32) - mean) / std,
+        (np.asarray(post_stack, dtype=np.float32) - mean) / std,
+    )
+
+
 def _build_resnet34_unet_model() -> Any:
     if smp is None:
         raise RuntimeError('segmentation_models_pytorch is required for SAR model family resnet34_unet')
@@ -482,7 +528,9 @@ def build_unet_model(
         model = _build_swinunet_tiny_diff_model(image_size=image_size)
     else:
         model = _build_resnet34_unet_model()
-    state_dict = _extract_state_dict(torch.load(model_path, map_location=device))
+    payload = torch.load(model_path, map_location=device)
+    state_dict = _extract_state_dict(payload)
+    normalization = _checkpoint_normalization(payload)
     load_result = model.load_state_dict(state_dict, strict=False)
     checkpoint_key_mismatch = _checkpoint_key_mismatch_summary(load_result)
     mismatch_reason = _obvious_checkpoint_family_mismatch(
@@ -511,6 +559,7 @@ def build_unet_model(
         model=model,
         checkpoint_key_mismatch=checkpoint_key_mismatch,
         model_family=resolved_family,
+        normalization=normalization,
     )
 
 
@@ -606,6 +655,7 @@ def _predict_manifest_probability_mask(
             loaded_batch = list(executor.map(_load_manifest_patch_stack, batch))
         pre_batch = np.stack([stack[:2] for _, _, stack in loaded_batch], axis=0)
         post_batch = np.stack([stack[2:] for _, _, stack in loaded_batch], axis=0)
+        pre_batch, post_batch = _apply_loaded_normalization(pre_batch, post_batch, loaded_model.normalization)
         probability_batch = predict_bitemporal_probability_mask_batch(
             loaded_model.model,
             pre_batch,
@@ -633,6 +683,7 @@ def predict_scene_probability_mask(loaded_model: LoadedUnetModel, scene: dict[st
         return _predict_manifest_probability_mask(loaded_model, manifest_ref=manifest_ref, device=device)
     if loaded_model.model_family == 'swinunet_tiny_diff':
         pre_stack, post_stack = load_bitemporal_scene_inputs(scene)
+        pre_stack, post_stack = _apply_loaded_normalization(pre_stack, post_stack, loaded_model.normalization)
         return predict_bitemporal_probability_mask(loaded_model.model, pre_stack, post_stack, device=device)
     stack = load_scene_stack(scene)
     return predict_probability_mask(loaded_model.model, stack, device=device)

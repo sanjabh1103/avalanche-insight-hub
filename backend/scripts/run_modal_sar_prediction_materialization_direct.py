@@ -63,6 +63,12 @@ def assert_avalcd_gate_allows_materialization(report: dict[str, Any]) -> dict[st
     if avalcd_report is None:
         raise ValueError('AvalCD benchmark report does not contain source_key=avalcd_zenodo_v1')
     prediction_metrics = avalcd_report.get('sar_prediction_metrics') if isinstance(avalcd_report.get('sar_prediction_metrics'), dict) else {}
+    evaluation_mode = str(prediction_metrics.get('evaluation_mode') or '').strip()
+    if evaluation_mode != 'scene_blended':
+        raise ValueError(
+            'SnowSlide prediction materialization blocked until AvalCD benchmark uses '
+            'scene_blended SAR evaluation mode'
+        )
     quality_gate = prediction_metrics.get('quality_gate') if isinstance(prediction_metrics.get('quality_gate'), dict) else {}
     if not (
         quality_gate.get('passed') is True

@@ -10,6 +10,7 @@ from backend.sar_unet_training import (
     DEFAULT_PRECISION_FLOOR,
     build_sar_validation_error_diagnostics,
     evaluate_sar_checkpoint,
+    evaluate_sar_checkpoint_scene_blended,
 )
 
 
@@ -78,6 +79,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument('--threshold', type=float, help='Threshold for error diagnostics; defaults to selected threshold when omitted')
     parser.add_argument('--device', default='cpu')
     parser.add_argument('--diagnostics', action='store_true')
+    parser.add_argument('--scene-blended', action='store_true')
     parser.add_argument('--max-components', type=int, default=10)
     return parser.parse_args(argv)
 
@@ -91,6 +93,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             artifact_root=args.output_root,
             device=args.device,
             max_components=args.max_components,
+        )
+    elif args.scene_blended:
+        request['evaluation_mode'] = 'scene_blended'
+        result = evaluate_sar_checkpoint_scene_blended(
+            request,
+            artifact_root=args.output_root,
+            device=args.device,
         )
     else:
         result = evaluate_sar_checkpoint(

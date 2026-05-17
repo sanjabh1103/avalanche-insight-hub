@@ -22,6 +22,7 @@ from backend.sar_unet_worker import (
 from backend.sar_unet_training import (
     build_sar_validation_error_diagnostics,
     evaluate_sar_checkpoint,
+    evaluate_sar_checkpoint_scene_blended,
 )
 
 if str(os.environ.get('AVALANCHE_SKIP_MODAL_IMPORT') or '').strip().lower() in {'1', 'true', 'yes', 'on'}:
@@ -169,6 +170,11 @@ def run_remote_evaluate_sar_checkpoint(
         volume_reload()
     if str(payload.get('diagnostics', '')).strip().lower() in {'1', 'true', 'yes', 'on'}:
         report = build_sar_validation_error_diagnostics(payload, artifact_root=artifact_root, device=device)
+    elif (
+        str(payload.get('scene_blended', '')).strip().lower() in {'1', 'true', 'yes', 'on'}
+        or str(payload.get('evaluation_mode') or '').strip() == 'scene_blended'
+    ):
+        report = evaluate_sar_checkpoint_scene_blended(payload, artifact_root=artifact_root, device=device)
     else:
         report = evaluate_sar_checkpoint(payload, artifact_root=artifact_root, device=device)
     if volume_commit is not None:

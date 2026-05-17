@@ -328,6 +328,7 @@ def _normalize_sar_prediction_artifact(artifact: dict[str, Any]) -> dict[str, An
             'model_family': artifact.get('model_family'),
             'model_version': artifact.get('candidate_model_version') or artifact.get('model_version'),
             'candidate_model_version': artifact.get('candidate_model_version'),
+            'evaluation_mode': artifact.get('evaluation_mode') or 'patch_level',
             'split': 'val',
             'threshold': artifact.get('best_threshold'),
             'generated_at': artifact.get('generated_at'),
@@ -433,6 +434,7 @@ def _sar_prediction_report_from_metrics_artifact(
         'dataset_version': artifact.get('dataset_version'),
         'model_family': artifact.get('model_family'),
         'model_version': artifact.get('model_version') or artifact.get('candidate_model_version'),
+        'evaluation_mode': artifact.get('evaluation_mode') or 'patch_level',
         'split': artifact.get('split') or 'val',
         'threshold': _coerce_float(artifact.get('threshold') or metrics.get('threshold')),
         'license_review_id': artifact.get('license_review_id'),
@@ -489,6 +491,7 @@ def _sar_prediction_report_from_mask_rows(
         'dataset_version': artifact.get('dataset_version'),
         'model_family': artifact.get('model_family'),
         'model_version': artifact.get('model_version') or artifact.get('candidate_model_version'),
+        'evaluation_mode': artifact.get('evaluation_mode') or 'mask_rows',
         'split': artifact.get('split') or 'val',
         'threshold': threshold,
         'license_review_id': artifact.get('license_review_id'),
@@ -567,15 +570,22 @@ def _sar_quality_gate_for_report(artifact: dict[str, Any], metrics: dict[str, An
         selection_reason = 'best_f0_5_without_precision_and_recall_floor'
     repaired_gate = dict(quality_gate or {})
     failures = list(repaired_gate.get('failures') or [])
-    failures.append({
-        'scene_id': None,
-        'reason': 'recall_floor_not_met' if blocked_gate == 'recall_floor' else 'precision_floor_not_met',
-        'precision_floor': precision_floor,
-        'recall_floor': recall_floor,
-        'precision': precision,
-        'recall': recall,
-        'selection_reason': selection_reason,
-    })
+    failure_reason = 'recall_floor_not_met' if blocked_gate == 'recall_floor' else 'precision_floor_not_met'
+    if not any(
+        isinstance(failure, dict)
+        and failure.get('scene_id') is None
+        and failure.get('reason') == failure_reason
+        for failure in failures
+    ):
+        failures.append({
+            'scene_id': None,
+            'reason': failure_reason,
+            'precision_floor': precision_floor,
+            'recall_floor': recall_floor,
+            'precision': precision,
+            'recall': recall,
+            'selection_reason': selection_reason,
+        })
     repaired_gate.update({
         'passed': False,
         'blocked_gate': blocked_gate,

@@ -255,7 +255,15 @@ class SarUnetWorkerTests(unittest.TestCase):
             side_effects.append(encode_patch_payload(patch_entry['stack']))
         storage_download_bytes_mock.side_effect = side_effects
         predict_bitemporal_probability_mask_batch_mock.return_value = np.ones((len(patch_entries), 128, 128), dtype=np.float32) * 0.9
-        loaded_model = LoadedUnetModel(model=object(), checkpoint_key_mismatch={}, model_family='swinunet_tiny_diff')
+        loaded_model = LoadedUnetModel(
+            model=object(),
+            checkpoint_key_mismatch={},
+            model_family='swinunet_tiny_diff',
+            normalization={
+                'img_mean': np.array([1.0, 2.0], dtype=np.float32),
+                'img_std': np.array([1.0, 2.0], dtype=np.float32),
+            },
+        )
 
         probability_mask = predict_scene_probability_mask(
             loaded_model,
@@ -269,6 +277,12 @@ class SarUnetWorkerTests(unittest.TestCase):
 
         self.assertEqual(probability_mask.shape, (80, 176))
         self.assertAlmostEqual(float(probability_mask[0, 0]), 0.9, places=5)
+        pre_batch = predict_bitemporal_probability_mask_batch_mock.call_args.args[1]
+        post_batch = predict_bitemporal_probability_mask_batch_mock.call_args.args[2]
+        self.assertAlmostEqual(float(pre_batch[0, 0, 0, 0]), 0.0, places=5)
+        self.assertAlmostEqual(float(pre_batch[0, 1, 0, 0]), 0.0, places=5)
+        self.assertAlmostEqual(float(post_batch[0, 0, 0, 0]), 2.0, places=5)
+        self.assertAlmostEqual(float(post_batch[0, 1, 0, 0]), 1.0, places=5)
 
     @patch('backend.sar_unet_worker.dump_json')
     @patch('backend.sar_unet_worker.build_unet_model')
@@ -460,6 +474,41 @@ class SarUnetWorkerTests(unittest.TestCase):
 
         swin_builder_mock.assert_called_once_with(image_size=128)
         self.assertEqual(loaded.model_family, 'swinunet_tiny_diff')
+
+    @patch('backend.sar_unet_worker._build_swinunet_tiny_diff_model')
+    @patch('backend.sar_unet_worker.torch')
+    def test_build_unet_model_extracts_checkpoint_normalization(self, torch_mock, swin_builder_mock) -> None:
+        class _DummyModel:
+            def load_state_dict(self, state_dict, strict=False):
+                return SimpleNamespace(missing_keys=[], unexpected_keys=[])
+
+            def to(self, device):
+                return self
+
+            def eval(self):
+                return None
+
+        swin_builder_mock.return_value = _DummyModel()
+        torch_mock.load.return_value = {
+            'state_dict': {'sar_encoder.model.patch_embed.proj.weight': 1},
+            'metadata': {
+                'normalization': {
+                    'img_mean': [1.0, 2.0],
+                    'img_std': [0.5, 0.25],
+                },
+            },
+        }
+
+        with tempfile.NamedTemporaryFile() as handle:
+            loaded = build_unet_model(
+                Path(handle.name),
+                device='cpu',
+                model_family='swinunet_tiny_diff',
+                image_size=128,
+            )
+
+        np.testing.assert_allclose(loaded.normalization['img_mean'], np.array([1.0, 2.0], dtype=np.float32))
+        np.testing.assert_allclose(loaded.normalization['img_std'], np.array([0.5, 0.25], dtype=np.float32))
 
     @patch('backend.sar_unet_worker.SAR_UNET_PROMOTED', False)
     def test_build_unet_model_rejects_cross_family_checkpoint_in_shadow_mode(self) -> None:

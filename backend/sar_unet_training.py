@@ -18,7 +18,9 @@ from backend.common.sar_model_family import build_model_architecture, normalize_
 from backend.common.sar_training_dataset import (
     BalancedPositivePatchSampler,
     SarPatchDataset,
+    _load_truth_mask_from_ref,
     compute_sar_normalization,
+    load_sar_training_manifest,
     materialize_sar_training_dataset,
 )
 
@@ -603,7 +605,17 @@ def _validation_quality_gate(
         max_precision = float(best_precision.get('precision') or 0.0)
         best_precision_threshold = float(best_precision.get('threshold') or 0.0)
         best_precision_recall = float(best_precision.get('recall') or 0.0)
-        precision_floor_met = max_precision >= float(precision_floor)
+        selected_metrics = validation_metrics if isinstance(validation_metrics, dict) else best_precision
+        selected_precision = float(selected_metrics.get('precision') or 0.0)
+        selected_recall = float(selected_metrics.get('recall') or 0.0)
+        selected_threshold = float(selected_metrics.get('threshold') or best_precision_threshold)
+        max_precision_floor_met = max_precision >= float(precision_floor)
+        selected_precision_floor_met = selected_precision >= float(precision_floor)
+        selected_recall_floor_met = (
+            selected_recall >= float(recall_floor)
+            if recall_floor is not None
+            else True
+        )
         if selection_floor_met is not None:
             combined_floor_met = bool(selection_floor_met)
         elif recall_floor is not None:
@@ -613,18 +625,27 @@ def _validation_quality_gate(
                 for row in metric_candidates
             )
         else:
-            combined_floor_met = precision_floor_met
-        recall_floor_met = combined_floor_met if recall_floor is not None else True
+            combined_floor_met = max_precision_floor_met
+        precision_floor_met = selected_precision_floor_met
+        recall_floor_met = selected_recall_floor_met
     else:
         max_precision = 0.0
         best_precision_threshold = 0.0
         best_precision_recall = 0.0
+        selected_precision = 0.0
+        selected_recall = 0.0
+        selected_threshold = 0.0
+        max_precision_floor_met = True
         precision_floor_met = True
         combined_floor_met = True
         recall_floor_met = True
     if not combined_floor_met:
         reason = 'precision_floor_not_met'
-        if recall_floor is not None and max_precision >= float(precision_floor):
+        if not bool(precision_floor_met):
+            reason = 'precision_floor_not_met'
+        elif recall_floor is not None and not bool(recall_floor_met):
+            reason = 'recall_floor_not_met'
+        elif recall_floor is not None and max_precision_floor_met:
             reason = 'recall_floor_not_met'
         failures.append({
             'scene_id': None,
@@ -636,6 +657,10 @@ def _validation_quality_gate(
             'best_precision_recall': best_precision_recall,
             'precision_floor_met': bool(precision_floor_met),
             'recall_floor_met': bool(recall_floor_met),
+            'joint_floor_met': bool(combined_floor_met),
+            'selected_precision': selected_precision,
+            'selected_recall': selected_recall,
+            'selected_threshold': selected_threshold,
         })
     blocked_gate = None
     if failures:
@@ -656,7 +681,12 @@ def _validation_quality_gate(
         'recall_floor': float(recall_floor) if recall_floor is not None else None,
         'precision_floor_met': bool(precision_floor_met),
         'recall_floor_met': bool(recall_floor_met),
+        'joint_floor_met': bool(combined_floor_met),
+        'selected_precision': selected_precision,
+        'selected_recall': selected_recall,
+        'selected_threshold': selected_threshold,
         'max_precision': max_precision,
+        'max_precision_floor_met': bool(max_precision_floor_met),
         'best_precision_threshold': best_precision_threshold,
         'best_precision_recall': best_precision_recall,
     }
@@ -957,6 +987,7 @@ def _build_validation_prediction_artifact(
     best_validation: dict[str, Any],
     scene_breakdown: list[dict[str, Any]],
     quality_gate: dict[str, Any],
+    evaluation_mode: str = 'patch_level',
 ) -> dict[str, Any]:
     source_key = str(request.get('source_key') or '').strip() or _source_key_from_dataset_audit(dataset_audit)
     metrics = best_validation['best_metrics']
@@ -967,6 +998,7 @@ def _build_validation_prediction_artifact(
         'model_family': config.model_family,
         'model_version': config.candidate_model_version,
         'candidate_model_version': config.candidate_model_version,
+        'evaluation_mode': evaluation_mode,
         'split': 'val',
         'threshold': float(best_validation['best_threshold']),
         'generated_at': datetime.now(timezone.utc).isoformat(),
@@ -1054,6 +1086,7 @@ def evaluate_sar_checkpoint(
     metrics_payload = {
         'status': 'ok' if quality_gate['passed'] else 'completed_with_validation_gate_failure',
         'request_type': 'evaluate_sar_checkpoint',
+        'evaluation_mode': 'patch_level',
         'model_family': config.model_family,
         'candidate_model_version': config.candidate_model_version,
         'checkpoint_path': str(checkpoint_path),
@@ -1096,6 +1129,7 @@ def evaluate_sar_checkpoint(
     report = {
         'status': metrics_payload['status'],
         'request_type': 'evaluate_sar_checkpoint',
+        'evaluation_mode': 'patch_level',
         'artifact_dir': str(artifact_dir),
         'candidate_model_version': config.candidate_model_version,
         'model_family': config.model_family,
@@ -1115,6 +1149,274 @@ def evaluate_sar_checkpoint(
     if prediction_artifact_path is not None:
         report['sar_prediction_artifact_path'] = prediction_artifact_path
     dump_json(artifact_dir / 'evaluate_sar_checkpoint_manifest.json', report)
+    return report
+
+
+def _audit_from_sar_training_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
+    scenes = [scene for scene in manifest.get('scenes', []) if isinstance(scene, dict)]
+    train_scenes = [scene for scene in scenes if str(scene.get('split') or '').strip().lower() == 'train']
+    val_scenes = [scene for scene in scenes if str(scene.get('split') or '').strip().lower() == 'val']
+    source_counts: dict[str, int] = {}
+    region_counts: dict[str, int] = {}
+    for scene in scenes:
+        source = str(scene.get('source_dataset') or 'unknown').strip() or 'unknown'
+        region = str(scene.get('region_key') or 'unknown').strip() or 'unknown'
+        source_counts[source] = source_counts.get(source, 0) + 1
+        region_counts[region] = region_counts.get(region, 0) + 1
+    return {
+        'dataset_version': str(manifest.get('dataset_version') or 'sar-training-v1'),
+        'train_scene_count': len(train_scenes),
+        'val_scene_count': len(val_scenes),
+        'scene_count': len(scenes),
+        'train_events': sorted(str(scene.get('scene_id') or '') for scene in train_scenes if scene.get('scene_id')),
+        'val_events': sorted(str(scene.get('scene_id') or '') for scene in val_scenes if scene.get('scene_id')),
+        'source_dataset_scene_counts': dict(sorted(source_counts.items())),
+        'region_scene_counts': dict(sorted(region_counts.items())),
+    }
+
+
+def _finalize_threshold_selection(
+    counts_by_candidate: dict[tuple[int, int], dict[float, dict[str, int]]],
+    *,
+    config: TrainingConfig,
+) -> dict[str, Any]:
+    if config.postprocess is not None and config.postprocess.enabled and config.postprocess.apply_to_threshold_selection:
+        best_threshold, selection = _select_best_postprocessed_threshold(
+            counts_by_candidate,
+            f_beta=config.f_beta,
+            precision_floor=config.precision_floor,
+            recall_floor=config.postprocess.recall_floor,
+        )
+    else:
+        threshold_counts = counts_by_candidate[(0, 0)]
+        best_threshold, selection = _select_best_threshold(
+            threshold_counts,
+            f_beta=config.f_beta,
+            precision_floor=config.precision_floor,
+        )
+        selection['postprocess_evaluation'] = {
+            'enabled': False,
+            'selection_reason': 'disabled',
+            'precision_floor': float(config.precision_floor),
+            'recall_floor': float(config.postprocess.recall_floor if config.postprocess is not None else DEFAULT_POSTPROCESS_RECALL_FLOOR),
+            'selected': {
+                'opening_size_px': 0,
+                'min_component_area_px': 0,
+                'threshold': float(best_threshold),
+                'precision': float(selection['best']['precision']),
+                'recall': float(selection['best']['recall']),
+                'f0_5': float(selection['best']['f0_5']),
+            },
+            'candidate_count': 1,
+            'candidates': [],
+        }
+    return {
+        'best_threshold': float(best_threshold),
+        'auprc': float(selection['auprc']),
+        'best_metrics': selection['best'],
+        'threshold_metrics': selection['threshold_metrics'],
+        'postprocess_evaluation': selection['postprocess_evaluation'],
+        'precision_floor_met': bool(selection['precision_floor_met']),
+        'max_precision': float(selection['max_precision']),
+        'best_precision_threshold': float(selection['best_precision_threshold']),
+    }
+
+
+def _scene_blended_scene_breakdown(
+    evaluated_scenes: list[dict[str, Any]],
+    *,
+    threshold: float,
+    min_component_area_px: int,
+    opening_size_px: int,
+) -> list[dict[str, Any]]:
+    breakdown: list[dict[str, Any]] = []
+    for item in evaluated_scenes:
+        probabilities = np.asarray(item['probabilities'], dtype=np.float32)
+        target = np.asarray(item['truth'], dtype=bool)
+        prediction = probabilities >= float(threshold)
+        prediction = _postprocess_binary_mask(
+            prediction,
+            min_component_area_px=min_component_area_px,
+            opening_size_px=opening_size_px,
+        )
+        counts = {
+            'tp': int(np.sum(prediction & target)),
+            'fp': int(np.sum(prediction & ~target)),
+            'fn': int(np.sum(~prediction & target)),
+            'tn': int(np.sum(~prediction & ~target)),
+        }
+        metrics = _metrics_from_counts(counts)
+        positive_pixels = int(np.sum(target))
+        predicted_pixels = int(np.sum(prediction))
+        total_pixels = int(target.size)
+        truth_positive_rate = positive_pixels / max(total_pixels, 1)
+        predicted_positive_rate = predicted_pixels / max(total_pixels, 1)
+        positive_rate_ratio = predicted_positive_rate / max(truth_positive_rate, 1e-6)
+        scene = item['scene']
+        breakdown.append({
+            'scene_id': str(scene.get('scene_id') or ''),
+            'region_key': str(scene.get('region_key') or 'unknown'),
+            'source_dataset': str(scene.get('source_dataset') or 'unknown'),
+            **metrics,
+            'positive_pixels': positive_pixels,
+            'predicted_pixels': predicted_pixels,
+            'total_pixels': total_pixels,
+            'truth_positive_rate': float(truth_positive_rate),
+            'predicted_positive_rate': float(predicted_positive_rate),
+            'positive_rate_ratio': float(positive_rate_ratio),
+        })
+    return sorted(breakdown, key=lambda row: str(row['scene_id']))
+
+
+def evaluate_sar_checkpoint_scene_blended(
+    request: dict[str, Any],
+    *,
+    artifact_root: Path,
+    device: str = 'cpu',
+) -> dict[str, Any]:
+    if not torch:
+        raise RuntimeError('torch is required for SAR checkpoint evaluation')
+    checkpoint_path = _checkpoint_path_from_request(request)
+    config = _training_config_from_request(request)
+    training_manifest_source = request.get('training_manifest') or request.get('training_manifest_path')
+    if not training_manifest_source:
+        raise ValueError('SAR scene-blended checkpoint evaluation requires training_manifest or training_manifest_path')
+
+    from backend.sar_unet_worker import build_unet_model, predict_scene_probability_mask
+
+    artifact_dir = create_artifact_dir(artifact_root)
+    manifest = load_sar_training_manifest(training_manifest_source)
+    dataset_audit = _audit_from_sar_training_manifest(manifest)
+    val_scenes = [
+        scene for scene in manifest['scenes']
+        if str(scene.get('split') or '').strip().lower() == 'val'
+    ]
+    if not val_scenes:
+        raise ValueError('SAR scene-blended checkpoint evaluation requires at least one val scene')
+
+    loaded_model = build_unet_model(
+        checkpoint_path,
+        device=device,
+        model_family=config.model_family,
+        image_size=config.patch_size,
+        promoted=True,
+    )
+    candidates = _postprocess_candidates(config.postprocess)
+    counts_by_candidate = {
+        (int(candidate['opening_size_px']), int(candidate['min_component_area_px'])): _build_counts_template(config.threshold_grid)
+        for candidate in candidates
+    }
+    evaluated_scenes: list[dict[str, Any]] = []
+    for scene in val_scenes:
+        probabilities = predict_scene_probability_mask(loaded_model, scene, device=device)
+        truth = _load_truth_mask_from_ref(str(scene['truth_mask_ref'])) >= 0.5
+        if probabilities.shape != truth.shape:
+            raise ValueError(
+                f'scene "{scene.get("scene_id")}" prediction/truth shape mismatch: '
+                f'{probabilities.shape} vs {truth.shape}',
+            )
+        for (opening_size_px, min_component_area_px), threshold_counts in counts_by_candidate.items():
+            _update_threshold_counts(
+                threshold_counts,
+                probabilities,
+                truth,
+                min_component_area_px=min_component_area_px,
+                opening_size_px=opening_size_px,
+            )
+        evaluated_scenes.append({
+            'scene': scene,
+            'probabilities': probabilities,
+            'truth': truth,
+        })
+
+    validation = _finalize_threshold_selection(counts_by_candidate, config=config)
+    selected_metrics = validation['best_metrics']
+    scene_breakdown = _scene_blended_scene_breakdown(
+        evaluated_scenes,
+        threshold=float(validation['best_threshold']),
+        min_component_area_px=int(selected_metrics.get('postprocess_min_component_area_px') or 0),
+        opening_size_px=int(selected_metrics.get('postprocess_opening_size_px') or 0),
+    )
+    quality_gate = _validation_quality_gate(
+        scene_breakdown,
+        max_positive_rate_ratio=config.max_validation_positive_rate_ratio,
+        max_positive_rate_absolute=config.max_validation_positive_rate_absolute,
+        threshold_metrics=validation['threshold_metrics'],
+        validation_metrics=validation['best_metrics'],
+        precision_floor=config.precision_floor,
+        recall_floor=(
+            config.postprocess.recall_floor
+            if config.postprocess is not None
+            and config.postprocess.enabled
+            and config.postprocess.apply_to_threshold_selection
+            else None
+        ),
+        selection_floor_met=validation.get('precision_floor_met'),
+    )
+    status = 'ok' if quality_gate['passed'] else 'completed_with_validation_gate_failure'
+    metrics_payload = {
+        'status': status,
+        'request_type': 'evaluate_sar_checkpoint',
+        'evaluation_mode': 'scene_blended',
+        'model_family': config.model_family,
+        'candidate_model_version': config.candidate_model_version,
+        'checkpoint_path': str(checkpoint_path),
+        'dataset_version': dataset_audit['dataset_version'],
+        'epochs_completed': 0,
+        'epochs_requested': 0,
+        'loss': config.loss_name,
+        'patch_size': config.patch_size,
+        'stride': config.stride,
+        'best_threshold': float(validation['best_threshold']),
+        'validation_metrics': validation['best_metrics'],
+        'validation_auprc': float(validation['auprc']),
+        'threshold_metrics': validation['threshold_metrics'],
+        'postprocess_evaluation': validation['postprocess_evaluation'],
+        'scene_breakdown': scene_breakdown,
+        'region_breakdown': _region_metrics(scene_breakdown),
+        'quality_gate': quality_gate,
+        'dataset_audit': dataset_audit,
+        'training_manifest_path': str(training_manifest_source),
+        'normalization_source': 'checkpoint' if loaded_model.normalization is not None else 'none',
+    }
+    prediction_artifact_path: str | None = None
+    if bool(request.get('export_validation_prediction_artifact')):
+        prediction_artifact = _build_validation_prediction_artifact(
+            request=request,
+            config=config,
+            dataset_audit=dataset_audit,
+            best_validation=validation,
+            scene_breakdown=scene_breakdown,
+            quality_gate=quality_gate,
+            evaluation_mode='scene_blended',
+        )
+        prediction_artifact_path = str(artifact_dir / 'european_sar_prediction_artifact.json')
+        dump_json(Path(prediction_artifact_path), prediction_artifact)
+        metrics_payload['sar_prediction_artifact_path'] = prediction_artifact_path
+        metrics_payload['sar_prediction_artifact'] = prediction_artifact
+    dump_json(artifact_dir / 'sar_training_metrics.json', metrics_payload)
+    report = {
+        'status': status,
+        'request_type': 'evaluate_sar_checkpoint',
+        'evaluation_mode': 'scene_blended',
+        'artifact_dir': str(artifact_dir),
+        'candidate_model_version': config.candidate_model_version,
+        'model_family': config.model_family,
+        'checkpoint_path': str(checkpoint_path),
+        'best_threshold': float(validation['best_threshold']),
+        'validation_auprc': float(validation['auprc']),
+        'validation_metrics': validation['best_metrics'],
+        'postprocess_evaluation': validation['postprocess_evaluation'],
+        'quality_gate_passed': bool(quality_gate['passed']),
+        'blocked_gate': quality_gate['blocked_gate'],
+        'scene_gate_failures': quality_gate['failures'],
+        'dataset_version': dataset_audit['dataset_version'],
+        'train_events': dataset_audit['train_events'],
+        'val_events': dataset_audit['val_events'],
+    }
+    if prediction_artifact_path is not None:
+        report['sar_prediction_artifact_path'] = prediction_artifact_path
+    dump_json(artifact_dir / 'evaluate_sar_checkpoint_scene_blended_manifest.json', report)
     return report
 
 
@@ -1426,8 +1728,10 @@ def train_sar_unet(
         device=device,
     )
 
+    status = 'ok' if quality_gate['passed'] else 'completed_with_validation_gate_failure'
     metrics_payload = {
-        'status': 'ok',
+        'status': status,
+        'evaluation_mode': 'patch_level',
         'candidate_model_version': config.candidate_model_version,
         'model_family': config.model_family,
         'patch_size': config.patch_size,
@@ -1469,10 +1773,10 @@ def train_sar_unet(
         metrics_payload['sar_prediction_artifact_path'] = prediction_artifact_path
         metrics_payload['sar_prediction_artifact'] = prediction_artifact
     dump_json(artifact_dir / 'sar_training_metrics.json', metrics_payload)
-    status = 'ok' if quality_gate['passed'] else 'completed_with_validation_gate_failure'
     report = {
         'status': status,
         'request_type': 'train_sar_unet',
+        'evaluation_mode': 'patch_level',
         'artifact_dir': str(artifact_dir),
         'candidate_model_version': config.candidate_model_version,
         'model_family': config.model_family,

@@ -16,6 +16,7 @@ from backend.sar_unet_training import (
     _validation_quality_gate,
     build_sar_validation_error_diagnostics,
     evaluate_sar_checkpoint,
+    evaluate_sar_checkpoint_scene_blended,
     train_sar_unet,
 )
 
@@ -99,6 +100,31 @@ class SarUnetTrainingTests(unittest.TestCase):
         self.assertEqual(gate['failures'][0]['reason'], 'recall_floor_not_met')
         self.assertEqual(gate['best_precision_recall'], 0.20)
 
+    def test_validation_quality_gate_reports_joint_pass_fields(self) -> None:
+        gate = _validation_quality_gate(
+            [{
+                'scene_id': 'scene-1',
+                'predicted_positive_rate': 0.01,
+                'truth_positive_rate': 0.01,
+                'positive_rate_ratio': 1.0,
+            }],
+            max_positive_rate_ratio=20.0,
+            max_positive_rate_absolute=0.15,
+            threshold_metrics=[
+                {'threshold': 0.995, 'precision': 0.62, 'recall': 0.51},
+            ],
+            validation_metrics={'threshold': 0.995, 'precision': 0.62, 'recall': 0.51},
+            precision_floor=0.60,
+            recall_floor=0.50,
+            selection_floor_met=True,
+        )
+
+        self.assertTrue(gate['passed'])
+        self.assertTrue(gate['precision_floor_met'])
+        self.assertTrue(gate['recall_floor_met'])
+        self.assertTrue(gate['joint_floor_met'])
+        self.assertEqual(gate['selected_threshold'], 0.995)
+
     def test_postprocess_binary_mask_noops_when_disabled(self) -> None:
         predictions = np.array([[True, False], [True, True]])
 
@@ -132,6 +158,73 @@ class SarUnetTrainingTests(unittest.TestCase):
         self.assertEqual([row['pixel_count'] for row in summaries], [9, 1])
         self.assertEqual(summaries[0]['scene_id'], 'scene-1')
         self.assertEqual(summaries[0]['component_type'], 'false_negative')
+
+    def test_scene_blended_checkpoint_evaluation_counts_full_scene_pixels_once(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            checkpoint_path = root / 'sar_model.pt'
+            checkpoint_path.write_bytes(b'placeholder')
+            truth_path = root / 'truth.npy'
+            np.save(truth_path, np.array([[1, 0], [0, 1]], dtype=np.float32))
+            request = {
+                'training_manifest': {
+                    'version': 'sar_training_manifest_v1',
+                    'dataset_version': 'scene-blended-unit-v1',
+                    'scenes': [
+                        {
+                            'source_dataset': 'avalcd',
+                            'event_id': 'evt-train-1',
+                            'scene_id': 'train-scene',
+                            'region_key': 'livigno',
+                            'split': 'train',
+                            'stack_ref': 'unused-train-stack.npy',
+                            'truth_mask_ref': str(truth_path),
+                        },
+                        {
+                            'source_dataset': 'avalcd',
+                            'event_id': 'evt-val-1',
+                            'scene_id': 'val-scene',
+                            'region_key': 'livigno',
+                            'split': 'val',
+                            'stack_ref': 'unused-val-stack.npy',
+                            'truth_mask_ref': str(truth_path),
+                        },
+                    ],
+                },
+                'checkpoint_path': str(checkpoint_path),
+                'candidate_model_version': 'scene-blended-unit-model',
+                'source_key': 'avalcd_zenodo_v1',
+                'license_review_id': 'license-review-unit',
+                'model_family': 'swinunet_tiny_diff',
+                'patch_size': 4,
+                'stride': 4,
+                'threshold_grid': [0.5],
+                'precision_floor': 0.5,
+                'postprocess_min_component_area_px': 0,
+                'postprocess_apply_to_threshold_selection': True,
+                'postprocess_recall_floor': 0.5,
+                'export_validation_prediction_artifact': True,
+            }
+
+            with patch('backend.sar_unet_worker.build_unet_model') as build_mock, \
+                    patch('backend.sar_unet_worker.predict_scene_probability_mask') as predict_mock:
+                build_mock.return_value = type('Loaded', (), {
+                    'normalization': {'img_mean': np.array([0, 0]), 'img_std': np.array([1, 1])},
+                })()
+                predict_mock.return_value = np.array([[0.9, 0.1], [0.1, 0.9]], dtype=np.float32)
+                report = evaluate_sar_checkpoint_scene_blended(
+                    request,
+                    artifact_root=root / 'artifacts',
+                    device='cpu',
+                )
+
+            self.assertEqual(report['status'], 'ok')
+            self.assertEqual(report['evaluation_mode'], 'scene_blended')
+            artifact = json.loads(Path(report['sar_prediction_artifact_path']).read_text(encoding='utf-8'))
+            self.assertEqual(artifact['evaluation_mode'], 'scene_blended')
+            self.assertEqual(artifact['metrics']['tp'], 2)
+            self.assertEqual(artifact['metrics']['tn'], 2)
+            self.assertEqual(artifact['scene_breakdown'][0]['total_pixels'], 4)
 
     def test_train_sar_unet_persists_checkpoint_metadata_and_report(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
