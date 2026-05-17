@@ -334,6 +334,20 @@ The scene-blended European shadow benchmarks were rebuilt at:
 
 Both reports remain `production_scoring_allowed=false` with `decision=blocked_shadow_only`. Because neither existing candidate passes both scene-blended floors, no SnowSlide prediction masks should be materialized and no new training sweep should be launched without a new checkpoint decision.
 
+Build the consolidated blocked-state operator packet:
+
+```bash
+python3 -m backend.scripts.build_avalcd_blocked_state_summary \
+  --v3-benchmark-report backend/artifacts/european-shadow-real-benchmarks/european-shadow-real-avalcd-scene-blended-v3-2026-05-17/european_shadow_benchmark_report.json \
+  --v4-benchmark-report backend/artifacts/european-shadow-real-benchmarks/european-shadow-real-avalcd-scene-blended-v4-2026-05-17/european_shadow_benchmark_report.json \
+  --snow-materialization-result backend/artifacts/european-shadow-heldout/snowslide-materialization/scene-blended-v3-blocked/sar_segment_result.json \
+  --modal-profile sanjabh1103_limit30 \
+  --output-json backend/artifacts/european-shadow-qualification/avalcd-blocked-state-2026-05-17/qualification_summary.json \
+  --output-markdown backend/artifacts/european-shadow-qualification/avalcd-blocked-state-2026-05-17/qualification_summary.md
+```
+
+The packet must report `final_decision=blocked_shadow_only`, `snow_slide_materialization_allowed=false`, `training_freeze=true`, no active Modal containers, and no validation violations.
+
 Reassert Modal.com zero-warm GPU settings before and after remote jobs:
 
 ```bash
@@ -360,7 +374,7 @@ python3 -m backend.scripts.run_modal_sar_prediction_materialization_direct \
   --output backend/artifacts/european-shadow-heldout/snowslide-materialization/materialize_prediction_masks_result.json
 ```
 
-The current guard run against the scene-blended v3 benchmark correctly wrote `status=blocked_prediction_materialization`, so SnowSlide prediction masks were not uploaded and the dry-run should not be rerun yet.
+The current guard run against the scene-blended v3 benchmark correctly wrote `status=blocked_prediction_materialization`, so SnowSlide prediction masks were not uploaded and the dry-run should not be rerun yet. This is now the explicit stop condition for the infrastructure-only closure.
 
 ## Promotion Rule
 
