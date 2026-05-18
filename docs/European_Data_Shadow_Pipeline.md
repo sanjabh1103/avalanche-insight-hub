@@ -40,7 +40,7 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | Swiss SPOT6 24,778 outlines | 4.5 | Local polygon staging, archive checksums, fixed event dates, bbox extraction, and extreme-event split reporting implemented. | Download/checksum EnviDat exports only after license review; keep extreme-event split separate from normal-season validation. |
 | French EPA/CLPA | 4.5 | EPA dated-event staging, CLPA path-prior staging, and observability-bias audit reporting implemented. | Verify avalanches.fr export terms and field schema before staging real exports. |
 | Swiss weather/snowpack/danger ratings | 4.0 | Local API/export staging, feature refs, danger-rating records, and calibration-slice reporting implemented. | Forecast ratings remain benchmark/context labels, not observed avalanche occurrence truth. |
-| AvalCD | 4.0 | Local scene/archive staging, corrected region keys, `sar_training_manifest_v1` emission, patch-level SAR metrics, scene-blended SAR checkpoint evaluation, gated SnowSlide dry-run execution, research-grade acceptance reporting, and promotion guard tightening implemented. | v6 passed the Phase 4 AvalCD scene-blended first gate. Next safe checkpoint is Phase 5 SnowSlide qualification with the same decision rule; production scoring remains blocked. |
+| AvalCD | 4.0 | Local scene/archive staging, corrected region keys, `sar_training_manifest_v1` emission, patch-level SAR metrics, scene-blended SAR checkpoint evaluation, gated SnowSlide dry-run execution, research-grade acceptance reporting, and promotion guard tightening implemented. | v6 passed the Phase 4 AvalCD scene-blended first gate, but failed Phase 5 SnowSlide research-grade qualification. Phase 6 fresh-final-holdout work is blocked until SnowSlide passes; production scoring remains blocked. |
 | SLF accident datasets | 3.0 | Accident export staging, uncertainty/casualty metadata, and accident-only bias audit reporting implemented. | Accident frequency remains blocked from avalanche occurrence-frequency training. |
 | EAWS/SLF bulletins | 2.5 | Bulletin/context staging and warning-semantics audit reporting implemented. | Bulletin text and danger scales remain context/calibration surfaces only. |
 
@@ -538,6 +538,37 @@ MODAL_PROFILE=sanjabh1103_limit30 python3 -m backend.scripts.run_modal_sar_check
 ```
 
 The v6 Phase 4 result is `passed_avalcd_first_gate` with scene-blended precision `0.6490`, recall `0.5354`, F1 `0.5867`, false-positive rate `0.00114`, and `production_scoring_allowed=false`. This authorizes Phase 5 SnowSlide qualification only; it does not authorize production scoring or promotion.
+
+Build the Phase 5 SnowSlide v6 qualification requests from the AvalCD first-gate result and the exact v6 selected rule:
+
+```bash
+python3 -m backend.scripts.build_avalcd_benchmark_from_first_gate
+python3 -m backend.scripts.build_snowslide_v6_qualification_requests
+```
+
+The generated SnowSlide v6 requests use checkpoint `/artifacts/20260518T103347Z/sar_model.pt`, model version `avalcd_swinunet_tiny_diff_research_gate_shadow_20260518_v6_scene_blended`, threshold `0.9980000257492065`, component area `0`, opening `0`, `shadow_mode=true`, `dry_run=true`, `compact_response=true`, and `persist_events=false`.
+
+The Phase 5 SnowSlide dry-run failed research-grade acceptance:
+
+| Metric | v6 SnowSlide result | Research-grade floor |
+|---|---:|---:|
+| Precision | `0.0000` | `>= 0.70` |
+| Recall | `0.0000` | `>= 0.50` |
+| F1 | `0.0000` | `>= 0.60` |
+| False-positive rate | `0.0000` | `<= 0.002` |
+| Beats baseline | `false` | `true` |
+| Scene coverage | `7` | `7` |
+
+The v6 acceptance report therefore emits `decision=blocked_research_grade`, `accepted_research_grade=false`, and `production_scoring_allowed=false`. The corresponding diagnostics emit `decision=blocked_shadow_only`, `dominant_blocker=both`, and `eval_only_passing_candidate_count=0`. No Phase 6 fresh final holdout run is allowed from this result.
+
+Build the blocked Phase 6 artifact:
+
+```bash
+python3 -m backend.scripts.build_fresh_final_holdout_plan \
+  --snowslide-acceptance-report backend/artifacts/european-shadow-qualification/snowslide-research-grade-v6-2026-05-18/acceptance_report.json
+```
+
+Current Phase 6 status is `blocked_pending_snowslide_research_grade`. A fresh final reference set is still mandatory for any future SnowSlide-guided candidate, but it cannot be evaluated until a candidate first passes SnowSlide research-grade qualification.
 
 Any future successful candidate must pass in this order:
 
