@@ -29,6 +29,7 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | Phase 2 non-GPU feasibility | `backend/scripts/build_snowslide_non_gpu_feasibility_audit.py` | Converts the existing SnowSlide threshold/postprocess sweep into a `non_gpu_feasibility_audit_v1` checkpoint before any GPU run. |
 | Phase 3 SAR candidate authorization | `backend/scripts/build_sar_candidate_authorization_request.py` | Converts an approved candidate design into a bounded single-run Modal training request with explicit GPU authorization and cost guard fields. |
 | Phase 4 AvalCD first gate | `backend/scripts/build_avalcd_first_gate_plan.py` | Builds the scene-blended AvalCD evaluation request from a candidate checkpoint and records pass/fail before any SnowSlide work. |
+| Phase 0-7 cross-verification | `backend/scripts/build_phase0_7_cross_verification_report.py` | Consolidates Phase 0-6 artifacts, writes the v6 transfer-failure addendum, and fails Phase 7 closed unless SnowSlide and fresh-final gates are ready. |
 | SAR promotion acceptance guard | `backend/sar_release_promote.py`, `backend/scripts/run_authoritative_release_gate.py` | Prevents SAR promotion from `beats_baseline=true` alone; promotion now requires an attached accepted SnowSlide research-grade report. |
 | Modal cost guard | `backend/scripts/modal_cost_guard.py` | Reasserts zero warm containers for GPU Modal functions so GPU is used only when a job is running. |
 
@@ -569,6 +570,19 @@ python3 -m backend.scripts.build_fresh_final_holdout_plan \
 ```
 
 Current Phase 6 status is `blocked_pending_snowslide_research_grade`. A fresh final reference set is still mandatory for any future SnowSlide-guided candidate, but it cannot be evaluated until a candidate first passes SnowSlide research-grade qualification.
+
+Build the Phase 0-7 cross-verification and Phase 7 readiness guard after recording the final Modal container-list output:
+
+```bash
+python3 -m backend.scripts.build_phase0_7_cross_verification_report \
+  --modal-container-list-file backend/artifacts/european-shadow-qualification/phase0-7-cross-verification-2026-05-18/modal_container_list.txt
+```
+
+Current expected decision is `blocked_phase7_not_ready`, with `phase7_ready=false`, `production_scoring_allowed=false`, `next_gpu_run_authorized=false`, and `promotion_allowed=false`.
+
+## Current Stop Condition
+
+The European SAR lane is stopped at Phase 6. The v6 candidate passed AvalCD but failed SnowSlide research-grade qualification with no positive SnowSlide predictions, so the transfer-failure addendum classifies this as cross-domain calibration/generalization failure rather than promotion evidence. Do not run a fresh final holdout, authorize another GPU candidate, or discuss production scoring until a future candidate first passes SnowSlide research-grade acceptance.
 
 Any future successful candidate must pass in this order:
 
