@@ -26,6 +26,9 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | SnowSlide v5 diagnostics | `backend/scripts/build_snowslide_error_diagnostics.py` | Builds per-scene v5 FP/FN diagnostics, component review packets, and an evaluation-only recovery report from existing masks without launching Modal/GPU work. |
 | SnowSlide manual review | `backend/scripts/build_snowslide_manual_label_review_packet.py`, `backend/scripts/resolve_snowslide_manual_label_review.py` | Converts v5 component-review actions into a closed-choice manual scene/label review worksheet and resolves completed decisions without authorizing GPU work or production scoring. |
 | SnowSlide candidate design | `backend/scripts/build_snowslide_candidate_design_report.py` | Builds a no-GPU `candidate_design_report_v1` from v5 diagnostics, manual review outcome, AvalCD/SnowSlide metrics, and evaluation-only recovery evidence. |
+| Phase 2 non-GPU feasibility | `backend/scripts/build_snowslide_non_gpu_feasibility_audit.py` | Converts the existing SnowSlide threshold/postprocess sweep into a `non_gpu_feasibility_audit_v1` checkpoint before any GPU run. |
+| Phase 3 SAR candidate authorization | `backend/scripts/build_sar_candidate_authorization_request.py` | Converts an approved candidate design into a bounded single-run Modal training request with explicit GPU authorization and cost guard fields. |
+| Phase 4 AvalCD first gate | `backend/scripts/build_avalcd_first_gate_plan.py` | Builds the scene-blended AvalCD evaluation request from a candidate checkpoint and records pass/fail before any SnowSlide work. |
 | SAR promotion acceptance guard | `backend/sar_release_promote.py`, `backend/scripts/run_authoritative_release_gate.py` | Prevents SAR promotion from `beats_baseline=true` alone; promotion now requires an attached accepted SnowSlide research-grade report. |
 | Modal cost guard | `backend/scripts/modal_cost_guard.py` | Reasserts zero warm containers for GPU Modal functions so GPU is used only when a job is running. |
 
@@ -37,7 +40,7 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | Swiss SPOT6 24,778 outlines | 4.5 | Local polygon staging, archive checksums, fixed event dates, bbox extraction, and extreme-event split reporting implemented. | Download/checksum EnviDat exports only after license review; keep extreme-event split separate from normal-season validation. |
 | French EPA/CLPA | 4.5 | EPA dated-event staging, CLPA path-prior staging, and observability-bias audit reporting implemented. | Verify avalanches.fr export terms and field schema before staging real exports. |
 | Swiss weather/snowpack/danger ratings | 4.0 | Local API/export staging, feature refs, danger-rating records, and calibration-slice reporting implemented. | Forecast ratings remain benchmark/context labels, not observed avalanche occurrence truth. |
-| AvalCD | 4.0 | Local scene/archive staging, corrected region keys, `sar_training_manifest_v1` emission, patch-level SAR metrics, scene-blended SAR checkpoint evaluation, gated SnowSlide dry-run execution, research-grade acceptance reporting, and promotion guard tightening implemented. | v5 passes the AvalCD scene-blended gate and beats the weak SnowSlide baseline, but still fails SnowSlide research-grade precision, recall, and F1 floors. Next safe work is scene/label review plus evaluation-only threshold/component recovery on existing masks. |
+| AvalCD | 4.0 | Local scene/archive staging, corrected region keys, `sar_training_manifest_v1` emission, patch-level SAR metrics, scene-blended SAR checkpoint evaluation, gated SnowSlide dry-run execution, research-grade acceptance reporting, and promotion guard tightening implemented. | v6 passed the Phase 4 AvalCD scene-blended first gate. Next safe checkpoint is Phase 5 SnowSlide qualification with the same decision rule; production scoring remains blocked. |
 | SLF accident datasets | 3.0 | Accident export staging, uncertainty/casualty metadata, and accident-only bias audit reporting implemented. | Accident frequency remains blocked from avalanche occurrence-frequency training. |
 | EAWS/SLF bulletins | 2.5 | Bulletin/context staging and warning-semantics audit reporting implemented. | Bulletin text and danger scales remain context/calibration surfaces only. |
 
@@ -488,33 +491,53 @@ Build the no-GPU candidate design dossier:
 python3 -m backend.scripts.build_snowslide_candidate_design_report
 ```
 
-The candidate design report writes `candidate_design_report.json` / `.md` under `backend/artifacts/european-shadow-qualification/snowslide-research-grade-v5-2026-05-18/candidate-design/`. Its current expected decision is `bounded_candidate_design_recommended` with `gpu_run_authorized=false`, because manual review confirmed a model-side gap and the evaluation-only sweep found no all-seven-scene passing candidate. This report is a design checkpoint only; it does not create a Modal request or authorize training.
+The candidate design report writes `candidate_design_report.json` / `.md` under `backend/artifacts/european-shadow-qualification/snowslide-research-grade-v5-2026-05-18/candidate-design/`. Its decision is `bounded_candidate_design_recommended` because manual review confirmed a model-side gap and the evaluation-only sweep found no all-seven-scene passing candidate. It remains design evidence only; GPU work requires the separate Phase 3 authorization artifact.
 
-Before any future bounded GPU retry, use the observability-first path:
+Build the Phase 2 non-GPU feasibility audit:
 
 ```bash
-python3 -m backend.scripts.inspect_modal_sar_training_run \
-  --modal-profile sanjabh1103_limit30 \
-  --local-result backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/research-v5/train_sar_unet_result.json \
-  --artifact-dir /artifacts/20260518T022355Z \
-  --output backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/research-v5/modal_sar_training_inspection.json
+python3 -m backend.scripts.build_snowslide_non_gpu_feasibility_audit
 ```
 
-New SAR training runs now write `train_sar_unet_status.json` as soon as the artifact directory exists, update it through materialization, dataset loading, normalization, checkpoint loading, epoch, validation, checkpoint, metrics, and terminal phases, and write `train_sar_unet_error.json` before re-raising failures. Modal training commits the artifact volume after every status update so a stalled run can be inspected while it is still running.
+The current Phase 2 audit emits `decision=blocked_research_grade_candidate_needed`, `non_gpu_pass_found=false`, `bounded_candidate_warranted=true`, and `production_scoring_allowed=false`.
 
-Use bounded async execution for any approved retry:
+Build the Phase 3 v6 authorization and request after explicit approval:
 
 ```bash
-python3 -m backend.scripts.run_modal_sar_training_direct \
+python3 -m backend.scripts.build_sar_candidate_authorization_request --authorize-gpu
+```
+
+The generated v6 request is under `backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/research-v6/` and authorizes exactly one bounded Modal GPU run with `max_wait_seconds=3600`, `cancel_on_timeout=true`, and zero-warm Modal guard requirements.
+
+Run the approved v6 training request:
+
+```bash
+MODAL_PROFILE=sanjabh1103_limit30 python3 -m backend.scripts.run_modal_sar_training_direct \
   --modal-profile sanjabh1103_limit30 \
-  --request backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/research-v5/train_sar_unet_request.json \
-  --output backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/research-v5/train_sar_unet_result.json \
+  --request backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/research-v6/train_sar_unet_request.json \
+  --output backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/research-v6/train_sar_unet_result_20260518T1033Z.json \
   --async \
   --max-wait-seconds 3600 \
   --cancel-on-timeout
 ```
 
-The timeout path writes `blocked_remote_training_timeout`, records the Modal `function_call_id`, cancels with `terminate_containers=true`, and still requires the Modal cost guard and final container-list check. Do not run this retry in the current checkpoint; the current approved state is scene/label review plus evaluation-only diagnostics only.
+The completed v6 training run returned `status=ok`, checkpoint `/artifacts/20260518T103347Z/sar_model.pt`, patch-level precision `0.6681`, recall `0.5030`, F1 `0.5739`, and function call `fc-01KRXABPWKKS8WW8HN064GMTC7`.
+
+Build and run the Phase 4 AvalCD first gate:
+
+```bash
+python3 -m backend.scripts.build_avalcd_first_gate_plan \
+  --training-result backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/research-v6/train_sar_unet_result_20260518T1033Z.json
+```
+
+```bash
+MODAL_PROFILE=sanjabh1103_limit30 python3 -m backend.scripts.run_modal_sar_checkpoint_evaluation_direct \
+  --modal-profile sanjabh1103_limit30 \
+  --request backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/research-v6/avalcd-first-gate/evaluate_sar_checkpoint_request.json \
+  --output backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/research-v6/avalcd-first-gate/evaluate_sar_checkpoint_result.json
+```
+
+The v6 Phase 4 result is `passed_avalcd_first_gate` with scene-blended precision `0.6490`, recall `0.5354`, F1 `0.5867`, false-positive rate `0.00114`, and `production_scoring_allowed=false`. This authorizes Phase 5 SnowSlide qualification only; it does not authorize production scoring or promotion.
 
 Any future successful candidate must pass in this order:
 
