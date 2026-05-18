@@ -445,10 +445,13 @@ The v5 diagnostic produces:
 | `scene_review_packet.json` / `.md` | Review-priority scenes with FP/FN component bounding boxes, centroids, pixel extents, and optional geo bboxes. |
 | `component_review_table.csv` | Spreadsheet-ready component review rows. |
 | `snowslide_eval_only_recovery_report.json` | Threshold/component-area sweep over existing v5 masks only. |
+| `component_review_summary.json` / `.md` and `component_review_actions.csv` | Decision-ready component review summary that classifies `nuuk_20160413` as recall-first, `nuuk_20210411` as mixed precision/recall, and `pish_20230221` as precision-first. |
 
 Current v5 diagnostic result: `blocked_shadow_only`, `dominant_blocker=both`, and `recommendation=targeted_scene_label_data_review_no_training`. The top false-positive burden scenes are `nuuk_20210411`, `pish_20230221`, and `nuuk_20160413`; the top false-negative burden scenes are `nuuk_20160413`, `nuuk_20210411`, and `livigno_20240403`. The top two false-negative scenes account for about `63.6%` of false negatives, so another GPU run is not justified before scene/label review.
 
 The v5 evaluation-only recovery sweep over thresholds `0.994-0.999` and component areas `0,16,32,64,96,128` found `passing_candidate_count=0` and `decision=blocked_research_grade`. The best all-scene candidate used threshold `0.994` with component area `96`; it reached precision `0.7357` and FPR `0.000802`, but recall fell to `0.4254` and F1 to `0.5391`, so it still failed the recall and F1 floors. Targeted-scene sensitivity also cannot mark acceptance because SnowSlide research-grade acceptance requires all seven scenes.
+
+The component review summary sets `recommended_next_step=manual_scene_label_review`, `production_scoring_allowed=false`, and `next_gpu_run_authorized=false`. It produces `15` large false-negative review actions and `15` large false-positive review actions across the three dominant scenes. No source labels are changed by this checkpoint.
 
 Before any future bounded GPU retry, use the observability-first path:
 
