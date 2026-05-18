@@ -21,6 +21,9 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | SAR checkpoint evaluation | `backend/scripts/evaluate_sar_checkpoint.py`, `backend/scripts/run_modal_sar_checkpoint_evaluation_direct.py` | Re-evaluates an existing SAR checkpoint against dense threshold/post-processing grids without another training run, locally or through the direct Modal.com function path. Use `evaluation_mode=scene_blended` for AvalCD promotion or SnowSlide prerequisites. |
 | SAR validation error diagnostics | `sar_validation_error_diagnostics_v1` | Reports scene-level false-negative/false-positive burden and largest missed components before any new training spend. |
 | SnowSlide materialization guard | `backend/scripts/run_modal_sar_prediction_materialization_direct.py` | Refuses held-out prediction-mask uploads until AvalCD precision and recall gates pass. |
+| SnowSlide research-grade acceptance | `backend/common/sar_acceptance_policy.py`, `backend/scripts/build_snowslide_acceptance_report.py` | Classifies SnowSlide dry-run evidence against research-grade precision, recall, F1, false-positive, provenance, scene-coverage, and no-promotion gates. |
+| SnowSlide threshold sweep | `backend/scripts/run_snowslide_threshold_sweep.py` | Runs evaluation-only threshold/component-area screening against existing held-out masks before any new GPU training. Passing sweep candidates still require AvalCD recheck and fresh final hold-out approval. |
+| SAR promotion acceptance guard | `backend/sar_release_promote.py`, `backend/scripts/run_authoritative_release_gate.py` | Prevents SAR promotion from `beats_baseline=true` alone; promotion now requires an attached accepted SnowSlide research-grade report. |
 | Modal cost guard | `backend/scripts/modal_cost_guard.py` | Reasserts zero warm containers for GPU Modal functions so GPU is used only when a job is running. |
 
 ## Updated Recommendation Status
@@ -31,7 +34,7 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | Swiss SPOT6 24,778 outlines | 4.5 | Local polygon staging, archive checksums, fixed event dates, bbox extraction, and extreme-event split reporting implemented. | Download/checksum EnviDat exports only after license review; keep extreme-event split separate from normal-season validation. |
 | French EPA/CLPA | 4.5 | EPA dated-event staging, CLPA path-prior staging, and observability-bias audit reporting implemented. | Verify avalanches.fr export terms and field schema before staging real exports. |
 | Swiss weather/snowpack/danger ratings | 4.0 | Local API/export staging, feature refs, danger-rating records, and calibration-slice reporting implemented. | Forecast ratings remain benchmark/context labels, not observed avalanche occurrence truth. |
-| AvalCD | 4.0 | Local scene/archive staging, corrected region keys, `sar_training_manifest_v1` emission, patch-level SAR metrics, scene-blended SAR checkpoint evaluation, and gated SnowSlide dry-run execution implemented. | v3 with area-64 postprocessing passes the aggregate AvalCD scene-blended floor and beats the SnowSlide baseline, but promotion remains blocked pending stricter held-out policy review and non-European regression sign-off. |
+| AvalCD | 4.0 | Local scene/archive staging, corrected region keys, `sar_training_manifest_v1` emission, patch-level SAR metrics, scene-blended SAR checkpoint evaluation, gated SnowSlide dry-run execution, research-grade acceptance reporting, and promotion guard tightening implemented. | v3 with area-64 postprocessing passes the aggregate AvalCD scene-blended floor and beats the weak SnowSlide baseline, but fails the research-grade SnowSlide acceptance gate. The bounded v5 attempt was stopped for cost control after the Modal run stalled without a result artifact. |
 | SLF accident datasets | 3.0 | Accident export staging, uncertainty/casualty metadata, and accident-only bias audit reporting implemented. | Accident frequency remains blocked from avalanche occurrence-frequency training. |
 | EAWS/SLF bulletins | 2.5 | Bulletin/context staging and warning-semantics audit reporting implemented. | Bulletin text and danger scales remain context/calibration surfaces only. |
 
@@ -387,6 +390,82 @@ Current SnowSlide v3 area-64 dry-run checkpoint:
 | Baseline comparison | `beats_baseline=true`; baseline F1 floor used `0.05008`. |
 | Decision | Keep `blocked_shadow_only`; do not promote because held-out precision/recall policy and non-European regression sign-off are still not complete. |
 
+## SnowSlide Research-Grade Acceptance Gate
+
+The baseline-beating SnowSlide dry-run is useful shadow evidence but is not research-grade acceptance. The current policy is `snowslide_research_grade_v1`:
+
+| Gate | Required value |
+|---|---|
+| Precision | `>= 0.70` |
+| Recall | `>= 0.50` |
+| F1 | `>= 0.60` |
+| False-positive rate | `<= 0.002` |
+| Baseline comparison | `beats_baseline=true` |
+| Run mode | `status=ok`, `dry_run=true`, no production promotion, no event persistence |
+| Scene coverage | exactly the 7 expected SnowSlide held-out scene IDs |
+| Provenance | AvalCD `scene_blended` gate passed with the same threshold/postprocess rule; materialization proof covers all 7 scenes |
+
+Build the current acceptance packet:
+
+```bash
+python3 -m backend.scripts.build_snowslide_acceptance_report \
+  --snow-report backend/artifacts/european-shadow-heldout/snowslide-dry-run/scene-blended-v3-area64/evaluate_release_result.json \
+  --avalcd-benchmark-report backend/artifacts/european-shadow-real-benchmarks/european-shadow-real-avalcd-scene-blended-v3-area64-2026-05-17/european_shadow_benchmark_report.json \
+  --materialization-result-dir backend/artifacts/european-shadow-heldout/snowslide-materialization/scene-blended-v3-area64/by-scene \
+  --output-json backend/artifacts/european-shadow-qualification/snowslide-research-grade-v1-2026-05-18/acceptance_report.json \
+  --output-markdown backend/artifacts/european-shadow-qualification/snowslide-research-grade-v1-2026-05-18/acceptance_report.md
+```
+
+Current output:
+
+| Evidence | Result |
+|---|---|
+| Acceptance decision | `blocked_research_grade` |
+| Failed floors | `precision_floor`, `recall_floor`, `f1_floor` |
+| Passing guardrails | 7 / 7 scene coverage, no event persistence, false-positive rate under `0.002`, AvalCD scene-blended provenance attached |
+| Production scoring | `false` |
+
+Run evaluation-only recovery before any training spend:
+
+```bash
+python3 -m backend.scripts.run_snowslide_threshold_sweep \
+  --env-file .env \
+  --request backend/artifacts/european-shadow-heldout/snowslide-dry-run/scene-blended-v3-area64/evaluate_release_request.json \
+  --output backend/artifacts/european-shadow-qualification/snowslide-research-grade-v1-2026-05-18/threshold_sweep_report.json
+```
+
+The 2026-05-18 sweep evaluated 48 threshold/component-area combinations. It found `passing_candidate_count=0`, `decision=blocked_research_grade`, and `bounded_candidate_warranted=true`. The best candidate still failed precision, recall, and F1 floors.
+
+The only approved next GPU step was a single bounded v5 fine-tune:
+
+```json
+{
+  "candidate_model_version": "avalcd_swinunet_tiny_diff_research_gate_shadow_20260518_v5",
+  "initial_checkpoint_path": "/artifacts/20260516T164730Z/sar_model.pt",
+  "epochs": 6,
+  "patience": 3,
+  "batch_size": 8,
+  "learning_rate": 0.000015,
+  "negative_ratio": 5,
+  "loss": "focal_tversky",
+  "focal_tversky_alpha": 0.40,
+  "focal_tversky_beta": 0.60,
+  "focal_tversky_gamma": 1.33,
+  "f_beta": 1.0
+}
+```
+
+That v5 direct Modal run did not produce a result artifact after an extended silent period. The active container was stopped to prevent unnecessary GPU spend, zero-warm autoscaler settings were reasserted, and `modal container list` was empty afterward. Treat v5 as `blocked_remote_training_stopped_for_cost_guard`, not as a model result.
+
+Any future successful candidate must pass in this order:
+
+| Step | Required checkpoint |
+|---|---|
+| 1 | AvalCD `scene_blended` precision `>= 0.60` and recall `>= 0.50`. |
+| 2 | SnowSlide research-grade dry-run precision `>= 0.70`, recall `>= 0.50`, F1 `>= 0.60`, false-positive rate `<= 0.002`. |
+| 3 | If SnowSlide influenced threshold/candidate choice, mark `requires_fresh_final_holdout=true`; no promotion discussion until a fresh final held-out set is approved and passes. |
+| 4 | SAR promotion requires an attached acceptance report with `decision=accepted_research_grade`; `beats_baseline=true` alone is insufficient. |
+
 ## Promotion Rule
 
 European data can support shadow validation, benchmark reconstruction, SAR candidate training, and calibration diagnostics. It must not change public production scoring until all of these are true:
@@ -396,5 +475,6 @@ European data can support shadow validation, benchmark reconstruction, SAR candi
 | License and attribution | Every included source has a recorded license review and required attribution. |
 | RF comparator | Any recalibrated RF model has strictly better time-split Peirce Skill Score and no worse Brier score than the current RF baseline. |
 | Local non-regression | Non-European/local validation slices do not materially degrade. |
-| SAR qualification | SAR candidates pass held-out SAR gates and current release-gate policies. |
+| SAR qualification | SAR candidates pass AvalCD scene-blended gates and the SnowSlide research-grade acceptance report has `decision=accepted_research_grade`. |
+| Final hold-out hygiene | If SnowSlide was used to select thresholds or tune a candidate, a fresh final held-out set must be created or explicitly approved before production discussion. |
 | Product truth | Public UI and artifacts continue to show candidate/fallback state until promotion is explicit. |
