@@ -27,6 +27,7 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | SnowSlide manual review | `backend/scripts/build_snowslide_manual_label_review_packet.py`, `backend/scripts/resolve_snowslide_manual_label_review.py` | Converts v5 component-review actions into a closed-choice manual scene/label review worksheet and resolves completed decisions without authorizing GPU work or production scoring. |
 | SnowSlide candidate design | `backend/scripts/build_snowslide_candidate_design_report.py` | Builds a no-GPU `candidate_design_report_v1` from v5 diagnostics, manual review outcome, AvalCD/SnowSlide metrics, and evaluation-only recovery evidence. |
 | Phase 2 non-GPU feasibility | `backend/scripts/build_snowslide_non_gpu_feasibility_audit.py` | Converts the existing SnowSlide threshold/postprocess sweep into a `non_gpu_feasibility_audit_v1` checkpoint before any GPU run. |
+| SnowSlide integrity audit | `backend/scripts/build_snowslide_v6_integrity_audit.py` | Checks existing SnowSlide probability masks, scene coverage, value ranges, threshold-positive pixels, and materialization refs before another GPU run is considered. |
 | Phase 3 SAR candidate authorization | `backend/scripts/build_sar_candidate_authorization_request.py` | Converts an approved candidate design into a bounded single-run Modal training request with explicit GPU authorization and cost guard fields. |
 | Phase 4 AvalCD first gate | `backend/scripts/build_avalcd_first_gate_plan.py` | Builds the scene-blended AvalCD evaluation request from a candidate checkpoint and records pass/fail before any SnowSlide work. |
 | Phase 0-7 cross-verification | `backend/scripts/build_phase0_7_cross_verification_report.py` | Consolidates Phase 0-6 artifacts, writes the v6 transfer-failure addendum, and fails Phase 7 closed unless SnowSlide and fresh-final gates are ready. |
@@ -583,6 +584,36 @@ Current expected decision is `blocked_phase7_not_ready`, with `phase7_ready=fals
 ## Current Stop Condition
 
 The European SAR lane is stopped at Phase 6. The v6 candidate passed AvalCD but failed SnowSlide research-grade qualification with no positive SnowSlide predictions, so the transfer-failure addendum classifies this as cross-domain calibration/generalization failure rather than promotion evidence. Do not run a fresh final holdout, authorize another GPU candidate, or discuss production scoring until a future candidate first passes SnowSlide research-grade acceptance.
+
+## Mission-Close V7 Checkpoint
+
+The v6 integrity audit showed the all-zero SnowSlide result was not caused by blank masks: the seven v6 masks had valid probability values below the selected AvalCD threshold. The v6 threshold/postprocess sweep still found `passing_candidate_count=0`, so one bounded v7 GPU candidate was authorized with Modal.com zero-warm guards and `cancel_on_timeout=true`.
+
+The v7 candidate completed and passed the AvalCD scene-blended first gate:
+
+| Metric | AvalCD v7 scene-blended result | Required floor |
+|---|---:|---:|
+| Precision | `0.6687` | `>= 0.60` |
+| Recall | `0.5678` | `>= 0.50` |
+| F1 | `0.6141` | diagnostic |
+| False-positive rate | `0.001111` | diagnostic |
+
+This only authorized SnowSlide qualification. It did not authorize production scoring or promotion.
+
+SnowSlide v7 was materialized for all seven held-out scenes with the exact AvalCD-selected rule: threshold `0.9980000257492065`, component area `96`, opening `0`, model `/artifacts/20260518T124829Z/sar_model.pt`, `shadow_mode=true`, and `persist_events=false`. The dry-run result again failed research-grade acceptance:
+
+| Metric | SnowSlide v7 selected-rule result | Research-grade floor |
+|---|---:|---:|
+| Precision | `0.0000` | `>= 0.70` |
+| Recall | `0.0000` | `>= 0.50` |
+| F1 | `0.0000` | `>= 0.60` |
+| False-positive rate | `0.0000` | `<= 0.002` |
+| Beats baseline | `false` | `true` |
+| Scene coverage | `7` | `7` |
+
+The v7 integrity audit classifies the selected-rule result as `blocked_threshold_calibration_failure`: no pixels pass the AvalCD-selected threshold, but lower thresholds do produce positives. The v7 no-GPU threshold/postprocess recovery sweep still found `passing_candidate_count=0`. Its best all-scene candidate used threshold `0.98` and component area `128`; it reached precision `0.6332`, recall `0.5531`, F1 `0.5904`, and false-positive rate `0.001681`, so it still fails the precision and F1 research-grade floors.
+
+Current v7 decision: `blocked_research_grade`. Phase 6 remains `blocked_pending_snowslide_research_grade`. Phase 7 remains not ready. No fresh final holdout, promotion, public scoring change, or further GPU run is authorized by this checkpoint.
 
 Any future successful candidate must pass in this order:
 

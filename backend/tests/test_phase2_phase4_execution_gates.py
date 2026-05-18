@@ -105,6 +105,44 @@ class Phase2Phase4ExecutionGateTests(unittest.TestCase):
         self.assertEqual(request['candidate_model_version'], 'avalcd_swinunet_tiny_diff_research_gate_shadow_20260518_v6')
         self.assertEqual(request['materialized_dataset_root'], '/tmp/avalcd-shadow-train5-val2-v6')
 
+    def test_phase3_authorization_accepts_explicit_bounded_v7_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            inputs = _phase2_inputs(root)
+            audit = build_non_gpu_feasibility_audit(output_root=root / 'phase2', **inputs)
+            audit_path = _write_json(root / 'phase2.json', audit)
+            report = build_candidate_authorization_request(
+                non_gpu_feasibility_audit=audit_path,
+                candidate_design_report=inputs['candidate_design_report'],
+                template_training_request=_training_template(root),
+                output_root=root / 'phase3',
+                authorize_gpu=True,
+                candidate_model_version='candidate-v7',
+                materialized_dataset_root='/tmp/avalcd-shadow-train5-val2-v7',
+                initial_checkpoint_path='/artifacts/v6/sar_model.pt',
+                epochs=6,
+                patience=3,
+                learning_rate=0.000008,
+                negative_ratio=4,
+                f_beta=0.9,
+                postprocess_min_component_area_px=96,
+                threshold_grid=[0.5, 0.7, 0.9],
+            )
+
+            request = json.loads((root / 'phase3' / 'train_sar_unet_request.json').read_text(encoding='utf-8'))
+
+        self.assertEqual(report['candidate_model_version'], 'candidate-v7')
+        self.assertTrue(report['gpu_run_authorized'])
+        self.assertEqual(request['candidate_model_version'], 'candidate-v7')
+        self.assertEqual(request['materialized_dataset_root'], '/tmp/avalcd-shadow-train5-val2-v7')
+        self.assertEqual(request['initial_checkpoint_path'], '/artifacts/v6/sar_model.pt')
+        self.assertEqual(request['epochs'], 6)
+        self.assertEqual(request['patience'], 3)
+        self.assertEqual(request['negative_ratio'], 4)
+        self.assertEqual(request['f_beta'], 0.9)
+        self.assertEqual(request['postprocess_min_component_area_px'], 96)
+        self.assertEqual(request['threshold_grid'], [0.5, 0.7, 0.9])
+
     def test_phase3_blocks_when_non_gpu_candidate_exists(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

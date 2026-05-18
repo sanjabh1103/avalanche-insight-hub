@@ -34,26 +34,43 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n', encoding='utf-8')
 
 
-def _candidate_request_from_template(template: dict[str, Any], *, candidate_model_version: str) -> dict[str, Any]:
+def _candidate_request_from_template(
+    template: dict[str, Any],
+    *,
+    candidate_model_version: str,
+    materialized_dataset_root: str = '/tmp/avalcd-shadow-train5-val2-v6',
+    initial_checkpoint_path: str | None = None,
+    epochs: int = 4,
+    patience: int = 2,
+    learning_rate: float = 0.00001,
+    negative_ratio: int | None = None,
+    focal_tversky_alpha: float = 0.45,
+    focal_tversky_beta: float = 0.55,
+    focal_tversky_gamma: float = 1.33,
+    f_beta: float = 0.75,
+    postprocess_min_component_area_px: int = 64,
+    postprocess_opening_size_px: int = 0,
+    threshold_grid: list[float] | None = None,
+) -> dict[str, Any]:
     request = deepcopy(template)
     request['candidate_model_version'] = candidate_model_version
     request['model_family'] = request.get('model_family') or 'swinunet_tiny_diff'
-    request['materialized_dataset_root'] = '/tmp/avalcd-shadow-train5-val2-v6'
-    request['initial_checkpoint_path'] = request.get('model_checkpoint_path') or '/artifacts/20260518T053032Z/sar_model.pt'
-    request['epochs'] = 4
-    request['patience'] = 2
-    request['learning_rate'] = 0.00001
-    request['negative_ratio'] = int(request.get('negative_ratio') or 5)
-    request['focal_tversky_alpha'] = 0.45
-    request['focal_tversky_beta'] = 0.55
-    request['focal_tversky_gamma'] = 1.33
-    request['f_beta'] = 0.75
+    request['materialized_dataset_root'] = materialized_dataset_root
+    request['initial_checkpoint_path'] = initial_checkpoint_path or request.get('model_checkpoint_path') or '/artifacts/20260518T053032Z/sar_model.pt'
+    request['epochs'] = int(epochs)
+    request['patience'] = int(patience)
+    request['learning_rate'] = float(learning_rate)
+    request['negative_ratio'] = int(negative_ratio if negative_ratio is not None else request.get('negative_ratio') or 5)
+    request['focal_tversky_alpha'] = float(focal_tversky_alpha)
+    request['focal_tversky_beta'] = float(focal_tversky_beta)
+    request['focal_tversky_gamma'] = float(focal_tversky_gamma)
+    request['f_beta'] = float(f_beta)
     request['precision_floor'] = 0.6
     request['postprocess_recall_floor'] = 0.5
     request['postprocess_apply_to_threshold_selection'] = True
-    request['postprocess_min_component_area_px'] = 64
-    request['postprocess_opening_size_px'] = 0
-    request['threshold_grid'] = [0.985, 0.988, 0.99, 0.992, 0.994, 0.996, 0.998, 0.999]
+    request['postprocess_min_component_area_px'] = int(postprocess_min_component_area_px)
+    request['postprocess_opening_size_px'] = int(postprocess_opening_size_px)
+    request['threshold_grid'] = threshold_grid or [0.985, 0.988, 0.99, 0.992, 0.994, 0.996, 0.998, 0.999]
     request['export_validation_prediction_artifact'] = True
     return request
 
@@ -85,6 +102,19 @@ def build_candidate_authorization_request(
     modal_profile: str = 'sanjabh1103_limit30',
     candidate_model_version: str = 'avalcd_swinunet_tiny_diff_research_gate_shadow_20260518_v6',
     max_wait_seconds: int = 3600,
+    materialized_dataset_root: str = '/tmp/avalcd-shadow-train5-val2-v6',
+    initial_checkpoint_path: str | None = None,
+    epochs: int = 4,
+    patience: int = 2,
+    learning_rate: float = 0.00001,
+    negative_ratio: int | None = None,
+    focal_tversky_alpha: float = 0.45,
+    focal_tversky_beta: float = 0.55,
+    focal_tversky_gamma: float = 1.33,
+    f_beta: float = 0.75,
+    postprocess_min_component_area_px: int = 64,
+    postprocess_opening_size_px: int = 0,
+    threshold_grid: list[float] | None = None,
 ) -> dict[str, Any]:
     audit = _load_json(non_gpu_feasibility_audit, label='non_gpu_feasibility_audit')
     design = _load_json(candidate_design_report, label='candidate_design_report')
@@ -112,6 +142,19 @@ def build_candidate_authorization_request(
         train_request = _candidate_request_from_template(
             template_request,
             candidate_model_version=candidate_model_version,
+            materialized_dataset_root=materialized_dataset_root,
+            initial_checkpoint_path=initial_checkpoint_path,
+            epochs=epochs,
+            patience=patience,
+            learning_rate=learning_rate,
+            negative_ratio=negative_ratio,
+            focal_tversky_alpha=focal_tversky_alpha,
+            focal_tversky_beta=focal_tversky_beta,
+            focal_tversky_gamma=focal_tversky_gamma,
+            f_beta=f_beta,
+            postprocess_min_component_area_px=postprocess_min_component_area_px,
+            postprocess_opening_size_px=postprocess_opening_size_px,
+            threshold_grid=threshold_grid,
         )
 
     report = {
@@ -157,6 +200,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument('--modal-profile', default='sanjabh1103_limit30')
     parser.add_argument('--candidate-model-version', default='avalcd_swinunet_tiny_diff_research_gate_shadow_20260518_v6')
     parser.add_argument('--max-wait-seconds', type=int, default=3600)
+    parser.add_argument('--materialized-dataset-root', default='/tmp/avalcd-shadow-train5-val2-v6')
+    parser.add_argument('--initial-checkpoint-path')
+    parser.add_argument('--epochs', type=int, default=4)
+    parser.add_argument('--patience', type=int, default=2)
+    parser.add_argument('--learning-rate', type=float, default=0.00001)
+    parser.add_argument('--negative-ratio', type=int)
+    parser.add_argument('--focal-tversky-alpha', type=float, default=0.45)
+    parser.add_argument('--focal-tversky-beta', type=float, default=0.55)
+    parser.add_argument('--focal-tversky-gamma', type=float, default=1.33)
+    parser.add_argument('--f-beta', type=float, default=0.75)
+    parser.add_argument('--postprocess-min-component-area-px', type=int, default=64)
+    parser.add_argument('--postprocess-opening-size-px', type=int, default=0)
+    parser.add_argument('--threshold-grid', default='0.985,0.988,0.99,0.992,0.994,0.996,0.998,0.999')
     return parser.parse_args(argv)
 
 
@@ -171,6 +227,19 @@ def main(argv: list[str] | None = None) -> int:
         modal_profile=args.modal_profile,
         candidate_model_version=args.candidate_model_version,
         max_wait_seconds=args.max_wait_seconds,
+        materialized_dataset_root=args.materialized_dataset_root,
+        initial_checkpoint_path=args.initial_checkpoint_path,
+        epochs=args.epochs,
+        patience=args.patience,
+        learning_rate=args.learning_rate,
+        negative_ratio=args.negative_ratio,
+        focal_tversky_alpha=args.focal_tversky_alpha,
+        focal_tversky_beta=args.focal_tversky_beta,
+        focal_tversky_gamma=args.focal_tversky_gamma,
+        f_beta=args.f_beta,
+        postprocess_min_component_area_px=args.postprocess_min_component_area_px,
+        postprocess_opening_size_px=args.postprocess_opening_size_px,
+        threshold_grid=[float(item.strip()) for item in args.threshold_grid.split(',') if item.strip()],
     )
     print(json.dumps({
         'status': 'ok',
