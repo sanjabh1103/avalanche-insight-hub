@@ -102,9 +102,18 @@ class SnowSlideErrorDiagnosticsTests(unittest.TestCase):
             fn_scene = next(row for row in report['per_scene'] if row['scene_id'] == 'scene-fn-heavy')
             self.assertEqual(fp_scene['top_false_positive_components'][0]['pixel_count'], 3)
             self.assertEqual(fn_scene['top_false_negative_components'][0]['pixel_count'], 3)
+            self.assertEqual(
+                fp_scene['top_false_positive_components'][0]['pixel_bbox'],
+                {'row_min': 0, 'row_max_exclusive': 2, 'col_min': 0, 'col_max_exclusive': 2},
+            )
+            self.assertIn('pixel_centroid', fp_scene['top_false_positive_components'][0])
             self.assertTrue((output_root / 'sar_error_diagnostics.json').exists())
             self.assertTrue((output_root / 'sar_error_diagnostics.md').exists())
             self.assertTrue((output_root / 'next_candidate_decision.json').exists())
+            self.assertTrue((output_root / 'scene_review_packet.json').exists())
+            self.assertTrue((output_root / 'scene_review_packet.md').exists())
+            self.assertTrue((output_root / 'component_review_table.csv').exists())
+            self.assertTrue((output_root / 'snowslide_eval_only_recovery_report.json').exists())
 
     def test_recommendation_prefers_threshold_postprocess_when_metrics_are_close(self) -> None:
         recommendation = classify_recommendation(
@@ -204,6 +213,97 @@ class SnowSlideErrorDiagnosticsTests(unittest.TestCase):
         self.assertFalse(report['modal_gpu_call_launched'])
         self.assertFalse(decision['next_gpu_run_authorized'])
         self.assertFalse(decision['future_gpu_training_allowed'])
+
+    def test_eval_only_recovery_pass_requires_all_scenes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            materialization_dir = root / 'mat'
+            scenes = []
+            for scene_id in ('scene-a', 'scene-b'):
+                prediction = np.array([[0.99, 0.99], [0.99, 0.0]])
+                truth = np.array([[1, 1], [1, 0]])
+                scenes.append({
+                    'scene_id': scene_id,
+                    'prediction_mask': _write_mask(root / f'{scene_id}-prediction.npy', prediction),
+                    'truth_mask': _write_mask(root / f'{scene_id}-truth.npy', truth),
+                    'baseline_mask': _write_mask(root / f'{scene_id}-baseline.npy', np.zeros_like(truth)),
+                })
+                _write_result(materialization_dir, scene_id)
+            request_path = root / 'request.json'
+            acceptance_path = root / 'acceptance.json'
+            request_path.write_text(
+                json.dumps({
+                    'baseline_margin': 0.05,
+                    'prediction_threshold': 0.5,
+                    'scenes': scenes,
+                }),
+                encoding='utf-8',
+            )
+            acceptance_path.write_text(json.dumps({'decision': 'blocked_research_grade'}), encoding='utf-8')
+
+            build_diagnostics(
+                request_path=request_path,
+                acceptance_report_path=acceptance_path,
+                materialization_result_dir=materialization_dir,
+                output_root=root / 'out',
+                recovery_thresholds=[0.98],
+                recovery_component_areas=[0],
+                review_scene_ids=['scene-a'],
+            )
+            recovery = json.loads((root / 'out' / 'snowslide_eval_only_recovery_report.json').read_text(encoding='utf-8'))
+
+        self.assertEqual(recovery['decision'], 'requires_fresh_final_holdout')
+        self.assertEqual(recovery['passing_candidate_count'], 1)
+        self.assertTrue(recovery['fresh_final_holdout_required'])
+        self.assertFalse(recovery['next_gpu_run_authorized'])
+
+    def test_targeted_scene_sensitivity_cannot_mark_acceptance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            materialization_dir = root / 'mat'
+            scenes = [
+                {
+                    'scene_id': 'target-good',
+                    'prediction_mask': _write_mask(root / 'target-prediction.npy', np.array([[0.99, 0.99], [0.99, 0.0]])),
+                    'truth_mask': _write_mask(root / 'target-truth.npy', np.array([[1, 1], [1, 0]])),
+                    'baseline_mask': _write_mask(root / 'target-baseline.npy', np.zeros((2, 2))),
+                },
+                {
+                    'scene_id': 'other-bad',
+                    'prediction_mask': _write_mask(root / 'other-prediction.npy', np.zeros((2, 2))),
+                    'truth_mask': _write_mask(root / 'other-truth.npy', np.ones((2, 2))),
+                    'baseline_mask': _write_mask(root / 'other-baseline.npy', np.zeros((2, 2))),
+                },
+            ]
+            for scene in scenes:
+                _write_result(materialization_dir, scene['scene_id'])
+            request_path = root / 'request.json'
+            acceptance_path = root / 'acceptance.json'
+            request_path.write_text(
+                json.dumps({
+                    'baseline_margin': 0.05,
+                    'prediction_threshold': 0.5,
+                    'scenes': scenes,
+                }),
+                encoding='utf-8',
+            )
+            acceptance_path.write_text(json.dumps({'decision': 'blocked_research_grade'}), encoding='utf-8')
+
+            build_diagnostics(
+                request_path=request_path,
+                acceptance_report_path=acceptance_path,
+                materialization_result_dir=materialization_dir,
+                output_root=root / 'out',
+                recovery_thresholds=[0.98],
+                recovery_component_areas=[0],
+                review_scene_ids=['target-good'],
+            )
+            recovery = json.loads((root / 'out' / 'snowslide_eval_only_recovery_report.json').read_text(encoding='utf-8'))
+
+        self.assertEqual(recovery['decision'], 'blocked_research_grade')
+        self.assertFalse(recovery['targeted_scene_sensitivity']['acceptance_allowed'])
+        self.assertTrue(recovery['targeted_scene_sensitivity']['best_candidate']['research_grade_floor_met'] is False)
+        self.assertEqual(recovery['targeted_scene_sensitivity']['best_candidate']['scope'], 'targeted_scene_sensitivity')
 
 
 if __name__ == '__main__':
