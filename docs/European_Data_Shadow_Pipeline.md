@@ -31,6 +31,7 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | Phase 3 SAR candidate authorization | `backend/scripts/build_sar_candidate_authorization_request.py` | Converts an approved candidate design into a bounded single-run Modal training request with explicit GPU authorization and cost guard fields. |
 | Phase 4 AvalCD first gate | `backend/scripts/build_avalcd_first_gate_plan.py` | Builds the scene-blended AvalCD evaluation request from a candidate checkpoint and records pass/fail before any SnowSlide work. |
 | Phase 0-7 cross-verification | `backend/scripts/build_phase0_7_cross_verification_report.py` | Consolidates Phase 0-6 artifacts, writes the v6 transfer-failure addendum, and fails Phase 7 closed unless SnowSlide and fresh-final gates are ready. |
+| Phase 7 unblock reattempt packet | `backend/scripts/build_phase7_unblock_reattempt_packet.py` | Records the two valid forward paths: reviewed SOTA checkpoint evaluation if a direct compatible checkpoint exists, otherwise a design-only v8 candidate packet plus a Claude 4.7 adversarial-review prompt. |
 | SAR promotion acceptance guard | `backend/sar_release_promote.py`, `backend/scripts/run_authoritative_release_gate.py` | Prevents SAR promotion from `beats_baseline=true` alone; promotion now requires an attached accepted SnowSlide research-grade report. |
 | Modal cost guard | `backend/scripts/modal_cost_guard.py` | Reasserts zero warm containers for GPU Modal functions so GPU is used only when a job is running. |
 
@@ -42,7 +43,7 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | Swiss SPOT6 24,778 outlines | 4.5 | Local polygon staging, archive checksums, fixed event dates, bbox extraction, and extreme-event split reporting implemented. | Download/checksum EnviDat exports only after license review; keep extreme-event split separate from normal-season validation. |
 | French EPA/CLPA | 4.5 | EPA dated-event staging, CLPA path-prior staging, and observability-bias audit reporting implemented. | Verify avalanches.fr export terms and field schema before staging real exports. |
 | Swiss weather/snowpack/danger ratings | 4.0 | Local API/export staging, feature refs, danger-rating records, and calibration-slice reporting implemented. | Forecast ratings remain benchmark/context labels, not observed avalanche occurrence truth. |
-| AvalCD | 4.0 | Local scene/archive staging, corrected region keys, `sar_training_manifest_v1` emission, patch-level SAR metrics, scene-blended SAR checkpoint evaluation, gated SnowSlide dry-run execution, research-grade acceptance reporting, and promotion guard tightening implemented. | v6 passed the Phase 4 AvalCD scene-blended first gate, but failed Phase 5 SnowSlide research-grade qualification. Phase 6 fresh-final-holdout work is blocked until SnowSlide passes; production scoring remains blocked. |
+| AvalCD | 4.0 | Local scene/archive staging, corrected region keys, `sar_training_manifest_v1` emission, patch-level SAR metrics, scene-blended SAR checkpoint evaluation, gated SnowSlide dry-run execution, research-grade acceptance reporting, and promotion guard tightening implemented. | v7 passed the Phase 4 AvalCD scene-blended first gate, but failed Phase 5 SnowSlide research-grade qualification. Phase 6 fresh-final-holdout work is blocked until SnowSlide passes; production scoring remains blocked. |
 | SLF accident datasets | 3.0 | Accident export staging, uncertainty/casualty metadata, and accident-only bias audit reporting implemented. | Accident frequency remains blocked from avalanche occurrence-frequency training. |
 | EAWS/SLF bulletins | 2.5 | Bulletin/context staging and warning-semantics audit reporting implemented. | Bulletin text and danger scales remain context/calibration surfaces only. |
 
@@ -614,6 +615,34 @@ SnowSlide v7 was materialized for all seven held-out scenes with the exact AvalC
 The v7 integrity audit classifies the selected-rule result as `blocked_threshold_calibration_failure`: no pixels pass the AvalCD-selected threshold, but lower thresholds do produce positives. The v7 no-GPU threshold/postprocess recovery sweep still found `passing_candidate_count=0`. Its best all-scene candidate used threshold `0.98` and component area `128`; it reached precision `0.6332`, recall `0.5531`, F1 `0.5904`, and false-positive rate `0.001681`, so it still fails the precision and F1 research-grade floors.
 
 Current v7 decision: `blocked_research_grade`. Phase 6 remains `blocked_pending_snowslide_research_grade`. Phase 7 remains not ready. No fresh final holdout, promotion, public scoring change, or further GPU run is authorized by this checkpoint.
+
+## Phase 7 Unblock Reattempt Packet
+
+The honest Phase 7 blocker remains valid. The two acceptable forward paths are now captured by a reproducible packet:
+
+```bash
+python3 -m backend.scripts.build_phase7_unblock_reattempt_packet
+```
+
+This writes ignored operator artifacts under:
+
+```text
+backend/artifacts/european-shadow-qualification/phase7-unblock-reattempt-2026-05-18/
+```
+
+Current generated decision is `one_bounded_v8_candidate_warranted`, but `next_gpu_run_authorized=false`. The packet records:
+
+| Path | Current status | Meaning |
+|---|---|---|
+| Reviewed SOTA checkpoint evaluation | `sota_checkpoint_unavailable` | Public AvalCD code documents training/inference and Zenodo exposes the dataset, but no reviewed direct HTTPS checkpoint URL compatible with `swinunet_tiny_diff` or `resnet34_unet` is available from the checked sources. |
+| SnowSlide calibration bridge | Tried and failed | The v7 non-GPU sweep found no all-seven-scene candidate that passes precision, recall, F1, and false-positive floors. |
+| v8 candidate design | `bounded_v8_candidate_design_recommended` | Design-only artifact targets SnowSlide domain calibration and probability-scale transfer from the v7 checkpoint. It does not authorize GPU work. |
+| Claude 4.7 adversarial review | Prompt generated | `claude_47_adversarial_review_prompt.md` asks for an independent audit of implementation bugs, SOTA availability, scientific floors, and whether one bounded v8 candidate is justified. |
+| Fresh final holdout | Blocked | It remains premature until SnowSlide research-grade first passes. |
+
+The SOTA search decision is intentionally strict: `backend/scripts/fetch_sota_sar_weights.py` must only be used after a direct `https://...` checkpoint URL, license note, and compatible model family are reviewed. HTML pages, generic SAM checkpoints, dataset-only Zenodo records, or unreviewed files are not accepted as model evidence.
+
+The v8 design-only checkpoint uses initial checkpoint `/artifacts/20260518T124829Z/sar_model.pt` and proposes a future bounded candidate that targets probability calibration and false-positive control. It must still go through a separate candidate authorization request before any Modal GPU run, then AvalCD scene-blended first, then SnowSlide research-grade, then fresh final holdout before Phase 7 review.
 
 Any future successful candidate must pass in this order:
 
