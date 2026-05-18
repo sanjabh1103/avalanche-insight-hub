@@ -154,7 +154,20 @@ def run_remote_train_sar_unet(
 ) -> dict[str, Any]:
     if volume_reload is not None:
         volume_reload()
-    report = run_train_sar_unet(payload, artifact_root=artifact_root, device=device)
+
+    progress_callback: Callable[[dict[str, Any]], None] | None = None
+    if volume_commit is not None:
+        def _commit_progress(_: dict[str, Any]) -> None:
+            volume_commit()
+
+        progress_callback = _commit_progress
+
+    report = run_train_sar_unet(
+        payload,
+        artifact_root=artifact_root,
+        device=device,
+        progress_callback=progress_callback,
+    )
     if volume_commit is not None:
         volume_commit()
     return report

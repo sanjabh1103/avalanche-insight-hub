@@ -788,11 +788,39 @@ class ModalWorkerAppTests(unittest.TestCase):
         self.assertEqual(result['status'], 'ok')
         self.assertEqual(result['candidate_model_version'], 'shadow-v2')
         self.assertEqual(calls, ['reload', 'commit'])
-        run_train_mock.assert_called_once_with(
-            {'training_manifest_path': 'sar-data/train.json'},
-            artifact_root=Path('/artifacts'),
-            device='cuda',
-        )
+        run_train_mock.assert_called_once()
+        _, kwargs = run_train_mock.call_args
+        self.assertEqual(kwargs['artifact_root'], Path('/artifacts'))
+        self.assertEqual(kwargs['device'], 'cuda')
+        self.assertTrue(callable(kwargs['progress_callback']))
+
+    def test_run_remote_train_sar_unet_commits_volume_on_progress_callback(self) -> None:
+        calls: list[str] = []
+
+        def _reload() -> None:
+            calls.append('reload')
+
+        def _commit() -> None:
+            calls.append('commit')
+
+        def _run_train(payload: dict[str, object], **kwargs: object) -> dict[str, object]:
+            progress_callback = kwargs.get('progress_callback')
+            self.assertTrue(callable(progress_callback))
+            progress_callback({'phase': 'initializing'})
+            progress_callback({'phase': 'materializing_dataset'})
+            return {'status': 'ok', 'candidate_model_version': 'shadow-progress'}
+
+        with patch('backend.modal_worker_app.run_train_sar_unet', side_effect=_run_train):
+            result = run_remote_train_sar_unet(
+                {'training_manifest_path': 'sar-data/train.json'},
+                artifact_root=Path('/artifacts'),
+                device='cuda',
+                volume_reload=_reload,
+                volume_commit=_commit,
+            )
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(calls, ['reload', 'commit', 'commit', 'commit'])
 
     @patch('backend.modal_worker_app.evaluate_sar_checkpoint', return_value={'status': 'ok', 'quality_gate': {'passed': True}})
     def test_run_remote_evaluate_sar_checkpoint_reloads_and_commits_volume(self, evaluate_mock) -> None:

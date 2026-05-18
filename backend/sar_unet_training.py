@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import random
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import torch
@@ -37,6 +39,9 @@ DEFAULT_MAX_VALIDATION_POSITIVE_RATE_ABSOLUTE = 0.15
 DEFAULT_POSTPROCESS_RECALL_FLOOR = 0.50
 EUROPEAN_SAR_PREDICTION_ARTIFACT_VERSION = 'european_sar_prediction_artifact_v1'
 SAR_VALIDATION_ERROR_DIAGNOSTICS_VERSION = 'sar_validation_error_diagnostics_v1'
+TRAIN_SAR_UNET_STATUS_VERSION = 'train_sar_unet_status_v1'
+TRAIN_SAR_UNET_ERROR_VERSION = 'train_sar_unet_error_v1'
+TrainingProgressCallback = Callable[[dict[str, Any]], None]
 
 
 class DiceLoss(nn.Module):
@@ -150,10 +155,64 @@ def _set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 def _timestamp_slug() -> str:
     from datetime import datetime, timezone
 
     return datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+
+
+def _request_hash(request: dict[str, Any]) -> str:
+    encoded = json.dumps(request, sort_keys=True, default=str, separators=(',', ':')).encode('utf-8')
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _write_train_status(
+    *,
+    artifact_dir: Path,
+    phase: str,
+    config: TrainingConfig,
+    request_hash: str,
+    started_at_monotonic: float,
+    dataset_root: Path,
+    training_manifest_source: Any,
+    dataset_audit: dict[str, Any] | None = None,
+    epoch: int | None = None,
+    epochs_completed: int | None = None,
+    extra: dict[str, Any] | None = None,
+    failure_reason: str | None = None,
+    progress_callback: TrainingProgressCallback | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        'version': TRAIN_SAR_UNET_STATUS_VERSION,
+        'phase': phase,
+        'candidate_model_version': config.candidate_model_version,
+        'model_family': config.model_family,
+        'request_hash': request_hash,
+        'artifact_dir': str(artifact_dir),
+        'materialized_dataset_root': str(dataset_root),
+        'training_manifest_ref': str(training_manifest_source),
+        'epochs_requested': int(config.epochs),
+        'elapsed_seconds': round(time.monotonic() - started_at_monotonic, 3),
+        'last_update_timestamp': _utc_now_iso(),
+    }
+    if dataset_audit is not None:
+        payload['dataset_audit'] = dataset_audit
+    if epoch is not None:
+        payload['epoch'] = int(epoch)
+    if epochs_completed is not None:
+        payload['epochs_completed'] = int(epochs_completed)
+    if failure_reason:
+        payload['failure_reason'] = str(failure_reason)
+    if extra:
+        payload.update(extra)
+    dump_json(artifact_dir / 'train_sar_unet_status.json', payload)
+    if progress_callback is not None:
+        progress_callback(payload)
+    return payload
 
 
 def _loss_from_name(
@@ -1584,6 +1643,7 @@ def train_sar_unet(
     *,
     artifact_root: Path,
     device: str = 'cpu',
+    progress_callback: TrainingProgressCallback | None = None,
 ) -> dict[str, Any]:
     if not torch:
         raise RuntimeError('torch is required for SAR training')
@@ -1595,208 +1655,402 @@ def train_sar_unet(
     artifact_dir = create_artifact_dir(artifact_root)
     dataset_root = _materialized_dataset_root(request, artifact_dir)
     seed = int(request.get('seed') or 42)
+    request_hash = _request_hash(request)
+    started_at_monotonic = time.monotonic()
     _set_seed(seed)
-
-    dataset_audit = materialize_sar_training_dataset(
-        manifest_source=training_manifest_source,
-        output_root=dataset_root,
-        patch_size=config.patch_size,
-        stride=config.stride,
-    )
-
-    train_dataset = SarPatchDataset(dataset_root, split='train', augment=True)
-    normalization = compute_sar_normalization(train_dataset)
-    val_dataset = SarPatchDataset(dataset_root, split='val', normalization=normalization, augment=False)
-    train_dataset.normalization = normalization
-    sampler = BalancedPositivePatchSampler(
-        train_dataset,
-        negative_ratio=int(request.get('negative_ratio') or 1),
-        seed=seed,
-    )
-    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, sampler=sampler, num_workers=0)
-    val_loader = DataLoader(val_dataset, batch_size=max(1, config.batch_size), shuffle=False, num_workers=0)
-
-    model = build_model_architecture(config.model_family, image_size=config.patch_size).to(device)
-    initial_checkpoint_path = None
-    raw_initial_checkpoint = request.get('initial_checkpoint_path')
-    if isinstance(raw_initial_checkpoint, str) and raw_initial_checkpoint.strip():
-        initial_checkpoint_path = Path(raw_initial_checkpoint.strip()).expanduser()
-    initial_checkpoint = _load_initial_checkpoint(
-        model,
-        checkpoint_path=initial_checkpoint_path,
-        device=device,
-    )
-
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate, weight_decay=1e-4)
-    criterion = _loss_from_name(
-        config.loss_name,
-        focal_tversky_alpha=config.focal_tversky_alpha,
-        focal_tversky_beta=config.focal_tversky_beta,
-        focal_tversky_gamma=config.focal_tversky_gamma,
-    ).to(device)
-    best_validation: dict[str, Any] | None = None
-    best_state_dict: dict[str, Any] | None = None
-    epochs_without_improvement = 0
+    dataset_audit: dict[str, Any] | None = None
     train_loss_history: list[float] = []
     val_loss_history: list[float] = []
 
-    for epoch in range(config.epochs):
-        train_loss = _train_one_epoch(
-            train_loader,
-            model,
-            device=device,
-            optimizer=optimizer,
-            criterion=criterion,
+    try:
+        _write_train_status(
+            artifact_dir=artifact_dir,
+            phase='initializing',
+            config=config,
+            request_hash=request_hash,
+            started_at_monotonic=started_at_monotonic,
+            dataset_root=dataset_root,
+            training_manifest_source=training_manifest_source,
+            progress_callback=progress_callback,
         )
-        validation = _validate(
-            val_loader,
-            model,
-            device=device,
-            criterion=criterion,
-            threshold_grid=config.threshold_grid,
-            f_beta=config.f_beta,
-            precision_floor=config.precision_floor,
-            postprocess=config.postprocess,
+        _write_train_status(
+            artifact_dir=artifact_dir,
+            phase='materializing_dataset',
+            config=config,
+            request_hash=request_hash,
+            started_at_monotonic=started_at_monotonic,
+            dataset_root=dataset_root,
+            training_manifest_source=training_manifest_source,
+            progress_callback=progress_callback,
         )
-        train_loss_history.append(float(train_loss))
-        val_loss_history.append(float(validation['loss']))
-        if best_validation is None or float(validation['auprc']) > float(best_validation['auprc']):
-            best_validation = validation
-            best_state_dict = {key: value.detach().cpu() for key, value in model.state_dict().items()}
-            epochs_without_improvement = 0
-        else:
-            epochs_without_improvement += 1
+        dataset_audit = materialize_sar_training_dataset(
+            manifest_source=training_manifest_source,
+            output_root=dataset_root,
+            patch_size=config.patch_size,
+            stride=config.stride,
+        )
+
+        _write_train_status(
+            artifact_dir=artifact_dir,
+            phase='loading_datasets',
+            config=config,
+            request_hash=request_hash,
+            started_at_monotonic=started_at_monotonic,
+            dataset_root=dataset_root,
+            training_manifest_source=training_manifest_source,
+            dataset_audit=dataset_audit,
+            progress_callback=progress_callback,
+        )
+        train_dataset = SarPatchDataset(dataset_root, split='train', augment=True)
+        _write_train_status(
+            artifact_dir=artifact_dir,
+            phase='computing_normalization',
+            config=config,
+            request_hash=request_hash,
+            started_at_monotonic=started_at_monotonic,
+            dataset_root=dataset_root,
+            training_manifest_source=training_manifest_source,
+            dataset_audit=dataset_audit,
+            progress_callback=progress_callback,
+        )
+        normalization = compute_sar_normalization(train_dataset)
+        val_dataset = SarPatchDataset(dataset_root, split='val', normalization=normalization, augment=False)
+        train_dataset.normalization = normalization
+        sampler = BalancedPositivePatchSampler(
+            train_dataset,
+            negative_ratio=int(request.get('negative_ratio') or 1),
+            seed=seed,
+        )
+        train_loader = DataLoader(train_dataset, batch_size=config.batch_size, sampler=sampler, num_workers=0)
+        val_loader = DataLoader(val_dataset, batch_size=max(1, config.batch_size), shuffle=False, num_workers=0)
+
+        _write_train_status(
+            artifact_dir=artifact_dir,
+            phase='loading_initial_checkpoint',
+            config=config,
+            request_hash=request_hash,
+            started_at_monotonic=started_at_monotonic,
+            dataset_root=dataset_root,
+            training_manifest_source=training_manifest_source,
+            dataset_audit=dataset_audit,
+            progress_callback=progress_callback,
+        )
+        model = build_model_architecture(config.model_family, image_size=config.patch_size).to(device)
+        initial_checkpoint_path = None
+        raw_initial_checkpoint = request.get('initial_checkpoint_path')
+        if isinstance(raw_initial_checkpoint, str) and raw_initial_checkpoint.strip():
+            initial_checkpoint_path = Path(raw_initial_checkpoint.strip()).expanduser()
+        initial_checkpoint = _load_initial_checkpoint(
+            model,
+            checkpoint_path=initial_checkpoint_path,
+            device=device,
+        )
+
+        optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate, weight_decay=1e-4)
+        criterion = _loss_from_name(
+            config.loss_name,
+            focal_tversky_alpha=config.focal_tversky_alpha,
+            focal_tversky_beta=config.focal_tversky_beta,
+            focal_tversky_gamma=config.focal_tversky_gamma,
+        ).to(device)
+        best_validation: dict[str, Any] | None = None
+        best_state_dict: dict[str, Any] | None = None
+        epochs_without_improvement = 0
+
+        for epoch in range(config.epochs):
+            epoch_number = epoch + 1
+            _write_train_status(
+                artifact_dir=artifact_dir,
+                phase='epoch_started',
+                config=config,
+                request_hash=request_hash,
+                started_at_monotonic=started_at_monotonic,
+                dataset_root=dataset_root,
+                training_manifest_source=training_manifest_source,
+                dataset_audit=dataset_audit,
+                epoch=epoch_number,
+                epochs_completed=len(train_loss_history),
+                progress_callback=progress_callback,
+            )
+            train_loss = _train_one_epoch(
+                train_loader,
+                model,
+                device=device,
+                optimizer=optimizer,
+                criterion=criterion,
+            )
+            _write_train_status(
+                artifact_dir=artifact_dir,
+                phase='validating',
+                config=config,
+                request_hash=request_hash,
+                started_at_monotonic=started_at_monotonic,
+                dataset_root=dataset_root,
+                training_manifest_source=training_manifest_source,
+                dataset_audit=dataset_audit,
+                epoch=epoch_number,
+                epochs_completed=len(train_loss_history),
+                extra={'train_loss': float(train_loss)},
+                progress_callback=progress_callback,
+            )
+            validation = _validate(
+                val_loader,
+                model,
+                device=device,
+                criterion=criterion,
+                threshold_grid=config.threshold_grid,
+                f_beta=config.f_beta,
+                precision_floor=config.precision_floor,
+                postprocess=config.postprocess,
+            )
+            train_loss_history.append(float(train_loss))
+            val_loss_history.append(float(validation['loss']))
+            if best_validation is None or float(validation['auprc']) > float(best_validation['auprc']):
+                best_validation = validation
+                best_state_dict = {key: value.detach().cpu() for key, value in model.state_dict().items()}
+                epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
+            _write_train_status(
+                artifact_dir=artifact_dir,
+                phase='epoch_completed',
+                config=config,
+                request_hash=request_hash,
+                started_at_monotonic=started_at_monotonic,
+                dataset_root=dataset_root,
+                training_manifest_source=training_manifest_source,
+                dataset_audit=dataset_audit,
+                epoch=epoch_number,
+                epochs_completed=len(train_loss_history),
+                extra={
+                    'train_loss': float(train_loss),
+                    'validation_loss': float(validation['loss']),
+                    'validation_auprc': float(validation['auprc']),
+                    'best_validation_auprc': float(best_validation['auprc']) if best_validation is not None else None,
+                    'epochs_without_improvement': int(epochs_without_improvement),
+                },
+                progress_callback=progress_callback,
+            )
             if epochs_without_improvement >= config.patience:
                 break
 
-    if best_validation is None or best_state_dict is None:
-        raise RuntimeError('SAR training did not produce a validation candidate')
+        if best_validation is None or best_state_dict is None:
+            raise RuntimeError('SAR training did not produce a validation candidate')
 
-    checkpoint_path = artifact_dir / 'sar_model.pt'
-    model.load_state_dict(best_state_dict, strict=True)
-    scene_breakdown = _scene_breakdown(
-        val_loader,
-        model,
-        device=device,
-        threshold=float(best_validation['best_threshold']),
-        min_component_area_px=int(best_validation['best_metrics'].get('postprocess_min_component_area_px') or 0),
-        opening_size_px=int(best_validation['best_metrics'].get('postprocess_opening_size_px') or 0),
-    )
-    quality_gate = _validation_quality_gate(
-        scene_breakdown,
-        max_positive_rate_ratio=config.max_validation_positive_rate_ratio,
-        max_positive_rate_absolute=config.max_validation_positive_rate_absolute,
-        threshold_metrics=best_validation['threshold_metrics'],
-        validation_metrics=best_validation['best_metrics'],
-        precision_floor=config.precision_floor,
-        recall_floor=(
-            config.postprocess.recall_floor
-            if config.postprocess is not None
-            and config.postprocess.enabled
-            and config.postprocess.apply_to_threshold_selection
-            else None
-        ),
-        selection_floor_met=best_validation.get('precision_floor_met'),
-    )
-    checkpoint_metadata = {
-        'model_family': config.model_family,
-        'candidate_model_version': config.candidate_model_version,
-        'dataset_version': dataset_audit['dataset_version'],
-        'train_events': dataset_audit['train_events'],
-        'val_events': dataset_audit['val_events'],
-        'loss': config.loss_name,
-        'loss_parameters': {
-            'focal_tversky_alpha': config.focal_tversky_alpha,
-            'focal_tversky_beta': config.focal_tversky_beta,
-            'focal_tversky_gamma': config.focal_tversky_gamma,
-        },
-        'best_threshold': float(best_validation['best_threshold']),
-        'validation_metrics': best_validation['best_metrics'],
-        'validation_auprc': float(best_validation['auprc']),
-        'postprocess_evaluation': best_validation['postprocess_evaluation'],
-        'initial_checkpoint': initial_checkpoint,
-        'normalization': {
-            'img_mean': normalization['img_mean'].tolist(),
-            'img_std': normalization['img_std'].tolist(),
-        },
-    }
-    _save_checkpoint(model, checkpoint_path=checkpoint_path, metadata=checkpoint_metadata)
-    _assert_clean_checkpoint_load(
-        checkpoint_path,
-        model_family=config.model_family,
-        patch_size=config.patch_size,
-        device=device,
-    )
-
-    status = 'ok' if quality_gate['passed'] else 'completed_with_validation_gate_failure'
-    metrics_payload = {
-        'status': status,
-        'evaluation_mode': 'patch_level',
-        'candidate_model_version': config.candidate_model_version,
-        'model_family': config.model_family,
-        'patch_size': config.patch_size,
-        'stride': config.stride,
-        'epochs_requested': config.epochs,
-        'epochs_completed': len(train_loss_history),
-        'loss': config.loss_name,
-        'loss_parameters': {
-            'focal_tversky_alpha': config.focal_tversky_alpha,
-            'focal_tversky_beta': config.focal_tversky_beta,
-            'focal_tversky_gamma': config.focal_tversky_gamma,
-        },
-        'best_threshold': float(best_validation['best_threshold']),
-        'validation_auprc': float(best_validation['auprc']),
-        'validation_metrics': best_validation['best_metrics'],
-        'threshold_metrics': best_validation['threshold_metrics'],
-        'postprocess_evaluation': best_validation['postprocess_evaluation'],
-        'scene_breakdown': scene_breakdown,
-        'quality_gate': quality_gate,
-        'train_loss_history': train_loss_history,
-        'val_loss_history': val_loss_history,
-        'dataset_audit': dataset_audit,
-        'materialized_dataset_root': str(dataset_root),
-        'initial_checkpoint': initial_checkpoint,
-        'model_checkpoint_path': str(checkpoint_path),
-    }
-    prediction_artifact_path: str | None = None
-    if bool(request.get('export_validation_prediction_artifact')):
-        prediction_artifact = _build_validation_prediction_artifact(
-            request=request,
+        checkpoint_path = artifact_dir / 'sar_model.pt'
+        model.load_state_dict(best_state_dict, strict=True)
+        _write_train_status(
+            artifact_dir=artifact_dir,
+            phase='validating',
             config=config,
+            request_hash=request_hash,
+            started_at_monotonic=started_at_monotonic,
+            dataset_root=dataset_root,
+            training_manifest_source=training_manifest_source,
             dataset_audit=dataset_audit,
-            best_validation=best_validation,
-            scene_breakdown=scene_breakdown,
-            quality_gate=quality_gate,
+            epochs_completed=len(train_loss_history),
+            extra={'validation_stage': 'final_scene_breakdown'},
+            progress_callback=progress_callback,
         )
-        prediction_artifact_path = str(artifact_dir / 'european_sar_prediction_artifact.json')
-        dump_json(Path(prediction_artifact_path), prediction_artifact)
-        metrics_payload['sar_prediction_artifact_path'] = prediction_artifact_path
-        metrics_payload['sar_prediction_artifact'] = prediction_artifact
-    dump_json(artifact_dir / 'sar_training_metrics.json', metrics_payload)
-    report = {
-        'status': status,
-        'request_type': 'train_sar_unet',
-        'evaluation_mode': 'patch_level',
-        'artifact_dir': str(artifact_dir),
-        'candidate_model_version': config.candidate_model_version,
-        'model_family': config.model_family,
-        'model_checkpoint_path': str(checkpoint_path),
-        'best_threshold': float(best_validation['best_threshold']),
-        'validation_auprc': float(best_validation['auprc']),
-        'validation_metrics': best_validation['best_metrics'],
-        'postprocess_evaluation': best_validation['postprocess_evaluation'],
-        'quality_gate_passed': bool(quality_gate['passed']),
-        'blocked_gate': quality_gate['blocked_gate'],
-        'scene_gate_failures': quality_gate['failures'],
-        'dataset_version': dataset_audit['dataset_version'],
-        'train_events': dataset_audit['train_events'],
-        'val_events': dataset_audit['val_events'],
-        'materialized_dataset_root': str(dataset_root),
-    }
-    if prediction_artifact_path is not None:
-        report['sar_prediction_artifact_path'] = prediction_artifact_path
-    dump_json(artifact_dir / 'train_sar_unet_manifest.json', report)
-    return report
+        scene_breakdown = _scene_breakdown(
+            val_loader,
+            model,
+            device=device,
+            threshold=float(best_validation['best_threshold']),
+            min_component_area_px=int(best_validation['best_metrics'].get('postprocess_min_component_area_px') or 0),
+            opening_size_px=int(best_validation['best_metrics'].get('postprocess_opening_size_px') or 0),
+        )
+        quality_gate = _validation_quality_gate(
+            scene_breakdown,
+            max_positive_rate_ratio=config.max_validation_positive_rate_ratio,
+            max_positive_rate_absolute=config.max_validation_positive_rate_absolute,
+            threshold_metrics=best_validation['threshold_metrics'],
+            validation_metrics=best_validation['best_metrics'],
+            precision_floor=config.precision_floor,
+            recall_floor=(
+                config.postprocess.recall_floor
+                if config.postprocess is not None
+                and config.postprocess.enabled
+                and config.postprocess.apply_to_threshold_selection
+                else None
+            ),
+            selection_floor_met=best_validation.get('precision_floor_met'),
+        )
+        checkpoint_metadata = {
+            'model_family': config.model_family,
+            'candidate_model_version': config.candidate_model_version,
+            'dataset_version': dataset_audit['dataset_version'],
+            'train_events': dataset_audit['train_events'],
+            'val_events': dataset_audit['val_events'],
+            'loss': config.loss_name,
+            'loss_parameters': {
+                'focal_tversky_alpha': config.focal_tversky_alpha,
+                'focal_tversky_beta': config.focal_tversky_beta,
+                'focal_tversky_gamma': config.focal_tversky_gamma,
+            },
+            'best_threshold': float(best_validation['best_threshold']),
+            'validation_metrics': best_validation['best_metrics'],
+            'validation_auprc': float(best_validation['auprc']),
+            'postprocess_evaluation': best_validation['postprocess_evaluation'],
+            'initial_checkpoint': initial_checkpoint,
+            'normalization': {
+                'img_mean': normalization['img_mean'].tolist(),
+                'img_std': normalization['img_std'].tolist(),
+            },
+        }
+        _write_train_status(
+            artifact_dir=artifact_dir,
+            phase='saving_checkpoint',
+            config=config,
+            request_hash=request_hash,
+            started_at_monotonic=started_at_monotonic,
+            dataset_root=dataset_root,
+            training_manifest_source=training_manifest_source,
+            dataset_audit=dataset_audit,
+            epochs_completed=len(train_loss_history),
+            progress_callback=progress_callback,
+        )
+        _save_checkpoint(model, checkpoint_path=checkpoint_path, metadata=checkpoint_metadata)
+        _assert_clean_checkpoint_load(
+            checkpoint_path,
+            model_family=config.model_family,
+            patch_size=config.patch_size,
+            device=device,
+        )
+
+        status = 'ok' if quality_gate['passed'] else 'completed_with_validation_gate_failure'
+        metrics_payload = {
+            'status': status,
+            'evaluation_mode': 'patch_level',
+            'candidate_model_version': config.candidate_model_version,
+            'model_family': config.model_family,
+            'patch_size': config.patch_size,
+            'stride': config.stride,
+            'epochs_requested': config.epochs,
+            'epochs_completed': len(train_loss_history),
+            'loss': config.loss_name,
+            'loss_parameters': {
+                'focal_tversky_alpha': config.focal_tversky_alpha,
+                'focal_tversky_beta': config.focal_tversky_beta,
+                'focal_tversky_gamma': config.focal_tversky_gamma,
+            },
+            'best_threshold': float(best_validation['best_threshold']),
+            'validation_auprc': float(best_validation['auprc']),
+            'validation_metrics': best_validation['best_metrics'],
+            'threshold_metrics': best_validation['threshold_metrics'],
+            'postprocess_evaluation': best_validation['postprocess_evaluation'],
+            'scene_breakdown': scene_breakdown,
+            'quality_gate': quality_gate,
+            'train_loss_history': train_loss_history,
+            'val_loss_history': val_loss_history,
+            'dataset_audit': dataset_audit,
+            'materialized_dataset_root': str(dataset_root),
+            'initial_checkpoint': initial_checkpoint,
+            'model_checkpoint_path': str(checkpoint_path),
+        }
+        prediction_artifact_path: str | None = None
+        if bool(request.get('export_validation_prediction_artifact')):
+            prediction_artifact = _build_validation_prediction_artifact(
+                request=request,
+                config=config,
+                dataset_audit=dataset_audit,
+                best_validation=best_validation,
+                scene_breakdown=scene_breakdown,
+                quality_gate=quality_gate,
+            )
+            prediction_artifact_path = str(artifact_dir / 'european_sar_prediction_artifact.json')
+            dump_json(Path(prediction_artifact_path), prediction_artifact)
+            metrics_payload['sar_prediction_artifact_path'] = prediction_artifact_path
+            metrics_payload['sar_prediction_artifact'] = prediction_artifact
+        _write_train_status(
+            artifact_dir=artifact_dir,
+            phase='writing_metrics',
+            config=config,
+            request_hash=request_hash,
+            started_at_monotonic=started_at_monotonic,
+            dataset_root=dataset_root,
+            training_manifest_source=training_manifest_source,
+            dataset_audit=dataset_audit,
+            epochs_completed=len(train_loss_history),
+            extra={'status': status, 'quality_gate_passed': bool(quality_gate['passed'])},
+            progress_callback=progress_callback,
+        )
+        dump_json(artifact_dir / 'sar_training_metrics.json', metrics_payload)
+        report = {
+            'status': status,
+            'request_type': 'train_sar_unet',
+            'evaluation_mode': 'patch_level',
+            'artifact_dir': str(artifact_dir),
+            'candidate_model_version': config.candidate_model_version,
+            'model_family': config.model_family,
+            'model_checkpoint_path': str(checkpoint_path),
+            'best_threshold': float(best_validation['best_threshold']),
+            'validation_auprc': float(best_validation['auprc']),
+            'validation_metrics': best_validation['best_metrics'],
+            'postprocess_evaluation': best_validation['postprocess_evaluation'],
+            'quality_gate_passed': bool(quality_gate['passed']),
+            'blocked_gate': quality_gate['blocked_gate'],
+            'scene_gate_failures': quality_gate['failures'],
+            'dataset_version': dataset_audit['dataset_version'],
+            'train_events': dataset_audit['train_events'],
+            'val_events': dataset_audit['val_events'],
+            'materialized_dataset_root': str(dataset_root),
+        }
+        if prediction_artifact_path is not None:
+            report['sar_prediction_artifact_path'] = prediction_artifact_path
+        dump_json(artifact_dir / 'train_sar_unet_manifest.json', report)
+        _write_train_status(
+            artifact_dir=artifact_dir,
+            phase='completed',
+            config=config,
+            request_hash=request_hash,
+            started_at_monotonic=started_at_monotonic,
+            dataset_root=dataset_root,
+            training_manifest_source=training_manifest_source,
+            dataset_audit=dataset_audit,
+            epochs_completed=len(train_loss_history),
+            extra={'status': status, 'quality_gate_passed': bool(quality_gate['passed'])},
+            progress_callback=progress_callback,
+        )
+        return report
+    except Exception as exc:
+        error_payload = {
+            'version': TRAIN_SAR_UNET_ERROR_VERSION,
+            'status': 'failed',
+            'phase': 'failed',
+            'candidate_model_version': config.candidate_model_version,
+            'model_family': config.model_family,
+            'request_hash': request_hash,
+            'artifact_dir': str(artifact_dir),
+            'materialized_dataset_root': str(dataset_root),
+            'training_manifest_ref': str(training_manifest_source),
+            'dataset_audit': dataset_audit,
+            'epochs_requested': int(config.epochs),
+            'epochs_completed': len(train_loss_history),
+            'failure_reason': str(exc),
+            'error_type': type(exc).__name__,
+            'elapsed_seconds': round(time.monotonic() - started_at_monotonic, 3),
+            'last_update_timestamp': _utc_now_iso(),
+        }
+        dump_json(artifact_dir / 'train_sar_unet_error.json', error_payload)
+        try:
+            _write_train_status(
+                artifact_dir=artifact_dir,
+                phase='failed',
+                config=config,
+                request_hash=request_hash,
+                started_at_monotonic=started_at_monotonic,
+                dataset_root=dataset_root,
+                training_manifest_source=training_manifest_source,
+                dataset_audit=dataset_audit,
+                epochs_completed=len(train_loss_history),
+                extra={'status': 'failed', 'error_type': type(exc).__name__},
+                failure_reason=str(exc),
+                progress_callback=progress_callback,
+            )
+        except Exception:
+            pass
+        raise
 
 
 def build_cli_request(args: Any) -> dict[str, Any]:

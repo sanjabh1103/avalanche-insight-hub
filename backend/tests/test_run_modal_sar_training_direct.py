@@ -100,6 +100,91 @@ class RunModalSarTrainingDirectTests(unittest.TestCase):
             self.assertEqual(payload['function_name'], 'train_sar_unet_remote')
             self.assertIn('spend limit', payload['error'])
 
+    def test_main_async_records_function_call_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            request_path = root / 'request.json'
+            output_path = root / 'result.json'
+            request_path.write_text(json.dumps({
+                'training_manifest_path': '/artifacts/european-shadow-sar/manifest.json',
+                'source_key': 'avalcd_zenodo_v1',
+                'candidate_model_version': 'avalcd-shadow-async',
+                'license_review_id': 'license-review-unit',
+            }), encoding='utf-8')
+
+            function_call = SimpleNamespace(
+                object_id='fc-unit-123',
+                get=Mock(return_value={'status': 'ok', 'artifact_dir': '/artifacts/unit'}),
+            )
+            remote_function = Mock()
+            remote_function.spawn.return_value = function_call
+            fake_modal = SimpleNamespace(Function=SimpleNamespace(from_name=Mock(return_value=remote_function)))
+
+            with patch(
+                'backend.scripts.run_modal_sar_training_direct._load_modal_module',
+                return_value=fake_modal,
+            ), patch.dict(os.environ, {}, clear=True):
+                exit_code = main([
+                    '--modal-profile', 'sanjabh1103_limit30',
+                    '--request', str(request_path),
+                    '--output', str(output_path),
+                    '--async',
+                    '--max-wait-seconds', '12',
+                ])
+
+            payload = json.loads(output_path.read_text(encoding='utf-8'))
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(payload['status'], 'ok')
+            self.assertEqual(payload['function_call_id'], 'fc-unit-123')
+            self.assertEqual(payload['request_type'], 'train_sar_unet_direct_async')
+            remote_function.spawn.assert_called_once()
+            function_call.get.assert_called_once_with(timeout=12)
+
+    def test_main_async_timeout_cancels_and_writes_structured_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            request_path = root / 'request.json'
+            output_path = root / 'result.json'
+            request_path.write_text(json.dumps({
+                'training_manifest_path': '/artifacts/european-shadow-sar/manifest.json',
+                'source_key': 'avalcd_zenodo_v1',
+                'candidate_model_version': 'avalcd-shadow-timeout',
+                'license_review_id': 'license-review-unit',
+                'validation_scene_ids': ['livigno_20250318'],
+            }), encoding='utf-8')
+
+            function_call = SimpleNamespace(
+                object_id='fc-unit-timeout',
+                get=Mock(side_effect=TimeoutError('still running')),
+                cancel=Mock(),
+            )
+            remote_function = Mock()
+            remote_function.spawn.return_value = function_call
+            fake_modal = SimpleNamespace(Function=SimpleNamespace(from_name=Mock(return_value=remote_function)))
+
+            with patch(
+                'backend.scripts.run_modal_sar_training_direct._load_modal_module',
+                return_value=fake_modal,
+            ):
+                exit_code = main([
+                    '--modal-profile', 'sanjabh1103_limit30',
+                    '--request', str(request_path),
+                    '--output', str(output_path),
+                    '--async',
+                    '--max-wait-seconds', '1',
+                    '--cancel-on-timeout',
+                ])
+
+            payload = json.loads(output_path.read_text(encoding='utf-8'))
+            self.assertEqual(exit_code, 1)
+            self.assertEqual(payload['status'], 'blocked_remote_training_timeout')
+            self.assertEqual(payload['request_type'], 'train_sar_unet_direct_async')
+            self.assertEqual(payload['function_call_id'], 'fc-unit-timeout')
+            self.assertEqual(payload['candidate_model_version'], 'avalcd-shadow-timeout')
+            self.assertEqual(payload['evaluated_scene_ids'], ['livigno_20250318'])
+            self.assertTrue(payload['cancelled'])
+            function_call.cancel.assert_called_once_with(terminate_containers=True)
+
 
 if __name__ == '__main__':
     unittest.main()

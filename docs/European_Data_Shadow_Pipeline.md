@@ -457,6 +457,32 @@ The only approved next GPU step was a single bounded v5 fine-tune:
 
 That v5 direct Modal run did not produce a result artifact after an extended silent period. The active container was stopped to prevent unnecessary GPU spend, zero-warm autoscaler settings were reasserted, and `modal container list` was empty afterward. Treat v5 as `blocked_remote_training_stopped_for_cost_guard`, not as a model result.
 
+Before any future bounded GPU retry, use the observability-first path:
+
+```bash
+python3 -m backend.scripts.inspect_modal_sar_training_run \
+  --modal-profile sanjabh1103_limit30 \
+  --local-result backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/research-v5/train_sar_unet_result.json \
+  --artifact-dir /artifacts/20260518T022355Z \
+  --output backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/research-v5/modal_sar_training_inspection.json
+```
+
+New SAR training runs now write `train_sar_unet_status.json` as soon as the artifact directory exists, update it through materialization, dataset loading, normalization, checkpoint loading, epoch, validation, checkpoint, metrics, and terminal phases, and write `train_sar_unet_error.json` before re-raising failures. Modal training commits the artifact volume after every status update so a stalled run can be inspected while it is still running.
+
+Use bounded async execution for any approved retry:
+
+```bash
+python3 -m backend.scripts.run_modal_sar_training_direct \
+  --modal-profile sanjabh1103_limit30 \
+  --request backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/research-v5/train_sar_unet_request.json \
+  --output backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/research-v5/train_sar_unet_result.json \
+  --async \
+  --max-wait-seconds 3600 \
+  --cancel-on-timeout
+```
+
+The timeout path writes `blocked_remote_training_timeout`, records the Modal `function_call_id`, cancels with `terminate_containers=true`, and still requires the Modal cost guard and final container-list check. Do not run this retry in the current checkpoint; the current approved state is observability tooling only.
+
 Any future successful candidate must pass in this order:
 
 | Step | Required checkpoint |

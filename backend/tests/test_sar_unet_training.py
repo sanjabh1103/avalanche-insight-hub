@@ -125,6 +125,47 @@ class SarUnetTrainingTests(unittest.TestCase):
         self.assertTrue(gate['joint_floor_met'])
         self.assertEqual(gate['selected_threshold'], 0.995)
 
+    def test_train_sar_unet_writes_status_before_materialization_and_error_on_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            progress_events: list[dict[str, object]] = []
+
+            def _fail_materialization(**kwargs: object) -> dict[str, object]:
+                artifact_dir = Path(kwargs['output_root']).parent
+                status_path = artifact_dir / 'train_sar_unet_status.json'
+                self.assertTrue(status_path.exists())
+                status = json.loads(status_path.read_text(encoding='utf-8'))
+                self.assertEqual(status['phase'], 'materializing_dataset')
+                raise RuntimeError('materialization failed for unit test')
+
+            request = {
+                'training_manifest_path': '/artifacts/european-shadow-sar/missing.json',
+                'candidate_model_version': 'swin-shadow-unit-failure',
+                'model_family': 'swinunet_tiny_diff',
+                'patch_size': 4,
+                'stride': 4,
+            }
+
+            with patch('backend.sar_unet_training.materialize_sar_training_dataset', side_effect=_fail_materialization):
+                with self.assertRaisesRegex(RuntimeError, 'materialization failed'):
+                    train_sar_unet(
+                        request,
+                        artifact_root=root / 'artifacts',
+                        device='cpu',
+                        progress_callback=progress_events.append,
+                    )
+
+            artifact_dirs = [path for path in (root / 'artifacts').iterdir() if path.is_dir()]
+            self.assertEqual(len(artifact_dirs), 1)
+            status_payload = json.loads((artifact_dirs[0] / 'train_sar_unet_status.json').read_text(encoding='utf-8'))
+            error_payload = json.loads((artifact_dirs[0] / 'train_sar_unet_error.json').read_text(encoding='utf-8'))
+            self.assertEqual(status_payload['phase'], 'failed')
+            self.assertEqual(error_payload['status'], 'failed')
+            self.assertEqual(error_payload['error_type'], 'RuntimeError')
+            self.assertIn('materialization failed', error_payload['failure_reason'])
+            self.assertIn('initializing', [event['phase'] for event in progress_events])
+            self.assertIn('materializing_dataset', [event['phase'] for event in progress_events])
+
     def test_postprocess_binary_mask_noops_when_disabled(self) -> None:
         predictions = np.array([[True, False], [True, True]])
 
@@ -300,10 +341,12 @@ class SarUnetTrainingTests(unittest.TestCase):
 
             with patch('backend.sar_unet_training.build_model_architecture', side_effect=lambda *args, **kwargs: _TinyBiTemporalModel()), \
                     patch('backend.sar_unet_training._validation_quality_gate', return_value={'passed': True, 'blocked_gate': None, 'failures': []}):
+                progress_events: list[dict[str, object]] = []
                 report = train_sar_unet(
                     request,
                     artifact_root=root / 'artifacts',
                     device='cpu',
+                    progress_callback=progress_events.append,
                 )
 
             self.assertEqual(report['status'], 'ok')
@@ -320,6 +363,14 @@ class SarUnetTrainingTests(unittest.TestCase):
             self.assertGreaterEqual(report['best_threshold'], 0.05)
             self.assertLessEqual(report['best_threshold'], 0.95)
             self.assertTrue(Path(report['sar_prediction_artifact_path']).exists())
+            status_payload = json.loads((Path(report['artifact_dir']) / 'train_sar_unet_status.json').read_text(encoding='utf-8'))
+            self.assertEqual(status_payload['phase'], 'completed')
+            self.assertEqual(status_payload['candidate_model_version'], 'swin-shadow-unit-v1')
+            progress_phases = [event['phase'] for event in progress_events]
+            self.assertIn('initializing', progress_phases)
+            self.assertIn('epoch_started', progress_phases)
+            self.assertIn('writing_metrics', progress_phases)
+            self.assertEqual(progress_phases[-1], 'completed')
 
             checkpoint_payload = torch.load(report['model_checkpoint_path'], map_location='cpu')
             metadata = checkpoint_payload['metadata']

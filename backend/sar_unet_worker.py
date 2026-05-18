@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlparse
 
 import numpy as np
@@ -1814,12 +1814,14 @@ def run_train_sar_unet(
     *,
     artifact_root: Path,
     device: str = 'cpu',
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     artifact_root.mkdir(parents=True, exist_ok=True)
     return train_sar_unet(
         request,
         artifact_root=artifact_root,
         device=device,
+        progress_callback=progress_callback,
     )
 
 
