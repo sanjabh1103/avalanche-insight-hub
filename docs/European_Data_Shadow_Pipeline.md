@@ -25,6 +25,7 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | SnowSlide threshold sweep | `backend/scripts/run_snowslide_threshold_sweep.py` | Runs evaluation-only threshold/component-area screening against existing held-out masks before any new GPU training. Passing sweep candidates still require AvalCD recheck and fresh final hold-out approval. |
 | SnowSlide v5 diagnostics | `backend/scripts/build_snowslide_error_diagnostics.py` | Builds per-scene v5 FP/FN diagnostics, component review packets, and an evaluation-only recovery report from existing masks without launching Modal/GPU work. |
 | SnowSlide manual review | `backend/scripts/build_snowslide_manual_label_review_packet.py`, `backend/scripts/resolve_snowslide_manual_label_review.py` | Converts v5 component-review actions into a closed-choice manual scene/label review worksheet and resolves completed decisions without authorizing GPU work or production scoring. |
+| SnowSlide candidate design | `backend/scripts/build_snowslide_candidate_design_report.py` | Builds a no-GPU `candidate_design_report_v1` from v5 diagnostics, manual review outcome, AvalCD/SnowSlide metrics, and evaluation-only recovery evidence. |
 | SAR promotion acceptance guard | `backend/sar_release_promote.py`, `backend/scripts/run_authoritative_release_gate.py` | Prevents SAR promotion from `beats_baseline=true` alone; promotion now requires an attached accepted SnowSlide research-grade report. |
 | Modal cost guard | `backend/scripts/modal_cost_guard.py` | Reasserts zero warm containers for GPU Modal functions so GPU is used only when a job is running. |
 
@@ -480,6 +481,14 @@ python3 -m backend.scripts.resolve_snowslide_manual_label_review
 The resolver writes `manual_label_review_outcome.json` / `.md`. It returns `review_incomplete` while any component is still pending. If source labels are suspect, the next step is a label/source remediation checkpoint. If labels are validated and the failure is model-side, the resolver can set `future_candidate_design_warranted=true`, but it still keeps `next_gpu_run_authorized=false`; any GPU work requires a separate explicit candidate-design checkpoint.
 
 Current manual review outcome: the 30 dominant v5 components have been completed as an artifact-only review that treats the existing SnowSlide truth masks as authoritative. The resolver now emits `decision=labels_valid_model_gap`, `future_candidate_design_warranted=true`, `production_scoring_allowed=false`, and `next_gpu_run_authorized=false`. This is not a research-grade acceptance result and does not authorize training; it only moves the next safe checkpoint to a separate candidate-design plan. Re-running the packet builder preserves completed worksheet decisions by `action_id`.
+
+Build the no-GPU candidate design dossier:
+
+```bash
+python3 -m backend.scripts.build_snowslide_candidate_design_report
+```
+
+The candidate design report writes `candidate_design_report.json` / `.md` under `backend/artifacts/european-shadow-qualification/snowslide-research-grade-v5-2026-05-18/candidate-design/`. Its current expected decision is `bounded_candidate_design_recommended` with `gpu_run_authorized=false`, because manual review confirmed a model-side gap and the evaluation-only sweep found no all-seven-scene passing candidate. This report is a design checkpoint only; it does not create a Modal request or authorize training.
 
 Before any future bounded GPU retry, use the observability-first path:
 
