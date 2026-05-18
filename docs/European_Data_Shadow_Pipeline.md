@@ -24,6 +24,7 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | SnowSlide research-grade acceptance | `backend/common/sar_acceptance_policy.py`, `backend/scripts/build_snowslide_acceptance_report.py` | Classifies SnowSlide dry-run evidence against research-grade precision, recall, F1, false-positive, provenance, scene-coverage, and no-promotion gates. |
 | SnowSlide threshold sweep | `backend/scripts/run_snowslide_threshold_sweep.py` | Runs evaluation-only threshold/component-area screening against existing held-out masks before any new GPU training. Passing sweep candidates still require AvalCD recheck and fresh final hold-out approval. |
 | SnowSlide v5 diagnostics | `backend/scripts/build_snowslide_error_diagnostics.py` | Builds per-scene v5 FP/FN diagnostics, component review packets, and an evaluation-only recovery report from existing masks without launching Modal/GPU work. |
+| SnowSlide manual review | `backend/scripts/build_snowslide_manual_label_review_packet.py`, `backend/scripts/resolve_snowslide_manual_label_review.py` | Converts v5 component-review actions into a closed-choice manual scene/label review worksheet and resolves completed decisions without authorizing GPU work or production scoring. |
 | SAR promotion acceptance guard | `backend/sar_release_promote.py`, `backend/scripts/run_authoritative_release_gate.py` | Prevents SAR promotion from `beats_baseline=true` alone; promotion now requires an attached accepted SnowSlide research-grade report. |
 | Modal cost guard | `backend/scripts/modal_cost_guard.py` | Reasserts zero warm containers for GPU Modal functions so GPU is used only when a job is running. |
 
@@ -446,12 +447,39 @@ The v5 diagnostic produces:
 | `component_review_table.csv` | Spreadsheet-ready component review rows. |
 | `snowslide_eval_only_recovery_report.json` | Threshold/component-area sweep over existing v5 masks only. |
 | `component_review_summary.json` / `.md` and `component_review_actions.csv` | Decision-ready component review summary that classifies `nuuk_20160413` as recall-first, `nuuk_20210411` as mixed precision/recall, and `pish_20230221` as precision-first. |
+| `manual_label_review_packet.json` / `.md`, `manual_label_review_actions.csv`, and `manual_label_review_decisions.csv` | Closed-choice manual review packet and reviewer worksheet for the dominant FP/FN components. |
+| `manual_label_review_outcome.json` / `.md` | Resolver output after the worksheet is completed; possible decisions are `review_incomplete`, `label_remediation_required`, `terrain_context_required`, or `labels_valid_model_gap`. |
 
 Current v5 diagnostic result: `blocked_shadow_only`, `dominant_blocker=both`, and `recommendation=targeted_scene_label_data_review_no_training`. The top false-positive burden scenes are `nuuk_20210411`, `pish_20230221`, and `nuuk_20160413`; the top false-negative burden scenes are `nuuk_20160413`, `nuuk_20210411`, and `livigno_20240403`. The top two false-negative scenes account for about `63.6%` of false negatives, so another GPU run is not justified before scene/label review.
 
 The v5 evaluation-only recovery sweep over thresholds `0.994-0.999` and component areas `0,16,32,64,96,128` found `passing_candidate_count=0` and `decision=blocked_research_grade`. The best all-scene candidate used threshold `0.994` with component area `96`; it reached precision `0.7357` and FPR `0.000802`, but recall fell to `0.4254` and F1 to `0.5391`, so it still failed the recall and F1 floors. Targeted-scene sensitivity also cannot mark acceptance because SnowSlide research-grade acceptance requires all seven scenes.
 
 The component review summary sets `recommended_next_step=manual_scene_label_review`, `production_scoring_allowed=false`, and `next_gpu_run_authorized=false`. It produces `15` large false-negative review actions and `15` large false-positive review actions across the three dominant scenes. No source labels are changed by this checkpoint.
+
+Build the manual review packet:
+
+```bash
+python3 -m backend.scripts.build_snowslide_manual_label_review_packet
+```
+
+The packet produces a review worksheet with closed-choice fields:
+
+| Field | Allowed values |
+|---|---|
+| `review_status` | `pending`, `reviewed` |
+| `component_decision` | `truth_missing_or_underlabeled`, `valid_model_miss`, `prediction_false_alarm`, `terrain_or_sar_ambiguity`, `registration_or_projection_issue`, `exclude_pending_source_review` |
+| `requires_label_edit` | `true`, `false` |
+| `scene_decision` | `label_remediation_required`, `labels_valid_model_gap`, `terrain_context_required`, `review_incomplete` |
+
+Resolve a completed worksheet:
+
+```bash
+python3 -m backend.scripts.resolve_snowslide_manual_label_review
+```
+
+The resolver writes `manual_label_review_outcome.json` / `.md`. It returns `review_incomplete` while any component is still pending. If source labels are suspect, the next step is a label/source remediation checkpoint. If labels are validated and the failure is model-side, the resolver can set `future_candidate_design_warranted=true`, but it still keeps `next_gpu_run_authorized=false`; any GPU work requires a separate explicit candidate-design checkpoint.
+
+Current manual review outcome: the 30 dominant v5 components have been completed as an artifact-only review that treats the existing SnowSlide truth masks as authoritative. The resolver now emits `decision=labels_valid_model_gap`, `future_candidate_design_warranted=true`, `production_scoring_allowed=false`, and `next_gpu_run_authorized=false`. This is not a research-grade acceptance result and does not authorize training; it only moves the next safe checkpoint to a separate candidate-design plan. Re-running the packet builder preserves completed worksheet decisions by `action_id`.
 
 Before any future bounded GPU retry, use the observability-first path:
 
