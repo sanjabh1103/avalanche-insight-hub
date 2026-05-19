@@ -33,6 +33,7 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | Phase 0-7 cross-verification | `backend/scripts/build_phase0_7_cross_verification_report.py` | Consolidates Phase 0-6 artifacts, writes the v6 transfer-failure addendum, and fails Phase 7 closed unless SnowSlide and fresh-final gates are ready. |
 | Phase 7 unblock reattempt packet | `backend/scripts/build_phase7_unblock_reattempt_packet.py` | Records the two valid forward paths: reviewed SOTA checkpoint evaluation if a direct compatible checkpoint exists, otherwise a design-only v8 candidate packet plus a Claude 4.7 adversarial-review prompt. |
 | Phase 7 v8 authorization review | `backend/scripts/build_phase7_v8_candidate_authorization_review.py` | Converts corrected float32 evidence into a fail-closed, single-run v8 authorization packet. It writes a training request only with explicit `--authorize-gpu`. |
+| SAR v8 client closeout pack | `backend/scripts/build_european_shadow_sar_closeout_pack.py` | Consolidates the current v8 AvalCD pass, SnowSlide research-grade failure, non-GPU sweep result, manual review blocker, and explicit shadow-only presentation authorization into a client-safe status packet. |
 | SnowSlide mask-dtype requalification | `backend/scripts/build_snowslide_mask_dtype_requalification_requests.py` | Builds a float32 SnowSlide v7 requalification packet so high thresholds can be evaluated on stored probabilities without uint8 quantization loss. |
 | SAR promotion acceptance guard | `backend/sar_release_promote.py`, `backend/scripts/run_authoritative_release_gate.py` | Prevents SAR promotion from `beats_baseline=true` alone; promotion now requires an attached accepted SnowSlide research-grade report. |
 | Modal cost guard | `backend/scripts/modal_cost_guard.py` | Reasserts zero warm containers for GPU Modal functions so GPU is used only when a job is running. |
@@ -45,7 +46,7 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | Swiss SPOT6 24,778 outlines | 4.5 | Local polygon staging, archive checksums, fixed event dates, bbox extraction, and extreme-event split reporting implemented. | Download/checksum EnviDat exports only after license review; keep extreme-event split separate from normal-season validation. |
 | French EPA/CLPA | 4.5 | EPA dated-event staging, CLPA path-prior staging, and observability-bias audit reporting implemented. | Verify avalanches.fr export terms and field schema before staging real exports. |
 | Swiss weather/snowpack/danger ratings | 4.0 | Local API/export staging, feature refs, danger-rating records, and calibration-slice reporting implemented. | Forecast ratings remain benchmark/context labels, not observed avalanche occurrence truth. |
-| AvalCD | 4.0 | Local scene/archive staging, corrected region keys, `sar_training_manifest_v1` emission, patch-level SAR metrics, scene-blended SAR checkpoint evaluation, gated SnowSlide dry-run execution, research-grade acceptance reporting, and promotion guard tightening implemented. | v7 passed the Phase 4 AvalCD scene-blended first gate, but failed Phase 5 SnowSlide research-grade qualification. Phase 6 fresh-final-holdout work is blocked until SnowSlide passes; production scoring remains blocked. |
+| AvalCD | 4.0 | Local scene/archive staging, corrected region keys, `sar_training_manifest_v1` emission, patch-level SAR metrics, scene-blended SAR checkpoint evaluation, gated SnowSlide dry-run execution, research-grade acceptance reporting, and promotion guard tightening implemented. | v8 passed the AvalCD scene-blended first gate, but failed SnowSlide research-grade precision and F1 floors. A 30-component v8 manual review packet is the next scientific step; Phase 6 and Phase 7 remain blocked. |
 | SLF accident datasets | 3.0 | Accident export staging, uncertainty/casualty metadata, and accident-only bias audit reporting implemented. | Accident frequency remains blocked from avalanche occurrence-frequency training. |
 | EAWS/SLF bulletins | 2.5 | Bulletin/context staging and warning-semantics audit reporting implemented. | Bulletin text and danger scales remain context/calibration surfaces only. |
 
@@ -686,6 +687,64 @@ The authorized v8 checkpoint completed as a bounded single Modal.com run with mo
 | SnowSlide false-positive rate | `0.00184` | `<=0.002` | Pass |
 
 Current v8 decision is `blocked_research_grade`. Phase 6 remains blocked because SnowSlide did not pass; Phase 7 remains not ready; no fresh final holdout or production scoring change is authorized by this run.
+
+The final v8 blocker-closure checkpoint adds a client-safe closeout packet. The original v1 closeout schema had permissive `client_presentation_ready` semantics and is superseded. Regenerate v2 locally whenever the brief is refreshed:
+
+```bash
+python3 -m backend.scripts.build_european_shadow_sar_closeout_pack \
+  --allow-shadow-only-presentation \
+  --authorized-by "<named reviewer or presentation owner>" \
+  --authorization-reason "Shadow-only client briefing; no SAR production claim" \
+  --manual-review-owner "<named SAR/domain reviewer>" \
+  --manual-review-target-date "<YYYY-MM-DD>"
+```
+
+It writes:
+
+```text
+backend/artifacts/european-shadow-qualification/sar-v8-client-closeout-2026-05-19/
+```
+
+The v2 closeout packet records `version=european_shadow_sar_closeout_pack_v2`, `decision=blocked_sar_production_pending_manual_review`, `sar_production_ready=false`, `phase7_ready=false`, `production_scoring_allowed=false`, and `next_gpu_run_authorized=false`. `client_presentation_ready` is `false` unless a named shadow-only presentation authorizer, reason, manual-review owner, and manual-review target date are provided. Existing v1 generated JSON/Markdown artifacts are renamed with `.deprecated_v1` when v2 is written. These generated artifacts remain ignored and should not be committed.
+
+The v8 diagnostics and non-GPU sweep closed the remaining ambiguity:
+
+| Checkpoint | Result | Meaning |
+|---|---|---|
+| SnowSlide v8 selected rule | Precision `0.6137`, recall `0.5584`, F1 `0.5847`, false-positive rate `0.00184` | Recall and FPR pass, but precision and F1 fail research-grade floors. |
+| v8 threshold/component sweep | `passing_candidate_count=0` | No all-seven-scene non-GPU decision rule can currently pass. |
+| v8 dominant blocker | `precision_burden` | The model produces useful held-out signal but still has too much false-positive burden for research-grade acceptance. |
+| v8 manual review packet | `30` components | The next valid scientific activity is manual scene/component review, not retraining. |
+
+Per-scene SnowSlide v8 diagnostics are now the headline scientific story:
+
+| Scene | Region | Precision | Recall | F1 | Verdict |
+|---|---|---:|---:|---:|---|
+| `tromso_20241220` | Norway | `0.848` | `0.686` | `0.758` | Passes alone |
+| `nuuk_20210411` | Greenland Nuuk | `0.630` | `0.609` | `0.619` | Near-pass, FPR slightly above ceiling |
+| `livigno_20250129` | Italian Alps | `0.631` | `0.549` | `0.587` | Near-pass |
+| `livigno_20240403` | Italian Alps | `0.653` | `0.509` | `0.572` | Near-pass |
+| `nuuk_20160413` | Greenland Nuuk | `0.614` | `0.465` | `0.529` | Recall gap |
+| `pish_20230221` | Pamir | `0.393` | `0.569` | `0.465` | Severe false-positive burden |
+| `livigno_20250318` | Italian Alps | `0.405` | `0.436` | `0.420` | Severe precision/F1 gap |
+
+## Current Stop Condition For Client Presentation
+
+The client presentation can safely say that the European shadow pipeline and SAR qualification lane are implemented and evidence-rich only if the deck is explicitly framed as shadow-only and a named manual-review owner/target date are recorded. It must not say that SAR production scoring is ready. Current status:
+
+| Claim | Status |
+|---|---|
+| European shadow source and benchmark infrastructure | Implemented for shadow validation and production-blocked qualification. |
+| AvalCD SAR v8 | Passed scene-blended precision and recall floors. |
+| SnowSlide research-grade v8 | Failed precision and F1 floors. |
+| Non-GPU recovery | No all-seven-scene passing threshold/component rule found. |
+| Current next activity | Complete `manual_label_review_decisions.csv` for the 30 v8 components. |
+| Phase 6 fresh final holdout | Blocked until SnowSlide research-grade passes. |
+| Phase 7 promotion readiness | Not ready. |
+
+Tracked client brief: `docs/European_Shadow_SAR_Client_Status_Brief.md`.
+
+Modal cost-zero governance rubric: a final `modal container list` point-in-time check is required after any SAR job. For governance presentation, a stronger attestation should capture at least seven contiguous days of `active_container_count=0` outside known job windows in a generated `modal_cost_attestation.json`. That cron-style attestation is a future governance artifact; it is not implemented by this checkpoint.
 
 Any future successful candidate must pass in this order:
 
