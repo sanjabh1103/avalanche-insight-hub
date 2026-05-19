@@ -68,6 +68,7 @@ class RunModalSarPredictionMaterializationDirectTests(unittest.TestCase):
                 'model_family': 'swinunet_tiny_diff',
                 'model_path': '/artifacts/20260516T164730Z/sar_model.pt',
                 'threshold': 0.995,
+                'prediction_mask_dtype': 'float32',
             }), encoding='utf-8')
             benchmark_path.write_text(json.dumps(_benchmark_report(gate_passed=True)), encoding='utf-8')
             remote_function = Mock()
@@ -97,6 +98,7 @@ class RunModalSarPredictionMaterializationDirectTests(unittest.TestCase):
             request_payload = remote_function.remote.call_args.args[0]
             self.assertFalse(request_payload['persist_events'])
             self.assertTrue(request_payload['shadow_mode'])
+            self.assertEqual(request_payload['prediction_mask_dtype'], 'float32')
 
     def test_main_writes_blocked_artifact_when_gate_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -98,12 +98,62 @@ def _positive_counts(array: np.ndarray, thresholds: list[float]) -> dict[str, in
     return {str(threshold): int(np.sum(array >= threshold)) for threshold in thresholds}
 
 
+def _quantization_signature(array: np.ndarray, *, selected_threshold: float) -> dict[str, Any]:
+    values = _finite_values(array)
+    if values.size == 0:
+        return {
+            'storage_dtype_signature': 'empty_or_nan',
+            'value_step_signature': None,
+            'selected_threshold_reachable': False,
+            'quantized_threshold_mismatch': False,
+        }
+    stride = max(1, values.size // 200000)
+    sample = values[::stride]
+    if len(np.unique(sample)) < 8:
+        return {
+            'storage_dtype_signature': 'float_probability_or_unquantized',
+            'value_step_signature': None,
+            'selected_threshold_reachable': bool(float(np.max(values)) >= selected_threshold),
+            'quantized_threshold_mismatch': False,
+        }
+
+    def _matches_step(scale: float) -> bool:
+        scaled = sample * np.float32(scale)
+        return bool(np.all(np.abs(scaled - np.round(scaled)) <= 1e-5))
+
+    if _matches_step(255.0):
+        storage_dtype_signature = 'uint8_quantized_probability'
+        step = 1.0 / 255.0
+    elif _matches_step(65535.0):
+        storage_dtype_signature = 'uint16_quantized_probability'
+        step = 1.0 / 65535.0
+    else:
+        storage_dtype_signature = 'float_probability_or_unquantized'
+        step = None
+
+    max_value = float(np.max(values))
+    selected_reachable = bool(max_value >= selected_threshold)
+    lower_positive = bool(np.sum(values >= min(0.995, selected_threshold)) > 0)
+    quantized_mismatch = (
+        storage_dtype_signature in {'uint8_quantized_probability', 'uint16_quantized_probability'}
+        and not selected_reachable
+        and lower_positive
+    )
+    return {
+        'storage_dtype_signature': storage_dtype_signature,
+        'value_step_signature': step,
+        'selected_threshold_reachable': selected_reachable,
+        'quantized_threshold_mismatch': quantized_mismatch,
+    }
+
+
 def _render_markdown(report: dict[str, Any]) -> str:
     lines = [
         '# SnowSlide V6 Integrity Audit',
         '',
         f"- Decision: `{report['decision']}`",
         f"- Failure classification: `{report['failure_classification']}`",
+        f"- Quantized threshold mismatch: `{str(report.get('quantized_threshold_mismatch')).lower()}`",
         f"- Production scoring allowed: `{str(report['production_scoring_allowed']).lower()}`",
         f"- Next GPU run authorized: `{str(report['next_gpu_run_authorized']).lower()}`",
         '',
@@ -116,17 +166,19 @@ def _render_markdown(report: dict[str, Any]) -> str:
         '',
         '## Scene Probability Summary',
         '',
-        '| Scene | Max | P99 | Positives at selected threshold | Truth positives | Shape aligned |',
-        '|---|---:|---:|---:|---:|---|',
+        '| Scene | Dtype signature | Max | P99 | Selected threshold reachable | Positives at selected threshold | Truth positives |',
+        '|---|---|---:|---:|---|---:|---:|',
     ])
     selected_threshold = str(report['selected_threshold'])
     for scene in report['scene_reports']:
         prob = scene['prediction_probability_summary']
         lines.append(
-            f"| {scene['scene_id']} | {prob.get('max')} | "
+            f"| {scene['scene_id']} | {scene.get('storage_dtype_signature')} | "
+            f"{prob.get('max')} | "
             f"{prob.get('percentiles', {}).get('p99')} | "
+            f"{scene.get('selected_threshold_reachable')} | "
             f"{scene['positive_pixel_counts_by_threshold'].get(selected_threshold, 0)} | "
-            f"{scene['truth_positive_pixels']} | {scene['shape_aligned']} |"
+            f"{scene['truth_positive_pixels']} |"
         )
     lines.extend(['', report['next_checkpoint'], ''])
     return '\n'.join(lines)
@@ -139,6 +191,12 @@ def _decision_from_findings(findings: list[dict[str, Any]], *, selected_positive
             'blocked_pipeline_integrity_failure',
             'pipeline_integrity_failure',
             'Fix mask/reference/model-path integrity issues before rerunning Phase 5.',
+        )
+    if any(finding.get('gate') == 'quantized_threshold_mismatch' for finding in findings):
+        return (
+            'blocked_quantized_threshold_mismatch',
+            'probability_storage_quantization_mismatch',
+            'Re-materialize SnowSlide prediction masks as float32 probabilities before judging Phase 5.',
         )
     if selected_positive_pixels == 0 and lower_threshold_positive_pixels > 0:
         return (
@@ -185,6 +243,7 @@ def build_snowslide_v6_integrity_audit(
         positive_counts = _positive_counts(prediction, thresholds)
         selected_count = int(np.sum(prediction >= selected_threshold))
         lower_count = int(np.sum(prediction >= min(thresholds)))
+        quantization = _quantization_signature(prediction, selected_threshold=selected_threshold)
         selected_positive_pixels += selected_count
         lower_threshold_positive_pixels += lower_count
         scene_reports.append({
@@ -197,6 +256,7 @@ def build_snowslide_v6_integrity_audit(
             'shape_aligned': tuple(prediction.shape) == tuple(truth.shape),
             'truth_positive_pixels': int(np.sum(truth)),
             'prediction_probability_summary': _probability_summary(prediction),
+            **quantization,
             'positive_pixel_counts_by_threshold': positive_counts | {str(selected_threshold): selected_count},
         })
 
@@ -248,6 +308,17 @@ def build_snowslide_v6_integrity_audit(
             'severity': 'warning',
             'summary': f'no pixels meet selected threshold {selected_threshold}',
         })
+    if any(scene.get('quantized_threshold_mismatch') for scene in scene_reports):
+        findings.append({
+            'gate': 'quantized_threshold_mismatch',
+            'severity': 'warning',
+            'summary': 'selected threshold is unreachable after probability-mask quantization, but lower thresholds have positives',
+            'affected_scene_ids': [
+                scene['scene_id']
+                for scene in scene_reports
+                if scene.get('quantized_threshold_mismatch')
+            ],
+        })
 
     decision, failure_classification, next_checkpoint = _decision_from_findings(
         findings,
@@ -266,6 +337,20 @@ def build_snowslide_v6_integrity_audit(
         'thresholds_checked': thresholds,
         'selected_threshold_positive_pixels': selected_positive_pixels,
         'lowest_threshold_positive_pixels': lower_threshold_positive_pixels,
+        'storage_dtype_signature': sorted({
+            str(scene.get('storage_dtype_signature'))
+            for scene in scene_reports
+            if scene.get('storage_dtype_signature')
+        }),
+        'value_step_signature': sorted({
+            float(scene.get('value_step_signature'))
+            for scene in scene_reports
+            if scene.get('value_step_signature') is not None
+        }),
+        'selected_threshold_reachable': bool(selected_positive_pixels > 0),
+        'quantized_threshold_mismatch': any(
+            scene.get('quantized_threshold_mismatch') for scene in scene_reports
+        ),
         'request_model_version': request.get('prediction_model_version') or request.get('model_version'),
         'request_reference_set_key': request.get('reference_set_key'),
         'acceptance_decision': acceptance.get('decision'),

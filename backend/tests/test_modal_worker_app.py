@@ -926,6 +926,7 @@ class ModalWorkerAppTests(unittest.TestCase):
         'backend.modal_worker_app.run_worker_request',
         return_value={
             'status': 'ok',
+            'prediction_mask_dtype': 'float32',
             'scene_count': 2,
             'detections_count': 2,
             'mask_asset_refs': ['sar-masks/a.tif', 'sar-masks/b.tif'],
@@ -941,6 +942,7 @@ class ModalWorkerAppTests(unittest.TestCase):
 
         self.assertEqual(result['status'], 'ok')
         self.assertTrue(result['compact_response'])
+        self.assertEqual(result['prediction_mask_dtype'], 'float32')
         self.assertEqual(result['mask_asset_ref_count'], 2)
         self.assertEqual(result['mask_asset_refs'], ['sar-masks/a.tif', 'sar-masks/b.tif'])
         self.assertNotIn('detections', result)

@@ -7,6 +7,9 @@ from pathlib import Path
 
 from backend.scripts.build_avalcd_benchmark_from_first_gate import build_avalcd_benchmark_from_first_gate
 from backend.scripts.build_fresh_final_holdout_plan import build_fresh_final_holdout_plan
+from backend.scripts.build_snowslide_mask_dtype_requalification_requests import (
+    build_snowslide_mask_dtype_requalification_requests,
+)
 from backend.scripts.build_snowslide_v6_qualification_requests import build_snowslide_v6_qualification_requests
 
 
@@ -173,6 +176,41 @@ class Phase5Phase6SnowSlideQualificationTests(unittest.TestCase):
         self.assertIn('/predictions/candidate-v6-scene-blended/prediction_mask.tif', first_request['scenes'][0]['prediction_mask'])
         self.assertEqual(eval_request['prediction_threshold'], 0.9980000257492065)
         self.assertEqual(eval_request['reference_set_key'], 'snowslide-heldout-v1')
+
+    def test_mask_dtype_requalification_builder_rewrites_refs_and_preserves_guards(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source_root = _v5_templates(root)
+            source_eval = _write_json(root / 'source-eval.json', {
+                'reference_set_key': 'snowslide-heldout-v1',
+                'prediction_model_version': 'candidate-v7',
+                'prediction_threshold': 0.9980000257492065,
+                'postprocess_min_component_area_px': 96,
+                'postprocess_opening_size_px': 0,
+                'dry_run': True,
+            })
+            manifest = build_snowslide_mask_dtype_requalification_requests(
+                source_materialization_root=source_root,
+                source_evaluate_request=source_eval,
+                prediction_model_version='candidate-v7-float32',
+                prediction_mask_dtype='float32',
+                materialization_output_root=root / 'materialize-float32',
+                dry_run_output_root=root / 'dry-run-float32',
+            )
+            first_request = json.loads(Path(manifest['scene_request_paths'][0]).read_text(encoding='utf-8'))
+            eval_request = json.loads((root / 'dry-run-float32' / 'evaluate_release_request.json').read_text(encoding='utf-8'))
+
+        self.assertEqual(manifest['scene_count'], 7)
+        self.assertEqual(manifest['prediction_mask_dtype'], 'float32')
+        self.assertFalse(manifest['production_scoring_allowed'])
+        self.assertFalse(manifest['next_gpu_run_authorized'])
+        self.assertEqual(first_request['prediction_mask_dtype'], 'float32')
+        self.assertFalse(first_request['persist_events'])
+        self.assertTrue(first_request['shadow_mode'])
+        self.assertTrue(first_request['compact_response'])
+        self.assertIn('/predictions/candidate-v7-float32/prediction_mask.tif', first_request['scenes'][0]['prediction_mask'])
+        self.assertEqual(eval_request['prediction_model_version'], 'candidate-v7-float32')
+        self.assertEqual(eval_request['prediction_threshold'], 0.9980000257492065)
 
     def test_fresh_final_holdout_blocks_without_independent_reference_set(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

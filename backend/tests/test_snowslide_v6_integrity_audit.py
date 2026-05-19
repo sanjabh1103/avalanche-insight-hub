@@ -83,6 +83,34 @@ class SnowSlideV6IntegrityAuditTests(unittest.TestCase):
         self.assertFalse(report['production_scoring_allowed'])
         self.assertFalse(report['next_gpu_run_authorized'])
 
+    def test_uint8_quantized_probabilities_classify_quantized_threshold_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            inputs = _audit_inputs(root, prediction_value=0.6)
+            request = json.loads(inputs['request_path'].read_text(encoding='utf-8'))
+            for index, scene in enumerate(request['scenes']):
+                quantized = (np.arange(16, dtype=np.float32).reshape(4, 4) + index) % 255
+                quantized = quantized / 255.0
+                quantized[0, 0] = 254.0 / 255.0
+                scene['prediction_mask'] = _write_mask(
+                    root / 'masks' / scene['scene_id'] / 'prediction-quantized.npy',
+                    quantized,
+                )
+            inputs['request_path'].write_text(json.dumps(request), encoding='utf-8')
+
+            report = build_snowslide_v6_integrity_audit(
+                **inputs,
+                output_root=root / 'out',
+                thresholds=[0.5, 0.995, 0.9980000257492065],
+            )
+
+        self.assertEqual(report['decision'], 'blocked_quantized_threshold_mismatch')
+        self.assertEqual(report['failure_classification'], 'probability_storage_quantization_mismatch')
+        self.assertTrue(report['quantized_threshold_mismatch'])
+        self.assertIn('uint8_quantized_probability', report['storage_dtype_signature'])
+        self.assertFalse(report['selected_threshold_reachable'])
+        self.assertIn('quantized_threshold_mismatch', [finding['gate'] for finding in report['findings']])
+
     def test_blank_prediction_masks_are_pipeline_integrity_failure(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

@@ -13,21 +13,21 @@ DEFAULT_OUTPUT_ROOT = Path(
 )
 DEFAULT_V7_INTEGRITY = Path(
     'backend/artifacts/european-shadow-qualification/'
-    'snowslide-research-grade-v7-2026-05-18/integrity-audit/snowslide_v6_integrity_audit.json',
+    'snowslide-research-grade-v7-float32-2026-05-18/integrity-audit/snowslide_v6_integrity_audit.json',
 )
 DEFAULT_V7_SWEEP = Path(
     'backend/artifacts/european-shadow-qualification/'
-    'snowslide-research-grade-v7-2026-05-18/integrity-audit/snowslide_v7_threshold_sweep_report.json',
+    'snowslide-research-grade-v7-float32-2026-05-18/snowslide_v7_float32_threshold_sweep_report.json',
 )
 DEFAULT_V7_ACCEPTANCE = Path(
-    'backend/artifacts/european-shadow-qualification/snowslide-research-grade-v7-2026-05-18/acceptance_report.json',
+    'backend/artifacts/european-shadow-qualification/snowslide-research-grade-v7-float32-2026-05-18/acceptance_report.json',
 )
 DEFAULT_V7_AVALCD = Path(
     'backend/artifacts/european-shadow-real-benchmarks/'
     'european-shadow-real-avalcd-scene-blended-v7-2026-05-18/european_shadow_benchmark_report.json',
 )
 DEFAULT_V7_DRY_RUN = Path(
-    'backend/artifacts/european-shadow-heldout/snowslide-dry-run/scene-blended-v7/evaluate_release_result.json',
+    'backend/artifacts/european-shadow-heldout/snowslide-dry-run/scene-blended-v7-float32/evaluate_release_result.json',
 )
 
 ALLOWED_SOTA_MODEL_FAMILIES = {'resnet34_unet', 'swinunet_tiny_diff'}
@@ -48,14 +48,14 @@ TOP_FIVE_UNBLOCK_PATHS = [
     {
         'rank': 2,
         'path': 'SnowSlide calibration bridge',
-        'why_it_may_unblock': 'v7 probability masks are valid and lower thresholds recover positives, but the all-scene sweep still missed precision/F1 floors.',
-        'decision': 'Already tried for v7; keep as a recheck path if a future SOTA or candidate changes probability scale.',
+        'why_it_may_unblock': 'Float32 materialization removes the uint8 threshold mismatch and separates pipeline bugs from true metric failure.',
+        'decision': 'Completed as the first non-GPU fix; use float32 evidence as the current source of truth.',
     },
     {
         'rank': 3,
         'path': 'Domain-calibrated v8 candidate design',
-        'why_it_may_unblock': 'The known failure is probability transfer from AvalCD to SnowSlide, not blank masks or missing scenes.',
-        'decision': 'Design only now; one bounded GPU run requires separate approval.',
+        'why_it_may_unblock': 'Corrected float32 evidence is close but still misses SnowSlide precision and F1 floors.',
+        'decision': 'Scientifically warranted as a design-only next step; it still needs explicit one-run authorization before GPU use.',
     },
     {
         'rank': 4,
@@ -127,6 +127,40 @@ def _best_sweep_candidate(sweep: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def _integrity_quantized_threshold_mismatch(integrity: dict[str, Any]) -> bool:
+    if integrity.get('quantized_threshold_mismatch') is True:
+        return True
+    if integrity.get('decision') == 'blocked_quantized_threshold_mismatch':
+        return True
+    selected_threshold = float(integrity.get('selected_threshold') or 0.0)
+    if selected_threshold <= 0.0:
+        return False
+    if int(integrity.get('selected_threshold_positive_pixels') or 0) != 0:
+        return False
+    if int(integrity.get('lowest_threshold_positive_pixels') or 0) <= 0:
+        return False
+    scene_reports = [item for item in integrity.get('scene_reports') or [] if isinstance(item, dict)]
+    if not scene_reports:
+        return False
+    uint8_max = 254.0 / 255.0
+    return all(
+        abs(
+            float(
+                (
+                    scene.get('prediction_probability_summary')
+                    if isinstance(scene.get('prediction_probability_summary'), dict)
+                    else {}
+                ).get('max')
+                or 0.0
+            )
+            - uint8_max
+        )
+        <= 1e-6
+        and selected_threshold > uint8_max
+        for scene in scene_reports
+    )
+
+
 def _validate_sota_candidate(
     *,
     checkpoint_url: str | None,
@@ -190,9 +224,19 @@ def _v8_candidate_design(
     best = _best_sweep_candidate(sweep)
     best_metrics = best.get('metrics') if isinstance(best.get('metrics'), dict) else {}
     avalcd_values = avalcd_metrics.get('metrics') if isinstance(avalcd_metrics.get('metrics'), dict) else {}
+    quantized_mismatch = _integrity_quantized_threshold_mismatch(integrity)
     candidate_warranted = (
         acceptance.get('decision') == 'blocked_research_grade'
-        and integrity.get('decision') == 'blocked_threshold_calibration_failure'
+        and (
+            integrity.get('decision')
+            in {
+                'blocked_threshold_calibration_failure',
+                'blocked_quantized_threshold_mismatch',
+                'integrity_passed_recovery_needed',
+            }
+            or integrity.get('failure_classification') == 'metrics_failure_after_valid_materialization'
+        )
+        and not quantized_mismatch
         and int(sweep.get('passing_candidate_count') or 0) == 0
         and float(best_metrics.get('precision') or 0.0) >= 0.60
         and float(best_metrics.get('recall') or 0.0) >= 0.50
@@ -208,9 +252,10 @@ def _v8_candidate_design(
         'candidate_model_version': 'avalcd_swinunet_tiny_diff_calibrated_transfer_shadow_20260518_v8_design_only',
         'initial_checkpoint_path': '/artifacts/20260518T124829Z/sar_model.pt',
         'hypothesis': (
-            'v7 learned an AvalCD-compatible separator, but its selected probability threshold does not '
-            'transfer to SnowSlide. A v8 candidate should target probability-scale stability and '
-            'precision/F1 recovery under all-seven-scene SnowSlide evaluation.'
+            'v7 learned an AvalCD-compatible separator, and float32 SnowSlide masks confirm real held-out signal. '
+            'However, selected-rule and dense non-GPU recovery still miss SnowSlide precision and F1 floors. '
+            'A v8 candidate should target cross-domain calibration, FP control, and threshold stability rather '
+            'than repeating a blind training sweep.'
         ),
         'evidence': {
             'avalcd_v7': _metric_values(avalcd_values),
@@ -227,6 +272,7 @@ def _v8_candidate_design(
                 'policy': best.get('policy'),
             },
             'integrity_decision': integrity.get('decision'),
+            'quantized_threshold_mismatch': quantized_mismatch,
             'selected_threshold_positive_pixels': integrity.get('selected_threshold_positive_pixels'),
             'lowest_threshold_positive_pixels': integrity.get('lowest_threshold_positive_pixels'),
         },
@@ -252,8 +298,8 @@ def _v8_candidate_design(
             'If adding a true calibration loss, implement and test it before building a candidate authorization request.',
         ],
         'why_not_blind_sweep': [
-            'The failure is localized to probability transfer: v7 masks are valid but the AvalCD-selected threshold exceeds SnowSlide probability maxima.',
-            'The best v7 non-GPU candidate is close but still misses precision and F1 floors, so v8 targets FP control and threshold stability.',
+            'The uint8 serialization bug has been closed with float32 masks; the remaining blocker is measured metric failure, not blank masks.',
+            'The best v7 float32 non-GPU candidate is close but still misses precision and F1 floors, so v8 targets FP control and threshold stability.',
             'The run is bounded to one future candidate and must stop on AvalCD or SnowSlide failure.',
         ],
         'stop_criteria': [
@@ -272,6 +318,7 @@ def _v8_candidate_design(
 
 def _claude_prompt(report: dict[str, Any]) -> str:
     best = report['candidate_design_report_v8']['evidence']['snowslide_best_non_gpu_sweep']
+    selected = report['candidate_design_report_v8']['evidence']['snowslide_selected_rule']['metrics']
     return f"""You are Claude 4.7 acting as an adversarial ML systems reviewer for an avalanche SAR shadow-qualification program.
 
 Repository: /Users/sanjayb/avalanche-insight-hub
@@ -296,16 +343,17 @@ Known phase status:
   - threshold 0.9980000257492065
   - component area 96
 - Phase 5 v7 SnowSlide selected-rule failed:
-  - precision 0.0
-  - recall 0.0
-  - F1 0.0
-  - FPR 0.0
-  - beats_baseline false
+  - precision {selected.get('precision')}
+  - recall {selected.get('recall')}
+  - F1 {selected.get('f1')}
+  - FPR {selected.get('false_positive_rate')}
+  - beats_baseline true
   - scene_count 7
-- v7 integrity audit says masks are valid, not blank:
+- v7 float32 integrity audit says masks are valid, not quantized, and the selected threshold is reachable:
   - decision {report['v7_integrity_decision']}
   - selected_threshold_positive_pixels {report['selected_threshold_positive_pixels']}
   - lower-threshold positives exist
+  - quantized_threshold_mismatch {report.get('v7_quantized_threshold_mismatch')}
 - v7 no-GPU sweep failed:
   - passing_candidate_count {report['v7_sweep_passing_candidate_count']}
   - best candidate threshold {best.get('threshold')}, component area {best.get('postprocess_min_component_area_px')}
@@ -348,7 +396,7 @@ Research anchors:
 
 Please perform an adversarial analysis:
 1. Verify whether the SnowSlide zero-positive result is threshold calibration, mask quantization, path mismatch, or true domain failure.
-2. Verify masks are loaded as probabilities and whether threshold 0.9980000257492065 is invalid for max values around 0.9960784316.
+2. Verify whether the float32 requalification and binary truth-mask loader fix correctly replaced the old uint8 zero-positive artifact.
 3. Verify whether the same threshold/postprocess rule is correctly carried from AvalCD to SnowSlide.
 4. Decide whether SOTA checkpoint evaluation is possible from public sources without inventing a checkpoint.
 5. Decide whether the proposed v8 design is scientifically justified and not a blind sweep.
@@ -383,6 +431,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
         '## Evidence',
         '',
         f"- v7 integrity: `{report['v7_integrity_decision']}`",
+        f"- v7 quantized threshold mismatch: `{report.get('v7_quantized_threshold_mismatch')}`",
         f"- v7 selected-threshold positives: `{report['selected_threshold_positive_pixels']}`",
         f"- v7 sweep passing candidates: `{report['v7_sweep_passing_candidate_count']}`",
         (
@@ -491,8 +540,11 @@ def build_phase7_unblock_reattempt_packet(
         avalcd_metrics=avalcd_metrics,
         dry_run=dry_run,
     )
+    quantized_mismatch = _integrity_quantized_threshold_mismatch(integrity)
     if sota['status'] == 'sota_checkpoint_candidate_ready':
         decision = 'sota_checkpoint_evaluation_first'
+    elif quantized_mismatch:
+        decision = 'calibration_bug_fix_first'
     elif int(sweep.get('passing_candidate_count') or 0) > 0:
         decision = 'calibration_bug_fix_first'
     elif candidate_design['decision'] == 'bounded_v8_candidate_design_recommended':
@@ -506,6 +558,7 @@ def build_phase7_unblock_reattempt_packet(
         'sota_checkpoint_review': sota,
         'candidate_design_report_v8': candidate_design,
         'v7_integrity_decision': integrity.get('decision'),
+        'v7_quantized_threshold_mismatch': quantized_mismatch,
         'selected_threshold_positive_pixels': integrity.get('selected_threshold_positive_pixels'),
         'lowest_threshold_positive_pixels': integrity.get('lowest_threshold_positive_pixels'),
         'v7_sweep_passing_candidate_count': sweep.get('passing_candidate_count'),
@@ -520,9 +573,9 @@ def build_phase7_unblock_reattempt_packet(
         'next_checkpoint': (
             'Evaluate the reviewed SOTA checkpoint on AvalCD first.'
             if decision == 'sota_checkpoint_evaluation_first'
-            else 'Recheck the passing non-GPU calibration rule against AvalCD scene_blended before any GPU work.'
+            else 'Re-materialize SnowSlide v7 masks as float32 probabilities and rerun SnowSlide qualification before any GPU work.'
             if decision == 'calibration_bug_fix_first'
-            else 'Send the adversarial prompt to Claude 4.7, then decide whether to authorize exactly one v8 candidate.'
+            else 'Prepare a separate bounded v8 candidate authorization request; do not launch GPU work from this design packet.'
             if decision == 'one_bounded_v8_candidate_warranted'
             else 'Stop; current evidence does not justify another candidate.'
         ),

@@ -59,6 +59,8 @@ SAR_UNET_MODEL_VERSION = os.environ.get('SAR_UNET_MODEL_VERSION', 'sar_unet_resn
 SAR_UNET_SEGMENTATION_THRESHOLD = float(os.environ.get('SAR_UNET_SEGMENTATION_THRESHOLD', '0.5'))
 SAR_UNET_PROMOTED = os.environ.get('SAR_UNET_PROMOTED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
 SAR_UNET_SHADOW_REASON = 'sar_unet_shadow_mode'
+DEFAULT_PREDICTION_MASK_DTYPE = 'uint8'
+PREDICTION_MASK_DTYPES = {'uint8', 'uint16', 'float32'}
 DEFAULT_LSTM_EPOCHS = int(os.environ.get('MTS_LSTM_EPOCHS', '50'))
 DEFAULT_LSTM_MIN_EPOCHS = int(os.environ.get('MTS_LSTM_MIN_EPOCHS_BEFORE_EARLY_STOPPING', '10'))
 DEFAULT_LSTM_PATIENCE = int(os.environ.get('MTS_LSTM_EARLY_STOPPING_PATIENCE', '7'))
@@ -782,20 +784,45 @@ def mask_centroid(
     }
 
 
-def encode_mask_geotiff(probability_mask: np.ndarray, *, bbox: tuple[float, float, float, float]) -> bytes:
+def normalize_prediction_mask_dtype(value: str | None = None) -> str:
+    resolved = str(value or DEFAULT_PREDICTION_MASK_DTYPE).strip().lower()
+    if resolved not in PREDICTION_MASK_DTYPES:
+        raise ValueError(
+            f'unsupported prediction_mask_dtype "{resolved}"; '
+            f'expected one of: {", ".join(sorted(PREDICTION_MASK_DTYPES))}',
+        )
+    return resolved
+
+
+def _probability_band_for_dtype(probability_mask: np.ndarray, dtype: str) -> np.ndarray:
+    clipped = np.clip(np.asarray(probability_mask, dtype=np.float32), 0.0, 1.0)
+    if dtype == 'float32':
+        return clipped.astype(np.float32)
+    if dtype == 'uint16':
+        return (clipped * 65535.0).astype(np.uint16)
+    return (clipped * 255.0).astype(np.uint8)
+
+
+def encode_mask_geotiff(
+    probability_mask: np.ndarray,
+    *,
+    bbox: tuple[float, float, float, float],
+    prediction_mask_dtype: str = DEFAULT_PREDICTION_MASK_DTYPE,
+) -> bytes:
     if MemoryFile is None or from_bounds is None:
         raise RuntimeError('rasterio is required to encode GeoTIFF mask artifacts')
+    resolved_dtype = normalize_prediction_mask_dtype(prediction_mask_dtype)
     height, width = probability_mask.shape
     west, south, east, north = bbox
     transform = from_bounds(west, south, east, north, width, height)
-    band = np.clip(probability_mask * 255.0, 0, 255).astype(np.uint8)
+    band = _probability_band_for_dtype(probability_mask, resolved_dtype)
     with MemoryFile() as memory_file:
         with memory_file.open(
             driver='GTiff',
             width=width,
             height=height,
             count=1,
-            dtype='uint8',
+            dtype=resolved_dtype,
             crs='EPSG:4326',
             transform=transform,
             compress='deflate',
@@ -969,8 +996,24 @@ def _load_mask_array_from_bytes(payload: bytes, *, suffix: str) -> np.ndarray:
             raise RuntimeError('rasterio is required to read GeoTIFF evaluation masks')
         with MemoryFile(payload) as memory_file:
             with memory_file.open() as dataset:
-                band = np.asarray(dataset.read(1), dtype=np.float32)
-                if band.size and float(np.nanmax(band)) > 1.0:
+                raw_band = np.asarray(dataset.read(1))
+                band = np.asarray(raw_band, dtype=np.float32)
+                declared_dtype = None
+                dtypes = getattr(dataset, 'dtypes', None)
+                if isinstance(dtypes, (list, tuple)) and dtypes:
+                    declared_dtype = str(dtypes[0]).lower()
+                if np.issubdtype(raw_band.dtype, np.integer):
+                    observed_max = float(np.nanmax(band)) if band.size else 0.0
+                    if observed_max > 1.0:
+                        info = np.iinfo(raw_band.dtype)
+                        band = band / float(info.max)
+                elif declared_dtype in {'uint8', 'byte'}:
+                    band = band / 255.0
+                elif declared_dtype == 'uint16':
+                    band = band / 65535.0
+                elif band.size and float(np.nanmax(band)) > 1.0:
+                    # Legacy tests and a few hand-authored fixtures emulate TIFF
+                    # bytes with float arrays carrying 0..255 byte values.
                     band = band / 255.0
                 return band
     raise ValueError(
@@ -1209,8 +1252,10 @@ def run_segmentation(
     promoted: bool = SAR_UNET_PROMOTED,
     model_version: str = SAR_UNET_MODEL_VERSION,
     model_family: str = SAR_UNET_MODEL_FAMILY,
+    prediction_mask_dtype: str = DEFAULT_PREDICTION_MASK_DTYPE,
 ) -> dict[str, Any]:
     artifact_dir = create_artifact_dir(artifact_root)
+    resolved_prediction_mask_dtype = normalize_prediction_mask_dtype(prediction_mask_dtype)
     if not scenes:
         manifest = {'status': 'skipped_no_scenes', 'detections': [], 'persisted_events': 0}
         dump_json(artifact_dir / 'sar_segment_manifest.json', manifest)
@@ -1250,7 +1295,11 @@ def run_segmentation(
         mask_asset_ref = None
         desired_prediction_ref = scene.get('prediction_mask')
         if has_supabase_credentials() and (persist_events or (isinstance(desired_prediction_ref, str) and desired_prediction_ref.strip())):
-            geotiff_bytes = encode_mask_geotiff(probability_mask, bbox=bbox)
+            geotiff_bytes = encode_mask_geotiff(
+                probability_mask,
+                bbox=bbox,
+                prediction_mask_dtype=resolved_prediction_mask_dtype,
+            )
             if isinstance(desired_prediction_ref, str) and desired_prediction_ref.strip():
                 upload_bucket, mask_object_path = parse_storage_ref(desired_prediction_ref.strip())
             else:
@@ -1300,6 +1349,7 @@ def run_segmentation(
         'shadow_mode': not promoted,
         'model_family': loaded_model.model_family,
         'model_version': model_version,
+        'prediction_mask_dtype': resolved_prediction_mask_dtype,
         'scene_count': len(scenes),
         'detections_count': len(detections),
         'persisted_events': persistence_summary['persisted_events'],
@@ -1864,6 +1914,9 @@ def run_worker_request(
     artifact_root.mkdir(parents=True, exist_ok=True)
     prediction_model_family = str(manifest.get('model_family') or SAR_UNET_MODEL_FAMILY)
     prediction_model_version = str(manifest.get('prediction_model_version') or SAR_UNET_MODEL_VERSION)
+    prediction_mask_dtype = normalize_prediction_mask_dtype(
+        manifest.get('prediction_mask_dtype') or manifest.get('mask_dtype'),
+    )
 
     if mode == 'evaluate-release':
         evaluation_manifest = manifest
@@ -1955,6 +2008,7 @@ def run_worker_request(
         promoted=not _flag_from_payload(manifest.get('shadow_mode'), not SAR_UNET_PROMOTED),
         model_family=prediction_model_family,
         model_version=prediction_model_version,
+        prediction_mask_dtype=prediction_mask_dtype,
     )
 
 

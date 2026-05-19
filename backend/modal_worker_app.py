@@ -268,6 +268,7 @@ def run_remote_sar_segment(
             'shadow_mode': report.get('shadow_mode'),
             'model_family': report.get('model_family'),
             'model_version': report.get('model_version'),
+            'prediction_mask_dtype': report.get('prediction_mask_dtype'),
             'scene_count': report.get('scene_count'),
             'detections_count': report.get('detections_count'),
             'persisted_events': report.get('persisted_events'),

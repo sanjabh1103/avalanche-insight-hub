@@ -20,6 +20,7 @@ def _inputs(root: Path, *, passing_candidate_count: int = 0) -> dict[str, Path]:
     return {
         'v7_integrity_path': _write_json(root / 'integrity.json', {
             'decision': 'blocked_threshold_calibration_failure',
+            'quantized_threshold_mismatch': False,
             'selected_threshold_positive_pixels': 0,
             'lowest_threshold_positive_pixels': 416668,
         }),
@@ -125,6 +126,73 @@ class Phase7UnblockReattemptPacketTests(unittest.TestCase):
         self.assertEqual(report['sota_checkpoint_review']['status'], 'blocked_invalid_sota_checkpoint_input')
         self.assertIn('checkpoint URL must be direct HTTPS', report['sota_checkpoint_review']['blockers'])
         self.assertIn('license note is required before checkpoint evaluation', report['sota_checkpoint_review']['blockers'])
+        self.assertFalse(report['next_gpu_run_authorized'])
+
+    def test_quantized_threshold_mismatch_prioritizes_calibration_fix_before_v8(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            inputs = _inputs(root)
+            integrity = json.loads(inputs['v7_integrity_path'].read_text(encoding='utf-8'))
+            integrity['decision'] = 'blocked_quantized_threshold_mismatch'
+            integrity['quantized_threshold_mismatch'] = True
+            inputs['v7_integrity_path'].write_text(json.dumps(integrity), encoding='utf-8')
+
+            report = build_phase7_unblock_reattempt_packet(
+                **inputs,
+                output_root=root / 'out',
+            )
+
+        self.assertEqual(report['decision'], 'calibration_bug_fix_first')
+        self.assertTrue(report['v7_quantized_threshold_mismatch'])
+        self.assertEqual(report['candidate_design_report_v8']['decision'], 'no_gpu_candidate_design_until_evidence_improves')
+        self.assertFalse(report['next_gpu_run_authorized'])
+
+    def test_legacy_integrity_artifact_with_uint8_max_infers_calibration_fix(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            inputs = _inputs(root)
+            integrity = json.loads(inputs['v7_integrity_path'].read_text(encoding='utf-8'))
+            integrity['selected_threshold'] = 0.9980000257492065
+            integrity['scene_reports'] = [
+                {'prediction_probability_summary': {'max': 254.0 / 255.0}},
+                {'prediction_probability_summary': {'max': 254.0 / 255.0}},
+            ]
+            inputs['v7_integrity_path'].write_text(json.dumps(integrity), encoding='utf-8')
+
+            report = build_phase7_unblock_reattempt_packet(
+                **inputs,
+                output_root=root / 'out',
+            )
+
+        self.assertEqual(report['decision'], 'calibration_bug_fix_first')
+        self.assertTrue(report['v7_quantized_threshold_mismatch'])
+        self.assertFalse(report['next_gpu_run_authorized'])
+
+    def test_float32_integrity_passed_but_metrics_fail_recommends_v8_design(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            inputs = _inputs(root)
+            integrity = json.loads(inputs['v7_integrity_path'].read_text(encoding='utf-8'))
+            integrity.update({
+                'decision': 'integrity_passed_recovery_needed',
+                'failure_classification': 'metrics_failure_after_valid_materialization',
+                'quantized_threshold_mismatch': False,
+                'selected_threshold_positive_pixels': 279181,
+                'lowest_threshold_positive_pixels': 416797,
+            })
+            inputs['v7_integrity_path'].write_text(json.dumps(integrity), encoding='utf-8')
+
+            report = build_phase7_unblock_reattempt_packet(
+                **inputs,
+                output_root=root / 'out',
+            )
+
+        self.assertEqual(report['decision'], 'one_bounded_v8_candidate_warranted')
+        self.assertFalse(report['v7_quantized_threshold_mismatch'])
+        self.assertEqual(
+            report['candidate_design_report_v8']['decision'],
+            'bounded_v8_candidate_design_recommended',
+        )
         self.assertFalse(report['next_gpu_run_authorized'])
 
     def test_passing_non_gpu_candidate_blocks_new_gpu_design(self) -> None:

@@ -32,6 +32,7 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | Phase 4 AvalCD first gate | `backend/scripts/build_avalcd_first_gate_plan.py` | Builds the scene-blended AvalCD evaluation request from a candidate checkpoint and records pass/fail before any SnowSlide work. |
 | Phase 0-7 cross-verification | `backend/scripts/build_phase0_7_cross_verification_report.py` | Consolidates Phase 0-6 artifacts, writes the v6 transfer-failure addendum, and fails Phase 7 closed unless SnowSlide and fresh-final gates are ready. |
 | Phase 7 unblock reattempt packet | `backend/scripts/build_phase7_unblock_reattempt_packet.py` | Records the two valid forward paths: reviewed SOTA checkpoint evaluation if a direct compatible checkpoint exists, otherwise a design-only v8 candidate packet plus a Claude 4.7 adversarial-review prompt. |
+| SnowSlide mask-dtype requalification | `backend/scripts/build_snowslide_mask_dtype_requalification_requests.py` | Builds a float32 SnowSlide v7 requalification packet so high thresholds can be evaluated on stored probabilities without uint8 quantization loss. |
 | SAR promotion acceptance guard | `backend/sar_release_promote.py`, `backend/scripts/run_authoritative_release_gate.py` | Prevents SAR promotion from `beats_baseline=true` alone; promotion now requires an attached accepted SnowSlide research-grade report. |
 | Modal cost guard | `backend/scripts/modal_cost_guard.py` | Reasserts zero warm containers for GPU Modal functions so GPU is used only when a job is running. |
 
@@ -630,19 +631,33 @@ This writes ignored operator artifacts under:
 backend/artifacts/european-shadow-qualification/phase7-unblock-reattempt-2026-05-18/
 ```
 
-Current generated decision is `one_bounded_v8_candidate_warranted`, but `next_gpu_run_authorized=false`. The packet records:
+Current generated decision is `one_bounded_v8_candidate_warranted`, with `next_gpu_run_authorized=false`. The packet records:
 
 | Path | Current status | Meaning |
 |---|---|---|
 | Reviewed SOTA checkpoint evaluation | `sota_checkpoint_unavailable` | Public AvalCD code documents training/inference and Zenodo exposes the dataset, but no reviewed direct HTTPS checkpoint URL compatible with `swinunet_tiny_diff` or `resnet34_unet` is available from the checked sources. |
-| SnowSlide calibration bridge | Tried and failed | The v7 non-GPU sweep found no all-seven-scene candidate that passes precision, recall, F1, and false-positive floors. |
-| v8 candidate design | `bounded_v8_candidate_design_recommended` | Design-only artifact targets SnowSlide domain calibration and probability-scale transfer from the v7 checkpoint. It does not authorize GPU work. |
+| SnowSlide serialization calibration | Closed as implementation bug | The old uint8 masks made threshold `0.9980000257492065` unreachable because the stored max was `254/255`. The worker now supports `prediction_mask_dtype=float32`, and binary `0/1` truth masks are kept unscaled during evaluation. |
+| SnowSlide calibration bridge | `blocked_research_grade` after float32 requalification | The corrected selected-rule dry-run reaches precision `0.6609`, recall `0.5097`, F1 `0.5755`, and false-positive rate `0.00137`. It beats baseline but still misses the precision and F1 floors. |
+| Non-GPU threshold/component sweep | `passing_candidate_count=0` | Best all-scene float32 sweep candidate uses threshold `0.985` and component area `128`, reaching precision `0.6443`, recall `0.5450`, F1 `0.5905`, and false-positive rate `0.00158`; it still fails research-grade. |
+| v8 candidate design | `bounded_v8_candidate_design_recommended` | A future v8 design is now scientifically warranted from corrected float32 evidence, but no GPU run is authorized by this artifact. A separate one-run authorization checkpoint is required. |
 | Claude 4.7 adversarial review | Prompt generated | `claude_47_adversarial_review_prompt.md` asks for an independent audit of implementation bugs, SOTA availability, scientific floors, and whether one bounded v8 candidate is justified. |
 | Fresh final holdout | Blocked | It remains premature until SnowSlide research-grade first passes. |
 
 The SOTA search decision is intentionally strict: `backend/scripts/fetch_sota_sar_weights.py` must only be used after a direct `https://...` checkpoint URL, license note, and compatible model family are reviewed. HTML pages, generic SAM checkpoints, dataset-only Zenodo records, or unreviewed files are not accepted as model evidence.
 
-The v8 design-only checkpoint uses initial checkpoint `/artifacts/20260518T124829Z/sar_model.pt` and proposes a future bounded candidate that targets probability calibration and false-positive control. It must still go through a separate candidate authorization request before any Modal GPU run, then AvalCD scene-blended first, then SnowSlide research-grade, then fresh final holdout before Phase 7 review.
+The float32 requalification request was generated with:
+
+```bash
+python3 -m backend.scripts.build_snowslide_mask_dtype_requalification_requests \
+  --source-materialization-root backend/artifacts/european-shadow-heldout/snowslide-materialization/scene-blended-v7/by-scene \
+  --source-evaluate-request backend/artifacts/european-shadow-heldout/snowslide-dry-run/scene-blended-v7/evaluate_release_request.json \
+  --prediction-model-version avalcd_swinunet_tiny_diff_domain_calibrated_shadow_20260518_v7_scene_blended_float32 \
+  --prediction-mask-dtype float32 \
+  --materialization-output-root backend/artifacts/european-shadow-heldout/snowslide-materialization/scene-blended-v7-float32 \
+  --dry-run-output-root backend/artifacts/european-shadow-heldout/snowslide-dry-run/scene-blended-v7-float32
+```
+
+After re-materialization, the float32 integrity audit reports `integrity_passed_recovery_needed` with quantization mismatch `false` and selected-threshold positives `279181`. This closes the serialization bug but does not unblock Phase 7. The next valid checkpoint is a design-only v8 authorization review based on corrected evidence. It must still go through a separate candidate authorization request before any Modal GPU training run, then AvalCD scene-blended first, then SnowSlide research-grade, then fresh final holdout before Phase 7 review.
 
 Any future successful candidate must pass in this order:
 
