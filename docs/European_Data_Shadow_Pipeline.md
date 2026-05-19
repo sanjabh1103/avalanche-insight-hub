@@ -32,6 +32,7 @@ This implementation adds a shadow-only European avalanche data layer. It is inte
 | Phase 4 AvalCD first gate | `backend/scripts/build_avalcd_first_gate_plan.py` | Builds the scene-blended AvalCD evaluation request from a candidate checkpoint and records pass/fail before any SnowSlide work. |
 | Phase 0-7 cross-verification | `backend/scripts/build_phase0_7_cross_verification_report.py` | Consolidates Phase 0-6 artifacts, writes the v6 transfer-failure addendum, and fails Phase 7 closed unless SnowSlide and fresh-final gates are ready. |
 | Phase 7 unblock reattempt packet | `backend/scripts/build_phase7_unblock_reattempt_packet.py` | Records the two valid forward paths: reviewed SOTA checkpoint evaluation if a direct compatible checkpoint exists, otherwise a design-only v8 candidate packet plus a Claude 4.7 adversarial-review prompt. |
+| Phase 7 v8 authorization review | `backend/scripts/build_phase7_v8_candidate_authorization_review.py` | Converts corrected float32 evidence into a fail-closed, single-run v8 authorization packet. It writes a training request only with explicit `--authorize-gpu`. |
 | SnowSlide mask-dtype requalification | `backend/scripts/build_snowslide_mask_dtype_requalification_requests.py` | Builds a float32 SnowSlide v7 requalification packet so high thresholds can be evaluated on stored probabilities without uint8 quantization loss. |
 | SAR promotion acceptance guard | `backend/sar_release_promote.py`, `backend/scripts/run_authoritative_release_gate.py` | Prevents SAR promotion from `beats_baseline=true` alone; promotion now requires an attached accepted SnowSlide research-grade report. |
 | Modal cost guard | `backend/scripts/modal_cost_guard.py` | Reasserts zero warm containers for GPU Modal functions so GPU is used only when a job is running. |
@@ -658,6 +659,33 @@ python3 -m backend.scripts.build_snowslide_mask_dtype_requalification_requests \
 ```
 
 After re-materialization, the float32 integrity audit reports `integrity_passed_recovery_needed` with quantization mismatch `false` and selected-threshold positives `279181`. This closes the serialization bug but does not unblock Phase 7. The next valid checkpoint is a design-only v8 authorization review based on corrected evidence. It must still go through a separate candidate authorization request before any Modal GPU training run, then AvalCD scene-blended first, then SnowSlide research-grade, then fresh final holdout before Phase 7 review.
+
+Build the v8 authorization review with no GPU launch by default:
+
+```bash
+python3 -m backend.scripts.build_phase7_v8_candidate_authorization_review
+```
+
+If the operator explicitly approves one bounded v8 run, generate the train request with:
+
+```bash
+python3 -m backend.scripts.build_phase7_v8_candidate_authorization_review --authorize-gpu
+```
+
+This writes `candidate_authorization_review.json` and, only in authorized mode, `train_sar_unet_request.json` under `backend/artifacts/european-shadow-sar-training/avalcd-shadow-train5-val2-2026-05-16/research-v8/`. The request remains shadow-only and must still be run through Modal cost guard, bounded async training, AvalCD first gate, SnowSlide research-grade gate, and fresh-final holdout before any Phase 7 readiness review.
+
+The authorized v8 checkpoint completed as a bounded single Modal.com run with model checkpoint `/artifacts/20260519T014508Z/sar_model.pt`. AvalCD scene-blended first gate passed, but SnowSlide research-grade still failed:
+
+| Gate | v8 result | Required floor | Status |
+|---|---:|---:|---|
+| AvalCD precision | `0.6093` | `>=0.60` | Pass |
+| AvalCD recall | `0.5942` | `>=0.50` | Pass |
+| SnowSlide precision | `0.6137` | `>=0.70` | Fail |
+| SnowSlide recall | `0.5584` | `>=0.50` | Pass |
+| SnowSlide F1 | `0.5847` | `>=0.60` | Fail |
+| SnowSlide false-positive rate | `0.00184` | `<=0.002` | Pass |
+
+Current v8 decision is `blocked_research_grade`. Phase 6 remains blocked because SnowSlide did not pass; Phase 7 remains not ready; no fresh final holdout or production scoring change is authorized by this run.
 
 Any future successful candidate must pass in this order:
 

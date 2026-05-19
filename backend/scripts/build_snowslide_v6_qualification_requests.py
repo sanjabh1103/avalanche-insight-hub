@@ -97,6 +97,7 @@ def _phase5_scene_request(
     model_path: str,
     model_version: str,
     selected_rule: dict[str, Any],
+    prediction_mask_dtype: str = 'uint8',
 ) -> dict[str, Any]:
     scenes = template.get('scenes')
     if not isinstance(scenes, list) or len(scenes) != 1 or not isinstance(scenes[0], dict):
@@ -111,6 +112,7 @@ def _phase5_scene_request(
         'persist_events': False,
         'model_path': model_path,
         'prediction_model_version': model_version,
+        'prediction_mask_dtype': prediction_mask_dtype,
         'model_family': 'swinunet_tiny_diff',
         'threshold': selected_rule['threshold'],
         'postprocess_min_component_area_px': selected_rule['postprocess_min_component_area_px'],
@@ -128,6 +130,7 @@ def build_snowslide_v6_qualification_requests(
     dry_run_output_root: Path,
     model_path: str = '/artifacts/20260518T103347Z/sar_model.pt',
     model_version: str = DEFAULT_MODEL_VERSION,
+    prediction_mask_dtype: str = 'uint8',
 ) -> dict[str, Any]:
     avalcd_benchmark = _load_json(avalcd_benchmark_report, label='avalcd_benchmark_report')
     first_gate = _load_json(first_gate_plan, label='first_gate_plan')
@@ -143,6 +146,7 @@ def build_snowslide_v6_qualification_requests(
             model_path=model_path,
             model_version=model_version,
             selected_rule=selected_rule,
+            prediction_mask_dtype=prediction_mask_dtype,
         )
         scene_id = str(request['scenes'][0].get('scene_id') or template_path.parent.name)
         output_path = materialization_output_root / 'by-scene' / scene_id / 'sar_segment_request.json'
@@ -170,6 +174,7 @@ def build_snowslide_v6_qualification_requests(
         'reference_set_key': 'snowslide-heldout-v1',
         'model_path': model_path,
         'prediction_model_version': model_version,
+        'prediction_mask_dtype': prediction_mask_dtype,
         'selected_rule': selected_rule,
         'scene_count': len(scene_ids),
         'scene_ids': sorted(scene_ids),
@@ -190,6 +195,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument('--dry-run-output-root', type=Path, default=DEFAULT_DRY_RUN_ROOT)
     parser.add_argument('--model-path', default='/artifacts/20260518T103347Z/sar_model.pt')
     parser.add_argument('--model-version', default=DEFAULT_MODEL_VERSION)
+    parser.add_argument('--prediction-mask-dtype', default='uint8', choices=['uint8', 'uint16', 'float32'])
     return parser.parse_args(argv)
 
 
@@ -203,6 +209,7 @@ def main(argv: list[str] | None = None) -> int:
         dry_run_output_root=args.dry_run_output_root,
         model_path=args.model_path,
         model_version=args.model_version,
+        prediction_mask_dtype=args.prediction_mask_dtype,
     )
     print(json.dumps({
         'status': 'ok',

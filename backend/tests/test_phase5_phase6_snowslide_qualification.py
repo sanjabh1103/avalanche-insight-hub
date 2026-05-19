@@ -163,12 +163,15 @@ class Phase5Phase6SnowSlideQualificationTests(unittest.TestCase):
                 dry_run_output_root=root / 'dry-run',
                 model_path='/artifacts/v6/sar_model.pt',
                 model_version='candidate-v6-scene-blended',
+                prediction_mask_dtype='float32',
             )
             first_request = json.loads(Path(manifest['scene_request_paths'][0]).read_text(encoding='utf-8'))
             eval_request = json.loads((root / 'dry-run' / 'evaluate_release_request.json').read_text(encoding='utf-8'))
 
         self.assertEqual(manifest['scene_count'], 7)
         self.assertEqual(first_request['model_path'], '/artifacts/v6/sar_model.pt')
+        self.assertEqual(first_request['prediction_mask_dtype'], 'float32')
+        self.assertEqual(manifest['prediction_mask_dtype'], 'float32')
         self.assertEqual(first_request['threshold'], 0.9980000257492065)
         self.assertEqual(first_request['postprocess_min_component_area_px'], 0)
         self.assertTrue(first_request['compact_response'])
