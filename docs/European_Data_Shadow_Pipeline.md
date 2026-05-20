@@ -693,10 +693,11 @@ The final v8 blocker-closure checkpoint adds a client-safe closeout packet. The 
 ```bash
 python3 -m backend.scripts.build_european_shadow_sar_closeout_pack \
   --allow-shadow-only-presentation \
-  --authorized-by "<named reviewer or presentation owner>" \
+  --authorized-by "Sanjay B." \
   --authorization-reason "Shadow-only client briefing; no SAR production claim" \
-  --manual-review-owner "<named SAR/domain reviewer>" \
-  --manual-review-target-date "<YYYY-MM-DD>"
+  --authorization-evidence-ref "user-thread-authorization-2026-05-20" \
+  --manual-review-owner "Dr. AK___" \
+  --manual-review-target-date "2026-05-27"
 ```
 
 It writes:
@@ -705,7 +706,7 @@ It writes:
 backend/artifacts/european-shadow-qualification/sar-v8-client-closeout-2026-05-19/
 ```
 
-The v2 closeout packet records `version=european_shadow_sar_closeout_pack_v2`, `decision=blocked_sar_production_pending_manual_review`, `sar_production_ready=false`, `phase7_ready=false`, `production_scoring_allowed=false`, and `next_gpu_run_authorized=false`. `client_presentation_ready` is `false` unless a named shadow-only presentation authorizer, reason, manual-review owner, and manual-review target date are provided. Existing v1 generated JSON/Markdown artifacts are renamed with `.deprecated_v1` when v2 is written. These generated artifacts remain ignored and should not be committed.
+The v2 closeout packet records `version=european_shadow_sar_closeout_pack_v2`, `decision=blocked_sar_production_pending_manual_review`, `sar_production_ready=false`, `phase7_ready=false`, `production_scoring_allowed=false`, and `next_gpu_run_authorized=false`. With Sanjay B. as authorizer and Dr. AK___ assigned for `2026-05-27`, `client_presentation_ready=true` is allowed only for a shadow-only briefing. It does not close the scientific SnowSlide review, authorize production, authorize v9 GPU work, or authorize fresh-final evaluation. Existing v1 generated JSON/Markdown artifacts are renamed with `.deprecated_v1` when v2 is written. These generated artifacts remain ignored and should not be committed.
 
 The v8 diagnostics and non-GPU sweep closed the remaining ambiguity:
 
@@ -716,6 +717,8 @@ The v8 diagnostics and non-GPU sweep closed the remaining ambiguity:
 | v8 dominant blocker | `precision_burden` | The model produces useful held-out signal but still has too much false-positive burden for research-grade acceptance. |
 | v8 manual review packet | `30` components | The next valid scientific activity is manual scene/component review, not retraining. |
 
+Manual review handoff: `docs/European_Shadow_SAR_Manual_Review_Handoff.md`.
+
 Per-scene SnowSlide v8 diagnostics are now the headline scientific story:
 
 | Scene | Region | Precision | Recall | F1 | Verdict |
@@ -725,12 +728,23 @@ Per-scene SnowSlide v8 diagnostics are now the headline scientific story:
 | `livigno_20250129` | Italian Alps | `0.631` | `0.549` | `0.587` | Near-pass |
 | `livigno_20240403` | Italian Alps | `0.653` | `0.509` | `0.572` | Near-pass |
 | `nuuk_20160413` | Greenland Nuuk | `0.614` | `0.465` | `0.529` | Recall gap |
-| `pish_20230221` | Pamir | `0.393` | `0.569` | `0.465` | Severe false-positive burden |
+| `pish_20230221` | Tajikistan Pamir | `0.393` | `0.569` | `0.465` | Severe false-positive burden |
 | `livigno_20250318` | Italian Alps | `0.405` | `0.436` | `0.420` | Severe precision/F1 gap |
+
+SnowSlide regional aggregates from diagnostic TP/FP/FN/TN counts are:
+
+| Region | Scene count | Precision | Recall | F1 | FPR |
+|---|---:|---:|---:|---:|---:|
+| Greenland Nuuk | 2 | `0.6237` | `0.5452` | `0.5818` | `0.001937` |
+| Italian Alps | 3 | `0.6024` | `0.5073` | `0.5508` | `0.000977` |
+| Norway | 1 | `0.8480` | `0.6856` | `0.7582` | `0.001721` |
+| Tajikistan Pamir | 1 | `0.3927` | `0.5690` | `0.4647` | `0.005569` |
+
+Statistical fragility note: the deterministic bootstrap over seven per-scene F1 values uses seed `20260520` and `10000` resamples. The per-scene F1 mean is `0.564318`, sample standard deviation is `0.110413`, min is `0.419982`, max is `0.758228`, and the mean-F1 CI95 is `[0.492448, 0.643184]`. This is a fragility indicator, not a replacement for the required fresh final holdout.
 
 ## Current Stop Condition For Client Presentation
 
-The client presentation can safely say that the European shadow pipeline and SAR qualification lane are implemented and evidence-rich only if the deck is explicitly framed as shadow-only and a named manual-review owner/target date are recorded. It must not say that SAR production scoring is ready. Current status:
+The client presentation can safely say that the European shadow pipeline and SAR qualification lane are implemented and evidence-rich because the deck is explicitly framed as shadow-only and Dr. AK___ is assigned to complete manual review by `2026-05-27`. It must not say that SAR production scoring is ready. Current status:
 
 | Claim | Status |
 |---|---|

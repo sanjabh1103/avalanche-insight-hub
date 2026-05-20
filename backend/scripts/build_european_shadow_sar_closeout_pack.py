@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
+import statistics
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,6 +35,8 @@ DEFAULT_SNOWSLIDE_DIAGNOSTICS = Path(
 )
 SCHEMA_VERSION = 'european_shadow_sar_closeout_pack_v2'
 DEPRECATED_SCHEMA_VERSIONS = {'european_shadow_sar_closeout_pack_v1'}
+SNOWSLIDE_BOOTSTRAP_SEED = 20260520
+SNOWSLIDE_BOOTSTRAP_RESAMPLES = 10_000
 
 
 def _now_iso() -> str:
@@ -119,7 +123,19 @@ def _scene_region(scene_id: str) -> str:
     if scene_id.startswith('livigno_'):
         return 'Italian Alps'
     if scene_id.startswith('pish_'):
-        return 'Pamir'
+        return 'Tajikistan Pamir'
+    return 'unknown'
+
+
+def _scene_region_key(scene_id: str) -> str:
+    if scene_id.startswith('tromso_'):
+        return 'norway'
+    if scene_id.startswith('nuuk_'):
+        return 'greenland_nuuk'
+    if scene_id.startswith('livigno_'):
+        return 'italian_alps'
+    if scene_id.startswith('pish_'):
+        return 'tajikistan_pamir'
     return 'unknown'
 
 
@@ -158,6 +174,92 @@ def _per_scene_results(diagnostics: dict[str, Any]) -> list[dict[str, Any]]:
             'verdict': _scene_verdict(metrics),
         })
     return sorted(rows, key=lambda item: float(item['metrics'].get('f1') or 0.0), reverse=True)
+
+
+def _safe_divide(numerator: float, denominator: float) -> float:
+    return numerator / denominator if denominator else 0.0
+
+
+def _snowslide_statistical_summary(diagnostics: dict[str, Any]) -> dict[str, Any]:
+    values = [
+        float(row['f1'])
+        for row in diagnostics.get('per_scene') or []
+        if isinstance(row, dict) and row.get('f1') is not None
+    ]
+    if not values:
+        return {
+            'unit': 'per_scene_f1',
+            'scene_count': 0,
+            'confidence_intervals_computed': False,
+            'note': 'No per-scene F1 values were available for statistical summary.',
+        }
+
+    rng = random.Random(SNOWSLIDE_BOOTSTRAP_SEED)
+    bootstrapped_means = sorted(
+        sum(rng.choice(values) for _ in values) / len(values)
+        for _ in range(SNOWSLIDE_BOOTSTRAP_RESAMPLES)
+    )
+    lower_index = int(0.025 * SNOWSLIDE_BOOTSTRAP_RESAMPLES) - 1
+    upper_index = int(0.975 * SNOWSLIDE_BOOTSTRAP_RESAMPLES) - 1
+    return {
+        'unit': 'per_scene_f1',
+        'scene_count': len(values),
+        'mean': round(statistics.mean(values), 6),
+        'sample_std': round(statistics.stdev(values), 6) if len(values) > 1 else 0.0,
+        'min': round(min(values), 6),
+        'max': round(max(values), 6),
+        'bootstrap_seed': SNOWSLIDE_BOOTSTRAP_SEED,
+        'bootstrap_resamples': SNOWSLIDE_BOOTSTRAP_RESAMPLES,
+        'bootstrap_mean_f1_ci95': [
+            round(bootstrapped_means[lower_index], 6),
+            round(bootstrapped_means[upper_index], 6),
+        ],
+        'confidence_intervals_computed': True,
+        'note': 'Bootstrap is over seven scene-level F1 values and should be treated as a fragility indicator, not high-power inference.',
+    }
+
+
+def _snowslide_region_metrics(diagnostics: dict[str, Any]) -> list[dict[str, Any]]:
+    aggregates: dict[str, dict[str, Any]] = {}
+    for row in diagnostics.get('per_scene') or []:
+        if not isinstance(row, dict):
+            continue
+        if not all(row.get(key) is not None for key in ('tp', 'fp', 'fn', 'tn')):
+            continue
+        scene_id = str(row.get('scene_id') or '')
+        region_key = _scene_region_key(scene_id)
+        aggregate = aggregates.setdefault(
+            region_key,
+            {
+                'region_key': region_key,
+                'region': _scene_region(scene_id),
+                'scene_count': 0,
+                'tp': 0,
+                'fp': 0,
+                'fn': 0,
+                'tn': 0,
+            },
+        )
+        aggregate['scene_count'] += 1
+        for key in ('tp', 'fp', 'fn', 'tn'):
+            aggregate[key] += int(row.get(key) or 0)
+
+    rows: list[dict[str, Any]] = []
+    for aggregate in aggregates.values():
+        tp = aggregate['tp']
+        fp = aggregate['fp']
+        fn = aggregate['fn']
+        tn = aggregate['tn']
+        precision = _safe_divide(tp, tp + fp)
+        recall = _safe_divide(tp, tp + fn)
+        rows.append({
+            **aggregate,
+            'precision': round(precision, 6),
+            'recall': round(recall, 6),
+            'f1': round(_safe_divide(2 * precision * recall, precision + recall), 6),
+            'false_positive_rate': round(_safe_divide(fp, fp + tn), 6),
+        })
+    return sorted(rows, key=lambda row: row['region_key'])
 
 
 def _region_coverage(benchmark: dict[str, Any]) -> list[dict[str, Any]]:
@@ -223,6 +325,17 @@ def _render_markdown(report: dict[str, Any]) -> str:
         f"- Authorized by: `{report['presentation_authorization'].get('authorized_by')}`",
         f"- Authorization ID: `{report['presentation_authorization'].get('presentation_authorization_id')}`",
         f"- Manual review owner status: `{report['manual_review'].get('owner_status')}`",
+        '',
+        '## SnowSlide Statistical Fragility',
+        '',
+        (
+            f"- Per-scene F1 mean: `{report['snowslide_statistical_summary'].get('mean')}` "
+            f"(sample std `{report['snowslide_statistical_summary'].get('sample_std')}`)"
+        ),
+        (
+            f"- Bootstrap mean-F1 CI95: "
+            f"`{report['snowslide_statistical_summary'].get('bootstrap_mean_f1_ci95')}`"
+        ),
         '',
         '## Current Stop Condition',
         '',
@@ -400,6 +513,8 @@ def build_closeout_pack(
             'estimated_reviewer_hours': 6,
         },
         'per_scene_snowslide_results': _per_scene_results(snowslide_diagnostics),
+        'snowslide_statistical_summary': _snowslide_statistical_summary(snowslide_diagnostics),
+        'snowslide_region_metrics': _snowslide_region_metrics(snowslide_diagnostics),
         'avalcd_region_coverage': _region_coverage(avalcd_benchmark),
         'statistical_limitations': {
             'snowslide_scene_count': 7,

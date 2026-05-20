@@ -23,6 +23,12 @@ def _avalcd_report(*, production_allowed: bool = False, passed: bool = True) -> 
         'production_scoring_allowed': production_allowed,
         'source_reports': [{
             'source_key': 'avalcd_zenodo_v1',
+            'data_quality': {
+                'region_counts': {
+                    'greenland_nuuk': 2,
+                    'italian_alps': 3,
+                },
+            },
             'sar_prediction_metrics': {
                 'evaluation_mode': 'scene_blended',
                 'quality_gate': {
@@ -96,6 +102,10 @@ def _diagnostics() -> dict:
                 'recall': 0.686,
                 'f1': 0.758,
                 'false_positive_rate': 0.0017,
+                'tp': 80,
+                'fp': 10,
+                'fn': 20,
+                'tn': 1000,
             },
             {
                 'scene_id': 'pish_20230221',
@@ -103,6 +113,10 @@ def _diagnostics() -> dict:
                 'recall': 0.569,
                 'f1': 0.465,
                 'false_positive_rate': 0.0056,
+                'tp': 40,
+                'fp': 60,
+                'fn': 30,
+                'tn': 990,
             },
         ],
     }
@@ -166,6 +180,11 @@ class EuropeanShadowSarCloseoutPackTests(unittest.TestCase):
         self.assertIsNotNone(report['presentation_authorization']['presentation_authorization_id'])
         self.assertEqual(report['manual_review']['owner_status'], 'assigned')
         self.assertEqual(report['per_scene_snowslide_results'][0]['scene_id'], 'tromso_20241220')
+        self.assertEqual(report['snowslide_statistical_summary']['unit'], 'per_scene_f1')
+        self.assertTrue(report['snowslide_statistical_summary']['confidence_intervals_computed'])
+        self.assertEqual(report['snowslide_statistical_summary']['bootstrap_seed'], 20260520)
+        self.assertEqual(report['snowslide_region_metrics'][0]['region_key'], 'norway')
+        self.assertEqual(report['avalcd_region_coverage'][0]['metric_status'], 'region_metrics_pending')
 
     def test_tbd_authorization_fields_do_not_count_as_ready(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

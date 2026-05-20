@@ -16,6 +16,8 @@ The failure is scene-localized, not uniform. `tromso_20241220` passes research-g
 
 It adjudicates whether dominant false positives and false negatives are label/data issues, valid model misses, terrain/SAR ambiguity, registration issues, or exclusions pending source review. That outcome determines whether the next step is label remediation, terrain-context review, or a no-launch v9 candidate design.
 
+Dr. AK___ owns this 30-component review, with target completion date `2026-05-27`. Until those rows are reviewed, scientific closure remains pending even though the shadow-only client briefing has been authorized by Sanjay B.
+
 ## 5. Can we run v9 now?
 
 No. v9 requires completed manual review or an explicit waiver plus a separate bounded one-run authorization artifact. The current closeout does not authorize GPU work.
@@ -40,3 +42,6 @@ Not by default. The license matrix distinguishes presentation summary, commercia
 
 Safe framing: the European shadow/SAR lane is implemented, validated as a shadow workflow, and has localized failure modes under review. Unsafe framing: SAR is production-ready, research-grade accepted, or guaranteed to pass v9.
 
+## 11. Does the Sanjay B. authorization make SAR client-ready or production-ready?
+
+It makes the material eligible for a shadow-only briefing when presented with the documented constraints. It does not make SAR production-ready, does not close the SnowSlide research-grade gap, does not authorize v9 GPU work, and does not authorize a fresh-final evaluation.

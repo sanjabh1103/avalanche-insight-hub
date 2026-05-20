@@ -68,9 +68,9 @@ Evidence:
 - `backend/artifacts/european-shadow-qualification/snowslide-research-grade-v8-2026-05-19/diagnostics/manual_label_review_decisions.csv`
 
 Say:
-- The 30-component worksheet must be assigned to a reviewer with SAR and avalanche-domain literacy.
+- The 30-component worksheet is assigned to Dr. AK___ with target date `2026-05-27`.
+- Sanjay B. has authorized the shadow-only briefing framing; this is not production approval.
 - v9 design is justified only after review confirms a model-side gap or a formal waiver is recorded.
 
 Do not say:
 - v9 is already approved or guaranteed to pass.
-

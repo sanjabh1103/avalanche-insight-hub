@@ -8,6 +8,8 @@ The European shadow-data pipeline and SAR qualification workflow are implemented
 
 The most important scientific update is that v8 does not fail uniformly. SnowSlide errors are localized by scene: one scene passes research-grade floors on its own, three scenes are near-pass, and two scenes are severe failure cases that pull the aggregate below acceptance.
 
+Presentation authorization is now assigned for a shadow-only briefing: Sanjay B. authorized the briefing framing, and Dr. AK___ owns the 30-component manual review with target date `2026-05-27`. This does not authorize production scoring, promotion, v9 GPU work, or fresh-final evaluation.
+
 ## What Is Complete
 
 | Area | Status | Client-safe wording |
@@ -42,10 +44,21 @@ Research-grade scene-level reference: precision `>=0.70`, recall `>=0.50`, F1 `>
 | `livigno_20250129` | Italian Alps | `0.631` | `0.549` | `0.587` | `0.00095` | Near-pass; F1 below floor |
 | `livigno_20240403` | Italian Alps | `0.653` | `0.509` | `0.572` | `0.00173` | Near-pass; precision/F1 below floors |
 | `nuuk_20160413` | Greenland Nuuk | `0.614` | `0.465` | `0.529` | `0.00173` | Below; recall gap |
-| `pish_20230221` | Pamir | `0.393` | `0.569` | `0.465` | `0.00557` | Severe false-positive burden |
+| `pish_20230221` | Tajikistan Pamir | `0.393` | `0.569` | `0.465` | `0.00557` | Severe false-positive burden |
 | `livigno_20250318` | Italian Alps | `0.405` | `0.436` | `0.420` | `0.00055` | Severe precision/F1 gap |
 
 Interpretation: v8 carries real SnowSlide signal, but the aggregate failure is dominated by scene-specific problems. The next review should focus first on `pish_20230221` and `livigno_20250318`, while preserving the strong Tromso result as evidence that the model can work under some held-out conditions.
+
+## SnowSlide Region Metrics
+
+These are SnowSlide diagnostic aggregates by broad region using current TP/FP/FN/TN counts. They are not AvalCD per-region metrics.
+
+| Region | Scene count | Precision | Recall | F1 | FPR |
+|---|---:|---:|---:|---:|---:|
+| Greenland Nuuk | 2 | `0.624` | `0.545` | `0.582` | `0.00194` |
+| Italian Alps | 3 | `0.602` | `0.507` | `0.551` | `0.00098` |
+| Norway | 1 | `0.848` | `0.686` | `0.758` | `0.00172` |
+| Tajikistan Pamir | 1 | `0.393` | `0.569` | `0.465` | `0.00557` |
 
 ## Evaluation Coverage By Region
 
@@ -65,9 +78,10 @@ Current status: `manual_scene_label_review_required`.
 | Item | Status |
 |---|---|
 | Component count | 30 |
-| Review owner | Unassigned |
-| Target completion date | Unassigned |
-| Presentation impact | External client presentation should not be scheduled until an owner and target date are named, or the absence is explicitly disclosed as a blocker. |
+| Review owner | Dr. AK___ |
+| Target completion date | `2026-05-27` |
+| Presentation authorization | Sanjay B.; shadow-only client briefing; evidence ref `user-thread-authorization-2026-05-20` |
+| Presentation impact | Shadow-only presentation can proceed with this owner/date recorded. The scientific review remains incomplete until Dr. AK___ fills the 30 decision rows. |
 | Competency required | SAR domain literacy plus glaciology/avalanche field literacy |
 | Throughput estimate | 5 components/hour; 30 components ~= 6 reviewer-hours plus reconciliation |
 | Decision SLA | Each scene resolves to `label_remediation_required`, `labels_valid_model_gap`, `terrain_context_required`, or `review_incomplete`. |
@@ -86,19 +100,19 @@ Decision branches:
 
 This matrix is conservative. It separates using a source in a presentation from deploying it commercially or sharing source imagery externally.
 
-| Source family | Presentation OK? | Commercial deployment OK? | External imagery/share OK? | Notes |
-|---|---|---|---|---|
-| AvalCD | Yes with attribution for shadow-method discussion | No under current CC-BY-NC-style review posture | Needs license-specific review | Current SAR evidence is shadow qualification, not deployable commercial scoring. |
-| Swiss SPOT6 outlines | Summary-level discussion OK with citation | Pending license review | Needs EnviDat/source-term review | Do not distribute imagery or derived outlines externally without terms review. |
-| SLF accidents | Summary-level discussion OK with citation | Pending product-specific review | Needs source-term review | Accident data is bias/audit context, not occurrence-frequency truth. |
-| Norway SAR detections | Summary-level discussion OK | Pending source package/license review | Needs source-term review | Counts and package terms must be verified before relying on row totals. |
-| French EPA/CLPA | Summary-level discussion OK | Pending avalanches.fr terms review | Needs source-term review | EPA/CLPA should remain occurrence/path-prior evidence until terms and schema are reviewed. |
-| Swiss weather/snowpack | Summary-level discussion OK with attribution | Pending product-specific CC BY 4.0 review | Needs product-specific review | Context/calibration surface, not direct avalanche occurrence truth. |
-| EAWS/SLF bulletins | Summary-level discussion OK | No production-warning equivalence | Needs source-specific review | Treat as context and semantics only; do not imply official warning replacement. |
+| Source family | Presentation OK? | Commercial deployment OK? | External imagery/share OK? | Review evidence / license review ID | Notes |
+|---|---|---|---|---|---|
+| AvalCD | Yes with attribution for shadow-method discussion | No under current CC-BY-NC-style review posture | Needs license-specific review | `license-review-avalcd-zenodo-cc-by-nc-2026-05-16` | Current SAR evidence is shadow qualification, not deployable commercial scoring. |
+| Swiss SPOT6 outlines | Summary-level discussion OK with citation | Pending license review | Needs EnviDat/source-term review | SPOT6 2018 staging used `license-review-spot6-2026-05-16`; other SPOT6 exports remain source-specific | Do not distribute imagery or derived outlines externally without terms review. |
+| SLF accidents | Summary-level discussion OK with citation | Pending product-specific review | Needs source-term review | Review ID pending in client-closeout matrix | Accident data is bias/audit context, not occurrence-frequency truth. |
+| Norway SAR detections | Summary-level discussion OK | Pending source package/license review | Needs source-term review | Review ID pending | Counts and package terms must be verified before relying on row totals. |
+| French EPA/CLPA | Summary-level discussion OK | Pending avalanches.fr terms review | Needs source-term review | Review ID pending | EPA/CLPA should remain occurrence/path-prior evidence until terms and schema are reviewed. |
+| Swiss weather/snowpack | Summary-level discussion OK with attribution | Pending product-specific CC BY 4.0 review | Needs product-specific review | Review ID pending by product | Context/calibration surface, not direct avalanche occurrence truth. |
+| EAWS/SLF bulletins | Summary-level discussion OK | No production-warning equivalence | Needs source-specific review | Review ID pending by bulletin source | Treat as context and semantics only; do not imply official warning replacement. |
 
 ## Statistical Limitations
 
-SnowSlide v8 uses seven held-out scenes. This is useful qualification evidence, but it is not a high-power statistical estimate. The aggregate F1 of `0.5847` is close to the `0.60` floor, and inter-scene variance is high. Confidence intervals are not computed in the current artifact. A fresh final holdout remains mandatory before any production discussion after SnowSlide-guided tuning.
+SnowSlide v8 uses seven held-out scenes. This is useful qualification evidence, but it is not a high-power statistical estimate. The aggregate F1 of `0.5847` is close to the `0.60` floor, and inter-scene variance is high. A deterministic bootstrap over the seven per-scene F1 values uses seed `20260520` and `10000` resamples; the mean per-scene F1 is `0.564318`, sample standard deviation is `0.110413`, and the bootstrap mean-F1 CI95 is `[0.492448, 0.643184]`. This interval reinforces the need for manual scene review and, after any future SnowSlide pass, a fresh final holdout before production discussion.
 
 ## Presenter Constraints
 
@@ -136,3 +150,4 @@ An independent Claude 4.7 audit identified the previous uint8 probability-mask q
 | v8 per-scene diagnostics | `backend/artifacts/european-shadow-qualification/snowslide-research-grade-v8-2026-05-19/diagnostics/sar_error_diagnostics.json` |
 | v8 manual review packet | `backend/artifacts/european-shadow-qualification/snowslide-research-grade-v8-2026-05-19/diagnostics/manual_label_review_packet.md` |
 | v8 component worksheet | `backend/artifacts/european-shadow-qualification/snowslide-research-grade-v8-2026-05-19/diagnostics/manual_label_review_decisions.csv` |
+| Manual review handoff | `docs/European_Shadow_SAR_Manual_Review_Handoff.md` |

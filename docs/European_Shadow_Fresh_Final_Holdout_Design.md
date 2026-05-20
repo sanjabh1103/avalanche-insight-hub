@@ -28,3 +28,4 @@ SnowSlide has influenced threshold and candidate decisions. If a future candidat
 
 Blocked. v8 did not pass SnowSlide research-grade, so fresh final holdout construction is premature.
 
+The Sanjay B. shadow-only presentation authorization and Dr. AK___ manual-review assignment do not change this holdout status.
