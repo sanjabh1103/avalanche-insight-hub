@@ -1,14 +1,15 @@
-# MVP V2 Scientist Client Hub
+# MVP V2 Scientist Collaboration Hub
 
 Status date: 2026-05-26
 
-This folder is the single working hub for the next Avalanche Insight Hub interaction with client scientists, SASE/DGRE-style partners, and scientific communities. It is a curated copy pack: original source files remain in their current locations so existing repo links, code paths, and deck history are not broken.
+This folder is the single working hub for the next Avalanche Insight Hub interaction with the scientist team, SASE/DGRE-style partners, and scientific communities. It is a curated copy pack: original source files remain in their current locations so existing repo links, code paths, and deck history are not broken.
 
 ## How To Use This Folder
 
 | Need | Start here | What it gives you |
 |---|---|---|
-| Customer response draft for MVP1 + MVP2 | [00_start_here/CUSTOMER_RESPONSE_DRAFT_MVP1_MVP2.md](00_start_here/CUSTOMER_RESPONSE_DRAFT_MVP1_MVP2.md) | Short email body plus Word-attachment-ready progress note and 3-month co-development ask. |
+| Scientist collaboration pitch for MVP1 + MVP2 | [00_start_here/SCIENTIST_COLLABORATION_PITCH_MVP1_MVP2.md](00_start_here/SCIENTIST_COLLABORATION_PITCH_MVP1_MVP2.md) | Humble first-contact note for a scientist-led discussion, with Word attachment available beside the Markdown file. |
+| Compact progress workbook | [00_start_here/SCIENTIST_PROGRESS_NOTE_MVP1_MVP2.xlsx](00_start_here/SCIENTIST_PROGRESS_NOTE_MVP1_MVP2.xlsx) | Tabbed Excel workbook with the fuller progress note, current boundaries, pilot outline, and evidence anchors without overloading the first email. |
 | First 5-minute FAQ | [Artifacts/00_read_me_first/SCIENTIST_TEAM_QUICK_START_FAQ.md](Artifacts/00_read_me_first/SCIENTIST_TEAM_QUICK_START_FAQ.md) | Short answers for the repeated scientist/team questions, without asking anyone to read the full archive. |
 | Curated MVP V2 artifact pack | [Artifacts/00_read_me_first/00_READ_ME_FIRST.md](Artifacts/00_read_me_first/00_READ_ME_FIRST.md) | One-source review pack with decks, scientist handout, partner files, workorders, checksums, and Colorado-to-Himalaya readiness links. |
 | First orientation before a meeting | `00_start_here/CLIENT_MEETING_RUNBOOK.md` | Meeting sequence, demo boundaries, and what to show first. |
@@ -20,12 +21,12 @@ This folder is the single working hub for the next Avalanche Insight Hub interac
 | Post-MVP update slides | `03_post_mvp_decks/` | Three addendum sources: co-working, European shadow/SAR, Modal/GPU. |
 | European SAR / SnowSlide evidence | `04_european_shadow_evidence/README.md` | Shadow-only evidence pack and transfer boundary. |
 | Modal/GPU and ML architecture | `05_modal_gpu_ml_architecture/` | Modal operating note, ML inventory, RF/SAR/Tier C plans. |
-| Customer remote-sensing wishlist | `Remote_Sensing_Operational_Wishlist_Delta.md` | Delta from the scanned operational pipeline wishlist; keeps avalanche/landslide detection claims gated. |
+| Scientist remote-sensing wishlist | `Remote_Sensing_Operational_Wishlist_Delta.md` | Delta from the scanned operational pipeline wishlist; keeps avalanche/landslide detection claims gated. |
 | Code, migration, script proof | `06_implementation_evidence/` | Reference copies of the implementation artifacts used by the docs. |
 | Screenshots for demo/deck proof | `07_demo_assets/screenshots/` | Selected public/admin/scientist proof screenshots. |
 | Security, UI, GitHub status | `08_security_ui_github_status/UI_GITHUB_SECURITY_STATUS.md` | What changed, what was not pushed, and what must be checked before sharing. |
 
-## Current Client-Safe Story
+## Current Scientist-Safe Story
 
 Avalanche Insight Hub is now best described as:
 
