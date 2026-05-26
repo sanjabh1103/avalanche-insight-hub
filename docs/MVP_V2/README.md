@@ -9,6 +9,7 @@ This folder is the single working hub for the next Avalanche Insight Hub interac
 | Need | Start here | What it gives you |
 |---|---|---|
 | Scientist collaboration pitch for MVP1 + MVP2 | [00_start_here/SCIENTIST_COLLABORATION_PITCH_MVP1_MVP2.md](00_start_here/SCIENTIST_COLLABORATION_PITCH_MVP1_MVP2.md) | Humble first-contact note for a scientist-led discussion, with Word attachment available beside the Markdown file. |
+| Prototype top-15 feature attachment | [00_start_here/PROTOTYPE_TOP15_FEATURES_AND_FUTURE_PLAN.md](00_start_here/PROTOTYPE_TOP15_FEATURES_AND_FUTURE_PLAN.md) | Quick shareable table of current prototype website features and future plans, with claim boundaries. |
 | Compact progress workbook | [00_start_here/SCIENTIST_PROGRESS_NOTE_MVP1_MVP2.xlsx](00_start_here/SCIENTIST_PROGRESS_NOTE_MVP1_MVP2.xlsx) | Tabbed Excel workbook with the fuller progress note, current boundaries, pilot outline, and evidence anchors without overloading the first email. |
 | First 5-minute FAQ | [Artifacts/00_read_me_first/SCIENTIST_TEAM_QUICK_START_FAQ.md](Artifacts/00_read_me_first/SCIENTIST_TEAM_QUICK_START_FAQ.md) | Short answers for the repeated scientist/team questions, without asking anyone to read the full archive. |
 | Curated MVP V2 artifact pack | [Artifacts/00_read_me_first/00_READ_ME_FIRST.md](Artifacts/00_read_me_first/00_READ_ME_FIRST.md) | One-source review pack with decks, scientist handout, partner files, workorders, checksums, and Colorado-to-Himalaya readiness links. |
