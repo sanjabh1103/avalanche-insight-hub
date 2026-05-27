@@ -1,6 +1,6 @@
 # MVP V2 Scientist Collaboration Hub
 
-Status date: 2026-05-26
+Status date: 2026-05-27
 
 This folder is the single working hub for the next Avalanche Insight Hub interaction with the scientist team, SASE/DGRE-style partners, and scientific communities. It is a curated copy pack: original source files remain in their current locations so existing repo links, code paths, and deck history are not broken.
 
@@ -12,6 +12,7 @@ This folder is the single working hub for the next Avalanche Insight Hub interac
 | Prototype top-15 feature attachment | [00_start_here/PROTOTYPE_TOP15_FEATURES_AND_FUTURE_PLAN.md](00_start_here/PROTOTYPE_TOP15_FEATURES_AND_FUTURE_PLAN.md) | Quick shareable table of current prototype website features and future plans, with claim boundaries. |
 | Prototype top-15 feature workbook | [00_start_here/PROTOTYPE_TOP15_FEATURES_AND_FUTURE_PLAN.xlsx](00_start_here/PROTOTYPE_TOP15_FEATURES_AND_FUTURE_PLAN.xlsx) | Excel version of the top-15 feature table with separate tabs for summary, features, future plan, and claim boundaries. |
 | Prototype top-15 verification report | [00_start_here/PROTOTYPE_TOP15_FEATURE_VERIFICATION_REPORT.md](00_start_here/PROTOTYPE_TOP15_FEATURE_VERIFICATION_REPORT.md) | Browser/test-backed demo-prep audit: what works, what to highlight, and what needs freshness/credential prep before the scientist meeting. |
+| Pre-presentation freshness mitigation | [00_start_here/PRE_PRESENTATION_FRESHNESS_RISK_MITIGATION.md](00_start_here/PRE_PRESENTATION_FRESHNESS_RISK_MITIGATION.md) | Records the 2026-05-27 hosted Colorado batch refresh, proof evidence, must-not-say list, and safe demo framing. |
 | Compact progress workbook | [00_start_here/SCIENTIST_PROGRESS_NOTE_MVP1_MVP2.xlsx](00_start_here/SCIENTIST_PROGRESS_NOTE_MVP1_MVP2.xlsx) | Tabbed Excel workbook with the fuller progress note, current boundaries, pilot outline, and evidence anchors without overloading the first email. |
 | First 5-minute FAQ | [Artifacts/00_read_me_first/SCIENTIST_TEAM_QUICK_START_FAQ.md](Artifacts/00_read_me_first/SCIENTIST_TEAM_QUICK_START_FAQ.md) | Short answers for the repeated scientist/team questions, without asking anyone to read the full archive. |
 | Curated MVP V2 artifact pack | [Artifacts/00_read_me_first/00_READ_ME_FIRST.md](Artifacts/00_read_me_first/00_READ_ME_FIRST.md) | One-source review pack with decks, scientist handout, partner files, workorders, checksums, and Colorado-to-Himalaya readiness links. |

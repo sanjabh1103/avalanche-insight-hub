@@ -8,7 +8,7 @@ Boundary: this verifies prototype feature surfaces and scientist-demo wording. I
 
 The top-15 prototype feature claims are substantially supported by repo code, focused tests, and browser checks. The strongest live-demo story is: a hosted, batch-first avalanche decision-support workspace exists; it loads a Colorado Rockies precomputed artifact; it presents map/time/bulletin/masking/uncertainty/share/export workflows; and admin/scientist routes are present with role-gated access.
 
-The main demo risk is freshness and access, not feature absence. On 2026-05-27, the hosted public route showed `PRECOMPUTED BATCH - STALE (72h)` and `last batch 6d ago`. Admin and scientist workflows are implemented and tested, but the browser-visible routes stop at login gates unless demo credentials and seeded scientist data are prepared. Therefore, for the meeting, say "working prototype and co-working workflow" rather than "fresh operational forecast" or "completed scientist validation."
+The main demo risk was freshness and access, not feature absence. On 2026-05-27, the hosted public route initially showed `PRECOMPUTED BATCH - STALE (72h)` and `last batch 6d ago`. The batch was then refreshed through the repo's same-day/full-grid publication proof path. The hosted route now shows `PRECOMPUTED BATCH - READY (72h)` and `last batch just now` for Colorado Rockies forecast run `f0632464-9200-42e0-bc29-c608291f8c26`. Admin and scientist workflows are implemented and tested, but the browser-visible routes still stop at login gates unless demo credentials and seeded scientist data are prepared. Therefore, for the meeting, say "fresh Colorado technical publication inside a hosted decision-support prototype" rather than "fresh operational forecast" or "completed scientist validation."
 
 ## Verification Evidence
 
@@ -17,7 +17,7 @@ The main demo risk is freshness and access, not feature absence. On 2026-05-27, 
 | Build | Pass | `PATH=/Users/sanjayb/.nvm/versions/node/v25.6.0/bin:$PATH npm run build` succeeded. The default Codex-bundled Node failed on Rollup native package loading; use the user-installed Node path for demo checks. |
 | Focused tests | Pass | 11 test files / 40 tests passed: admin gate, role gate, bulletin, risk dashboard/IPA, uncertainty, cell evidence, field reports, scientist workbench, daily verification, exports. |
 | Local browser `/` | Pass | Rendered Avalanche Hub public workspace with disclaimer, Colorado Rockies region, model/status panel, map, time controls, bulletin, share/export/report/event controls. |
-| Hosted browser `/` | Pass with stale data caveat | `https://avalanche-insight-hub.netlify.app/` rendered the same public route and loaded a precomputed Colorado batch, but displayed stale status. |
+| Hosted browser `/` | Pass after freshness refresh | `https://avalanche-insight-hub.netlify.app/?freshness_check=20260527T1439` rendered the public route and loaded a precomputed Colorado batch showing `last batch just now` and `PRECOMPUTED BATCH - READY (72h)`. |
 | Hosted browser `/admin` | Pass as gated route | Rendered admin control lane and Supabase operator sign-in gate. |
 | Hosted browser `/scientist` | Pass as gated route | Rendered scientist workspace and Supabase scientist sign-in gate. |
 | Computer Use | Partial | Direct Computer Use could not inspect the Codex in-app browser; Chrome was inspected and available. Browser verification is the stronger UI evidence for this task. |
@@ -38,7 +38,7 @@ The main demo risk is freshness and access, not feature absence. On 2026-05-27, 
 | # | Feature | Verified Status | Evidence | Benefit To Highlight To Scientists | Demo Wording |
 |---:|---|---|---|---|---|
 | 1 | Public avalanche forecast workspace | Working | Hosted and local `/` render forecast map, disclaimer, status panel, bulletin, time controls, selected-cell area, share/export/report/event controls. | Shows that research output can be converted into a usable decision-support surface instead of remaining a notebook. | "This is a working decision-support shell for published forecast artifacts, not an official warning service." |
-| 2 | Published batch forecast artifacts | Working, but current hosted batch is stale | Hosted route loaded `forecast-20260504T070406Z`, `PRECOMPUTED BATCH - STALE (72h)`. | Heavy computation stays outside the browser; users inspect published artifacts with provenance and freshness cues. | "The batch publication mechanism works; today it is stale, so we should not call this a fresh forecast." |
+| 2 | Published batch forecast artifacts | Working; refreshed for demo | Hosted route loaded `forecast-20260504T070406Z` with `PRECOMPUTED BATCH - READY (72h)` after same-day publication proof passed for forecast run `f0632464-9200-42e0-bc29-c608291f8c26`. | Heavy computation stays outside the browser; users inspect published artifacts with provenance and freshness cues. | "The Colorado batch is fresh technical publication proof, not an official operational forecast." |
 | 4 | EAWS-style experimental bulletin | Working | Browser showed danger level, problem type, critical aspects/elevations, morning/afternoon/evening windows, and peak window. | Speaks the language avalanche professionals expect: danger level plus problem, where, and when. | "EAWS-style experimental bulletin framing is implemented; local terminology still needs scientist approval." |
 | 5 | Interactive map and time slider | Working | Browser showed Leaflet map, timeline controls, play/reset, hour offset, daypart buttons. | Lets scientists inspect how forecast state changes over time rather than seeing one static score. | "The UI supports map-and-time review of published cells." |
 | 7 | Terrain and snow/public eligibility masking | Working | Hosted click showed `GRID STATE`, `APT MASKED`, slope angle, probability, and mask reason. Tests also cover cell evidence wording. | Prevents false low-risk messaging where terrain is outside the avalanche-prone or public-eligible profile. | "Masked terrain is deliberately separated from danger classes to reduce false confidence." |
@@ -52,7 +52,7 @@ The main demo risk is freshness and access, not feature absence. On 2026-05-27, 
 
 | # | Feature | Current Gap | Why It Matters | Plan To Fix Before Demo |
 |---:|---|---|---|---|
-| 2 | Published batch forecast artifacts | Hosted batch is stale on 2026-05-27 (`last batch 6d ago`, `STALE (72h)`). | A scientist may interpret stale data as weak operational discipline if we call it a current forecast. | Either publish a fresh Colorado technical artifact before the demo or explicitly say "hosted technical proof surface, not a fresh forecast today." |
+| 2 | Published batch forecast artifacts | Mitigated on 2026-05-27; must be rechecked immediately before the meeting. | A scientist may interpret stale data as weak operational discipline if we call it current after it ages out. | Browser-confirm `last batch just now/today` and `READY (72h)` before the demo. If stale again, rerun the same-day publication command or switch wording to "hosted technical proof surface." |
 | 3 | 20x20 grid and 72-hour review pattern | Docs record historic May 8 `20x20` / `400` / `72h` proof, but current visible browser text does not expose `20x20` or `400 ready cells`; it does expose `72h` and timeline review. | The presenter may be challenged if the live UI does not visibly show the exact grid-size claim. | Add a small visible "grid: 20x20 / ready cells / horizon" metadata line, or use a prepared screenshot from the verified May 8 proof pack. |
 | 6 | Cell-level risk inspection | Masked selected cells are easy to demonstrate live; non-masked risk-score cells were not easily found in the current hosted artifact during spot checks. | The top-15 wording says selected cells show risk level/probability/drivers; a live demo should include at least one normal cell and one masked cell. | Prepare a known selected-cell link or publish/seed a demo artifact with both normal and masked cells. Keep masked-cell demo as the conservative fallback. |
 | 9 | Weather summary and snowpack proxy context | Code supports these fields, but the current browser check did not prove a visible weather/snowpack proxy panel for the loaded artifact. | Scientists will ask whether snowpack/weak-layer context is real or placeholder. | Before demo, identify one artifact/cell with weather summary and snowpack proxy fields, or say this is an artifact-dependent surface awaiting partner-reviewed snowpack features. |
@@ -65,7 +65,7 @@ The main demo risk is freshness and access, not feature absence. On 2026-05-27, 
 
 | Pitch Claim | Verification Result | Evidence | Safe Benefit Framing |
 |---|---|---|---|
-| Hosted decision-support MVP exists | Verified | Hosted `/` rendered the public forecast workspace; hosted `/admin` and `/scientist` rendered protected routes. | "The product shell is real and hosted; the current artifact is stale and must not be framed as a fresh operational warning." |
+| Hosted decision-support MVP exists | Verified | Hosted `/` rendered the public forecast workspace; hosted `/admin` and `/scientist` rendered protected routes. After refresh, hosted `/` showed `last batch just now` and `READY (72h)`. | "The product shell is real and hosted; the current Colorado artifact is fresh technical publication proof, not an official operational warning." |
 | Scientist review workflow exists | Verified as code/test + gated route | `/scientist` and `/scientist/daily-verification` routes exist; role-gate and workbench tests passed; full browser workflow requires credentials. | "Scientists can be given a separate review lane without giving them broad operator/admin access." |
 | Current live scorer remains an explainable RF baseline | Verified from route/status docs and source | Hosted route showed `active scorer surrogate_rf_v1`; `Modal_GPU_ML_Inventory.md` identifies `surrogate_rf_v1` as the active MVP baseline. | "The live MVP is anchored on an inspectable tree baseline, while advanced models remain gated." |
 | Modal/GPU is off-path research/candidate compute | Verified from source/docs, not exercised in this run | `Modal_GPU_ML_Inventory.md` maps SAR and MTS-LSTM Modal paths and explicitly states they do not drive current public scoring. | "Modal helps candidate ML and SAR research without making the public route a black-box GPU product." |
@@ -80,7 +80,7 @@ The main demo risk is freshness and access, not feature absence. On 2026-05-27, 
 | 1 | Hosted `/` disclaimer and status panel | We make claim boundaries visible before showing maps. | "Decision-support prototype, not an official warning service." |
 | 2 | Colorado Rockies map, time slider, bulletin | We can turn batch model output into a map/time/bulletin workspace. | "Colorado is live technical proof; it is not Himalayan accuracy proof." |
 | 3 | Click a masked terrain cell | The UI avoids false low-risk messages outside eligible terrain. | "Masked is not low danger; it means this cell is outside the public/terrain profile." |
-| 4 | Show reduced confidence / stale cues | The product is built to expose evidence weakness. | "Today’s hosted batch is stale, so do not treat it as a fresh forecast." |
+| 4 | Show reduced confidence / freshness cues | The product is built to expose evidence weakness and current publication state. | "Today’s Colorado batch is fresh technical proof; this still is not an official forecast or Himalayan validation." |
 | 5 | Share/export controls | Scientists can review the same state and export grid evidence. | "Exports are artifact evidence, not validation." |
 | 6 | `/admin` and `/scientist` gates, then signed-in demo if credentials are prepared | Separation of public, operator, and scientist authority. | "Scientist review informs decisions; it does not automatically promote models." |
 
@@ -92,13 +92,13 @@ The main demo risk is freshness and access, not feature absence. On 2026-05-27, 
 | "The Colorado model proves the Himalayas." | "Colorado proves the web/publication mechanics; Himalayan accuracy requires local reviewed evidence and scientist gates." |
 | "Admin and scientist workflows are ready for scientists to use today." | "The admin and scientist routes are implemented and tested; live use requires prepared accounts and seeded or real review rows." |
 | "The app provides full operational avalanche detection." | "Remote sensing and advanced detection remain shadow-gated and require separate validation." |
-| "The forecast is current." | "The hosted route currently works, but the loaded batch is stale unless we publish a fresh artifact before the demo." |
+| "The forecast is current." | "The Colorado technical batch is fresh as of the latest same-day publication proof; do not call it an operational forecast." |
 
 ## Immediate Fix Checklist
 
 | Priority | Action | Owner | Done Criteria |
 |---:|---|---|---|
-| 1 | Publish or clearly label a fresh/stale Colorado demo artifact | Operator/dev | Hosted `/` shows fresh status, or deck/script explicitly says stale technical proof. |
+| 1 | Publish or clearly label a fresh/stale Colorado demo artifact | Operator/dev | Done on 2026-05-27: hosted `/` showed `last batch just now` and `READY (72h)` after proof passed. Recheck immediately before the meeting. |
 | 2 | Prepare one normal-cell and one masked-cell demo link | Dev/operator | Links restore selected cells and show risk details without hunting during the meeting. |
 | 3 | Prepare admin and scientist demo credentials | Operator | `/admin`, `/scientist`, `/scientist/daily-verification` can be shown beyond the gate. |
 | 4 | Seed synthetic scientist demo rows, if no real rows are approved | Operator | Workbench shows rows marked synthetic/demo-only and not training/production evidence. |
