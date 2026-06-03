@@ -1,0 +1,1293 @@
+{
+  "claim_boundary": {
+    "himalayan_accuracy_claim_allowed": false,
+    "production_scoring_allowed": false,
+    "reason": "The field dictionary defines data semantics only. It is not partner evidence and does not validate any prediction claim."
+  },
+  "decision": "partner_field_dictionary_written_pending_partner_submission",
+  "field_count": 64,
+  "field_definitions": [
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "acceptance_floors",
+      "controlled_values": [],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "independent_himalayan_holdout"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "acquired_at",
+      "controlled_values": [],
+      "description": "Remote-sensing acquisition timestamp.",
+      "expected_format": "ISO-8601 timestamp",
+      "required_in_template_count": 1,
+      "unit": "timestamp",
+      "used_by_requirements": [
+        "remote_sensing_validation_scenes"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "active_date_range",
+      "controlled_values": [],
+      "description": "Date interval when a station, region, or source was active and valid for analysis.",
+      "expected_format": "YYYY-MM-DD/YYYY-MM-DD",
+      "required_in_template_count": 1,
+      "unit": "date range",
+      "used_by_requirements": [
+        "station_metadata"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "air_temp_c",
+      "controlled_values": [],
+      "description": "Near-surface air temperature used for weather features.",
+      "expected_format": "number",
+      "required_in_template_count": 1,
+      "unit": "deg C",
+      "used_by_requirements": [
+        "weather_station_observations"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "aspect",
+      "controlled_values": [],
+      "description": "Slope aspect as degrees clockwise from north or a compass sector.",
+      "expected_format": "number in [0, 360] or compass sector",
+      "required_in_template_count": 2,
+      "unit": "degrees",
+      "used_by_requirements": [
+        "historical_avalanche_events",
+        "terrain_ates_runout_validation"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "avalanche_problem",
+      "controlled_values": [
+        "cornice_fall",
+        "deep_persistent_weak_layer",
+        "gliding_snow",
+        "loose_dry",
+        "loose_wet",
+        "multiple",
+        "new_snow",
+        "no_distinct_problem",
+        "other_reviewed",
+        "persistent_weak_layer",
+        "persistent_weak_layers",
+        "unknown",
+        "wet_snow",
+        "wind_slab"
+      ],
+      "description": "Reviewed avalanche problem type associated with a label, event, or terrain context.",
+      "expected_format": "controlled value",
+      "required_in_template_count": 2,
+      "unit": "none",
+      "used_by_requirements": [
+        "danger_labels_and_bulletins",
+        "historical_avalanche_events"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "case_id",
+      "controlled_values": [],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "scientist_reviews"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "confidence",
+      "controlled_values": [],
+      "description": "Reviewer confidence in an event, label, or case decision.",
+      "expected_format": "number in [0, 1]",
+      "required_in_template_count": 2,
+      "unit": "ratio",
+      "used_by_requirements": [
+        "historical_avalanche_events",
+        "scientist_reviews"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "crs",
+      "controlled_values": [],
+      "description": "Coordinate reference system for a geometry or gridded source.",
+      "expected_format": "EPSG code or CRS identifier",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "warning_region_polygons"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "danger_level_1_to_4",
+      "controlled_values": [],
+      "description": "Current research model-compatible four-class label; must not replace the canonical partner danger level.",
+      "expected_format": "integer from 1 to 4",
+      "required_in_template_count": 1,
+      "unit": "model class",
+      "used_by_requirements": [
+        "danger_labels_and_bulletins"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "danger_level_1_to_5",
+      "controlled_values": [],
+      "description": "Canonical reviewed avalanche danger level, preserving five-level operational standards where available.",
+      "expected_format": "integer from 1 to 5",
+      "required_in_template_count": 1,
+      "unit": "danger level",
+      "used_by_requirements": [
+        "danger_labels_and_bulletins"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "danger_scale_standard",
+      "controlled_values": [
+        "eaws_5_level",
+        "local_4_level",
+        "partner_custom_reviewed",
+        "unknown"
+      ],
+      "description": "Danger-scale standard used by the partner before any model-compatible mapping.",
+      "expected_format": "controlled value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "danger_labels_and_bulletins"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "date_range",
+      "controlled_values": [],
+      "description": "Date interval covered by a holdout or reviewed source group.",
+      "expected_format": "YYYY-MM-DD/YYYY-MM-DD",
+      "required_in_template_count": 1,
+      "unit": "date range",
+      "used_by_requirements": [
+        "independent_himalayan_holdout"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "dem_ref",
+      "controlled_values": [],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "terrain_ates_runout_validation"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "elevation_band_policy",
+      "controlled_values": [],
+      "description": "Partner rule for applying danger labels by elevation band.",
+      "expected_format": "string",
+      "required_in_template_count": 1,
+      "unit": "policy text",
+      "used_by_requirements": [
+        "danger_labels_and_bulletins"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "elevation_m",
+      "controlled_values": [],
+      "description": "Elevation above mean sea level.",
+      "expected_format": "number in [0, 9000]",
+      "required_in_template_count": 2,
+      "unit": "m",
+      "used_by_requirements": [
+        "historical_avalanche_events",
+        "station_metadata"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "elevation_policy",
+      "controlled_values": [],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "warning_region_polygons"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "event_id",
+      "controlled_values": [],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "historical_avalanche_events"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "forecaster_or_reviewer_id",
+      "controlled_values": [],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "danger_labels_and_bulletins"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "grain_type",
+      "controlled_values": [],
+      "description": "Reviewed snow grain or weak-layer classification supplied by the partner.",
+      "expected_format": "string",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "snowpack_profile_features"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "hardness_index",
+      "controlled_values": [],
+      "description": "Partner-reviewed snow hardness index or encoded hardness class.",
+      "expected_format": "number or reviewed class code",
+      "required_in_template_count": 1,
+      "unit": "partner scale",
+      "used_by_requirements": [
+        "snowpack_profile_features"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "holdout_id",
+      "controlled_values": [],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "independent_himalayan_holdout"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "holdout_split",
+      "controlled_values": [],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "remote_sensing_validation_scenes"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "label_quality",
+      "controlled_values": [
+        "incomplete",
+        "invalid",
+        "needs_terrain_context",
+        "suspect",
+        "unknown",
+        "valid"
+      ],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "scientist_reviews"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "latitude",
+      "controlled_values": [],
+      "description": "WGS84 latitude for station, event, or validation point.",
+      "expected_format": "decimal degrees in [-90, 90]",
+      "required_in_template_count": 2,
+      "unit": "degrees",
+      "used_by_requirements": [
+        "historical_avalanche_events",
+        "station_metadata"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "layer_depth_cm",
+      "controlled_values": [],
+      "description": "Depth of a snowpack layer or weak-layer marker.",
+      "expected_format": "nonnegative number",
+      "required_in_template_count": 1,
+      "unit": "cm",
+      "used_by_requirements": [
+        "snowpack_profile_features"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "layer_index",
+      "controlled_values": [],
+      "description": "Ordered snowpack layer index within a station/time profile.",
+      "expected_format": "integer",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "snowpack_profile_features"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "leakage_check",
+      "controlled_values": [],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "independent_himalayan_holdout"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "license_scope",
+      "controlled_values": [
+        "blocked_license_scope",
+        "cc_by_nc_research_only",
+        "commercial_deployment_approved",
+        "external_imagery_share_approved",
+        "internal_research_validation",
+        "internal_shadow_presentation",
+        "partner_restricted_research",
+        "pending_license_review",
+        "public_presentation_with_attribution",
+        "research_validation_only",
+        "unknown"
+      ],
+      "description": "Reviewed usage scope for the source row or package.",
+      "expected_format": "controlled value",
+      "required_in_template_count": 10,
+      "unit": "none",
+      "used_by_requirements": [
+        "danger_labels_and_bulletins",
+        "historical_avalanche_events",
+        "independent_himalayan_holdout",
+        "remote_sensing_validation_scenes",
+        "scientist_reviews",
+        "snowpack_profile_features",
+        "station_metadata",
+        "terrain_ates_runout_validation",
+        "warning_region_polygons",
+        "weather_station_observations"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "longitude",
+      "controlled_values": [],
+      "description": "WGS84 longitude for station, event, or validation point.",
+      "expected_format": "decimal degrees in [-180, 180]",
+      "required_in_template_count": 2,
+      "unit": "degrees",
+      "used_by_requirements": [
+        "historical_avalanche_events",
+        "station_metadata"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "model_error_type",
+      "controlled_values": [
+        "calibration_error",
+        "domain_shift",
+        "false_negative",
+        "false_positive",
+        "localization_error",
+        "not_applicable",
+        "true_negative",
+        "true_positive",
+        "unknown"
+      ],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "scientist_reviews"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "observed_at",
+      "controlled_values": [],
+      "description": "Timestamp for an observation, event, or reviewed snowpack profile.",
+      "expected_format": "ISO-8601 timestamp",
+      "required_in_template_count": 3,
+      "unit": "timestamp",
+      "used_by_requirements": [
+        "historical_avalanche_events",
+        "snowpack_profile_features",
+        "weather_station_observations"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "observed_outcome",
+      "controlled_values": [
+        "avalanche_observed",
+        "incident",
+        "near_miss",
+        "no_avalanche_observed",
+        "partial_evidence",
+        "unknown"
+      ],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "historical_avalanche_events"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "polygon_geometry",
+      "controlled_values": [],
+      "description": "Warning-region geometry in a reviewed geospatial encoding.",
+      "expected_format": "WKT, GeoJSON, or partner-reviewed geometry reference",
+      "required_in_template_count": 1,
+      "unit": "geometry",
+      "used_by_requirements": [
+        "warning_region_polygons"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "precipitation_mm",
+      "controlled_values": [],
+      "description": "Liquid-equivalent precipitation over the reported observation window.",
+      "expected_format": "nonnegative number",
+      "required_in_template_count": 1,
+      "unit": "mm",
+      "used_by_requirements": [
+        "weather_station_observations"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "preprocessing_level",
+      "controlled_values": [
+        "analysis_ready",
+        "co_registered",
+        "orthorectified",
+        "radiometrically_calibrated",
+        "raw",
+        "reviewed_analysis_ready",
+        "terrain_corrected",
+        "unknown"
+      ],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "remote_sensing_validation_scenes"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "quality_flag",
+      "controlled_values": [
+        "corrected",
+        "estimated",
+        "measured",
+        "modeled",
+        "provisional",
+        "reviewed_suspect",
+        "reviewed_valid",
+        "unknown"
+      ],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 2,
+      "unit": "none",
+      "used_by_requirements": [
+        "snowpack_profile_features",
+        "terrain_ates_runout_validation"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "region_id",
+      "controlled_values": [],
+      "description": "Stable warning-region identifier used to join labels, polygons, terrain, and holdout evidence.",
+      "expected_format": "string",
+      "required_in_template_count": 3,
+      "unit": "none",
+      "used_by_requirements": [
+        "danger_labels_and_bulletins",
+        "terrain_ates_runout_validation",
+        "warning_region_polygons"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "region_ids",
+      "controlled_values": [],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "independent_himalayan_holdout"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "region_key",
+      "controlled_values": [],
+      "description": "Partner warning region, forecast zone, or pilot-area key for station grouping.",
+      "expected_format": "string",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "station_metadata"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "review_id",
+      "controlled_values": [],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "scientist_reviews"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "review_status",
+      "controlled_values": [],
+      "description": "Partner review state; evidence rows must be reviewed before they can support readiness.",
+      "expected_format": "reviewed",
+      "required_in_template_count": 10,
+      "unit": "none",
+      "used_by_requirements": [
+        "danger_labels_and_bulletins",
+        "historical_avalanche_events",
+        "independent_himalayan_holdout",
+        "remote_sensing_validation_scenes",
+        "scientist_reviews",
+        "snowpack_profile_features",
+        "station_metadata",
+        "terrain_ates_runout_validation",
+        "warning_region_polygons",
+        "weather_station_observations"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "reviewed_at",
+      "controlled_values": [],
+      "description": "Timestamp when the evidence row or source package was reviewed.",
+      "expected_format": "ISO-8601 timestamp",
+      "required_in_template_count": 10,
+      "unit": "timestamp",
+      "used_by_requirements": [
+        "danger_labels_and_bulletins",
+        "historical_avalanche_events",
+        "independent_himalayan_holdout",
+        "remote_sensing_validation_scenes",
+        "scientist_reviews",
+        "snowpack_profile_features",
+        "station_metadata",
+        "terrain_ates_runout_validation",
+        "warning_region_polygons",
+        "weather_station_observations"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "reviewer_id",
+      "controlled_values": [],
+      "description": "Named reviewer, review board, or partner review identifier.",
+      "expected_format": "string",
+      "required_in_template_count": 10,
+      "unit": "none",
+      "used_by_requirements": [
+        "danger_labels_and_bulletins",
+        "historical_avalanche_events",
+        "independent_himalayan_holdout",
+        "remote_sensing_validation_scenes",
+        "scientist_reviews",
+        "snowpack_profile_features",
+        "station_metadata",
+        "terrain_ates_runout_validation",
+        "warning_region_polygons",
+        "weather_station_observations"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "reviewer_notes",
+      "controlled_values": [],
+      "description": "Short notes explaining assumptions, caveats, or local mapping decisions.",
+      "expected_format": "string",
+      "required_in_template_count": 10,
+      "unit": "none",
+      "used_by_requirements": [
+        "danger_labels_and_bulletins",
+        "historical_avalanche_events",
+        "independent_himalayan_holdout",
+        "remote_sensing_validation_scenes",
+        "scientist_reviews",
+        "snowpack_profile_features",
+        "station_metadata",
+        "terrain_ates_runout_validation",
+        "warning_region_polygons",
+        "weather_station_observations"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "runout_validation_ref",
+      "controlled_values": [],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "terrain_ates_runout_validation"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "scene_id",
+      "controlled_values": [],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "remote_sensing_validation_scenes"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "sensor",
+      "controlled_values": [],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "remote_sensing_validation_scenes"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "slope",
+      "controlled_values": [],
+      "description": "Slope angle for terrain or runout evidence.",
+      "expected_format": "number in [0, 90]",
+      "required_in_template_count": 1,
+      "unit": "degrees",
+      "used_by_requirements": [
+        "terrain_ates_runout_validation"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "snow_depth_cm",
+      "controlled_values": [],
+      "description": "Total snow depth at the observation point.",
+      "expected_format": "nonnegative number",
+      "required_in_template_count": 1,
+      "unit": "cm",
+      "used_by_requirements": [
+        "weather_station_observations"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "snowfall_cm",
+      "controlled_values": [],
+      "description": "New snowfall over the reported observation window.",
+      "expected_format": "nonnegative number",
+      "required_in_template_count": 1,
+      "unit": "cm",
+      "used_by_requirements": [
+        "weather_station_observations"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "source",
+      "controlled_values": [],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "historical_avalanche_events"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "source_ref",
+      "controlled_values": [],
+      "description": "SHA-256 qualified reference to a reviewed source package.",
+      "expected_format": "sha256:<64-hex> or file:<path>#sha256=<64-hex>",
+      "required_in_template_count": 10,
+      "unit": "reference",
+      "used_by_requirements": [
+        "danger_labels_and_bulletins",
+        "historical_avalanche_events",
+        "independent_himalayan_holdout",
+        "remote_sensing_validation_scenes",
+        "scientist_reviews",
+        "snowpack_profile_features",
+        "station_metadata",
+        "terrain_ates_runout_validation",
+        "warning_region_polygons",
+        "weather_station_observations"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "source_refs",
+      "controlled_values": [],
+      "description": "One or more SHA-256 qualified source references used by a holdout definition.",
+      "expected_format": "semicolon, comma, or pipe separated source_ref values",
+      "required_in_template_count": 1,
+      "unit": "reference list",
+      "used_by_requirements": [
+        "independent_himalayan_holdout"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "stability_index",
+      "controlled_values": [],
+      "description": "Normalized snowpack stability indicator.",
+      "expected_format": "number in [0, 1]",
+      "required_in_template_count": 1,
+      "unit": "ratio",
+      "used_by_requirements": [
+        "snowpack_profile_features"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "station_id",
+      "controlled_values": [],
+      "description": "Stable partner-local station identifier used to join metadata, weather, and snowpack rows.",
+      "expected_format": "string",
+      "required_in_template_count": 3,
+      "unit": "none",
+      "used_by_requirements": [
+        "snowpack_profile_features",
+        "station_metadata",
+        "weather_station_observations"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "terrain_class",
+      "controlled_values": [
+        "challenging",
+        "complex",
+        "extreme",
+        "non_avalanche",
+        "simple",
+        "unknown"
+      ],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "terrain_ates_runout_validation"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "truth_mask_or_event_ref",
+      "controlled_values": [],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "remote_sensing_validation_scenes"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "valid_date_range",
+      "controlled_values": [],
+      "description": "Date interval when a geometry or regional policy is valid.",
+      "expected_format": "YYYY-MM-DD/YYYY-MM-DD",
+      "required_in_template_count": 1,
+      "unit": "date range",
+      "used_by_requirements": [
+        "warning_region_polygons"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "valid_from",
+      "controlled_values": [],
+      "description": "Forecast, bulletin, or label validity start.",
+      "expected_format": "ISO-8601 timestamp",
+      "required_in_template_count": 1,
+      "unit": "timestamp",
+      "used_by_requirements": [
+        "danger_labels_and_bulletins"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "valid_to",
+      "controlled_values": [],
+      "description": "Forecast, bulletin, or label validity end.",
+      "expected_format": "ISO-8601 timestamp",
+      "required_in_template_count": 1,
+      "unit": "timestamp",
+      "used_by_requirements": [
+        "danger_labels_and_bulletins"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "verdict",
+      "controlled_values": [
+        "label_remediation_required",
+        "label_valid",
+        "model_error",
+        "review_incomplete",
+        "terrain_context_required",
+        "uncertain"
+      ],
+      "description": "Partner-reviewed field required by one or more Himalayan evidence templates.",
+      "expected_format": "string or reviewed partner value",
+      "required_in_template_count": 1,
+      "unit": "none",
+      "used_by_requirements": [
+        "scientist_reviews"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "wind_dir_deg",
+      "controlled_values": [],
+      "description": "Wind direction clockwise from north.",
+      "expected_format": "number in [0, 360]",
+      "required_in_template_count": 1,
+      "unit": "degrees",
+      "used_by_requirements": [
+        "weather_station_observations"
+      ]
+    },
+    {
+      "collection_note": "Preserve the original partner value in source systems; only map to this schema with reviewer notes.",
+      "column": "wind_speed_ms",
+      "controlled_values": [],
+      "description": "Wind speed aligned to the weather feature window.",
+      "expected_format": "nonnegative number",
+      "required_in_template_count": 1,
+      "unit": "m/s",
+      "used_by_requirements": [
+        "weather_station_observations"
+      ]
+    }
+  ],
+  "generated_at": "2026-05-23T13:13:35.699020+00:00",
+  "himalayan_accuracy_claim_allowed": false,
+  "production_scoring_allowed": false,
+  "scale_mapping_notes": [
+    "danger_level_1_to_5 preserves the partner or operational five-level scale when available.",
+    "danger_level_1_to_4 is the current RF4-compatible research label and must not be treated as canonical truth.",
+    "If a reviewed level 5 occurs, keep danger_level_1_to_5=5 and document the four-class mapping in reviewer_notes before RF4 evaluation."
+  ],
+  "schema_version": "himalayan_accuracy_partner_field_dictionary_v1",
+  "standards_anchors": [
+    {
+      "name": "EAWS avalanche danger scale and avalanche problems",
+      "url": "https://www.avalanches.org/standards/",
+      "usage": "Preserve canonical danger and problem semantics before model-specific class mapping."
+    },
+    {
+      "name": "CAAML-style avalanche data interchange",
+      "url": "https://caaml.org/",
+      "usage": "Keep evidence fields explicit enough for later structured data exchange and archival mapping."
+    }
+  ],
+  "template_guides": [
+    {
+      "category": "himalayan_station_network",
+      "controlled_fields": [
+        "license_scope"
+      ],
+      "filename": "station_metadata.csv",
+      "minimum_distinct_counts": {
+        "station_id": 10
+      },
+      "minimum_numeric_spans": {
+        "elevation_m": 500.0
+      },
+      "minimum_rows_for_availability": 10,
+      "minimum_temporal_span_days": {},
+      "required_columns": [
+        "station_id",
+        "region_key",
+        "latitude",
+        "longitude",
+        "elevation_m",
+        "active_date_range",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "requirement_key": "station_metadata",
+      "world_class_reason": "Reviewed Himalayan station coordinates and elevations for GPxyz and local validation."
+    },
+    {
+      "category": "weather_features",
+      "controlled_fields": [
+        "license_scope"
+      ],
+      "filename": "weather_station_observations.csv",
+      "minimum_distinct_counts": {
+        "observed_at": 10,
+        "station_id": 3
+      },
+      "minimum_numeric_spans": {},
+      "minimum_rows_for_availability": 30,
+      "minimum_temporal_span_days": {
+        "observed_at": 7.0
+      },
+      "required_columns": [
+        "station_id",
+        "observed_at",
+        "air_temp_c",
+        "precipitation_mm",
+        "snowfall_cm",
+        "snow_depth_cm",
+        "wind_speed_ms",
+        "wind_dir_deg",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "requirement_key": "weather_station_observations",
+      "world_class_reason": "Partner-observed weather station series aligned to local danger labels."
+    },
+    {
+      "category": "snowpack_weak_layer",
+      "controlled_fields": [
+        "quality_flag",
+        "license_scope"
+      ],
+      "filename": "snowpack_profile_features.csv",
+      "minimum_distinct_counts": {
+        "observed_at": 5,
+        "station_id": 3
+      },
+      "minimum_numeric_spans": {},
+      "minimum_rows_for_availability": 20,
+      "minimum_temporal_span_days": {
+        "observed_at": 4.0
+      },
+      "required_columns": [
+        "station_id",
+        "observed_at",
+        "layer_index",
+        "layer_depth_cm",
+        "grain_type",
+        "hardness_index",
+        "stability_index",
+        "quality_flag",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "requirement_key": "snowpack_profile_features",
+      "world_class_reason": "HIM-STRAT/SNOWPACK-like local profile features and weak-layer validation."
+    },
+    {
+      "category": "danger_ground_truth",
+      "controlled_fields": [
+        "danger_scale_standard",
+        "avalanche_problem",
+        "license_scope"
+      ],
+      "filename": "danger_labels_and_bulletins.csv",
+      "minimum_distinct_counts": {
+        "danger_level_1_to_4": 2,
+        "region_id": 3
+      },
+      "minimum_numeric_spans": {},
+      "minimum_rows_for_availability": 10,
+      "minimum_temporal_span_days": {
+        "valid_from": 7.0
+      },
+      "required_columns": [
+        "region_id",
+        "valid_from",
+        "valid_to",
+        "danger_scale_standard",
+        "danger_level_1_to_5",
+        "danger_level_1_to_4",
+        "avalanche_problem",
+        "elevation_band_policy",
+        "forecaster_or_reviewer_id",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "requirement_key": "danger_labels_and_bulletins",
+      "world_class_reason": "Reviewed Himalayan danger labels and bulletin archive by region/elevation band."
+    },
+    {
+      "category": "spatial_forecast_units",
+      "controlled_fields": [
+        "license_scope"
+      ],
+      "filename": "warning_region_polygons.csv",
+      "minimum_distinct_counts": {
+        "region_id": 1
+      },
+      "minimum_numeric_spans": {},
+      "minimum_rows_for_availability": 1,
+      "minimum_temporal_span_days": {},
+      "required_columns": [
+        "region_id",
+        "polygon_geometry",
+        "crs",
+        "elevation_policy",
+        "valid_date_range",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "requirement_key": "warning_region_polygons",
+      "world_class_reason": "Official or partner-reviewed Himalayan warning-region geometries."
+    },
+    {
+      "category": "event_outcomes",
+      "controlled_fields": [
+        "avalanche_problem",
+        "observed_outcome",
+        "license_scope"
+      ],
+      "filename": "historical_avalanche_events.csv",
+      "minimum_distinct_counts": {
+        "event_id": 10
+      },
+      "minimum_numeric_spans": {
+        "elevation_m": 500.0
+      },
+      "minimum_rows_for_availability": 10,
+      "minimum_temporal_span_days": {
+        "observed_at": 7.0
+      },
+      "required_columns": [
+        "event_id",
+        "observed_at",
+        "latitude",
+        "longitude",
+        "elevation_m",
+        "aspect",
+        "avalanche_problem",
+        "observed_outcome",
+        "confidence",
+        "source",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "requirement_key": "historical_avalanche_events",
+      "world_class_reason": "Partner-confirmed Himalayan events for false-positive/false-negative assessment."
+    },
+    {
+      "category": "remote_sensing",
+      "controlled_fields": [
+        "preprocessing_level",
+        "license_scope"
+      ],
+      "filename": "remote_sensing_validation_scenes.csv",
+      "minimum_distinct_counts": {
+        "scene_id": 5
+      },
+      "minimum_numeric_spans": {},
+      "minimum_rows_for_availability": 5,
+      "minimum_temporal_span_days": {
+        "acquired_at": 4.0
+      },
+      "required_columns": [
+        "scene_id",
+        "sensor",
+        "acquired_at",
+        "preprocessing_level",
+        "truth_mask_or_event_ref",
+        "holdout_split",
+        "license_scope",
+        "source_ref",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "requirement_key": "remote_sensing_validation_scenes",
+      "world_class_reason": "Himalayan SAR/optical/InSAR validation scenes with independent holdouts."
+    },
+    {
+      "category": "terrain_exposure",
+      "controlled_fields": [
+        "terrain_class",
+        "quality_flag",
+        "license_scope"
+      ],
+      "filename": "terrain_ates_runout_validation.csv",
+      "minimum_distinct_counts": {
+        "region_id": 3
+      },
+      "minimum_numeric_spans": {
+        "slope": 10.0
+      },
+      "minimum_rows_for_availability": 3,
+      "minimum_temporal_span_days": {},
+      "required_columns": [
+        "region_id",
+        "dem_ref",
+        "slope",
+        "aspect",
+        "terrain_class",
+        "runout_validation_ref",
+        "quality_flag",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "requirement_key": "terrain_ates_runout_validation",
+      "world_class_reason": "Reviewed terrain classes and runout validation for pilot regions."
+    },
+    {
+      "category": "human_validation",
+      "controlled_fields": [
+        "verdict",
+        "label_quality",
+        "model_error_type",
+        "license_scope"
+      ],
+      "filename": "scientist_reviews.csv",
+      "minimum_distinct_counts": {
+        "case_id": 20,
+        "review_id": 20
+      },
+      "minimum_numeric_spans": {},
+      "minimum_rows_for_availability": 20,
+      "minimum_temporal_span_days": {
+        "reviewed_at": 7.0
+      },
+      "required_columns": [
+        "review_id",
+        "reviewer_id",
+        "reviewed_at",
+        "case_id",
+        "verdict",
+        "label_quality",
+        "model_error_type",
+        "confidence",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_notes"
+      ],
+      "requirement_key": "scientist_reviews",
+      "world_class_reason": "Enough completed scientist reviews to support model-vs-human and label-quality analysis."
+    },
+    {
+      "category": "release_gate",
+      "controlled_fields": [
+        "license_scope"
+      ],
+      "filename": "independent_himalayan_holdout.csv",
+      "minimum_distinct_counts": {
+        "holdout_id": 1
+      },
+      "minimum_numeric_spans": {},
+      "minimum_rows_for_availability": 1,
+      "minimum_temporal_span_days": {},
+      "required_columns": [
+        "holdout_id",
+        "source_refs",
+        "region_ids",
+        "date_range",
+        "leakage_check",
+        "acceptance_floors",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "requirement_key": "independent_himalayan_holdout",
+      "world_class_reason": "Independent Himalayan final holdout not used in model or threshold selection."
+    }
+  ],
+  "usage_boundary": "research_validation_only",
+  "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+}

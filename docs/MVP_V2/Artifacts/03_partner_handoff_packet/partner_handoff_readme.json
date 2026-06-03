@@ -1,0 +1,157 @@
+{
+  "best_practice_anchors": [
+    {
+      "name": "FAIR data principles",
+      "url": "https://www.go-fair.org/fair-principles/",
+      "use": "Keep partner evidence findable, reusable, and source-governed before scientific claims."
+    },
+    {
+      "name": "WMO WIGOS data quality monitoring",
+      "url": "https://community.wmo.int/en/activity-areas/wigos/wigos-data-quality-monitoring-system-wdqms",
+      "use": "Treat observation readiness as a quality-controlled data pipeline, not a one-off upload."
+    },
+    {
+      "name": "ISO 19157-style geospatial quality dimensions",
+      "url": "https://www.iso.org/standard/78900.html",
+      "use": "Track completeness, consistency, coverage, and lineage for geospatial evidence."
+    }
+  ],
+  "claim_boundary": {
+    "himalayan_accuracy_claim_allowed": false,
+    "production_scoring_allowed": false,
+    "reason": "The handoff README is navigation only; it does not supply evidence, validate a model, or authorize production scoring."
+  },
+  "current_status": {
+    "acceptance_decision": "blocked_acceptance_checklist_partner_fixes_required",
+    "claim_review_ready": false,
+    "package_index_decision": "partner_package_index_written_pending_partner_submission",
+    "quality_score": 0.0,
+    "quality_score_decision": "blocked_quality_checks_not_run",
+    "quality_score_max": 100.0,
+    "readiness_band": "not_run",
+    "scientist_review_ready": false,
+    "submission_summary_decision": "blocked_submission_checks_not_run"
+  },
+  "decision": "partner_handoff_readme_written_pending_partner_submission",
+  "do_not_claim": [
+    "Do not claim Himalayan accuracy readiness from blank templates, sample rows, or package navigation artifacts.",
+    "Do not treat the submission quality score as prediction accuracy.",
+    "Do not start production scoring, public claims, or promotion without validated evidence and release-gate attestations.",
+    "Do not collapse five-level danger labels into four classes without reviewed mapping notes."
+  ],
+  "generated_at": "2026-05-23T13:13:35.699020+00:00",
+  "himalayan_accuracy_claim_allowed": false,
+  "open_first": [
+    {
+      "artifact": "partner_handoff_readme.md",
+      "reason": "Start here for the short package navigation and resubmission sequence.",
+      "step": 1
+    },
+    {
+      "artifact": "partner_package_index.md",
+      "reason": "Use this as the full artifact map and command-order reference.",
+      "step": 2
+    },
+    {
+      "artifact": "partner_submission_status_dashboard.md",
+      "reason": "Use this for the one-page current blocker, score, top-10 readiness, and claim-gate status.",
+      "step": 3
+    },
+    {
+      "artifact": "partner_source_package_checksum_guide.md",
+      "reason": "Use this before filling source_ref values or partner_source_manifest.json.",
+      "step": 4
+    },
+    {
+      "artifact": "partner_synthetic_validation_report.md",
+      "reason": "Optional: smoke-test the validator with synthetic-only rows that must never be submitted as evidence.",
+      "step": 5
+    },
+    {
+      "artifact": "partner_intake_dry_run_runbook.md",
+      "reason": "Use this to dry-run a real submitted package and interpret expected blocked/pass decisions.",
+      "step": 6
+    },
+    {
+      "artifact": "partner_incoming_triage_runbook.md",
+      "reason": "Use this when a real partner package arrives to run the first-response sequence and route blockers.",
+      "step": 7
+    },
+    {
+      "artifact": "release_gate_attestation_template_pack.md",
+      "reason": "Use this after evidence validation passes to document holdout, scientist-review, license, and promotion gates.",
+      "step": 8
+    },
+    {
+      "artifact": "himalayan_local_holdout_protocol.md",
+      "reason": "Use this before any local model evaluation to lock split rules, leakage checks, metrics, and floors.",
+      "step": 9
+    },
+    {
+      "artifact": "himalayan_local_holdout_leakage_audit.md",
+      "reason": "Run this when partner evidence arrives to block contaminated or source-unreviewed holdout rows.",
+      "step": 10
+    },
+    {
+      "artifact": "himalayan_local_holdout_prediction_template.md",
+      "reason": "Use this to produce the exact predictions CSV consumed by the holdout metric report.",
+      "step": 11
+    },
+    {
+      "artifact": "himalayan_local_holdout_metric_report.md",
+      "reason": "Run this after the leakage audit passes to evaluate locked local holdout classification and calibration floors.",
+      "step": 12
+    },
+    {
+      "artifact": "partner_submission_acceptance_checklist.md",
+      "reason": "Fix every partner-side blocker before scientist review.",
+      "step": 13
+    },
+    {
+      "artifact": "partner_submission_quality_score.md",
+      "reason": "Track package quality dimensions and score changes after resubmission.",
+      "step": 14
+    },
+    {
+      "artifact": "partner_submission_manifest_diff.md",
+      "reason": "Confirm which files changed since the prior submitted package.",
+      "step": 15
+    },
+    {
+      "artifact": "partner_submission_review_ledger.md",
+      "reason": "Track each package attempt, score, blocker, routing state, and resubmission action over time.",
+      "step": 16
+    },
+    {
+      "artifact": "partner_field_dictionary.md",
+      "reason": "Confirm field meanings, units, formats, controlled values, and danger-scale mapping.",
+      "step": 17
+    },
+    {
+      "artifact": "partner_sample_row_pack.md",
+      "reason": "Use example-only rows as a guide, not as evidence.",
+      "step": 18
+    }
+  ],
+  "production_scoring_allowed": false,
+  "resubmission_sequence": [
+    {
+      "action": "Complete partner_source_manifest.json and all ten evidence CSVs using real reviewed Himalayan evidence.",
+      "name": "Fill partner package",
+      "step": 1
+    },
+    {
+      "command": "python3 -m backend.scripts.build_himalayan_accuracy_readiness_contract --output backend/artifacts/reproduction/himalayan_accuracy/readiness_contract.json --output-markdown backend/artifacts/reproduction/himalayan_accuracy/readiness_contract.md --partner-intake-root <partner-package-root> --partner-evidence-root <partner-package-root> --partner-source-manifest <partner-package-root>/partner_source_manifest.json --partner-intake-preflight-output backend/artifacts/reproduction/himalayan_accuracy/partner_intake_preflight.json --partner-intake-preflight-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_intake_preflight.md --partner-source-manifest-validation-output backend/artifacts/reproduction/himalayan_accuracy/partner_source_manifest_validation.json --partner-source-manifest-validation-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_source_manifest_validation.md --partner-evidence-validation-output backend/artifacts/reproduction/himalayan_accuracy/partner_evidence_validation.json --partner-evidence-validation-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_evidence_validation.md --partner-submission-quality-score-output backend/artifacts/reproduction/himalayan_accuracy/partner_submission_quality_score.json --partner-submission-quality-score-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_submission_quality_score.md --partner-submission-acceptance-checklist-output backend/artifacts/reproduction/himalayan_accuracy/partner_submission_acceptance_checklist.json --partner-submission-acceptance-checklist-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_submission_acceptance_checklist.md --partner-submission-manifest-diff-output backend/artifacts/reproduction/himalayan_accuracy/partner_submission_manifest_diff.json --partner-submission-manifest-diff-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_submission_manifest_diff.md --partner-submission-summary-output backend/artifacts/reproduction/himalayan_accuracy/partner_submission_summary.json --partner-submission-summary-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_submission_summary.md",
+      "name": "Run full validation and blocker reports",
+      "step": 2
+    },
+    {
+      "action": "Proceed to scientist review only when scientist_review_ready=true; proceed to claim review only when claim_review_ready=true.",
+      "name": "Route next review",
+      "step": 3
+    }
+  ],
+  "schema_version": "himalayan_accuracy_partner_handoff_readme_v1",
+  "usage_boundary": "research_validation_only",
+  "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+}

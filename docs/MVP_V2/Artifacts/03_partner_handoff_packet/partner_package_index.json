@@ -1,0 +1,319 @@
+{
+  "artifact_sequence": [
+    {
+      "artifact": "partner_handoff_readme.md",
+      "command_flags": [
+        "--partner-handoff-readme-output",
+        "--partner-handoff-readme-markdown"
+      ],
+      "purpose": "Compact first-read handoff that points to the package index, scorecard, acceptance checklist, examples, and resubmission commands.",
+      "step": 1
+    },
+    {
+      "artifact": "partner_field_dictionary.md",
+      "command_flags": [
+        "--partner-field-dictionary-output",
+        "--partner-field-dictionary-markdown"
+      ],
+      "purpose": "Defines field meanings, units, formats, controlled values, and non-lossy danger-scale guidance.",
+      "step": 2
+    },
+    {
+      "artifact": "partner_sample_row_pack.md",
+      "command_flags": [
+        "--partner-sample-row-pack-output",
+        "--partner-sample-row-pack-markdown"
+      ],
+      "purpose": "Shows example-only rows for each evidence CSV without creating submit-ready evidence files.",
+      "step": 3
+    },
+    {
+      "artifact": "partner_synthetic_validation_report.md",
+      "command_flags": [
+        "--partner-synthetic-validation-package-root",
+        "--partner-synthetic-validation-report-output",
+        "--partner-synthetic-validation-report-markdown"
+      ],
+      "purpose": "Optional synthetic-only smoke package proving the validation chain can pass structurally without creating real Himalayan evidence.",
+      "step": 4
+    },
+    {
+      "artifact": "partner_intake_checklist.md",
+      "command_flags": [
+        "--partner-intake-checklist-output",
+        "--partner-intake-checklist-markdown"
+      ],
+      "purpose": "Defines the required source manifest, evidence CSVs, package rules, and validation outputs.",
+      "step": 5
+    },
+    {
+      "artifact": "partner_intake_dry_run_runbook.md",
+      "command_flags": [
+        "--partner-intake-dry-run-runbook-output",
+        "--partner-intake-dry-run-runbook-markdown"
+      ],
+      "purpose": "Operator runbook for dry-running a real submitted partner package while keeping claims blocked.",
+      "step": 6
+    },
+    {
+      "artifact": "partner_incoming_triage_runbook.md",
+      "command_flags": [
+        "--partner-incoming-triage-runbook-output",
+        "--partner-incoming-triage-runbook-markdown"
+      ],
+      "purpose": "First-response operator sequence for a real incoming partner package, including stop conditions and routing decisions.",
+      "step": 7
+    },
+    {
+      "artifact": "partner_intake_preflight.md",
+      "command_flags": [
+        "--partner-intake-preflight-output",
+        "--partner-intake-preflight-markdown"
+      ],
+      "purpose": "Checks whether the source manifest and ten evidence CSV files are present before row-level validation.",
+      "step": 8
+    },
+    {
+      "artifact": "partner_source_manifest_starter.md",
+      "command_flags": [
+        "--partner-source-manifest-starter-output",
+        "--partner-source-manifest-starter-markdown"
+      ],
+      "purpose": "Derives a fillable source manifest skeleton from source_ref hashes found in submitted evidence CSVs.",
+      "step": 9
+    },
+    {
+      "artifact": "partner_source_manifest_validation.md",
+      "command_flags": [
+        "--partner-source-manifest-validation-output",
+        "--partner-source-manifest-validation-markdown"
+      ],
+      "purpose": "Validates source ownership, dataset names, licenses, dates, reviewer identity, freshness, and SHA-256 references.",
+      "step": 10
+    },
+    {
+      "artifact": "partner_evidence_validation.md",
+      "command_flags": [
+        "--partner-evidence-validation-output",
+        "--partner-evidence-validation-markdown"
+      ],
+      "purpose": "Validates every partner evidence CSV for row count, coverage, values, freshness, licenses, and source references.",
+      "step": 11
+    },
+    {
+      "artifact": "partner_submission_quality_score.md",
+      "command_flags": [
+        "--partner-submission-quality-score-output",
+        "--partner-submission-quality-score-markdown"
+      ],
+      "purpose": "Scores package completeness, source governance, evidence coverage, review controls, and release-gate readiness.",
+      "step": 12
+    },
+    {
+      "artifact": "partner_submission_acceptance_checklist.md",
+      "command_flags": [
+        "--partner-submission-acceptance-checklist-output",
+        "--partner-submission-acceptance-checklist-markdown"
+      ],
+      "purpose": "Translates scorecard failures into partner-side fixes before scientist review or claim review.",
+      "step": 13
+    },
+    {
+      "artifact": "partner_submission_manifest_diff.md",
+      "command_flags": [
+        "--partner-submission-manifest-diff-output",
+        "--partner-submission-manifest-diff-markdown"
+      ],
+      "purpose": "Compares package file presence, hashes, sizes, row counts, and schema versions against a previous submission snapshot.",
+      "step": 14
+    },
+    {
+      "artifact": "partner_submission_review_ledger.md",
+      "command_flags": [
+        "--partner-submission-review-ledger-output",
+        "--partner-submission-review-ledger-markdown"
+      ],
+      "purpose": "Records each package attempt, fingerprint, score, blocker, review routing state, and resubmission action over time.",
+      "step": 15
+    },
+    {
+      "artifact": "partner_submission_status_dashboard.md",
+      "command_flags": [
+        "--partner-submission-status-dashboard-output",
+        "--partner-submission-status-dashboard-markdown"
+      ],
+      "purpose": "One-page operator/scientist status export summarizing blocker, score, top-10 readiness, routing state, and claim gates.",
+      "step": 16
+    },
+    {
+      "artifact": "himalayan_local_holdout_protocol.md",
+      "command_flags": [
+        "--local-holdout-protocol-output",
+        "--local-holdout-protocol-markdown"
+      ],
+      "purpose": "Pre-registers independent Himalayan holdout split rules, leakage checks, metrics, floors, and report outputs before evaluation.",
+      "step": 17
+    },
+    {
+      "artifact": "himalayan_local_holdout_leakage_audit.md",
+      "command_flags": [
+        "--local-holdout-leakage-audit-output",
+        "--local-holdout-leakage-audit-markdown"
+      ],
+      "purpose": "Checks independent holdout rows, source-ref manifest coverage, and source-ref overlap before metric evaluation.",
+      "step": 18
+    },
+    {
+      "artifact": "himalayan_local_holdout_prediction_template.md",
+      "command_flags": [
+        "--local-holdout-prediction-template-output",
+        "--local-holdout-prediction-template-markdown",
+        "--local-holdout-prediction-template-csv"
+      ],
+      "purpose": "Defines the header-only predictions CSV that the local holdout metric report consumes after leakage audit pass.",
+      "step": 19
+    },
+    {
+      "artifact": "himalayan_local_holdout_metric_report.md",
+      "command_flags": [
+        "--local-holdout-metric-report-output",
+        "--local-holdout-metric-report-markdown",
+        "--local-holdout-predictions"
+      ],
+      "purpose": "Blocks metric evaluation until the leakage audit passes, then reports local holdout classification, calibration, and region floors.",
+      "step": 20
+    },
+    {
+      "artifact": "partner_submission_summary.md",
+      "command_flags": [
+        "--partner-submission-summary-output",
+        "--partner-submission-summary-markdown"
+      ],
+      "purpose": "Combines preflight, source-manifest validation, evidence validation, and readiness status into one first-blocker report.",
+      "step": 21
+    },
+    {
+      "artifact": "partner_source_package_checksum_guide.md",
+      "command_flags": [
+        "--partner-source-package-checksum-guide-output",
+        "--partner-source-package-checksum-guide-markdown"
+      ],
+      "purpose": "Explains SHA-256 source-package checksums, source_ref syntax, and partner_source_manifest.json handoff rules.",
+      "step": 22
+    },
+    {
+      "artifact": "release_gate_attestation_template_pack.md",
+      "command_flags": [
+        "--release-gate-attestation-template-pack-output",
+        "--release-gate-attestation-template-pack-markdown"
+      ],
+      "purpose": "Fillable template pack for holdout, scientist-review, license, and promotion attestations after evidence passes.",
+      "step": 23
+    },
+    {
+      "artifact": "readiness_contract.md",
+      "command_flags": [
+        "--output",
+        "--output-markdown"
+      ],
+      "purpose": "Shows the release-gated Himalayan accuracy-readiness contract after validated evidence and attestations are applied.",
+      "step": 24
+    }
+  ],
+  "claim_boundary": {
+    "himalayan_accuracy_claim_allowed": false,
+    "production_scoring_allowed": false,
+    "reason": "This index is a partner handoff map. Local Himalayan evidence, source governance, release attestations, and promotion approval are still required."
+  },
+  "command_order": [
+    {
+      "command": "python3 -m backend.scripts.build_himalayan_accuracy_readiness_contract --output backend/artifacts/reproduction/himalayan_accuracy/readiness_contract.json --templates-output-root backend/artifacts/reproduction/himalayan_accuracy/partner_evidence_templates --partner-handoff-readme-output backend/artifacts/reproduction/himalayan_accuracy/partner_handoff_readme.json --partner-handoff-readme-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_handoff_readme.md --partner-field-dictionary-output backend/artifacts/reproduction/himalayan_accuracy/partner_field_dictionary.json --partner-field-dictionary-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_field_dictionary.md --partner-sample-row-pack-output backend/artifacts/reproduction/himalayan_accuracy/partner_sample_row_pack.json --partner-sample-row-pack-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_sample_row_pack.md --partner-source-package-checksum-guide-output backend/artifacts/reproduction/himalayan_accuracy/partner_source_package_checksum_guide.json --partner-source-package-checksum-guide-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_source_package_checksum_guide.md --partner-synthetic-validation-package-root backend/artifacts/reproduction/himalayan_accuracy/partner_synthetic_validation_package --partner-synthetic-validation-report-output backend/artifacts/reproduction/himalayan_accuracy/partner_synthetic_validation_report.json --partner-synthetic-validation-report-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_synthetic_validation_report.md --partner-intake-dry-run-runbook-output backend/artifacts/reproduction/himalayan_accuracy/partner_intake_dry_run_runbook.json --partner-intake-dry-run-runbook-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_intake_dry_run_runbook.md --partner-incoming-triage-runbook-output backend/artifacts/reproduction/himalayan_accuracy/partner_incoming_triage_runbook.json --partner-incoming-triage-runbook-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_incoming_triage_runbook.md --release-gate-attestation-template-pack-output backend/artifacts/reproduction/himalayan_accuracy/release_gate_attestation_template_pack.json --release-gate-attestation-template-pack-markdown backend/artifacts/reproduction/himalayan_accuracy/release_gate_attestation_template_pack.md --partner-package-index-output backend/artifacts/reproduction/himalayan_accuracy/partner_package_index.json --partner-package-index-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_package_index.md",
+      "name": "Generate templates and package index",
+      "step": 1
+    },
+    {
+      "command": "python3 -m backend.scripts.build_himalayan_accuracy_readiness_contract --output backend/artifacts/reproduction/himalayan_accuracy/readiness_contract.json --partner-intake-root <partner-package-root> --partner-intake-preflight-output backend/artifacts/reproduction/himalayan_accuracy/partner_intake_preflight.json --partner-intake-preflight-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_intake_preflight.md",
+      "name": "Preflight submitted package files",
+      "step": 2
+    },
+    {
+      "command": "python3 -m backend.scripts.build_himalayan_accuracy_readiness_contract --output backend/artifacts/reproduction/himalayan_accuracy/readiness_contract.json --partner-evidence-root <partner-package-root> --partner-source-manifest-starter-output backend/artifacts/reproduction/himalayan_accuracy/partner_source_manifest_starter.json --partner-source-manifest-starter-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_source_manifest_starter.md",
+      "name": "Generate source manifest starter if needed",
+      "step": 3
+    },
+    {
+      "command": "python3 -m backend.scripts.build_himalayan_accuracy_readiness_contract --output backend/artifacts/reproduction/himalayan_accuracy/readiness_contract.json --partner-source-manifest <partner-package-root>/partner_source_manifest.json --partner-source-manifest-validation-output backend/artifacts/reproduction/himalayan_accuracy/partner_source_manifest_validation.json --partner-source-manifest-validation-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_source_manifest_validation.md",
+      "name": "Validate source manifest",
+      "step": 4
+    },
+    {
+      "command": "python3 -m backend.scripts.build_himalayan_accuracy_readiness_contract --output backend/artifacts/reproduction/himalayan_accuracy/readiness_contract.json --output-markdown backend/artifacts/reproduction/himalayan_accuracy/readiness_contract.md --partner-intake-root <partner-package-root> --partner-evidence-root <partner-package-root> --partner-source-manifest <partner-package-root>/partner_source_manifest.json --partner-evidence-validation-output backend/artifacts/reproduction/himalayan_accuracy/partner_evidence_validation.json --partner-evidence-validation-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_evidence_validation.md --partner-submission-quality-score-output backend/artifacts/reproduction/himalayan_accuracy/partner_submission_quality_score.json --partner-submission-quality-score-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_submission_quality_score.md --partner-submission-acceptance-checklist-output backend/artifacts/reproduction/himalayan_accuracy/partner_submission_acceptance_checklist.json --partner-submission-acceptance-checklist-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_submission_acceptance_checklist.md --partner-submission-manifest-diff-output backend/artifacts/reproduction/himalayan_accuracy/partner_submission_manifest_diff.json --partner-submission-manifest-diff-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_submission_manifest_diff.md --partner-submission-review-ledger-output backend/artifacts/reproduction/himalayan_accuracy/partner_submission_review_ledger.json --partner-submission-review-ledger-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_submission_review_ledger.md --partner-submission-status-dashboard-output backend/artifacts/reproduction/himalayan_accuracy/partner_submission_status_dashboard.json --partner-submission-status-dashboard-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_submission_status_dashboard.md --local-holdout-protocol-output backend/artifacts/reproduction/himalayan_accuracy/himalayan_local_holdout_protocol.json --local-holdout-protocol-markdown backend/artifacts/reproduction/himalayan_accuracy/himalayan_local_holdout_protocol.md --local-holdout-leakage-audit-output backend/artifacts/reproduction/himalayan_accuracy/himalayan_local_holdout_leakage_audit.json --local-holdout-leakage-audit-markdown backend/artifacts/reproduction/himalayan_accuracy/himalayan_local_holdout_leakage_audit.md --local-holdout-prediction-template-output backend/artifacts/reproduction/himalayan_accuracy/himalayan_local_holdout_prediction_template.json --local-holdout-prediction-template-markdown backend/artifacts/reproduction/himalayan_accuracy/himalayan_local_holdout_prediction_template.md --local-holdout-prediction-template-csv backend/artifacts/reproduction/himalayan_accuracy/himalayan_local_holdout_predictions.csv --local-holdout-metric-report-output backend/artifacts/reproduction/himalayan_accuracy/himalayan_local_holdout_metric_report.json --local-holdout-metric-report-markdown backend/artifacts/reproduction/himalayan_accuracy/himalayan_local_holdout_metric_report.md --partner-submission-summary-output backend/artifacts/reproduction/himalayan_accuracy/partner_submission_summary.json --partner-submission-summary-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_submission_summary.md --local-holdout-leakage-audit-output backend/artifacts/reproduction/himalayan_accuracy/himalayan_local_holdout_leakage_audit.json --local-holdout-leakage-audit-markdown backend/artifacts/reproduction/himalayan_accuracy/himalayan_local_holdout_leakage_audit.md --local-holdout-prediction-template-output backend/artifacts/reproduction/himalayan_accuracy/himalayan_local_holdout_prediction_template.json --local-holdout-prediction-template-markdown backend/artifacts/reproduction/himalayan_accuracy/himalayan_local_holdout_prediction_template.md --local-holdout-prediction-template-csv backend/artifacts/reproduction/himalayan_accuracy/himalayan_local_holdout_predictions.csv --local-holdout-metric-report-output backend/artifacts/reproduction/himalayan_accuracy/himalayan_local_holdout_metric_report.json --local-holdout-metric-report-markdown backend/artifacts/reproduction/himalayan_accuracy/himalayan_local_holdout_metric_report.md",
+      "name": "Validate partner evidence and summarize blockers",
+      "step": 5
+    }
+  ],
+  "decision": "partner_package_index_written_pending_partner_submission",
+  "generated_at": "2026-05-23T13:13:35.699020+00:00",
+  "himalayan_accuracy_claim_allowed": false,
+  "production_scoring_allowed": false,
+  "required_partner_files": [
+    {
+      "path": "partner_source_manifest.json",
+      "requirement_key": "source_manifest",
+      "type": "source_manifest"
+    },
+    {
+      "path": "station_metadata.csv",
+      "requirement_key": "station_metadata",
+      "type": "evidence_csv"
+    },
+    {
+      "path": "weather_station_observations.csv",
+      "requirement_key": "weather_station_observations",
+      "type": "evidence_csv"
+    },
+    {
+      "path": "snowpack_profile_features.csv",
+      "requirement_key": "snowpack_profile_features",
+      "type": "evidence_csv"
+    },
+    {
+      "path": "danger_labels_and_bulletins.csv",
+      "requirement_key": "danger_labels_and_bulletins",
+      "type": "evidence_csv"
+    },
+    {
+      "path": "warning_region_polygons.csv",
+      "requirement_key": "warning_region_polygons",
+      "type": "evidence_csv"
+    },
+    {
+      "path": "historical_avalanche_events.csv",
+      "requirement_key": "historical_avalanche_events",
+      "type": "evidence_csv"
+    },
+    {
+      "path": "remote_sensing_validation_scenes.csv",
+      "requirement_key": "remote_sensing_validation_scenes",
+      "type": "evidence_csv"
+    },
+    {
+      "path": "terrain_ates_runout_validation.csv",
+      "requirement_key": "terrain_ates_runout_validation",
+      "type": "evidence_csv"
+    },
+    {
+      "path": "scientist_reviews.csv",
+      "requirement_key": "scientist_reviews",
+      "type": "evidence_csv"
+    },
+    {
+      "path": "independent_himalayan_holdout.csv",
+      "requirement_key": "independent_himalayan_holdout",
+      "type": "evidence_csv"
+    }
+  ],
+  "schema_version": "himalayan_accuracy_partner_package_index_v1",
+  "usage_boundary": "research_validation_only",
+  "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+}

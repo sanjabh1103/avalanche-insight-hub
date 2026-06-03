@@ -1,0 +1,266 @@
+{
+  "blocked_feature_count": 10,
+  "claim_boundary": {
+    "himalayan_accuracy_claim_allowed": false,
+    "production_scoring_allowed": false,
+    "reason": "This matrix is strategy and evidence-gap tracking only. It does not provide local Himalayan validation, release-gate attestations, or production authorization."
+  },
+  "confidence_position": "not_100_percent_confident_local_himalayan_evidence_required",
+  "decision": "top10_feature_gap_matrix_written_pending_partner_evidence",
+  "external_anchors": [
+    {
+      "implication": "Treat best-class danger forecasting as a pipeline from station classification through spatial interpolation to elevation/region aggregation.",
+      "name": "RAvaFcast v1.0.0",
+      "url": "https://gmd.copernicus.org/articles/17/7569/2024/"
+    },
+    {
+      "implication": "Preserve five-level danger semantics and avoid silent label collapse.",
+      "name": "European Avalanche Warning Services danger scale",
+      "url": "https://www.avalanches.org/standards/avalanche-danger-scale/"
+    },
+    {
+      "implication": "Treat observation readiness as a monitored data-quality pipeline.",
+      "name": "WMO WIGOS data quality monitoring",
+      "url": "https://community.wmo.int/en/activity-areas/wigos/wigos-data-quality-monitoring-system-wdqms"
+    },
+    {
+      "implication": "Compare models against expert forecasts and outcomes, not aggregate accuracy alone.",
+      "name": "NHESS model-vs-human avalanche warning skill literature",
+      "url": "https://nhess.copernicus.org/articles/25/3333/2025/"
+    }
+  ],
+  "feature_count": 10,
+  "features": [
+    {
+      "available_evidence": [],
+      "blocked_evidence": [
+        "station_metadata",
+        "weather_station_observations",
+        "snowpack_profile_features",
+        "danger_labels_and_bulletins"
+      ],
+      "current_repo_evidence": "Partner adapter docs, Swiss EnviDat mapping, and generated partner evidence templates.",
+      "feature": "Himalayan station + snowpack data contract",
+      "gap_or_loophole": "Without local station/snowpack labels, no Himalayan accuracy claim is defensible.",
+      "immediate_next_action": "Obtain a complete partner source manifest and filled station/weather/snowpack/danger CSVs.",
+      "next_target": "Obtain a complete partner source manifest and filled station/weather/snowpack/danger CSVs.",
+      "rank": 1,
+      "rating": 2,
+      "readiness_status": "blocked_partner_evidence_required",
+      "required_evidence": [
+        "station_metadata",
+        "weather_station_observations",
+        "snowpack_profile_features",
+        "danger_labels_and_bulletins"
+      ],
+      "world_class_need": "Reviewed local station coordinates, weather, snowpack profiles, and danger labels by date, region, and elevation policy."
+    },
+    {
+      "available_evidence": [],
+      "blocked_evidence": [
+        "weather_station_observations",
+        "snowpack_profile_features",
+        "danger_labels_and_bulletins",
+        "independent_himalayan_holdout"
+      ],
+      "current_repo_evidence": "Research-only Swiss RF4 reproduction, feature audit, and calibration artifacts.",
+      "feature": "Calibrated 4-class danger-level model",
+      "gap_or_loophole": "Swiss RF4 signal is not Himalayan proof and can be inflated by split, feature, or label mismatch.",
+      "immediate_next_action": "Run calibrated model evaluation only after local partner labels and holdout are available.",
+      "next_target": "Run calibrated model evaluation only after local partner labels and holdout are available.",
+      "rank": 2,
+      "rating": 3,
+      "readiness_status": "blocked_partner_evidence_required",
+      "required_evidence": [
+        "weather_station_observations",
+        "snowpack_profile_features",
+        "danger_labels_and_bulletins",
+        "independent_himalayan_holdout"
+      ],
+      "world_class_need": "Local or reviewed-transfer calibrated danger model with per-class F1, high-danger recall, Brier score, and ECE."
+    },
+    {
+      "available_evidence": [],
+      "blocked_evidence": [
+        "station_metadata",
+        "weather_station_observations",
+        "danger_labels_and_bulletins"
+      ],
+      "current_repo_evidence": "GPxyz readiness and exact-GP guardrails exist; real run blocks on station coordinates.",
+      "feature": "RAvaFcast-style spatial interpolation",
+      "gap_or_loophole": "Missing station metadata blocks spatial forecast parity and regional interpretation.",
+      "immediate_next_action": "Validate station coordinate coverage, then run GPxyz LOOCV and grid generation.",
+      "next_target": "Validate station coordinate coverage, then run GPxyz LOOCV and grid generation.",
+      "rank": 3,
+      "rating": 2,
+      "readiness_status": "blocked_partner_evidence_required",
+      "required_evidence": [
+        "station_metadata",
+        "weather_station_observations",
+        "danger_labels_and_bulletins"
+      ],
+      "world_class_need": "Station-coordinate join, LOOCV ME/MAE/RMSE, 1 km grid predictions, and posterior uncertainty."
+    },
+    {
+      "available_evidence": [],
+      "blocked_evidence": [
+        "warning_region_polygons",
+        "station_metadata",
+        "danger_labels_and_bulletins"
+      ],
+      "current_repo_evidence": "Station-row elev-simple baseline exists for Swiss reproduction.",
+      "feature": "Elevation-band warning-region aggregation",
+      "gap_or_loophole": "Station-row aggregation is not full regional forecast parity.",
+      "immediate_next_action": "Acquire reviewed warning-region polygons and elevation-band policy.",
+      "next_target": "Acquire reviewed warning-region polygons and elevation-band policy.",
+      "rank": 4,
+      "rating": 2,
+      "readiness_status": "blocked_partner_evidence_required",
+      "required_evidence": [
+        "warning_region_polygons",
+        "station_metadata",
+        "danger_labels_and_bulletins"
+      ],
+      "world_class_need": "Official Himalayan warning-region polygons, elevation policy, refined rounding, and day/region accuracy."
+    },
+    {
+      "available_evidence": [],
+      "blocked_evidence": [
+        "snowpack_profile_features",
+        "weather_station_observations",
+        "danger_labels_and_bulletins"
+      ],
+      "current_repo_evidence": "Snowpack proxy exists; Swiss source contains weak-layer-style variables.",
+      "feature": "Distributed snowpack / weak-layer evidence",
+      "gap_or_loophole": "Proxy scalars are not weak-layer truth.",
+      "immediate_next_action": "Add reviewed snowpack profile exports and map fields to controlled partner schema.",
+      "next_target": "Add reviewed snowpack profile exports and map fields to controlled partner schema.",
+      "rank": 5,
+      "rating": 2,
+      "readiness_status": "blocked_partner_evidence_required",
+      "required_evidence": [
+        "snowpack_profile_features",
+        "weather_station_observations",
+        "danger_labels_and_bulletins"
+      ],
+      "world_class_need": "HIM-STRAT/SNOWPACK-like local profile fields, weak-layer indicators, and stability/failure-depth validation."
+    },
+    {
+      "available_evidence": [],
+      "blocked_evidence": [
+        "terrain_ates_runout_validation",
+        "warning_region_polygons",
+        "historical_avalanche_events"
+      ],
+      "current_repo_evidence": "DEM, runout, map overlays, impact layers, and 3D inspection exist.",
+      "feature": "Terrain, ATES, runout and exposure features",
+      "gap_or_loophole": "Terrain visualization can be mistaken for validated exposure modelling.",
+      "immediate_next_action": "Validate terrain/runout rows against partner-reviewed regions and events.",
+      "next_target": "Validate terrain/runout rows against partner-reviewed regions and events.",
+      "rank": 6,
+      "rating": 3,
+      "readiness_status": "blocked_partner_evidence_required",
+      "required_evidence": [
+        "terrain_ates_runout_validation",
+        "warning_region_polygons",
+        "historical_avalanche_events"
+      ],
+      "world_class_need": "Reviewed slope/aspect/elevation/terrain traps, ATES-style classes, runout validation, and exposure-sensitive surfaces."
+    },
+    {
+      "available_evidence": [],
+      "blocked_evidence": [
+        "remote_sensing_validation_scenes",
+        "historical_avalanche_events",
+        "independent_himalayan_holdout"
+      ],
+      "current_repo_evidence": "European SAR shadow lane exists; SnowSlide remains research-grade blocked.",
+      "feature": "Remote-sensing avalanche evidence",
+      "gap_or_loophole": "European scene performance cannot be generalized to Himalayan terrain.",
+      "immediate_next_action": "Collect Himalayan remote-sensing validation scenes and keep SAR/optical/InSAR shadow-gated.",
+      "next_target": "Collect Himalayan remote-sensing validation scenes and keep SAR/optical/InSAR shadow-gated.",
+      "rank": 7,
+      "rating": 3,
+      "readiness_status": "blocked_partner_evidence_required",
+      "required_evidence": [
+        "remote_sensing_validation_scenes",
+        "historical_avalanche_events",
+        "independent_himalayan_holdout"
+      ],
+      "world_class_need": "Himalayan SAR/optical/InSAR validation scenes, preprocessing contracts, independent holdouts, and precision/recall/FPR gates."
+    },
+    {
+      "available_evidence": [],
+      "blocked_evidence": [
+        "historical_avalanche_events",
+        "scientist_reviews",
+        "danger_labels_and_bulletins"
+      ],
+      "current_repo_evidence": "Field reports, event ingestion, scientist validation cases, daily verification, and action ledger exist.",
+      "feature": "Field reports and event-outcome feedback loop",
+      "gap_or_loophole": "Workflow exists but local Himalayan evidence volume is still insufficient.",
+      "immediate_next_action": "Route real events through scientist review and close label/model error types.",
+      "next_target": "Route real events through scientist review and close label/model error types.",
+      "rank": 8,
+      "rating": 4,
+      "readiness_status": "blocked_partner_evidence_required",
+      "required_evidence": [
+        "historical_avalanche_events",
+        "scientist_reviews",
+        "danger_labels_and_bulletins"
+      ],
+      "world_class_need": "Enough paired events, label-quality workflow, false-positive/false-negative closure, and training eligibility rules."
+    },
+    {
+      "available_evidence": [],
+      "blocked_evidence": [
+        "scientist_reviews",
+        "independent_himalayan_holdout",
+        "danger_labels_and_bulletins"
+      ],
+      "current_repo_evidence": "SHAP path, RF methodology docs, scientist daily verification, and RF4 calibration work exist.",
+      "feature": "Explainability, calibration and model-vs-human diagnostics",
+      "gap_or_loophole": "Explanations must be tied to active artifacts and local outcomes before claims.",
+      "immediate_next_action": "Add model-vs-scientist/outcome report once reviewed cases exist.",
+      "next_target": "Add model-vs-scientist/outcome report once reviewed cases exist.",
+      "rank": 9,
+      "rating": 3,
+      "readiness_status": "blocked_partner_evidence_required",
+      "required_evidence": [
+        "scientist_reviews",
+        "independent_himalayan_holdout",
+        "danger_labels_and_bulletins"
+      ],
+      "world_class_need": "Artifact-level SHAP proof, calibrated probability quality, model-vs-scientist discrimination, and decision-curve evidence."
+    },
+    {
+      "available_evidence": [],
+      "blocked_evidence": [
+        "independent_himalayan_holdout",
+        "scientist_reviews",
+        "remote_sensing_validation_scenes"
+      ],
+      "current_repo_evidence": "Readiness contract, release attestations, production blocks, and SAR-style holdout discipline exist.",
+      "feature": "Release gates, uncertainty and claim governance",
+      "gap_or_loophole": "Governance is strong, but local validation is still missing.",
+      "immediate_next_action": "Populate release-gate attestations only after local evidence and independent holdout pass.",
+      "next_target": "Populate release-gate attestations only after local evidence and independent holdout pass.",
+      "rank": 10,
+      "rating": 4,
+      "readiness_status": "blocked_partner_evidence_required",
+      "required_evidence": [
+        "independent_himalayan_holdout",
+        "scientist_reviews",
+        "remote_sensing_validation_scenes"
+      ],
+      "world_class_need": "One promotion framework across danger model, spatial aggregation, SAR/remote sensing, uncertainty display, and fresh holdouts."
+    }
+  ],
+  "generated_at": "2026-05-23T13:13:35.699020+00:00",
+  "himalayan_accuracy_claim_allowed": false,
+  "production_scoring_allowed": false,
+  "rating_scale": "5 = implementation/evidence near needed standard; 1 = mostly missing",
+  "schema_version": "himalayan_accuracy_top10_feature_gap_matrix_v1",
+  "usage_boundary": "research_validation_only",
+  "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+}

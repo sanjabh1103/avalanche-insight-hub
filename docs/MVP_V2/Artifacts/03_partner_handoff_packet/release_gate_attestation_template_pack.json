@@ -1,0 +1,254 @@
+{
+  "attestation_max_age_days": 180.0,
+  "claim_boundary": {
+    "himalayan_accuracy_claim_allowed": false,
+    "production_scoring_allowed": false,
+    "reason": "This pack is a blank attestation template. It is not validated evidence, accepted release-gate proof, or production authorization."
+  },
+  "decision": "release_gate_attestation_template_pack_written_pending_validated_evidence",
+  "generated_at": "2026-05-23T13:13:35.699020+00:00",
+  "himalayan_accuracy_claim_allowed": false,
+  "operator_rules": [
+    "Use this template only after partner evidence validation passes and scientist review is ready.",
+    "Every gate needs a named approver, evidence digest, reviewed_at timestamp, acceptance floors, and measured results.",
+    "Human approval text alone is insufficient without structured floors and measured results.",
+    "Production scoring remains false even when claim-review gates pass; promotion requires a separate production path."
+  ],
+  "production_scoring_allowed": false,
+  "release_gate_count": 4,
+  "release_gate_order": [
+    "local_himalayan_holdout_passed",
+    "scientist_review_complete",
+    "license_clearance_complete",
+    "production_promotion_approved"
+  ],
+  "required_attestation_fields": [
+    "approved_by",
+    "summary",
+    "evidence_ref",
+    "reviewed_at",
+    "evidence_schema_version",
+    "validation_policy_version",
+    "acceptance_floors_ref",
+    "acceptance_floors",
+    "measured_results"
+  ],
+  "schema_version": "himalayan_accuracy_release_gate_attestation_template_pack_v1",
+  "standards_anchors": [
+    {
+      "name": "NIST AI Risk Management Framework",
+      "url": "https://www.nist.gov/itl/ai-risk-management-framework",
+      "use": "Keep release decisions traceable, reviewed, and risk-governed before deployment claims."
+    },
+    {
+      "name": "WMO WIGOS data quality monitoring",
+      "url": "https://community.wmo.int/en/activity-areas/wigos/wigos-data-quality-monitoring-system-wdqms",
+      "use": "Require quality-controlled observation and evidence handling before operational use."
+    },
+    {
+      "name": "ISO 19157 geospatial data quality",
+      "url": "https://www.iso.org/standard/78900.html",
+      "use": "Track geospatial completeness, lineage, consistency, and quality in release evidence."
+    },
+    {
+      "name": "FAIR data principles",
+      "url": "https://www.go-fair.org/fair-principles/",
+      "use": "Keep final evidence reusable, source-referenced, and auditable."
+    }
+  ],
+  "template_is_evidence": false,
+  "templates": [
+    {
+      "acceptance_floor_requirements": {
+        "max_ratio_fields": [
+          "brier_score_max",
+          "ece_max"
+        ],
+        "ratio_fields": [
+          "macro_f1_min",
+          "high_danger_recall_min",
+          "mean_day_accuracy_min",
+          "region_accuracy_min"
+        ],
+        "true_fields": [
+          "leakage_check_required",
+          "independent_holdout_required"
+        ]
+      },
+      "gate": "local_himalayan_holdout_passed",
+      "required_fields": [
+        "approved_by",
+        "summary",
+        "evidence_ref",
+        "reviewed_at",
+        "evidence_schema_version",
+        "validation_policy_version",
+        "acceptance_floors_ref",
+        "acceptance_floors",
+        "measured_results"
+      ],
+      "reviewer_instruction": "Replace every placeholder with reviewed evidence. Do not set the gate true until measured_results satisfy acceptance_floors and evidence_ref/acceptance_floors_ref are SHA-256-qualified.",
+      "template": {
+        "acceptance_floors": {
+          "max_ratio_fields": [
+            "brier_score_max",
+            "ece_max"
+          ],
+          "ratio_fields": [
+            "macro_f1_min",
+            "high_danger_recall_min",
+            "mean_day_accuracy_min",
+            "region_accuracy_min"
+          ],
+          "true_fields": [
+            "leakage_check_required",
+            "independent_holdout_required"
+          ]
+        },
+        "acceptance_floors_ref": "sha256:<64-hex-digest-of-accepted-floor-document>",
+        "approved_by": "<named-reviewer-or-authorizer>",
+        "evidence_ref": "sha256:<64-hex-digest-of-evidence-pack>",
+        "evidence_schema_version": "himalayan_accuracy_partner_evidence_validation_v2",
+        "measured_results": "<structured metrics/results meeting the acceptance_floors>",
+        "reviewed_at": "<ISO-8601 timestamp>",
+        "summary": "<summary of reviewed evidence for local_himalayan_holdout_passed>",
+        "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+      }
+    },
+    {
+      "acceptance_floor_requirements": {
+        "nonnegative_integer_fields": [
+          "unresolved_critical_issue_max"
+        ],
+        "positive_integer_fields": [
+          "reviewed_case_count_min",
+          "reviewer_count_min"
+        ],
+        "ratio_fields": [
+          "adjudication_completion_rate_min"
+        ]
+      },
+      "gate": "scientist_review_complete",
+      "required_fields": [
+        "approved_by",
+        "summary",
+        "evidence_ref",
+        "reviewed_at",
+        "evidence_schema_version",
+        "validation_policy_version",
+        "acceptance_floors_ref",
+        "acceptance_floors",
+        "measured_results"
+      ],
+      "reviewer_instruction": "Replace every placeholder with reviewed evidence. Do not set the gate true until measured_results satisfy acceptance_floors and evidence_ref/acceptance_floors_ref are SHA-256-qualified.",
+      "template": {
+        "acceptance_floors": {
+          "nonnegative_integer_fields": [
+            "unresolved_critical_issue_max"
+          ],
+          "positive_integer_fields": [
+            "reviewed_case_count_min",
+            "reviewer_count_min"
+          ],
+          "ratio_fields": [
+            "adjudication_completion_rate_min"
+          ]
+        },
+        "acceptance_floors_ref": "sha256:<64-hex-digest-of-accepted-floor-document>",
+        "approved_by": "<named-reviewer-or-authorizer>",
+        "evidence_ref": "sha256:<64-hex-digest-of-evidence-pack>",
+        "evidence_schema_version": "himalayan_accuracy_partner_evidence_validation_v2",
+        "measured_results": "<structured metrics/results meeting the acceptance_floors>",
+        "reviewed_at": "<ISO-8601 timestamp>",
+        "summary": "<summary of reviewed evidence for scientist_review_complete>",
+        "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+      }
+    },
+    {
+      "acceptance_floor_requirements": {
+        "nonnegative_integer_fields": [
+          "blocked_license_scope_count_max",
+          "unsupported_license_scope_count_max"
+        ],
+        "ratio_fields": [
+          "source_license_review_coverage_min"
+        ]
+      },
+      "gate": "license_clearance_complete",
+      "required_fields": [
+        "approved_by",
+        "summary",
+        "evidence_ref",
+        "reviewed_at",
+        "evidence_schema_version",
+        "validation_policy_version",
+        "acceptance_floors_ref",
+        "acceptance_floors",
+        "measured_results"
+      ],
+      "reviewer_instruction": "Replace every placeholder with reviewed evidence. Do not set the gate true until measured_results satisfy acceptance_floors and evidence_ref/acceptance_floors_ref are SHA-256-qualified.",
+      "template": {
+        "acceptance_floors": {
+          "nonnegative_integer_fields": [
+            "blocked_license_scope_count_max",
+            "unsupported_license_scope_count_max"
+          ],
+          "ratio_fields": [
+            "source_license_review_coverage_min"
+          ]
+        },
+        "acceptance_floors_ref": "sha256:<64-hex-digest-of-accepted-floor-document>",
+        "approved_by": "<named-reviewer-or-authorizer>",
+        "evidence_ref": "sha256:<64-hex-digest-of-evidence-pack>",
+        "evidence_schema_version": "himalayan_accuracy_partner_evidence_validation_v2",
+        "measured_results": "<structured metrics/results meeting the acceptance_floors>",
+        "reviewed_at": "<ISO-8601 timestamp>",
+        "summary": "<summary of reviewed evidence for license_clearance_complete>",
+        "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+      }
+    },
+    {
+      "acceptance_floor_requirements": {
+        "true_fields": [
+          "rollback_plan_required",
+          "monitoring_required",
+          "human_override_required",
+          "production_scoring_approval_required"
+        ]
+      },
+      "gate": "production_promotion_approved",
+      "required_fields": [
+        "approved_by",
+        "summary",
+        "evidence_ref",
+        "reviewed_at",
+        "evidence_schema_version",
+        "validation_policy_version",
+        "acceptance_floors_ref",
+        "acceptance_floors",
+        "measured_results"
+      ],
+      "reviewer_instruction": "Replace every placeholder with reviewed evidence. Do not set the gate true until measured_results satisfy acceptance_floors and evidence_ref/acceptance_floors_ref are SHA-256-qualified.",
+      "template": {
+        "acceptance_floors": {
+          "true_fields": [
+            "rollback_plan_required",
+            "monitoring_required",
+            "human_override_required",
+            "production_scoring_approval_required"
+          ]
+        },
+        "acceptance_floors_ref": "sha256:<64-hex-digest-of-accepted-floor-document>",
+        "approved_by": "<named-reviewer-or-authorizer>",
+        "evidence_ref": "sha256:<64-hex-digest-of-evidence-pack>",
+        "evidence_schema_version": "himalayan_accuracy_partner_evidence_validation_v2",
+        "measured_results": "<structured metrics/results meeting the acceptance_floors>",
+        "reviewed_at": "<ISO-8601 timestamp>",
+        "summary": "<summary of reviewed evidence for production_promotion_approved>",
+        "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+      }
+    }
+  ],
+  "usage_boundary": "research_validation_only",
+  "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+}

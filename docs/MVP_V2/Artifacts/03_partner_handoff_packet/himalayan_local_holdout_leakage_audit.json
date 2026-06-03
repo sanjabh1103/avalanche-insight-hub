@@ -1,0 +1,68 @@
+{
+  "acceptance_floors": {
+    "brier_score_max": 0.18,
+    "ece_max": 0.08,
+    "high_danger_recall_min": 0.8,
+    "independent_holdout_required": true,
+    "leakage_check_required": true,
+    "macro_f1_min": 0.7,
+    "mean_day_accuracy_min": 0.75,
+    "region_accuracy_min": 0.7
+  },
+  "audit_is_prediction_evidence": false,
+  "checks": [
+    {
+      "detail": "backend/artifacts/reproduction/himalayan_accuracy/partner_evidence_templates/independent_himalayan_holdout.csv",
+      "key": "holdout_file_present",
+      "passed": true
+    },
+    {
+      "detail": 0,
+      "key": "holdout_rows_present",
+      "passed": false
+    },
+    {
+      "detail": 0,
+      "key": "holdout_rows_valid",
+      "passed": false
+    },
+    {
+      "detail": 0,
+      "key": "source_manifest_covers_holdout",
+      "passed": false
+    },
+    {
+      "detail": 0,
+      "key": "source_ref_no_overlap_with_non_holdout_evidence",
+      "passed": false
+    }
+  ],
+  "claim_boundary": {
+    "himalayan_accuracy_claim_allowed": false,
+    "production_scoring_allowed": false,
+    "reason": "The audit checks holdout leakage and source governance only. It is not model performance evidence or production authorization."
+  },
+  "decision": "blocked_local_holdout_leakage_audit_no_holdout_rows",
+  "evidence_root": "backend/artifacts/reproduction/himalayan_accuracy/partner_evidence_templates",
+  "generated_at": "2026-05-23T13:13:35.699020+00:00",
+  "himalayan_accuracy_claim_allowed": false,
+  "holdout_ids": [],
+  "holdout_path": "backend/artifacts/reproduction/himalayan_accuracy/partner_evidence_templates/independent_himalayan_holdout.csv",
+  "holdout_row_count": 0,
+  "holdout_source_ref_count": 0,
+  "missing_manifest_hash_count": 0,
+  "missing_manifest_hashes": [],
+  "next_actions": [
+    "Supply a reviewed independent_himalayan_holdout.csv with at least one independent holdout row."
+  ],
+  "non_holdout_source_ref_count": 0,
+  "overlapping_source_hashes": [],
+  "production_scoring_allowed": false,
+  "row_issue_count": 0,
+  "row_issue_examples": [],
+  "schema_version": "himalayan_accuracy_local_holdout_leakage_audit_v1",
+  "source_manifest_decision": "partner_source_manifest_not_supplied",
+  "source_ref_overlap_count": 0,
+  "usage_boundary": "research_validation_only",
+  "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+}

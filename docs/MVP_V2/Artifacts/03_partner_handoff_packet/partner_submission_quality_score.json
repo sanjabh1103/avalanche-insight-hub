@@ -1,0 +1,137 @@
+{
+  "claim_boundary": {
+    "himalayan_accuracy_claim_allowed": false,
+    "production_scoring_allowed": false,
+    "reason": "The quality score grades partner evidence package readiness only; model claims still require validated evidence and release gates."
+  },
+  "decision": "blocked_quality_checks_not_run",
+  "dimensions": [
+    {
+      "evidence": {
+        "decision": "not_run",
+        "missing_files": [],
+        "present_file_count": 0,
+        "required_file_count": 0
+      },
+      "key": "package_file_completeness",
+      "label": "Required package files",
+      "max_score": 15.0,
+      "next_action": "Supply partner_source_manifest.json and all ten evidence CSV files.",
+      "score": 0.0,
+      "score_ratio": 0.0,
+      "status": "not_run"
+    },
+    {
+      "evidence": {
+        "decision": "not_run",
+        "invalid_source_count": 0,
+        "source_count": 0,
+        "valid_source_count": 0
+      },
+      "key": "source_governance",
+      "label": "Source manifest governance",
+      "max_score": 20.0,
+      "next_action": "Map every source_ref SHA-256 to owner, dataset, license, date range, reviewer, and evidence package.",
+      "score": 0.0,
+      "score_ratio": 0.0,
+      "status": "not_run"
+    },
+    {
+      "evidence": {
+        "available_requirement_count": 0,
+        "available_requirements": [],
+        "blocked_requirements": [],
+        "decision": "not_run",
+        "requirement_count": 0
+      },
+      "key": "evidence_row_sufficiency",
+      "label": "Evidence row sufficiency",
+      "max_score": 20.0,
+      "next_action": "Fill every evidence CSV with enough reviewed rows to meet the row floor.",
+      "score": 0.0,
+      "score_ratio": 0.0,
+      "status": "not_run"
+    },
+    {
+      "evidence": {
+        "coverage_ratio": 0.0,
+        "requirement_count": 0,
+        "shortfall_requirements": []
+      },
+      "key": "coverage_quality",
+      "label": "Spatial, temporal, numeric coverage",
+      "max_score": 20.0,
+      "next_action": "Broaden station, region, scene, case, time, elevation, or slope coverage where required.",
+      "score": 0.0,
+      "score_ratio": 0.0,
+      "status": "not_run"
+    },
+    {
+      "evidence": {
+        "requirement_count": 0,
+        "review_license_source_ratio": 0.0,
+        "shortfall_requirements": []
+      },
+      "key": "review_license_source_controls",
+      "label": "Review freshness, license, and source controls",
+      "max_score": 15.0,
+      "next_action": "Ensure every row is reviewed, fresh, license-supported, and linked to the source manifest.",
+      "score": 0.0,
+      "score_ratio": 0.0,
+      "status": "not_run"
+    },
+    {
+      "evidence": {
+        "decision": "not_run",
+        "himalayan_accuracy_claim_allowed": false
+      },
+      "key": "release_gate_readiness",
+      "label": "Release-gate attestations",
+      "max_score": 10.0,
+      "next_action": "Supply accepted holdout, scientist-review, license-clearance, and promotion attestations after evidence passes.",
+      "score": 0.0,
+      "score_ratio": 0.0,
+      "status": "not_run"
+    }
+  ],
+  "failed_dimension_count": 6,
+  "failed_dimensions": [
+    "package_file_completeness",
+    "source_governance",
+    "evidence_row_sufficiency",
+    "coverage_quality",
+    "review_license_source_controls",
+    "release_gate_readiness"
+  ],
+  "generated_at": "2026-05-23T13:13:35.699020+00:00",
+  "himalayan_accuracy_claim_allowed": false,
+  "max_score": 100.0,
+  "next_actions": [
+    "Supply partner_source_manifest.json and all ten evidence CSV files.",
+    "Map every source_ref SHA-256 to owner, dataset, license, date range, reviewer, and evidence package.",
+    "Fill every evidence CSV with enough reviewed rows to meet the row floor.",
+    "Broaden station, region, scene, case, time, elevation, or slope coverage where required.",
+    "Ensure every row is reviewed, fresh, license-supported, and linked to the source manifest.",
+    "Supply accepted holdout, scientist-review, license-clearance, and promotion attestations after evidence passes."
+  ],
+  "production_scoring_allowed": false,
+  "quality_policy": {
+    "dimensions": {
+      "coverage_quality": 20,
+      "evidence_row_sufficiency": 20,
+      "package_file_completeness": 15,
+      "release_gate_readiness": 10,
+      "review_license_source_controls": 15,
+      "source_governance": 20
+    },
+    "score_is_not_accuracy": true,
+    "score_is_not_production_authorization": true,
+    "scoring_model": "100 point evidence-package quality rubric"
+  },
+  "readiness_band": "not_run",
+  "schema_version": "himalayan_accuracy_partner_submission_quality_score_v1",
+  "score": 0.0,
+  "score_ratio": 0.0,
+  "usage_boundary": "research_validation_only",
+  "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+}

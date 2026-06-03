@@ -1,0 +1,144 @@
+{
+  "acceptance_floors": {
+    "brier_score_max": 0.18,
+    "ece_max": 0.08,
+    "high_danger_recall_min": 0.8,
+    "independent_holdout_required": true,
+    "leakage_check_required": true,
+    "macro_f1_min": 0.7,
+    "mean_day_accuracy_min": 0.75,
+    "region_accuracy_min": 0.7
+  },
+  "claim_boundary": {
+    "himalayan_accuracy_claim_allowed": false,
+    "production_scoring_allowed": false,
+    "reason": "This is a pre-registered protocol. It contains no local holdout results, no accepted release-gate attestation, and no production authorization."
+  },
+  "decision": "local_himalayan_holdout_protocol_written_pending_partner_evidence",
+  "generated_at": "2026-05-23T13:13:35.699020+00:00",
+  "himalayan_accuracy_claim_allowed": false,
+  "leakage_controls": [
+    "No holdout row may be used for feature selection, calibration, threshold tuning, or release-gate floor selection.",
+    "No source_ref SHA-256 digest may appear in both training/calibration evidence and independent_himalayan_holdout evidence.",
+    "Holdout dates and warning-region identifiers must be reported explicitly before evaluation.",
+    "Any four-class danger mapping must include reviewed mapping notes from the original five-level label.",
+    "Remote-sensing scenes used for model or threshold selection cannot be reused as fresh final holdout evidence."
+  ],
+  "metric_groups": [
+    {
+      "group": "classification",
+      "metrics": [
+        "macro_f1",
+        "per_class_f1",
+        "high_danger_recall",
+        "confusion_matrix",
+        "class_support"
+      ]
+    },
+    {
+      "group": "calibration",
+      "metrics": [
+        "brier_score",
+        "expected_calibration_error",
+        "classwise_calibration_bins",
+        "expected_danger_before_after_calibration"
+      ]
+    },
+    {
+      "group": "spatial_temporal",
+      "metrics": [
+        "mean_day_accuracy",
+        "median_day_accuracy",
+        "region_accuracy",
+        "elevation_band_accuracy",
+        "station_count",
+        "warning_region_count"
+      ]
+    },
+    {
+      "group": "event_and_remote_sensing",
+      "metrics": [
+        "historical_event_recall",
+        "remote_sensing_precision",
+        "remote_sensing_recall",
+        "remote_sensing_f1",
+        "remote_sensing_false_positive_rate"
+      ]
+    }
+  ],
+  "objective": "Pre-register the independent Himalayan holdout split, leakage controls, metrics, acceptance floors, and reporting outputs before any local model selection or public accuracy claim.",
+  "production_scoring_allowed": false,
+  "protocol_is_evidence": false,
+  "required_partner_inputs": [
+    "partner_source_manifest.json",
+    "station_metadata.csv",
+    "weather_station_observations.csv",
+    "snowpack_profile_features.csv",
+    "danger_labels_and_bulletins.csv",
+    "warning_region_polygons.csv",
+    "historical_avalanche_events.csv",
+    "remote_sensing_validation_scenes.csv",
+    "terrain_ates_runout_validation.csv",
+    "scientist_reviews.csv",
+    "independent_himalayan_holdout.csv"
+  ],
+  "required_report_outputs": [
+    "himalayan_local_holdout_evaluation_report.json",
+    "himalayan_local_holdout_evaluation_report.md",
+    "himalayan_local_holdout_leakage_audit.json",
+    "himalayan_local_holdout_metric_report.json",
+    "himalayan_local_holdout_metric_report.md",
+    "himalayan_local_holdout_region_breakdown.csv",
+    "himalayan_local_holdout_calibration_bins.csv",
+    "himalayan_local_holdout_confusion_matrix.csv",
+    "himalayan_local_holdout_scientist_review_packet.md"
+  ],
+  "schema_version": "himalayan_accuracy_local_holdout_protocol_v1",
+  "split_policy": {
+    "five_level_danger_preserved_until_reviewed_mapping": true,
+    "holdout_split_value": "independent_holdout",
+    "minimum_holdout_ids": 1,
+    "must_be_excluded_from_calibration": true,
+    "must_be_excluded_from_threshold_selection": true,
+    "must_be_excluded_from_training": true,
+    "region_and_elevation_breakdown_required": true,
+    "source_ref_overlap_allowed": false,
+    "temporal_overlap_allowed": false
+  },
+  "standards_anchors": [
+    {
+      "name": "RAvaFcast v1.0.0",
+      "url": "https://gmd.copernicus.org/articles/17/7569/2024/",
+      "use": "Keep station classification, spatial interpolation, and elevation/region aggregation as separate evaluation surfaces."
+    },
+    {
+      "name": "European Avalanche Warning Services danger scale",
+      "url": "https://www.avalanches.org/standards/avalanche-danger-scale/",
+      "use": "Preserve five-level danger semantics unless a reviewed mapping justifies aggregation."
+    },
+    {
+      "name": "NIST AI Risk Management Framework",
+      "url": "https://www.nist.gov/itl/ai-risk-management-framework",
+      "use": "Pre-register evaluation and release evidence before any risky operational claim."
+    },
+    {
+      "name": "ISO 19157 geospatial data quality",
+      "url": "https://www.iso.org/standard/78900.html",
+      "use": "Report geospatial completeness, lineage, consistency, and quality in holdout evidence."
+    },
+    {
+      "name": "FAIR data principles",
+      "url": "https://www.go-fair.org/fair-principles/",
+      "use": "Keep holdout evidence source-referenced, reusable, and auditable."
+    }
+  ],
+  "stop_conditions": [
+    "Stop if partner_source_manifest.json is missing or stale.",
+    "Stop if independent_himalayan_holdout.csv is missing, blank, or has no independent_holdout rows.",
+    "Stop if leakage audit finds source_ref, date, station, region, or scene contamination.",
+    "Stop if any acceptance floor is missed; report blocker instead of weakening thresholds.",
+    "Stop before production scoring even when the holdout passes; production requires separate release-gate attestations."
+  ],
+  "usage_boundary": "research_validation_only",
+  "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+}

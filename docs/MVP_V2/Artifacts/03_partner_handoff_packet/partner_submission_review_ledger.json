@@ -1,0 +1,69 @@
+{
+  "blocked_submission_count": 1,
+  "claim_boundary": {
+    "himalayan_accuracy_claim_allowed": false,
+    "production_scoring_allowed": false,
+    "reason": "The ledger tracks package review state and resubmission history. It does not validate model accuracy or authorize production scoring."
+  },
+  "claim_review_ready_count": 0,
+  "decision": "partner_submission_review_ledger_updated_blocked",
+  "entries": [
+    {
+      "acceptance_decision": "blocked_acceptance_checklist_partner_fixes_required",
+      "changed_files": [],
+      "claim_review_ready": false,
+      "first_blocker": "intake_preflight",
+      "manifest_diff_decision": "blocked_manifest_diff_current_package_incomplete",
+      "missing_files": [
+        "partner_source_manifest.json"
+      ],
+      "next_actions": [
+        "Supply partner_source_manifest.json and all ten evidence CSV files.",
+        "Validate source owner, license, reviewer, freshness, and evidence package refs.",
+        "Fix missing, stale, undersized, unreviewed, unlicensed, or invalid evidence rows.",
+        "Supply release-gate attestations for holdout, scientist review, license clearance, and promotion approval.",
+        "Map every source_ref SHA-256 to owner, dataset, license, date range, reviewer, and evidence package.",
+        "Fill every evidence CSV with enough reviewed rows to meet the row floor.",
+        "Broaden station, region, scene, case, time, elevation, or slope coverage where required.",
+        "Ensure every row is reviewed, fresh, license-supported, and linked to the source manifest.",
+        "Supply accepted holdout, scientist-review, license-clearance, and promotion attestations after evidence passes.",
+        "Supply all missing required package files before scientist review."
+      ],
+      "package_complete": false,
+      "package_fingerprint": "d195763dfcdd377527d7328305c5f6893a31c0faeedbb5d14d4510d8ef0ad2b5",
+      "package_root": "backend/artifacts/reproduction/himalayan_accuracy/partner_evidence_templates",
+      "quality_score": 0.0,
+      "quality_score_decision": "blocked_quality_checks_not_run",
+      "quality_score_max": 100.0,
+      "readiness_band": "not_run",
+      "removed_files": [],
+      "scientist_review_ready": false,
+      "submission_id": "69b9a8ff37a381b3",
+      "submission_number": 1,
+      "submission_summary_decision": "blocked_submission_checks_not_run",
+      "submitted_at": "2026-05-23T13:13:35.699020+00:00"
+    }
+  ],
+  "generated_at": "2026-05-23T13:13:35.699020+00:00",
+  "himalayan_accuracy_claim_allowed": false,
+  "latest_claim_review_ready": false,
+  "latest_first_blocker": "intake_preflight",
+  "latest_quality_score": 0.0,
+  "latest_readiness_band": "not_run",
+  "latest_scientist_review_ready": false,
+  "latest_submission_id": "69b9a8ff37a381b3",
+  "ledger_is_prediction_evidence": false,
+  "operator_rules": [
+    "Append one ledger entry per partner submission or resubmission attempt.",
+    "Use package_fingerprint and manifest diff outputs to distinguish changed packages.",
+    "Do not route to scientist review until scientist_review_ready=true.",
+    "Do not route to claim review until claim_review_ready=true.",
+    "The ledger records governance state only; it is not prediction evidence."
+  ],
+  "production_scoring_allowed": false,
+  "schema_version": "himalayan_accuracy_partner_submission_review_ledger_v1",
+  "scientist_review_ready_count": 0,
+  "submission_count": 1,
+  "usage_boundary": "research_validation_only",
+  "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+}

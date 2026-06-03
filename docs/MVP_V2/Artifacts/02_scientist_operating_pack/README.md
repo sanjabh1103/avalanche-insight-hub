@@ -1,0 +1,52 @@
+# MVP V2 Scientist Client Hub
+
+Status date: 2026-05-22
+
+This folder is the single working hub for the next Avalanche Insight Hub interaction with client scientists, SASE/DGRE-style partners, and scientific communities. It is a curated copy pack: original source files remain in their current locations so existing repo links, code paths, and deck history are not broken.
+
+## How To Use This Folder
+
+| Need | Start here | What it gives you |
+|---|---|---|
+| First orientation before a meeting | `00_start_here/CLIENT_MEETING_RUNBOOK.md` | Meeting sequence, demo boundaries, and what to show first. |
+| Scientist feature verification | `01_scientist_client_pack/top20.md` | Step-by-step hand-holding guide and score sheet. |
+| Technical architecture and Top 20 capability map | `01_scientist_client_pack/Top20_features.md` | Current stack, APIs, GPU/Modal role, and feature map. |
+| Prediction accuracy top-10 gap plan | `Avalanche_Prediction_Accuracy_Top10_Gap_Plan.md` | Accuracy-focused feature priorities, current-vs-needed gaps, loopholes, and implementation sequence for Himalayan readiness. |
+| Director / partner letter | `02_letters_outreach_templates/SASE_DGRE_Director_Letter_Draft.md` | Sendable draft with data ask and proof boundaries. |
+| Pre-meeting data collection | `02_letters_outreach_templates/Scientist_pre_meeting_questionnaire.md` | Questions scientists should answer before or during meeting. |
+| Post-MVP update slides | `03_post_mvp_decks/` | Three addendum sources: co-working, European shadow/SAR, Modal/GPU. |
+| European SAR / SnowSlide evidence | `04_european_shadow_evidence/README.md` | Shadow-only evidence pack and transfer boundary. |
+| Modal/GPU and ML architecture | `05_modal_gpu_ml_architecture/` | Modal operating note, ML inventory, RF/SAR/Tier C plans. |
+| Customer remote-sensing wishlist | `Remote_Sensing_Operational_Wishlist_Delta.md` | Delta from the scanned operational pipeline wishlist; keeps avalanche/landslide detection claims gated. |
+| Code, migration, script proof | `06_implementation_evidence/` | Reference copies of the implementation artifacts used by the docs. |
+| Screenshots for demo/deck proof | `07_demo_assets/screenshots/` | Selected public/admin/scientist proof screenshots. |
+| Security, UI, GitHub status | `08_security_ui_github_status/UI_GITHUB_SECURITY_STATUS.md` | What changed, what was not pushed, and what must be checked before sharing. |
+
+## Current Client-Safe Story
+
+Avalanche Insight Hub is now best described as:
+
+- a batch-first avalanche decision-support web app;
+- an RF-baseline public forecast workspace with uncertainty and evidence surfaces;
+- a scientist co-working system with structured review, two-reviewer governance, daily model-vs-scientist comparison, and non-automatic action ledgers;
+- an off-path Modal/GPU compute system for SAR, MTS-LSTM candidates, and release evaluation;
+- a European shadow evidence track for methodology and SAR qualification, not Himalayan proof.
+- a prediction-accuracy roadmap that prioritizes Himalayan station/snowpack evidence, calibrated danger-level modelling, RAvaFcast-style spatial aggregation, remote-sensing gates, and scientist verification before production claims.
+
+## Do Not Claim
+
+- Do not claim official avalanche warning authority.
+- Do not claim European data proves Himalayan accuracy.
+- Do not claim Modal GPU drives the public forecast.
+- Do not claim SAR or MTS-LSTM is promoted into production scoring.
+- Do not claim full operational avalanche/landslide detection or automated alerts from the scanned wishlist.
+- Do not claim synthetic demo data is training-eligible or production-eligible.
+- Do not claim scientist validation is closed until real scientist verdicts, meeting outcomes, and partner-confirmed Himalayan evidence are recorded.
+
+## Why The Folder Is Structured This Way
+
+The structure follows reproducible-research and scientific-collaboration practice: keep a README, preserve provenance, separate evidence from claims, keep source artifacts findable, and maintain explicit data/credential boundaries. Useful external anchors:
+
+- [The Turing Way reproducible research checklist](https://book.the-turing-way.org/reproducible-research/open/open-checklist/)
+- [GO FAIR principles](https://www.go-fair.org/fair-principles)
+- [WMO Impact-Based Forecast and Warning Services](https://wmo.int/impact-based-forecast-and-warning-services)

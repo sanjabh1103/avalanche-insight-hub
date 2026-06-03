@@ -1,0 +1,93 @@
+{
+  "claim_boundary": {
+    "himalayan_accuracy_claim_allowed": false,
+    "production_scoring_allowed": false,
+    "reason": "This runbook is an operator procedure. It does not provide partner evidence, scientific acceptance, or production authorization."
+  },
+  "decision": "partner_intake_dry_run_runbook_written_pending_partner_package",
+  "dry_run_steps": [
+    {
+      "command": "python3 -m backend.scripts.build_himalayan_accuracy_readiness_contract --output backend/artifacts/reproduction/himalayan_accuracy/readiness_contract.json --partner-intake-root <partner-package-root> --partner-intake-preflight-output backend/artifacts/reproduction/himalayan_accuracy/partner_intake_preflight.json --partner-intake-preflight-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_intake_preflight.md",
+      "expected_blocked_decision": "blocked_missing_partner_intake_files",
+      "expected_pass_decision": "partner_intake_package_files_present",
+      "name": "Confirm package files",
+      "step": 1,
+      "stop_if_blocked": true
+    },
+    {
+      "command": "python3 -m backend.scripts.build_himalayan_accuracy_readiness_contract --output backend/artifacts/reproduction/himalayan_accuracy/readiness_contract.json --partner-source-manifest <partner-package-root>/partner_source_manifest.json --partner-source-manifest-validation-output backend/artifacts/reproduction/himalayan_accuracy/partner_source_manifest_validation.json --partner-source-manifest-validation-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_source_manifest_validation.md",
+      "expected_blocked_decision": "partner_source_manifest_not_supplied or blocked_invalid_partner_source_manifest",
+      "expected_pass_decision": "partner_source_manifest_available",
+      "name": "Validate source manifest",
+      "step": 2,
+      "stop_if_blocked": true
+    },
+    {
+      "command": "python3 -m backend.scripts.build_himalayan_accuracy_readiness_contract --output backend/artifacts/reproduction/himalayan_accuracy/readiness_contract.json --partner-evidence-root <partner-package-root> --partner-source-manifest <partner-package-root>/partner_source_manifest.json --partner-evidence-validation-output backend/artifacts/reproduction/himalayan_accuracy/partner_evidence_validation.json --partner-evidence-validation-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_evidence_validation.md",
+      "expected_blocked_decision": "blocked_pending_partner_evidence",
+      "expected_pass_decision": "all_partner_evidence_available",
+      "name": "Validate evidence rows",
+      "step": 3,
+      "stop_if_blocked": true
+    },
+    {
+      "command": "python3 -m backend.scripts.build_himalayan_accuracy_readiness_contract --output backend/artifacts/reproduction/himalayan_accuracy/readiness_contract.json --output-markdown backend/artifacts/reproduction/himalayan_accuracy/readiness_contract.md --partner-intake-root <partner-package-root> --partner-evidence-root <partner-package-root> --partner-source-manifest <partner-package-root>/partner_source_manifest.json --partner-submission-quality-score-output backend/artifacts/reproduction/himalayan_accuracy/partner_submission_quality_score.json --partner-submission-quality-score-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_submission_quality_score.md --partner-submission-acceptance-checklist-output backend/artifacts/reproduction/himalayan_accuracy/partner_submission_acceptance_checklist.json --partner-submission-acceptance-checklist-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_submission_acceptance_checklist.md --partner-submission-summary-output backend/artifacts/reproduction/himalayan_accuracy/partner_submission_summary.json --partner-submission-summary-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_submission_summary.md",
+      "expected_blocked_decision": "blocked_submission_checks_not_run or blocked_<first_blocker>",
+      "expected_pass_decision": "partner_submission_evidence_available_release_gates_pending",
+      "name": "Score and summarize submission",
+      "step": 4,
+      "stop_if_blocked": false
+    },
+    {
+      "command": "python3 -m backend.scripts.build_himalayan_accuracy_readiness_contract --output backend/artifacts/reproduction/himalayan_accuracy/readiness_contract.json --partner-intake-root <partner-package-root> --partner-submission-manifest-diff-output backend/artifacts/reproduction/himalayan_accuracy/partner_submission_manifest_diff.json --partner-submission-manifest-diff-markdown backend/artifacts/reproduction/himalayan_accuracy/partner_submission_manifest_diff.md",
+      "expected_blocked_decision": "blocked_manifest_diff_current_package_incomplete",
+      "expected_pass_decision": "partner_submission_manifest_diff_baseline_written or partner_submission_manifest_diff_changed",
+      "name": "Capture manifest diff",
+      "optional_previous_snapshot_flag": "--partner-submission-manifest-diff-previous <previous-manifest-diff-json>",
+      "step": 5,
+      "stop_if_blocked": false
+    }
+  ],
+  "expected_current_template_status": {
+    "decision": "blocked_missing_partner_intake_files",
+    "reason": "The generated template folder intentionally lacks partner_source_manifest.json and real reviewed rows."
+  },
+  "generated_at": "2026-05-23T13:13:35.699020+00:00",
+  "himalayan_accuracy_claim_allowed": false,
+  "interpretation_rules": [
+    "A dry-run pass means the package is structurally ready for scientist review, not production.",
+    "Any blocked preflight, source-manifest, or evidence-validation decision should be returned to the partner before scientist review.",
+    "A quality score is evidence-package readiness, not model accuracy.",
+    "Release-gate readiness requires separate accepted holdout, scientist-review, license-clearance, and promotion attestations.",
+    "Never copy synthetic fixture rows into a partner package."
+  ],
+  "operator_inputs": [
+    {
+      "description": "Directory containing partner_source_manifest.json, raw_sources/, and ten filled evidence CSV files.",
+      "name": "<partner-package-root>",
+      "required": true
+    },
+    {
+      "description": "Optional previous partner_submission_manifest_diff.json for resubmission comparison.",
+      "name": "<previous-manifest-diff-json>",
+      "required": false
+    }
+  ],
+  "production_scoring_allowed": false,
+  "required_partner_files": [
+    "partner_source_manifest.json",
+    "station_metadata.csv",
+    "weather_station_observations.csv",
+    "snowpack_profile_features.csv",
+    "danger_labels_and_bulletins.csv",
+    "warning_region_polygons.csv",
+    "historical_avalanche_events.csv",
+    "remote_sensing_validation_scenes.csv",
+    "terrain_ates_runout_validation.csv",
+    "scientist_reviews.csv",
+    "independent_himalayan_holdout.csv"
+  ],
+  "schema_version": "himalayan_accuracy_partner_intake_dry_run_runbook_v1",
+  "usage_boundary": "research_validation_only",
+  "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+}

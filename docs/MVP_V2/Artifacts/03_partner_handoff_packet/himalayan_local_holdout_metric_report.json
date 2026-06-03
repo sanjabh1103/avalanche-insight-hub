@@ -1,0 +1,48 @@
+{
+  "acceptance_floors": {
+    "brier_score_max": 0.18,
+    "ece_max": 0.08,
+    "high_danger_recall_min": 0.8,
+    "independent_holdout_required": true,
+    "leakage_check_required": true,
+    "macro_f1_min": 0.7,
+    "mean_day_accuracy_min": 0.75,
+    "region_accuracy_min": 0.7
+  },
+  "claim_boundary": {
+    "himalayan_accuracy_claim_allowed": false,
+    "production_scoring_allowed": false,
+    "reason": "This report is a local holdout metric gate. It can support a release-gate attestation only after leakage, prediction rows, and all acceptance floors pass."
+  },
+  "decision": "blocked_local_holdout_metric_report_leakage_audit_not_passed",
+  "evidence_root": "backend/artifacts/reproduction/himalayan_accuracy/partner_evidence_templates",
+  "floor_results": [],
+  "generated_at": "2026-05-23T13:13:35.699020+00:00",
+  "himalayan_accuracy_claim_allowed": false,
+  "leakage_audit_decision": "blocked_local_holdout_leakage_audit_no_holdout_rows",
+  "metric_report_is_prediction_evidence": false,
+  "metrics": null,
+  "next_actions": [
+    "Pass the local holdout leakage audit before metric evaluation."
+  ],
+  "prediction_required_columns": [
+    "holdout_id",
+    "valid_at",
+    "region_id",
+    "elevation_band",
+    "true_danger_level_1_to_4",
+    "predicted_danger_level_1_to_4",
+    "probability_level_1",
+    "probability_level_2",
+    "probability_level_3",
+    "probability_level_4"
+  ],
+  "prediction_row_count": 0,
+  "prediction_row_issue_count": 0,
+  "predictions_path": "backend/artifacts/reproduction/himalayan_accuracy/partner_evidence_templates/himalayan_local_holdout_predictions.csv",
+  "production_scoring_allowed": false,
+  "row_issue_examples": [],
+  "schema_version": "himalayan_accuracy_local_holdout_metric_report_v1",
+  "usage_boundary": "research_validation_only",
+  "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+}

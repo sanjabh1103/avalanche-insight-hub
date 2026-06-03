@@ -1,0 +1,46 @@
+{
+  "allowed_license_scopes_for_research_validation": [
+    "cc_by_nc_research_only",
+    "commercial_deployment_approved",
+    "internal_research_validation",
+    "partner_restricted_research",
+    "research_validation_only"
+  ],
+  "decision": "source_manifest_template_written_pending_partner_sources",
+  "example_source": {
+    "dataset_name": "<dataset or source package name>",
+    "date_range": "YYYY-MM-DD/YYYY-MM-DD",
+    "evidence_package_ref": "sha256:<64-hex-review-artifact-digest>",
+    "license_scope": "internal_research_validation",
+    "review_status": "reviewed",
+    "reviewed_at": "YYYY-MM-DDTHH:MM:SS+00:00",
+    "reviewer_id": "<named reviewer or review board id>",
+    "sha256": "<64-hex-sha256-of-source-package>",
+    "source_id": "partner_source_package_001",
+    "source_owner": "<partner institution or data owner>"
+  },
+  "generated_at": "2026-05-23T13:13:35.699020+00:00",
+  "himalayan_accuracy_claim_allowed": false,
+  "max_review_age_days": 365.0,
+  "production_scoring_allowed": false,
+  "required_source_fields": [
+    "source_id",
+    "sha256",
+    "source_owner",
+    "dataset_name",
+    "license_scope",
+    "date_range",
+    "review_status",
+    "reviewer_id",
+    "reviewed_at",
+    "evidence_package_ref"
+  ],
+  "schema_version": "himalayan_accuracy_partner_source_manifest_v1",
+  "source_ref_usage": {
+    "hash_only": "sha256:<64-hex-sha256-of-source-package>",
+    "local_file": "file:raw_sources/source_package.csv#sha256=<64-hex-sha256-of-source-package>"
+  },
+  "sources": [],
+  "usage_boundary": "research_validation_only",
+  "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+}
