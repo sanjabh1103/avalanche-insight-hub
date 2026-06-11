@@ -151,3 +151,98 @@ Deno.test("computeJobStatusForResult completes non-accepted results", () => {
   );
   assertEquals(computeJobStatusForResult({ simulated: true }), "completed");
 });
+
+Deno.test({
+  name: "handleTriggerJob returns 401 when REQUIRE_JOB_AUTH is enabled and token is missing",
+  sanitizeOps: false,
+  sanitizeResources: false,
+  async fn() {
+    const oldRequireAuth = Deno.env.get("REQUIRE_JOB_AUTH");
+    const oldJobToken = Deno.env.get("JOB_DISPATCH_TOKEN");
+    const oldSupabaseUrl = Deno.env.get("SUPABASE_URL");
+    const oldServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    Deno.env.set("REQUIRE_JOB_AUTH", "true");
+    Deno.env.set("JOB_DISPATCH_TOKEN", "super-secret-token");
+    Deno.env.set("SUPABASE_URL", "https://example.supabase.co");
+    Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "dummy-service-key");
+
+    try {
+      const req = new Request("https://example.com/functions/v1/trigger-job", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ type: "daily_enrichment" }),
+      });
+
+      const { handleTriggerJob } = await import("./index.ts");
+      const res = await handleTriggerJob(req);
+      assertEquals(res.status, 401);
+
+      const body = await res.json();
+      assertEquals(body.error, "Missing authorization token");
+    } finally {
+      if (oldRequireAuth !== undefined) Deno.env.set("REQUIRE_JOB_AUTH", oldRequireAuth);
+      else Deno.env.delete("REQUIRE_JOB_AUTH");
+
+      if (oldJobToken !== undefined) Deno.env.set("JOB_DISPATCH_TOKEN", oldJobToken);
+      else Deno.env.delete("JOB_DISPATCH_TOKEN");
+
+      if (oldSupabaseUrl !== undefined) Deno.env.set("SUPABASE_URL", oldSupabaseUrl);
+      else Deno.env.delete("SUPABASE_URL");
+
+      if (oldServiceRoleKey !== undefined) Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", oldServiceRoleKey);
+      else Deno.env.delete("SUPABASE_SERVICE_ROLE_KEY");
+    }
+  }
+});
+
+Deno.test({
+  name: "handleTriggerJob accepts request when token matches JOB_DISPATCH_TOKEN",
+  sanitizeOps: false,
+  sanitizeResources: false,
+  async fn() {
+    const oldRequireAuth = Deno.env.get("REQUIRE_JOB_AUTH");
+    const oldJobToken = Deno.env.get("JOB_DISPATCH_TOKEN");
+    const oldSupabaseUrl = Deno.env.get("SUPABASE_URL");
+    const oldServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    Deno.env.set("REQUIRE_JOB_AUTH", "true");
+    Deno.env.set("JOB_DISPATCH_TOKEN", "super-secret-token");
+    Deno.env.set("SUPABASE_URL", "https://example.supabase.co");
+    Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "dummy-service-key");
+
+    try {
+      const req = new Request("https://example.com/functions/v1/trigger-job", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer super-secret-token",
+        },
+        // Send invalid type so it rejects with 400 instead of attempting DB operations.
+        body: JSON.stringify({ type: "invalid_type" }),
+      });
+
+      const { handleTriggerJob } = await import("./index.ts");
+      const res = await handleTriggerJob(req);
+      assertEquals(res.status, 400);
+
+      const body = await res.json();
+      assertEquals(body.error, "Invalid job type");
+    } finally {
+      if (oldRequireAuth !== undefined) Deno.env.set("REQUIRE_JOB_AUTH", oldRequireAuth);
+      else Deno.env.delete("REQUIRE_JOB_AUTH");
+
+      if (oldJobToken !== undefined) Deno.env.set("JOB_DISPATCH_TOKEN", oldJobToken);
+      else Deno.env.delete("JOB_DISPATCH_TOKEN");
+
+      if (oldSupabaseUrl !== undefined) Deno.env.set("SUPABASE_URL", oldSupabaseUrl);
+      else Deno.env.delete("SUPABASE_URL");
+
+      if (oldServiceRoleKey !== undefined) Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", oldServiceRoleKey);
+      else Deno.env.delete("SUPABASE_SERVICE_ROLE_KEY");
+    }
+  }
+});
+

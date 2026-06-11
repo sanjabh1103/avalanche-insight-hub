@@ -33,16 +33,12 @@ describe('overpassClient', () => {
     });
 
     expect(first.ok).toBe(false);
-    if (first.ok) {
-      throw new Error('Expected degraded result for rate-limited response');
-    }
-    expect(first.reason).toBe('rate_limited');
-    expect(first.message).toMatch(/rate-limited/i);
+    const firstDegraded = first as any;
+    expect(firstDegraded.reason).toBe('rate_limited');
+    expect(firstDegraded.message).toMatch(/rate-limited/i);
     expect(second.ok).toBe(false);
-    if (second.ok) {
-      throw new Error('Expected cooldown result');
-    }
-    expect(second.reason).toBe('cooldown');
+    const secondDegraded = second as any;
+    expect(secondDegraded.reason).toBe('cooldown');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

@@ -1,6 +1,6 @@
 # Deck 3 Final: Scientist Validation And Collaboration Plan
 
-Updated: May 8, 2026
+Updated: May 24, 2026
 
 ## Deck Design System
 
@@ -12,15 +12,16 @@ Updated: May 8, 2026
 - Customer-facing tone: customer-ready scientific fieldbook with clear current-state and future-strategy commitments.
 - Asset use: this deck should mainly use diagrams and tables. Use screenshots only if they directly support proof.
 
-## Slide 1: Why Scientist Co-Development Is Necessary Now
+## Slide 1: Why Scientist And Partner Co-Development Is Necessary Now
 
 **Background:** Deep Moraine
 **Customer message:**
-The current platform is ready for a focused validation program. The future strategy is to turn open scientific questions into explicit co-development gates.
+MVP V2 is ready for a focused SASE/DGRE partner handoff and validation program. The future strategy is to turn open scientific questions into explicit co-development gates.
 
 **Current state and future strategy:**
 - Current platform: usable, inspectable, governed
-- Missing closure: weak layers, regional transfer, candidate promotion, SAR qualification
+- V2 infrastructure: Swiss RAvaFcast research, Himalayan v3 templates, and one-command package triage
+- Missing closure: `D_tidy`-grade labels, station coverage, weak layers, regional transfer, candidate promotion, SAR qualification
 - Collaboration question: what evidence should trigger each promotion decision?
 
 **Evidence level:** `Artifact/doc proof only`
@@ -81,32 +82,35 @@ Scientists define what the system must prove, where evidence is thin, and which 
 
 ---
 
-## Slide 5: Benchmark Pack v0
+## Slide 5: Himalayan v3 Partner Handoff Packet
 
 **Background:** Light Field
 **Customer message:**
-Benchmark Pack v0 is the starting work surface for validation closure.
+The Himalayan v3 partner handoff packet is the starting work surface for validation closure. It is intake infrastructure, not prediction success.
 
 **Current state and future strategy:**
-- Case inventory
-- Region slices
-- Failure slices
-- Critical-layer questions
-- Acceptance criteria
+- `partner_handoff_readme.md`
+- `partner_field_dictionary.md`
+- `partner_source_package_checksum_guide.md`
+- `partner_source_manifest_template.json/.md`
+- Ten blank v3 evidence CSV templates
+- Claim locks: `production_scoring_allowed=false`, `himalayan_accuracy_claim_allowed=false`
 
 **Evidence level:** `Artifact/doc proof only`
 **Supporting source:** [Benchmark Pack](../../source/Scientist_benchmark_pack_v0.md)
 
 ---
 
-## Slide 6: Validation Protocol v0
+## Slide 6: Validation Protocol v0 And V3 Triage Loop
 
 **Background:** Light Field
 **Customer message:**
-The validation protocol turns review into a repeatable loop: label review, critical-layer review, benchmark acceptance, candidate promotion review, and claim-boundary escalation.
+The validation protocol turns review into a repeatable loop: source manifest validation, `D_tidy` label review, station coverage review, leakage audit, benchmark acceptance, candidate promotion review, and claim-boundary escalation.
 
 **Current state and future strategy:**
-- Event-label review
+- Source-manifest and evidence-template review
+- `D_tidy` label provenance review
+- GPxyz station X/Y/Z coverage review
 - Critical-layer review
 - Benchmark acceptance
 - Candidate model promotion review
@@ -190,12 +194,13 @@ The next useful step is a pilot with shared benchmark packs, review cadence, pas
 
 **Background:** Light Field
 **Customer message:**
-The platform needs scientist input on event quality, weak-layer interpretation, regional terrain context, and validation cases.
+The platform needs partner and scientist input on source packages, event quality, station metadata, weak-layer interpretation, regional terrain context, and validation cases.
 
 **Current state and future strategy:**
-- Event review support
-- Weak-layer interpretation
-- Curated regional cases
+- Reviewed source packages and `source_ref` hashes
+- `D_tidy`-equivalent danger labels with nowcast/observer evidence
+- Station latitude, longitude, elevation, and density coverage
+- Weak-layer interpretation and curated regional cases
 - Field or proxy validation inputs
 - Regional benchmark slices
 - Offline field-reporting stays queue-and-replay proof until field smoke verifies reliability
@@ -209,11 +214,12 @@ The platform needs scientist input on event quality, weak-layer interpretation, 
 
 **Background:** Light Field
 **Customer message:**
-The engineering work is already organized around claim hardening, evidence verification, benchmark packaging, admin visibility, and gated qualification.
+The engineering work is already organized around claim hardening, partner-package triage, evidence verification, benchmark packaging, admin visibility, and gated qualification.
 
 **Current state and future strategy:**
 - Claim-state hardening
-- Evidence-surface verification
+- One-command `run_himalayan_partner_package_triage`
+- Source traceability and triage artifact manifest
 - Benchmark packaging
 - Admin visibility
 - Release-gated qualification
@@ -262,12 +268,13 @@ Use the three-phase scientist collaboration model for the main deck: harden the 
 
 **Background:** Deep Moraine
 **Customer message:**
-End with a clear ask: choose the next level of scientist engagement.
+End with a clear ask: choose the next partner handoff and scientist engagement level.
 
 **Current state and future strategy:**
-- Option A: benchmark-design workshop
-- Option B: scoped 90-day validation pilot
-- Option C: deeper co-development track
+- Option A: SASE/DGRE handoff session
+- Option B: benchmark-design workshop
+- Option C: scoped 90-day evidence pilot
+- Option D: deeper co-development track
 - Required first action: agree on proof boundaries and benchmark ownership
 
 **Evidence level:** `Artifact/doc proof only`

@@ -41,6 +41,10 @@ on:
         description: 'Forecast horizon hours'
         required: false
         default: '72'
+      region_keys:
+        description: 'Comma-separated region keys for inference publication proof. Defaults to Colorado Rockies demo region.'
+        required: false
+        default: 'colorado_rockies'
       snowpack_proxy_mode:
         description: 'Snowpack proxy mode for public inference publication. Synthetic is intentionally excluded from this workflow input.'
         required: false
@@ -194,13 +198,30 @@ jobs:
         env:
           ARTIFACT_ROOT: backend/artifacts
           FORECAST_HOURS: ${{ github.event.inputs.forecast_hours || '72' }}
+          REGION_KEYS: ${{ github.event.inputs.region_keys || 'colorado_rockies' }}
           GRID_SIZE: '20'
           SNOWPACK_PROXY_MODE: ${{ github.event.inputs.snowpack_proxy_mode || 'regional' }}
           RUN_PHYSICS_RUNOUT: ${{ github.event.inputs.run_physics_runout || 'false' }}
           PYTHONPATH: ${{ github.workspace }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python -m backend.daily_inference --forecast-hours "${FORECAST_HOURS}" --snowpack-proxy-mode "${SNOWPACK_PROXY_MODE}" --require-full-grid-publication
+        run: |
+          set -euo pipefail
+          region_args=()
+          IFS=',' read -ra requested_regions <<< "${REGION_KEYS}"
+          for region_key in "${requested_regions[@]}"; do
+            region_key="$(echo "${region_key}" | xargs)"
+            if [ -n "${region_key}" ]; then
+              region_args+=(--region-key "${region_key}")
+            fi
+          done
+          python -m backend.daily_inference \
+            --forecast-hours "${FORECAST_HOURS}" \
+            --snowpack-proxy-mode "${SNOWPACK_PROXY_MODE}" \
+            --require-full-grid-publication \
+            --require-same-day-publication \
+            --emit-stage-metrics \
+            "${region_args[@]}"
 
       # P0.2: Surface the inference manifest as a step output so failures show
       # the last-known-good state inline in the GitHub UI.

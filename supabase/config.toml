@@ -11,3 +11,19 @@ verify_jwt = false
 
 [functions.ingest-event]
 verify_jwt = false
+
+[functions.ingest-snow-cover]
+verify_jwt = false
+
+[functions.label-forecast-outcomes]
+verify_jwt = false
+
+[functions.recent-activity-refresh]
+verify_jwt = false
+
+[functions.run-evaluation]
+verify_jwt = false
+
+[functions.promote-report]
+verify_jwt = false
+

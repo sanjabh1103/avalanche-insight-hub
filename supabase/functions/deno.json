@@ -1,0 +1,20 @@
+{
+  "lint": {
+    "include": ["."],
+    "rules": {
+      "tags": ["recommended"],
+      "exclude": [
+        "no-explicit-any",
+        "require-await",
+        "no-unused-vars"
+      ]
+    }
+  },
+  "fmt": {
+    "include": ["."],
+    "useTabs": false,
+    "lineWidth": 100,
+    "indentWidth": 2,
+    "singleQuote": true
+  }
+}

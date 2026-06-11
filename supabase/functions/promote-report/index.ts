@@ -1,10 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { authorizeJobRequest } from "../_shared/auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
 
 // P1.3: Admin-invoked promotion endpoint. Calls the promote_event_verification
 // RPC which refuses downgrades and writes an audit trail into
@@ -46,6 +48,14 @@ serve(async (req: Request) => {
       });
     }
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+    const authResult = await authorizeJobRequest("promote_report", req, supabase);
+    if (!authResult.authorized) {
+      return new Response(JSON.stringify({ error: authResult.error }), {
+        status: authResult.status || 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const { data, error } = await (supabase as any).rpc('promote_event_verification', {
       p_event_id: eventId,

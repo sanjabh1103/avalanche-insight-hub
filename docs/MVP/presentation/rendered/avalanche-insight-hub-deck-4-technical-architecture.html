@@ -111,6 +111,20 @@ body.deck-terms {
     linear-gradient(180deg, #f8f6f0 0%, #efece4 100%);
 }
 
+body.deck-ml-understanding {
+  --proof-live: #1c7c74;
+  --proof-internal: #1f3340;
+  --proof-future: #9f6b19;
+  --accent-main: #1c7c74;
+  --accent-soft: rgba(28, 124, 116, 0.13);
+  --accent-alt: #9f6b19;
+  --accent-alt-soft: rgba(159, 107, 25, 0.14);
+  background:
+    radial-gradient(circle at top left, rgba(28, 124, 116, 0.10), transparent 30%),
+    radial-gradient(circle at top right, rgba(159, 107, 25, 0.08), transparent 25%),
+    linear-gradient(180deg, #f4f8f7 0%, #eef1ed 100%);
+}
+
 body::before {
   content: '';
   position: fixed;
@@ -406,6 +420,11 @@ body::before {
   min-height: 53vh;
 }
 
+.frame--compact {
+  height: 34vh;
+  min-height: 0;
+}
+
 .frame--public img {
   object-position: center top;
 }
@@ -424,6 +443,58 @@ body::before {
 
 .frame--admin img {
   object-position: center top;
+}
+
+.frame--dashboard {
+  background: #101010;
+}
+
+.frame--dashboard img {
+  object-fit: contain;
+  object-position: center center;
+}
+
+.evidence-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 0.48rem;
+}
+
+.evidence-shot {
+  margin: 0;
+  min-height: clamp(3.7rem, 8vh, 5.4rem);
+  border: 1px solid var(--line-soft);
+  border-radius: 0.95rem;
+  overflow: hidden;
+  position: relative;
+  background: #101010;
+  box-shadow: var(--shadow-soft);
+}
+
+.evidence-shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  display: block;
+}
+
+.evidence-shot figcaption {
+  position: absolute;
+  left: 0.45rem;
+  bottom: 0.45rem;
+  max-width: calc(100% - 0.9rem);
+  padding: 0.28rem 0.48rem;
+  border-radius: 999px;
+  background: rgba(9, 11, 16, 0.76);
+  color: #f6f4ef;
+  font-size: var(--small-size);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .frame-label {
@@ -882,6 +953,7 @@ a {
   .timeline,
   .flow,
   .matrix-table,
+  .evidence-strip,
   .row-list {
     gap: 0.48rem;
   }
@@ -893,6 +965,8 @@ a {
 
   .frame--wide { min-height: 34vh; }
   .frame--tall { min-height: 44vh; }
+  .frame--compact { height: 28vh; }
+  .evidence-shot { min-height: 3.8rem; }
 }
 
 @media (max-height: 620px) {
@@ -951,6 +1025,8 @@ a {
 
   .frame--wide { min-height: 30vh; }
   .frame--tall { min-height: 38vh; }
+  .frame--compact { height: 14vh; }
+  .evidence-shot { min-height: 3.6rem; }
 }
 
 @media (max-width: 640px) {
@@ -1022,6 +1098,9 @@ a {
 
   .frame--wide { min-height: 18vh; }
   .frame--tall { min-height: 22vh; }
+  .frame--compact { height: 16vh; }
+  .evidence-strip { display: none; }
+  .evidence-shot figcaption { display: none; }
 }
 
 @media (max-width: 640px) and (max-height: 760px) {
@@ -1032,8 +1111,14 @@ a {
   }
 
   .frame--wide,
-  .frame--tall {
-    min-height: 16vh;
+  .frame--tall,
+  .frame--compact {
+    height: 16vh;
+    min-height: 0;
+  }
+
+  .evidence-shot {
+    min-height: 3.4rem;
   }
 }
 
@@ -1077,6 +1162,11 @@ a {
     display: none !important;
   }
 
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
   .slide {
     width: 13.333in;
     height: 7.5in;
@@ -1100,7 +1190,7 @@ a {
             <div class="kicker">Technical deck</div>
             <div class="eyebrow">Architecture addendum</div>
             <h1 class="slide-title">Architecture Proof Boundary</h1>
-            <p class="slide-subtitle">The deployed architecture proves a live public route, a live admin route, same-day full-grid cell publication, and a hosted authenticated admin observability view. Scientist validation and operational qualification remain the next hardening items before stronger operational claims.</p>
+            <p class="slide-subtitle">The deployed architecture proves a live public route, a live admin route, same-day full-grid cell publication, and a hosted authenticated admin observability view. MVP V2 adds a research-only Swiss RAvaFcast lane and a Himalayan v3 partner-evidence pipeline, while scientist validation and operational qualification remain required before stronger claims.</p>
           </div>
           <div class="proof-row"><span class="proof-chip live">Live platform</span><span class="proof-chip internal">Technical evidence</span></div>
         </div>
@@ -1114,6 +1204,7 @@ a {
 <li>Public proof: same-day <code>20x20</code> / <code>72h</code> full-grid cell batch from <code>2026-05-08</code></li>
 <li>Hosted authenticated admin smoke succeeded on May 8, 2026</li>
 <li>Metadata and preview assets use Avalanche Insight Hub branding</li>
+<li><code>production_scoring_allowed=false</code> and <code>himalayan_accuracy_claim_allowed=false</code> remain the governing boundaries for new evidence lanes</li>
               </ul>
             </div>
             <div class="warning-band">
@@ -1134,7 +1225,7 @@ a {
         </div>
         <div class="footer">
           <span class="slide-id">T 1</span>
-          <span><a href="../06_Proof_Status_And_Screenshot_Manifest.md">Proof Manifest</a>, <a href="../../source/Technical_Architecture_Current_Platform.md">Current Platform Architecture</a></span>
+          <span><a href="../06_Proof_Status_And_Screenshot_Manifest.md">Proof Manifest</a>, <a href="../../source/Technical_Architecture_Current_Platform.md">Current Platform Architecture</a>, <a href="../../../MVP%20V2/Himalayan_PrePartner_Evidence_Finite_Checkpoint.md">Himalayan Pre-Partner Evidence</a></span>
         </div>
       </div>
     </section>
@@ -1147,7 +1238,7 @@ a {
             <div class="kicker">Technical deck</div>
             <div class="eyebrow">Architecture addendum</div>
             <h1 class="slide-title">Current Platform Layers</h1>
-            <p class="slide-subtitle">The current platform separates presentation, storage, artifact delivery, batch compute, machine learning, governance, remote compute, and offline reliability.</p>
+            <p class="slide-subtitle">The current platform separates presentation, storage, artifact delivery, batch compute, machine learning, governance, partner evidence intake, remote compute, and offline reliability.</p>
           </div>
           <div class="proof-row"><span class="proof-chip internal">Technical evidence</span></div>
         </div>
@@ -1162,6 +1253,7 @@ a {
 <li>Artifact delivery: manifests, hourly grids, runout overlays</li>
 <li>Batch compute: Python jobs</li>
 <li>Governance: model status, benchmark, release gates</li>
+<li>Research evidence: Swiss reproduction artifacts and Himalayan partner-package triage outputs</li>
               </ul>
             </div>
             <div class="warning-band">
@@ -1527,7 +1619,7 @@ a {
             <div class="kicker">Technical deck</div>
             <div class="eyebrow">Architecture addendum</div>
             <h1 class="slide-title">Modal.com Candidate Compute Plane</h1>
-            <p class="slide-subtitle">Modal.com supports heavier candidate workflows away from the public route. It is separate from the proof behind current public forecast scoring.</p>
+            <p class="slide-subtitle">Modal.com supports heavier candidate workflows away from the public route. It is separate from the proof behind current public forecast scoring and from the Himalayan partner-evidence intake pipeline.</p>
           </div>
           <div class="proof-row"><span class="proof-chip internal">Technical evidence</span></div>
         </div>
@@ -1542,6 +1634,7 @@ a {
 <li>Persistent artifact volumes</li>
 <li>Authenticated worker endpoints</li>
 <li>Current public scorer remains Random Forest baseline</li>
+<li>No GPU run is authorized by partner handoff or synthetic validation success</li>
               </ul>
             </div>
             <div class="warning-band">
@@ -1622,7 +1715,7 @@ a {
             <div class="kicker">Technical deck</div>
             <div class="eyebrow">Architecture addendum</div>
             <h1 class="slide-title">Proposed Data Contract</h1>
-            <p class="slide-subtitle">The proposed architecture simplifies future publication around topographic enrichment, <code>forecast_grids</code>, JSONB payloads, and optional PostGIS support.</p>
+            <p class="slide-subtitle">The proposed architecture now has two tracks: public forecast publication and research-only partner evidence governance.</p>
           </div>
           <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
         </div>
@@ -1632,12 +1725,11 @@ a {
             <div class="lead-panel">
               <div class="section-label">Current state and future strategy</div>
               <ul class="bullet-list">
-                <li><code>avalanche_events</code></li>
-<li>topographic enrichment: elevation, slope angle, aspect</li>
-<li><code>forecast_grids</code></li>
-<li><code>grid_geojson</code></li>
-<li><code>runout_polygons</code></li>
-<li>PostGIS as proposed geospatial extension</li>
+                <li>Public path: <code>avalanche_events</code>, topographic enrichment, <code>forecast_grids</code>, <code>grid_geojson</code>, and <code>runout_polygons</code></li>
+<li>Himalayan v3 path: ten evidence CSV templates, <code>partner_source_manifest</code>, <code>source_ref</code> hashes, and release-gate attestations</li>
+<li>Partner packet: <code>partner_handoff_readme.md</code>, <code>partner_field_dictionary.md</code>, checksum guide, source manifest template, and blank evidence CSVs</li>
+<li>Triage outputs: source-manifest validation, evidence validation, leakage audit, artifact manifest, source traceability, and status dashboard</li>
+<li>PostGIS remains a proposed geospatial extension, not current partner-evidence proof</li>
               </ul>
             </div>
             <div class="warning-band">
@@ -1658,7 +1750,7 @@ a {
         </div>
         <div class="footer">
           <span class="slide-id">T 12</span>
-          <span><a href="../../../prd_add3.md">PRD Addendum</a>, <a href="../../source/Technical_Glossary_And_Acronyms.md">Technical Glossary</a></span>
+          <span><a href="../../../prd_add3.md">PRD Addendum</a>, <a href="../../source/Technical_Glossary_And_Acronyms.md">Technical Glossary</a>, <a href="../../../EnviDat_to_Partner_Schema_Mapping.md">Partner Schema Mapping</a></span>
         </div>
       </div>
     </section>
@@ -1671,7 +1763,7 @@ a {
             <div class="kicker">Technical deck</div>
             <div class="eyebrow">Architecture addendum</div>
             <h1 class="slide-title">Proposed ML And Runout Pipeline</h1>
-            <p class="slide-subtitle">The proposed future pipeline combines rare-event balancing, feature selection, calibrated Random Forest inference, uncertainty bounds, and memory-safe Alpha-Beta runout processing.</p>
+            <p class="slide-subtitle">The proposed future pipeline combines rare-event balancing, feature selection, calibrated Random Forest inference, uncertainty bounds, research-only RAvaFcast reproduction, and memory-safe Alpha-Beta runout processing.</p>
           </div>
           <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
         </div>
@@ -1684,6 +1776,7 @@ a {
                 <li>KMeansSMOTE for rare events</li>
 <li>Recursive Feature Elimination for feature discipline</li>
 <li>Calibrated Random Forest</li>
+<li>Swiss RAvaFcast research lane: Stage 1 RF4, Stage 2 GPxyz blocked until station coordinates, Stage 3 aggregation blocked until grid/polygons</li>
 <li>Tree variance for uncertainty bounds</li>
 <li>WhiteboxTools Alpha-Beta runout with DEM cropping remains a validation path</li>
 <li>Current active runout proof is analytical Alpha-Beta fallback; Whitebox smoke passed separately</li>
@@ -1720,7 +1813,7 @@ a {
             <div class="kicker">Technical deck</div>
             <div class="eyebrow">Architecture addendum</div>
             <h1 class="slide-title">Current, Partial, Candidate, Proposed</h1>
-            <p class="slide-subtitle">The technical deck should prevent architecture overclaim by classifying every major system path.</p>
+            <p class="slide-subtitle">The technical deck should prevent architecture overclaim by classifying every major system path and evidence lane.</p>
           </div>
           <div class="proof-row"><span class="proof-chip internal">Technical evidence</span><span class="proof-chip future">Research agenda</span></div>
         </div>
@@ -1733,6 +1826,7 @@ a {
                 <li>Current: hosted public route, admin route, RF baseline, artifact hydration</li>
 <li>Partial/current: offline report queueing</li>
 <li>Candidate/gated: MTS-LSTM, SAR, TreeSHAP refresh for the active full-grid run</li>
+<li>Research-only: Swiss RAvaFcast reproduction and Himalayan partner-package triage</li>
 <li>Proposed/validation: GitHub Actions/VPS batch compute, PostGIS terrain enrichment, WhiteboxTools runout</li>
               </ul>
             </div>
@@ -1767,7 +1861,7 @@ a {
             <div class="kicker">Technical deck</div>
             <div class="eyebrow">Architecture addendum</div>
             <h1 class="slide-title">Architecture Gates And Next Workstreams</h1>
-            <p class="slide-subtitle">The next engineering work is to harden freshness, validate architecture choices, and promote only what passes gates.</p>
+            <p class="slide-subtitle">The next engineering work is to harden freshness, execute partner handoff, validate architecture choices, and promote only what passes gates.</p>
           </div>
           <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
         </div>
@@ -1780,6 +1874,8 @@ a {
                 <li>Full-grid same-day publication with structured bulletin content is current</li>
 <li>Benchmark packaging</li>
 <li>Admin proof refresh before each customer-send reuse</li>
+<li>Generate and send the v3 handoff packet without synthetic rows</li>
+<li>Run <code>run_himalayan_partner_package_triage</code> only after real SASE/DGRE evidence arrives</li>
 <li>Schema and PostGIS migration decision</li>
 <li>Offline-batch execution proof</li>
 <li>TreeSHAP, SAR, and Whitebox runout validation gates</li>

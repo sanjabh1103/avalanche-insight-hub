@@ -12,6 +12,17 @@ const screenshots = {
   events: 'assets/screenshots/2026-05-07_hosted-public_events-workflow.png',
   adminGate: 'assets/screenshots/2026-05-07_hosted-admin-gate.png',
   adminAuth: 'assets/screenshots/2026-05-08_hosted-admin-auth-full-grid-run.png',
+  uaStructural: 'assets/screenshots/ua-structural-overview.png',
+  uaDomain: 'assets/screenshots/ua-domain-overview.png',
+  uaActiveRf: 'assets/screenshots/ua-active-rf-layer.png',
+  uaMtsLstm: 'assets/screenshots/ua-mts-lstm-layer.png',
+  uaSarShadow: 'assets/screenshots/ua-sar-shadow-layer.png',
+  uaSwiss: 'assets/screenshots/ua-swiss-ravafcast-layer.png',
+  uaHimalayan: 'assets/screenshots/ua-himalayan-evidence-layer.png',
+  uaEvaluation: 'assets/screenshots/ua-evaluation-governance-layer.png',
+  uaModal: 'assets/screenshots/ua-modal-compute-layer.png',
+  uaTests: 'assets/screenshots/ua-tests-ci-layer.png',
+  uaBackend: 'assets/screenshots/ua-backend-support-layer.png',
 };
 
 const evidenceLabels = {
@@ -124,6 +135,20 @@ body.deck-terms {
     radial-gradient(circle at top left, rgba(28, 124, 116, 0.08), transparent 30%),
     radial-gradient(circle at top right, rgba(201, 134, 43, 0.08), transparent 24%),
     linear-gradient(180deg, #f8f6f0 0%, #efece4 100%);
+}
+
+body.deck-ml-understanding {
+  --proof-live: #1c7c74;
+  --proof-internal: #1f3340;
+  --proof-future: #9f6b19;
+  --accent-main: #1c7c74;
+  --accent-soft: rgba(28, 124, 116, 0.13);
+  --accent-alt: #9f6b19;
+  --accent-alt-soft: rgba(159, 107, 25, 0.14);
+  background:
+    radial-gradient(circle at top left, rgba(28, 124, 116, 0.10), transparent 30%),
+    radial-gradient(circle at top right, rgba(159, 107, 25, 0.08), transparent 25%),
+    linear-gradient(180deg, #f4f8f7 0%, #eef1ed 100%);
 }
 
 body::before {
@@ -421,6 +446,11 @@ body::before {
   min-height: 53vh;
 }
 
+.frame--compact {
+  height: 34vh;
+  min-height: 0;
+}
+
 .frame--public img {
   object-position: center top;
 }
@@ -439,6 +469,58 @@ body::before {
 
 .frame--admin img {
   object-position: center top;
+}
+
+.frame--dashboard {
+  background: #101010;
+}
+
+.frame--dashboard img {
+  object-fit: contain;
+  object-position: center center;
+}
+
+.evidence-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 0.48rem;
+}
+
+.evidence-shot {
+  margin: 0;
+  min-height: clamp(3.7rem, 8vh, 5.4rem);
+  border: 1px solid var(--line-soft);
+  border-radius: 0.95rem;
+  overflow: hidden;
+  position: relative;
+  background: #101010;
+  box-shadow: var(--shadow-soft);
+}
+
+.evidence-shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  display: block;
+}
+
+.evidence-shot figcaption {
+  position: absolute;
+  left: 0.45rem;
+  bottom: 0.45rem;
+  max-width: calc(100% - 0.9rem);
+  padding: 0.28rem 0.48rem;
+  border-radius: 999px;
+  background: rgba(9, 11, 16, 0.76);
+  color: #f6f4ef;
+  font-size: var(--small-size);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .frame-label {
@@ -897,6 +979,7 @@ a {
   .timeline,
   .flow,
   .matrix-table,
+  .evidence-strip,
   .row-list {
     gap: 0.48rem;
   }
@@ -908,6 +991,8 @@ a {
 
   .frame--wide { min-height: 34vh; }
   .frame--tall { min-height: 44vh; }
+  .frame--compact { height: 28vh; }
+  .evidence-shot { min-height: 3.8rem; }
 }
 
 @media (max-height: 620px) {
@@ -966,6 +1051,8 @@ a {
 
   .frame--wide { min-height: 30vh; }
   .frame--tall { min-height: 38vh; }
+  .frame--compact { height: 14vh; }
+  .evidence-shot { min-height: 3.6rem; }
 }
 
 @media (max-width: 640px) {
@@ -1037,6 +1124,9 @@ a {
 
   .frame--wide { min-height: 18vh; }
   .frame--tall { min-height: 22vh; }
+  .frame--compact { height: 16vh; }
+  .evidence-strip { display: none; }
+  .evidence-shot figcaption { display: none; }
 }
 
 @media (max-width: 640px) and (max-height: 760px) {
@@ -1047,8 +1137,14 @@ a {
   }
 
   .frame--wide,
-  .frame--tall {
-    min-height: 16vh;
+  .frame--tall,
+  .frame--compact {
+    height: 16vh;
+    min-height: 0;
+  }
+
+  .evidence-shot {
+    min-height: 3.4rem;
   }
 }
 
@@ -1090,6 +1186,11 @@ a {
   .progress-shell,
   .keyboard-hint {
     display: none !important;
+  }
+
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
   }
 
   .slide {
@@ -1211,6 +1312,19 @@ function frame(src, alt, classes, label) {
       <img src="${src}" alt="${alt}">
       ${label ? `<figcaption class="frame-label">${label}</figcaption>` : ''}
     </figure>
+  `;
+}
+
+function dashboardEvidence(items) {
+  return `
+    <div class="evidence-strip reveal delay-3">
+      ${items.map(({ src, alt, label }) => `
+        <figure class="evidence-shot">
+          <img src="${src}" alt="${alt}">
+          <figcaption>${label}</figcaption>
+        </figure>
+      `).join('')}
+    </div>
   `;
 }
 
@@ -1360,7 +1474,7 @@ const deck1Slides = [
     kicker: 'Deck 1 of 5',
     eyebrow: 'Credibility arc • scientist-first contract',
     title: 'Avalanche Insight Hub',
-    subtitle: 'A governed decision-support platform for avalanche forecasting, review, and scientific collaboration.',
+    subtitle: 'MVP V2: a governed decision-support platform for avalanche forecasting, partner evidence intake, review, and scientific collaboration.',
     proof: [
       { label: evidenceLabels.internal, kind: 'internal' },
       { label: evidenceLabels.future, kind: 'future' },
@@ -1371,21 +1485,21 @@ const deck1Slides = [
         <div class="lead-panel">
           <div class="section-label">Meeting objective</div>
           <ul class="bullet-list">
-            <li>Show the live platform, the administration view, and the operating model.</li>
-            <li>Distinguish current capabilities from candidate methods, research precedent, and the next research program.</li>
-            <li>Close on whether a scientist-led validation program should begin next.</li>
+            <li>Show the live platform, the administration view, and the MVP V2 evidence-governance model.</li>
+            <li>Distinguish hosted product proof from Swiss RAvaFcast research, Himalayan v3 partner intake, SAR shadow evidence, and future promotion gates.</li>
+            <li>Close on whether the SASE/DGRE partner handoff and scientist-led validation program should begin next.</li>
           </ul>
         </div>
         <div class="card-grid">
           <article class="card">
             <div class="section-label">What this is</div>
             <h3>Governed decision support</h3>
-            <p>Batch-first forecast publication, explicit uncertainty, and auditable model-status surfaces.</p>
+            <p>Batch-first forecast publication, explicit uncertainty, auditable model-status surfaces, and partner evidence intake.</p>
           </article>
           <article class="card">
             <div class="section-label">What this is not</div>
             <h3>Autonomy-first launch</h3>
-            <p>No active MTS-LSTM claim, no promoted SAR claim, no authority-grade warning claim.</p>
+            <p>No active MTS-LSTM claim, no promoted SAR claim, no Himalayan accuracy claim, no authority-grade warning claim.</p>
           </article>
         </div>
       </div>
@@ -1404,11 +1518,11 @@ const deck1Slides = [
           <article class="phase-card">
             <div class="phase-meta">Discussion lane</div>
             <h3 class="phase-title">${evidenceLabels.future}</h3>
-            <p>Critical-layer validation, SAR qualification, and candidate-model advancement remain part of the next research program.</p>
+            <p>Critical-layer validation, SAR qualification, Himalayan holdout evidence, and candidate-model advancement remain part of the next research program.</p>
           </article>
         </div>
         <div class="quote-band">
-          <p>Use the deck to establish context first, then focus the discussion on the next scientific frontier.</p>
+          <p>Use the deck to establish context first, then focus the discussion on the partner handoff and next scientific frontier.</p>
           <small>Keep the three discussion lanes visible throughout</small>
         </div>
       </div>
@@ -1764,8 +1878,8 @@ const deck1Slides = [
     id: 'd1-10',
     kicker: 'Deck 1 of 5',
     eyebrow: 'Current ML truth',
-    title: 'RF Baseline, Explanation Fallback, And Modal.com Compute Split',
-    subtitle: 'The live platform is anchored on the Random Forest baseline. The current active publication uses heuristic explanation fallback; TreeSHAP refresh remains a technical hardening gate.',
+    title: 'RF Baseline, RAvaFcast Research, And Modal.com Split',
+    subtitle: 'The live platform is anchored on the Random Forest baseline. Swiss RAvaFcast work is research-only, and the current active publication uses heuristic explanation fallback.',
     proof: [
       { label: 'Validated internal evidence', kind: 'internal' },
       { label: 'Research next phase', kind: 'future' },
@@ -1777,33 +1891,19 @@ const deck1Slides = [
           <h3 class="matrix-title">What is active now</h3>
           <div class="matrix-table">
             <div class="matrix-row">
-              <div><strong>Public scorer</strong><p><code>surrogate_rf_v1</code> is the active public-facing scorer on the live route.</p></div>
-              <div><strong>Explanation layer</strong><p>The current active run reports <code>heuristic_fallback</code>; TreeSHAP remains implemented evidence, not a stronger live-run claim for this artifact.</p></div>
+              <div><strong>Public scorer</strong><p><code>surrogate_rf_v1</code> is active; the current run reports <code>heuristic_fallback</code>, not active TreeSHAP proof.</p></div>
+              <div><strong>Candidate lanes</strong><p><code>mts_lstm_v1</code>, SAR, and Modal-backed training/segmentation remain gated and off the public scoring path.</p></div>
             </div>
             <div class="matrix-row">
-              <div><strong>Candidate scorer</strong><p><code>mts_lstm_v1</code> remains shadow-gated and blocked behind explicit release evidence.</p></div>
-              <div><strong>Remote sensing</strong><p>SAR flows exist as candidate evidence paths, not as current public forecast proof.</p></div>
+              <div><strong>Swiss research lane</strong><p>RAvaFcast is an initial research signal; GPxyz remains blocked until station coordinates exist.</p></div>
+              <div><strong>Himalayan evidence lane</strong><p>The v3 partner contract validates package structure, provenance, and claim locks, not Himalayan accuracy.</p></div>
             </div>
           </div>
         </div>
       </div>
       <div class="stack reveal delay-2">
-        <div class="card-grid">
-          <article class="card">
-            <div class="section-label">GPU-backed today</div>
-            <h3>SAR segmentation and model training</h3>
-            <p><code>train_mts_lstm_remote</code>, <code>train_sar_unet_remote</code>, and <code>sar_segment_remote</code> use GPU-backed Modal workers.</p>
-          </article>
-          <article class="card">
-            <div class="section-label">CPU-sized today</div>
-            <h3>MTS-LSTM remote inference</h3>
-            <p><code>infer_mts_lstm_remote</code> is Modal-backed today but still CPU or memory sized, not GPU-backed production scoring.</p>
-          </article>
-          <article class="card">
-            <div class="section-label">Safe phrase</div>
-            <h3>Off-path compute for candidate workflows</h3>
-            <p>That is the safest current description of Modal.com in the platform story.</p>
-          </article>
+        <div class="warning-band">
+          <p><strong>Safe phrase:</strong> Modal.com supports bounded candidate compute; partner intake and synthetic checks do not authorize GPU, production scoring, or public claim changes.</p>
         </div>
       </div>
     `,
@@ -1853,7 +1953,7 @@ const deck1Slides = [
     kicker: 'Deck 1 of 5',
     eyebrow: 'Release-gate posture',
     title: 'Benchmark, Stability, And Release Gates',
-    subtitle: 'This slide is about discipline, not theater. The current evidence should be read as governance metadata and bounded observability, not as broad robustness closure.',
+    subtitle: 'This slide is about discipline, not theater. Current evidence should be read as governance metadata, partner-readiness infrastructure, and bounded observability, not broad robustness closure.',
     proof: [
       { label: 'Validated internal evidence', kind: 'internal' },
     ],
@@ -1874,7 +1974,7 @@ const deck1Slides = [
           <article class="stat">
             <div class="stat-label">Promotion rule</div>
             <div class="stat-number">Blocked until earned</div>
-            <p>Candidate models stay gated until release artifacts and scientist review justify stronger claims.</p>
+            <p>Candidate models and Himalayan claims stay gated until local evidence, holdout metrics, release artifacts, and scientist review justify stronger claims.</p>
           </article>
         </div>
       </div>
@@ -1887,13 +1987,13 @@ const deck1Slides = [
               <div><strong>Threshold drift</strong><p><code>0.157726</code> is visible and should remain visible in the scientist discussion.</p></div>
             </div>
             <div class="matrix-row">
-              <div><strong>Source of truth</strong><p>Current admin surfaces, benchmark pack v0, validation protocol v0, and the stability summary artifact.</p></div>
+              <div><strong>Source of truth</strong><p>Current admin surfaces, benchmark pack v0, validation protocol v0, v3 partner evidence contract, and the stability summary artifact.</p></div>
               <div><strong>What to say safely</strong><p>“We have explicit benchmark and stability traces, and they are conservative enough to keep stronger claims blocked.”</p></div>
             </div>
           </div>
         </div>
         <div class="warning-band">
-          <p><strong>Do not say:</strong> “the shadow path is stable and production-ready.” The artifact only supports cautious governance language.</p>
+          <p><strong>Do not say:</strong> “the shadow path is stable and ready for production.” The artifact only supports cautious governance language.</p>
         </div>
       </div>
     `,
@@ -1943,7 +2043,7 @@ const deck1Slides = [
     kicker: 'Deck 1 of 5',
     eyebrow: 'Boundary slide',
     title: 'What Is Not Unique, And Must Not Be Overclaimed',
-    subtitle: 'Trust increases when we draw the line before the scientist has to do it for us.',
+    subtitle: 'Trust increases when we draw the line before the scientist or partner agency has to do it for us.',
     proof: [
       { label: 'Validated internal evidence', kind: 'internal' },
     ],
@@ -1955,11 +2055,11 @@ const deck1Slides = [
           <div class="matrix-table">
             <div class="matrix-row">
               <div><strong>Algorithm novelty</strong><p>ANNs, SHAP, SAR segmentation, LSTM-style modeling, and GPU workers are not unique by themselves.</p></div>
-              <div><strong>Operational status</strong><p>No active public MTS-LSTM claim, no promoted SAR claim, and no authority-grade warning status.</p></div>
+              <div><strong>Operational status</strong><p>No active public MTS-LSTM claim, no promoted SAR claim, no Himalayan accuracy claim, and no authority-grade warning status.</p></div>
             </div>
             <div class="matrix-row">
               <div><strong>Snow science closure</strong><p>No solved weak-layer or critical-layer validation story.</p></div>
-              <div><strong>Autonomy closure</strong><p>No field-certified autonomous truth-generation claim.</p></div>
+              <div><strong>Autonomy closure</strong><p>No field-certified autonomous truth-generation claim and no <code>D_tidy</code>-equivalent Himalayan truth yet.</p></div>
             </div>
           </div>
         </div>
@@ -1971,6 +2071,7 @@ const deck1Slides = [
             <li>“Explainable baseline plus governed candidate pathways.”</li>
             <li>“Modal.com supports candidate compute, not the current public proof surface.”</li>
             <li>“SAR is promising but still qualification-bound.”</li>
+            <li>“The SASE/DGRE packet is a partner-evidence handoff, not prediction success.”</li>
             <li>“The current value is disciplined integration under sparse-data constraints.”</li>
           </ul>
         </div>
@@ -1986,7 +2087,7 @@ const deck1Slides = [
     kicker: 'Deck 1 of 5',
     eyebrow: 'Conditional close',
     title: 'Current Gaps, Blocked Claims, And The Real Question',
-    subtitle: 'The right close is not certainty. It is whether the next scientist-owned validation step is worth doing now.',
+    subtitle: 'The right close is not certainty. It is whether the SASE/DGRE handoff and next scientist-owned validation step are worth doing now.',
     proof: [
       { label: 'Validated internal evidence', kind: 'internal' },
       { label: 'Research next phase', kind: 'future' },
@@ -2007,8 +2108,8 @@ const deck1Slides = [
           </article>
           <article class="decision-card">
             <div class="section-label">Blocked claim</div>
-            <h3>No critical-layer closure</h3>
-            <p>Weak-layer review and snowpack validation are explicitly next-phase work.</p>
+            <h3>No Himalayan or weak-layer closure</h3>
+            <p>V3 intake validates structure/provenance only; weak-layer and snowpack validation remain next-phase work.</p>
           </article>
         </div>
       </div>
@@ -2018,7 +2119,7 @@ const deck1Slides = [
           <ul class="bullet-list">
             <li>The platform already proves a serious decision-support shell and disciplined governance posture.</li>
             <li>The missing science is visible rather than hidden, which makes co-development discussable.</li>
-            <li><strong>Meeting question:</strong> should the scientist team help own the benchmark, validation, and promotion frontier from here?</li>
+            <li><strong>Meeting question:</strong> should the scientist team and SASE/DGRE partner contacts help own the benchmark, validation, and promotion frontier from here?</li>
           </ul>
         </div>
       </div>
@@ -2031,8 +2132,8 @@ const deck2Slides = [
     id: 'd3-1',
     kicker: 'Deck 3 of 5',
     eyebrow: 'Collaboration arc',
-    title: 'Why Scientist Co-Development Is Necessary Now',
-    subtitle: 'The platform proves enough to justify a serious discussion. It does not prove enough to skip scientist-owned validation.',
+    title: 'Why Scientist And Partner Co-Development Is Necessary Now',
+    subtitle: 'MVP V2 proves enough to justify SASE/DGRE partner handoff and scientist review. It does not prove enough to skip local Himalayan validation.',
     proof: [
       { label: 'Validated internal evidence', kind: 'internal' },
       { label: 'Research next phase', kind: 'future' },
@@ -2044,8 +2145,9 @@ const deck2Slides = [
           <div class="section-label">Transition after Deck 1</div>
           <ul class="bullet-list">
             <li>The product proof is real: public route, admin observability, explainable baseline, and governance surfaces.</li>
-            <li>The science gap is also real: weak layers, regional transfer, qualification, and promotion evidence are unfinished.</li>
-            <li>That gap is exactly where the scientist team becomes central rather than decorative.</li>
+            <li>The V2 infrastructure is real: Swiss RAvaFcast research, Himalayan v3 evidence templates, and one-command package triage.</li>
+            <li>The science gap is also real: weak layers, regional transfer, quality-controlled labels, station coverage, and promotion evidence are unfinished.</li>
+            <li>That gap is exactly where SASE/DGRE partners and the scientist team become central rather than decorative.</li>
           </ul>
         </div>
       </div>
@@ -2054,16 +2156,16 @@ const deck2Slides = [
           <article class="stat">
             <div class="stat-label">Ready now</div>
             <div class="stat-number">Decision-support platform</div>
-            <p>Public-facing product shell and operator evidence surfaces already exist.</p>
+            <p>Public-facing product shell, operator evidence surfaces, and partner-intake templates already exist.</p>
           </article>
           <article class="stat">
             <div class="stat-label">Not ready now</div>
             <div class="stat-number">Scientific closure</div>
-            <p>The next phase is about benchmark and validation ownership, not about declaring victory.</p>
+            <p>The next phase is about SASE/DGRE evidence handoff, benchmark ownership, and validation ownership, not declaring victory.</p>
           </article>
         </div>
         <div class="quote-band">
-          <p>The strongest collaboration pitch is: “help us decide what should count as real evidence here.”</p>
+          <p>The strongest collaboration pitch is: “help us decide what should count as real Himalayan evidence here.”</p>
           <small>Scientist-first framing</small>
         </div>
       </div>
@@ -2188,8 +2290,8 @@ const deck2Slides = [
     id: 'd3-5',
     kicker: 'Deck 3 of 5',
     eyebrow: 'Immediate work surface',
-    title: 'Benchmark Pack v0',
-    subtitle: 'The first reviewable package already exists. It is deliberately small and explicitly not field-validation closure.',
+    title: 'Himalayan v3 Partner Handoff Packet',
+    subtitle: 'The immediate packet is machine-readable intake infrastructure. It is deliberately not a Himalayan accuracy result.',
     proof: [
       { label: 'Validated internal evidence', kind: 'internal' },
     ],
@@ -2197,22 +2299,22 @@ const deck2Slides = [
     content: `
       <div class="stack reveal delay-1">
         <div class="matrix">
-          <h3 class="matrix-title">What v0 already includes</h3>
+          <h3 class="matrix-title">What partners receive (20+ artifacts, summarized here; full list in the handout)</h3>
           <div class="matrix-table">
             <div class="matrix-row">
-              <div><strong>Case inventory</strong><p>Public route proof, admin observability, inference manifest, stability summary, evaluation contracts, and governance contracts.</p></div>
-              <div><strong>Region slices</strong><p><code>cascades_wa</code>, <code>colorado_rockies</code>, <code>french_alps</code>, <code>himalayas_nepal</code>, <code>japanese_alps</code>, <code>swiss_alps</code>.</p></div>
+              <div><strong>Start here</strong><p>README, field dictionary, checksum guide, package index, and source-manifest template.</p></div>
+              <div><strong>Evidence to fill</strong><p>Ten blank v3 CSVs for stations, weather, snowpack, labels, polygons, events, sensing, terrain, reviews, and holdout.</p></div>
             </div>
             <div class="matrix-row">
-              <div><strong>Failure slices</strong><p>Reduced confidence, source support gaps, candidate-gate failure, stability drift, narrow evidence mix, evaluation sparsity.</p></div>
-              <div><strong>Critical-layer questions</strong><p>Explicit prompts for weak-layer review, slice choice, and minimally credible benchmark deltas.</p></div>
+              <div><strong>Validation and triage</strong><p>Preflight, evidence validation, source checks, quality score, acceptance checklist, manifest diff, summary, and ledger.</p></div>
+              <div><strong>Holdout and claim locks</strong><p>Pre-registered holdout protocol, leakage audit, metric report, release attestation, and explicit claim gates.</p></div>
             </div>
           </div>
         </div>
       </div>
       <div class="stack reveal delay-2">
         <div class="warning-band">
-          <p><strong>v0 boundary:</strong> this pack makes the discussion disciplined. It does not pretend the review is complete, fresh, or field-validated yet.</p>
+          <p><strong>Boundary:</strong> blank templates and instructions only. Synthetic fixtures are validator smoke-tests, never partner evidence. See <code>Scientist_Handout_OnePager.md</code> for the complete inventory.</p>
         </div>
       </div>
     `,
@@ -2221,8 +2323,8 @@ const deck2Slides = [
     id: 'd3-6',
     kicker: 'Deck 3 of 5',
     eyebrow: 'Review loop',
-    title: 'Validation Protocol v0',
-    subtitle: 'The minimum scientist-in-the-loop protocol is already structured: event labels, critical layers, benchmark acceptance, and promotion review.',
+    title: 'Validation Protocol v0 And V3 Triage Loop',
+    subtitle: 'The minimum scientist-in-the-loop protocol is now tied to partner package triage: source governance, evidence validation, leakage checks, and promotion review.',
     proof: [
       { label: 'Validated internal evidence', kind: 'internal' },
     ],
@@ -2231,32 +2333,32 @@ const deck2Slides = [
       <div class="timeline reveal delay-1">
         <div class="timeline-step">
           <strong>01</strong>
-          <p>Review label confidence, training weights, and field-report linkage.</p>
+          <p>Validate source manifest coverage and reject rows with missing or stale <code>source_ref</code> evidence.</p>
         </div>
         <div class="timeline-step">
           <strong>02</strong>
-          <p>Define weak-layer and critical-layer review expectations.</p>
+          <p>Review <code>D_tidy</code>-equivalent label provenance, nowcast/observer refs, regime, and timing fields.</p>
         </div>
         <div class="timeline-step">
           <strong>03</strong>
-          <p>Accept or reject benchmark artifacts and runtime traces.</p>
+          <p>Check station X/Y/Z coverage, GPxyz readiness, snowpack provenance, event truth, and remote-sensing scope.</p>
         </div>
         <div class="timeline-step">
           <strong>04</strong>
-          <p>Check candidate-model gates and downgrade language if a gate fails.</p>
+          <p>Run holdout leakage and metric reports only after package evidence is complete and independent.</p>
         </div>
         <div class="timeline-step">
           <strong>05</strong>
-          <p>Carry sign-off checkpoints back into deck, docs, and release phrasing.</p>
+          <p>Carry scientist decisions back into release-gate attestations, deck language, docs, and claim state.</p>
         </div>
       </div>
       <div class="stack reveal delay-2">
         <div class="lead-panel">
           <div class="section-label">Why this matters now</div>
           <ul class="bullet-list">
-            <li>The protocol gives the scientist team a real review surface from day one.</li>
-            <li>It turns “validation” into explicit checkpoints instead of vague reassurance.</li>
-            <li>It keeps blocked claims blocked until someone can point to the proving artifact.</li>
+            <li>The protocol gives the scientist team and partner reviewers a real review surface from day one.</li>
+            <li>It turns “validation” into explicit package, source, label, station, holdout, and release-gate checkpoints.</li>
+            <li>It keeps blocked claims blocked until someone can point to the proving artifact and reviewed local evidence.</li>
           </ul>
         </div>
       </div>
@@ -2385,27 +2487,33 @@ const deck2Slides = [
     content: `
       <div class="timeline reveal delay-1">
         <div class="timeline-step">
-          <strong>Week 0-2</strong>
-          <p>Lock benchmark scope, region slices, and critical-layer questions.</p>
+          <strong>Weeks 1-3 · Activate</strong>
+          <p>Partner handoff session (W1), source-manifest discipline + SHA-256 walkthrough (W2), station metadata + GPxyz readiness gate (W3). Acceptance: ≥1 priority region exits <code>blocked_station_coordinates_required</code>.</p>
         </div>
         <div class="timeline-step">
-          <strong>Week 3-6</strong>
-          <p>Run governed evidence and evaluation slices against the agreed case pack.</p>
+          <strong>Weeks 4-6 · Evidence</strong>
+          <p><code>D_tidy</code> label provenance + weak-layer slice definitions (W4), full validator/leakage triage + 100-point score (W5), Stage-1 RF4 feasibility spike + SAR read-only review (W6). Acceptance: ≥1 region scores ≥50/100; SAR not promoted.</p>
         </div>
         <div class="timeline-step">
-          <strong>Week 7-10</strong>
-          <p>Review failures, drift, weak-layer misses, and candidate-model gate posture together.</p>
+          <strong>Weeks 7-9 · Audit + protocol lock</strong>
+          <p>Refined-discretization audit (W7), weak-layer evidence pack round 1 (W8), <strong>pre-registered</strong> local holdout protocol with scientist co-signature (W9). Acceptance: protocol SHA-256 captured, immutable thereafter.</p>
         </div>
         <div class="timeline-step">
-          <strong>Week 11-12</strong>
-          <p>Decide whether to extend, constrain, or terminate the next qualification loop.</p>
+          <strong>Weeks 10-12 · Review + attestation</strong>
+          <p>Weak-layer round 2 + spike iteration (W10), failure-mode review + pre-decision memo (W11), <strong>release-gate attestation or claim_review_blocked ledger entry</strong> (W12). No silent failures.</p>
         </div>
         <div class="timeline-step">
-          <strong>Exit</strong>
-          <p>Produce a scientist-owned go, no-go, or narrow-pilot recommendation.</p>
+          <strong>Week 13 · Decision</strong>
+          <p>60-min session producing one of: <code>Phase_2_Scoping.md</code>, <code>Narrow_Pilot_Charter.md</code>, or <code>Pilot_Termination_Memo.md</code>. Scientist Lead can extend, narrow, block, or terminate at any prior weekly gate.</p>
         </div>
       </div>
-      <div class="warning-band reveal delay-2">
+      <div class="stack reveal delay-2">
+        <div class="lead-panel">
+          <div class="section-label">Per-week handout</div>
+          <p>The week-by-week plan with deliverables, owners, acceptance gates, risk triggers, and contingencies (Swiss-only sandbox, synthetic-pseudo-stations, re-submission cycle, scientist-led narrow pilot) lives in <code>MVP_V2_13_Week_Pilot_Plan.md</code>. Companion artifacts: <code>MVP_V2_Action_List.md</code> and <code>MVP_V2_Weekly_Progress_Template.md</code>.</p>
+        </div>
+      </div>
+      <div class="warning-band reveal delay-3">
         <p>Success is not “the model looked good.” Success is a benchmark result the scientist team is willing to stand behind narrowly and carefully.</p>
       </div>
     `,
@@ -2415,32 +2523,32 @@ const deck2Slides = [
     kicker: 'Deck 3 of 5',
     eyebrow: 'Requirements',
     title: 'Data And Field Requirements',
-    subtitle: 'The next phase needs concrete contributions: case definitions, field context, weak-layer interpretation, and evidence-quality review.',
+    subtitle: 'The next phase needs concrete contributions: reviewed source packages, case definitions, field context, weak-layer interpretation, and evidence-quality review.',
     proof: [
       { label: 'Research next phase', kind: 'future' },
     ],
     source: 'Field and data requirements',
     content: `
       <div class="card-grid reveal delay-1">
-        <article class="card">
-          <div class="section-label">Scientist input</div>
-          <h3>Weak-layer and critical-layer cases</h3>
-          <p>Choose the slices that matter before any promotion rhetoric returns.</p>
-        </article>
-        <article class="card">
-          <div class="section-label">Field context</div>
-          <h3>Local terrain interpretation</h3>
-          <p>Benchmark cases need ground-informed review, not purely remote or statistical interpretation.</p>
-        </article>
-        <article class="card">
-          <div class="section-label">Event curation</div>
-          <h3>Label arbitration support</h3>
-          <p>Ambiguous, duplicated, or thinly sourced avalanche events need shared review.</p>
-        </article>
+          <article class="card">
+            <div class="section-label">Scientist input</div>
+            <h3>D_tidy-quality danger labels</h3>
+            <p>Separate raw bulletins from reviewed nowcast, observer, event, or reanalysis-backed truth.</p>
+          </article>
+          <article class="card">
+            <div class="section-label">Field context</div>
+            <h3>Station and terrain metadata</h3>
+            <p>GPxyz needs latitude, longitude, elevation, density diagnostics, and region coverage before spatial claims.</p>
+          </article>
+          <article class="card">
+            <div class="section-label">Event curation</div>
+            <h3>Label arbitration and event truth</h3>
+            <p>Ambiguous, duplicated, or thinly sourced avalanche events need shared review and source-manifest backing.</p>
+          </article>
         <article class="card">
           <div class="section-label">Honest caveat</div>
           <h3>Offline report replay is not field reliability proof</h3>
-          <p>The queue-and-replay mechanism exists, but the deck should not treat it as validated mountain-device robustness.</p>
+            <p>The queue-and-replay mechanism and v3 intake validators exist, but neither proves field-device robustness or Himalayan accuracy.</p>
         </article>
       </div>
     `,
@@ -2449,7 +2557,7 @@ const deck2Slides = [
     id: 'd3-12',
     kicker: 'Deck 3 of 5',
     eyebrow: 'Execution realism',
-    title: 'Engineering And Platform Workstreams Are Already Structured',
+    title: 'Engineering And Partner Workstreams Are Already Structured',
     subtitle: 'The path forward is not abstract. The current program already breaks the next work into concrete, bounded streams.',
     proof: [
       { label: 'Validated internal evidence', kind: 'internal' },
@@ -2462,11 +2570,11 @@ const deck2Slides = [
           <h3>Claim-state hardening</h3>
           <p>Every sentence is now mapped to an allowed proof tier and blocked-claim rule.</p>
         </article>
-        <article class="card">
-          <div class="section-label">Workstream</div>
-          <h3>Evidence-surface verification</h3>
-          <p>Every meaningful claim is tied to a route, artifact, test, or admin surface.</p>
-        </article>
+          <article class="card">
+            <div class="section-label">Workstream</div>
+            <h3>Partner-package triage</h3>
+            <p><code>run_himalayan_partner_package_triage</code> produces preflight, source, evidence, holdout, ledger, dashboard, manifest, and traceability outputs.</p>
+          </article>
         <article class="card">
           <div class="section-label">Workstream</div>
           <h3>Governed autonomy reframing</h3>
@@ -2475,7 +2583,7 @@ const deck2Slides = [
         <article class="card">
           <div class="section-label">Workstream</div>
           <h3>Benchmark and protocol packaging</h3>
-          <p>Benchmark pack v0 and validation protocol v0 are ready as discussion starters.</p>
+            <p>Benchmark pack v0, validation protocol v0, and the v3 handoff packet are ready as discussion starters.</p>
         </article>
       </div>
       <div class="warning-band reveal delay-2">
@@ -2566,7 +2674,7 @@ const deck2Slides = [
     kicker: 'Deck 3 of 5',
     eyebrow: 'Specific ask',
     title: 'Concrete Ask, Decision Options, And Next Steps',
-    subtitle: 'End the meeting with a choice, not with generic enthusiasm.',
+    subtitle: 'End the meeting with a choice, not with generic enthusiasm or prediction-success language.',
     proof: [
       { label: 'Research next phase', kind: 'future' },
     ],
@@ -2575,17 +2683,17 @@ const deck2Slides = [
       <div class="decision-grid reveal delay-1">
         <article class="decision-card">
           <div class="section-label">Option 1</div>
-          <h3>Benchmark-design workshop</h3>
+          <h3>SASE/DGRE handoff session</h3>
           <ul>
-            <li>Define cases, slices, and validation questions.</li>
-            <li>Low commitment, high clarity.</li>
+            <li>Walk through README, field dictionary, checksum guide, source manifest, and blank v3 CSVs.</li>
+            <li>Low commitment, high clarity before data formatting begins.</li>
           </ul>
         </article>
         <article class="decision-card">
           <div class="section-label">Option 2</div>
-          <h3>90-day pilot</h3>
+          <h3>90-day evidence pilot</h3>
           <ul>
-            <li>Shared benchmark pack, review cadence, and go or no-go gates.</li>
+            <li>Partner package submission, triage, scientist review, and go or no-go gates.</li>
             <li>Turns curiosity into inspectable pilot evidence.</li>
           </ul>
         </article>
@@ -2599,8 +2707,485 @@ const deck2Slides = [
         </article>
       </div>
       <div class="quote-band reveal delay-2">
-        <p>The ideal immediate ask is a scientist-led benchmark-design session with selected regional cases and explicit validation criteria.</p>
+        <p>The ideal immediate ask is a partner handoff session followed by a scientist-led benchmark-design session with selected regional cases and explicit validation criteria.</p>
         <small>Close on a concrete next step, not on AI transformation language</small>
+      </div>
+    `,
+  }),
+];
+
+const deck6Slides = [
+  slideSection({
+    id: 'd6-1',
+    kicker: 'Deck 6 of 6',
+    eyebrow: 'MVP V2 explanation deck',
+    title: 'Database, ML Models, And Himalayan Accuracy Path',
+    subtitle: 'A beginner-friendly guide to what the Understand Anything graphs show, how the current model stack works, and what evidence is still needed before Himalayan accuracy can be claimed.',
+    proof: [
+      { label: 'Technical evidence', kind: 'internal' },
+      { label: 'Research agenda', kind: 'future' },
+    ],
+    source: 'Understand Anything graph • MVP V2 repo review',
+    shellClass: 'split-2',
+    content: `
+      <div class="stack reveal delay-1">
+        <div class="lead-panel">
+          <div class="section-label">Plain-English purpose</div>
+          <p>This deck explains the system as three connected parts: a database that stores facts, machine-learning models that estimate risk, and evidence gates that decide what may be shown or claimed.</p>
+        </div>
+        <div class="card-grid">
+          <article class="card">
+            <h3>For beginners</h3>
+            <p>No code reading required; every technical term is mapped to a simple operational meaning.</p>
+          </article>
+          <article class="card">
+            <h3>For scientists</h3>
+            <p>The deck keeps label quality, validation data, SAR limits, and local holdout gates visible.</p>
+          </article>
+        </div>
+      </div>
+      <div class="stack reveal delay-2">
+        ${frame(screenshots.uaStructural, 'Understand Anything structural overview of the Avalanche Insight Hub ML/backend layers.', 'frame--wide frame--dashboard', 'Understand Anything • structural overview')}
+      </div>
+    `,
+  }),
+  slideSection({
+    id: 'd6-2',
+    kicker: 'Deck 6 of 6',
+    eyebrow: 'One-minute mental model',
+    title: 'Three Things To Remember',
+    subtitle: 'The website is not just a map. It is a governed evidence system: store facts, run models, then publish only what passes the right gates.',
+    proof: [
+      { label: 'Technical evidence', kind: 'internal' },
+    ],
+    source: 'Repo architecture synthesis',
+    shellClass: 'split-3',
+    content: `
+      <article class="card reveal delay-1">
+        <div class="section-label">1 · Database</div>
+        <h3>Stores the facts</h3>
+        <p>Supabase/Postgres stores forecast runs, grid cells, events, model status, evaluation records, scientist reviews, and daily verification records.</p>
+      </article>
+      <article class="card reveal delay-2">
+        <div class="section-label">2 · Models</div>
+        <h3>Estimate risk</h3>
+        <p>Random Forest is the active structured scorer; MTS-LSTM, SAR segmentation, and Swiss RAvaFcast remain gated research or candidate lanes.</p>
+      </article>
+      <article class="card reveal delay-3">
+        <div class="section-label">3 · Evidence gates</div>
+        <h3>Control claims</h3>
+        <p>Publication, SAR, Himalayan partner, and holdout gates stop unsupported claims even when a model or graph looks promising.</p>
+      </article>
+      ${dashboardEvidence([
+        { src: screenshots.uaDomain, alt: 'Understand Anything domain overview for the avalanche system.', label: 'Domain overview' },
+        { src: screenshots.uaActiveRf, alt: 'Active RF pipeline screenshot.', label: 'Active RF' },
+        { src: screenshots.uaHimalayan, alt: 'Himalayan partner evidence screenshot.', label: 'Himalayan evidence' },
+      ])}
+    `,
+  }),
+  slideSection({
+    id: 'd6-3',
+    kicker: 'Deck 6 of 6',
+    eyebrow: 'Dashboard map',
+    title: 'What The Graph Is Showing',
+    subtitle: 'Understand Anything turned the repo into a visual map: 2,045 nodes, 4,015 edges, and 10 ML/backend layers for the structural view.',
+    proof: [
+      { label: 'Technical evidence', kind: 'internal' },
+    ],
+    source: '.understand-anything/knowledge-graph.json',
+    content: `
+      <div class="stack reveal delay-1">
+        ${frame(screenshots.uaStructural, 'Structural graph showing ten ML and backend layers.', 'frame--wide frame--dashboard', '10 structural layers')}
+      </div>
+      <div class="stack reveal delay-2">
+        <div class="stat-row">
+          <article class="stat">
+            <div class="stat-label">Nodes</div>
+            <div class="stat-number">2,045</div>
+            <p>Files, functions, classes, pipelines, config, and docs.</p>
+          </article>
+          <article class="stat">
+            <div class="stat-label">Edges</div>
+            <div class="stat-number">4,015</div>
+            <p>Relationships that show how code and evidence connect.</p>
+          </article>
+          <article class="stat">
+            <div class="stat-label">Layers</div>
+            <div class="stat-number">10</div>
+            <p>Grouped ML/backend workstreams, not random file lists.</p>
+          </article>
+        </div>
+        <div class="lead-panel">
+          <p>The graph is a navigation aid. It does not prove scientific accuracy by itself; it helps reviewers see where the implemented evidence and remaining gates live.</p>
+        </div>
+      </div>
+    `,
+  }),
+  slideSection({
+    id: 'd6-4',
+    kicker: 'Deck 6 of 6',
+    eyebrow: 'Database basics',
+    title: 'The Database In Plain English',
+    subtitle: 'The database is the system ledger: it records forecast products, event evidence, model state, evaluation runs, and scientist review decisions.',
+    proof: [
+      { label: 'Technical evidence', kind: 'internal' },
+    ],
+    source: 'Supabase migrations • README architecture',
+    shellClass: 'split-3',
+    content: `
+      <article class="card reveal delay-1">
+        <div class="section-label">Forecast facts</div>
+        <h3>Runs and grid cells</h3>
+        <p><code>forecast_runs</code>, <code>forecast_run_hours</code>, <code>forecast_grids</code>, and publication events record what was generated and published.</p>
+      </article>
+      <article class="card reveal delay-2">
+        <div class="section-label">Ground evidence</div>
+        <h3>Events and reports</h3>
+        <p><code>avalanche_events</code>, field reports, outcome labels, and feature logs form the evidence trail behind model evaluation.</p>
+      </article>
+      <article class="card reveal delay-3">
+        <div class="section-label">Governance</div>
+        <h3>Status and reviews</h3>
+        <p><code>model_status</code>, <code>evaluation_runs</code>, <code>scientist_validation_reviews</code>, and daily verifications keep model state and human checks visible.</p>
+      </article>
+      ${dashboardEvidence([
+        { src: screenshots.uaBackend, alt: 'Backend support and shared infrastructure layer screenshot.', label: 'Backend support' },
+        { src: screenshots.uaEvaluation, alt: 'Evaluation and release governance layer screenshot.', label: 'Governance tables' },
+      ])}
+    `,
+  }),
+  slideSection({
+    id: 'd6-5',
+    kicker: 'Deck 6 of 6',
+    eyebrow: 'Database flow',
+    title: 'Forecast Run To Public Map',
+    subtitle: 'A beginner can read the data path as a chain: inputs become a model run, the run writes grid cells, the public map reads the published grid, and scientists review exceptions.',
+    proof: [
+      { label: 'Technical evidence', kind: 'internal' },
+    ],
+    source: 'Forecast publication plane • scientist workbench migrations',
+    shellClass: 'split-2',
+    content: `
+      <div class="diagram-shell reveal delay-1">
+        <div class="section-label">Core flow</div>
+        <div class="flow">
+          <div class="flow-node"><strong>Inputs</strong><p>Weather, terrain, snowpack proxies, event history, and model status.</p></div>
+          <div class="flow-node"><strong>Forecast run</strong><p>Backend scoring creates a dated run with lineage and metadata.</p></div>
+          <div class="flow-node"><strong>Grid cells</strong><p>Cell-level risk values become the map surface and bulletin context.</p></div>
+          <div class="flow-node"><strong>Review</strong><p>Scientists and operators inspect cases, actions, and daily verification records.</p></div>
+        </div>
+      </div>
+      <div class="stack reveal delay-2">
+        <div class="lead-panel">
+          <div class="section-label">What is not UI-complete today</div>
+          <p>Himalayan partner evidence intake is still CSV, source-manifest, and CLI based. The current UI supports product and review concepts, but the full partner evidence package is not yet a web form workflow.</p>
+        </div>
+        ${dashboardEvidence([
+          { src: screenshots.uaEvaluation, alt: 'Evaluation and publication governance layer screenshot.', label: 'Review/gates' },
+          { src: screenshots.uaBackend, alt: 'Backend support layer screenshot.', label: 'Data flow support' },
+        ])}
+      </div>
+    `,
+  }),
+  slideSection({
+    id: 'd6-6',
+    kicker: 'Deck 6 of 6',
+    eyebrow: 'Model ladder',
+    title: 'Current ML Model Map',
+    subtitle: 'The system deliberately separates active, candidate, shadow, research, and evidence lanes so one promising result does not become an unsupported public claim.',
+    proof: [
+      { label: 'Technical evidence', kind: 'internal' },
+      { label: 'Research agenda', kind: 'future' },
+    ],
+    source: 'Understand Anything structural graph • backend model scan',
+    shellClass: 'split-2',
+    content: `
+      <div class="stack reveal delay-1">
+        ${frame(screenshots.uaActiveRf, 'Understand Anything layer view for the active Random Forest forecast pipeline.', 'frame--compact frame--dashboard', 'Active RF layer')}
+      </div>
+      <div class="stack reveal delay-2">
+        <div class="matrix">
+          <h3 class="matrix-title">Five lanes</h3>
+          <div class="matrix-table">
+            <div class="matrix-row"><div><strong>Active</strong><p>Random Forest with terrain, weather, and snowpack features.</p></div><div><strong>Candidate</strong><p>MTS-LSTM for future temporal learning.</p></div></div>
+            <div class="matrix-row"><div><strong>Shadow and research</strong><p>SAR shadow plus Swiss RAvaFcast RF4, GPxyz, and refined aggregation.</p></div><div><strong>Evidence and claim lock</strong><p>Himalayan partner evidence; <code>production_scoring_allowed=false</code>; <code>himalayan_accuracy_claim_allowed=false</code>.</p></div></div>
+          </div>
+        </div>
+      </div>
+    `,
+  }),
+  slideSection({
+    id: 'd6-7',
+    kicker: 'Deck 6 of 6',
+    eyebrow: 'Active model',
+    title: 'How Random Forest Improves Prediction',
+    subtitle: 'Random Forest is a practical baseline: it combines many simple decision trees so the final estimate is less fragile than one hand-written rule.',
+    proof: [
+      { label: 'Technical evidence', kind: 'internal' },
+    ],
+    source: 'backend/models/surrogate_rf.py • backend/daily_inference.py',
+    shellClass: 'split-3',
+    content: `
+      <article class="card reveal delay-1">
+        <div class="section-label">Input features</div>
+        <h3>More than one signal</h3>
+        <p>Terrain, weather, snowpack proxies, historical context, and freshness cues become structured columns for the model.</p>
+      </article>
+      <article class="card reveal delay-2">
+        <div class="section-label">Tree ensemble</div>
+        <h3>Many small votes</h3>
+        <p>Each tree learns a different split pattern; the ensemble combines them to reduce dependence on a single brittle rule.</p>
+      </article>
+      <article class="card reveal delay-3">
+        <div class="section-label">Publication gate</div>
+        <h3>Prediction is not enough</h3>
+        <p>The score must still pass model-status, lineage, freshness, and confidence controls before it is safe to publish.</p>
+      </article>
+      ${dashboardEvidence([
+        { src: screenshots.uaActiveRf, alt: 'Active Random Forest pipeline layer screenshot.', label: 'RF layer' },
+        { src: screenshots.uaEvaluation, alt: 'Evaluation and release governance layer screenshot.', label: 'Publication gates' },
+      ])}
+    `,
+  }),
+  slideSection({
+    id: 'd6-8',
+    kicker: 'Deck 6 of 6',
+    eyebrow: 'Quality controls',
+    title: 'Calibration And Explainability',
+    subtitle: 'Good prediction is not only the top class. The system also needs probability quality, explanation traces, and publication proof.',
+    proof: [
+      { label: 'Technical evidence', kind: 'internal' },
+    ],
+    source: 'Model status, evaluation, and methodology reports',
+    shellClass: 'split-2',
+    content: `
+      <div class="stack reveal delay-1">
+        <div class="lead-panel">
+          <div class="section-label">Calibration</div>
+          <p>Calibration checks whether a probability behaves like a probability. If the model says 70% risk often, roughly 7 out of 10 comparable cases should behave that way over a valid evaluation set.</p>
+        </div>
+        <div class="lead-panel">
+          <div class="section-label">Explainability</div>
+          <p>TreeSHAP-style explanations and feature summaries help reviewers see why a cell moved up or down, instead of treating the model as a black box.</p>
+        </div>
+      </div>
+      <div class="stack reveal delay-2">
+        <div class="warning-band">
+          <p>The current deck keeps explanation and calibration as evidence controls, not as magic. If a run falls back to heuristic explanation, that must remain visible.</p>
+        </div>
+        ${dashboardEvidence([
+          { src: screenshots.uaEvaluation, alt: 'Evaluation and release governance layer screenshot.', label: 'Evaluation layer' },
+          { src: screenshots.uaTests, alt: 'Tests and CI gates layer screenshot.', label: 'Test gates' },
+        ])}
+      </div>
+    `,
+  }),
+  slideSection({
+    id: 'd6-9',
+    kicker: 'Deck 6 of 6',
+    eyebrow: 'Candidate model',
+    title: 'Why MTS-LSTM May Help Later',
+    subtitle: 'Avalanche danger changes over time. A sequence model can learn recent weather and snowpack progression, but it needs enough reviewed local sequences before promotion can be discussed.',
+    proof: [
+      { label: 'Research agenda', kind: 'future' },
+    ],
+    source: 'backend/lstm_model.py • backend/models/mts_lstm.py',
+    shellClass: 'split-2',
+    content: `
+      <div class="stack reveal delay-1">
+        <div class="lead-panel">
+          <div class="section-label">Beginner version</div>
+          <p>Random Forest sees a structured snapshot. MTS-LSTM can learn a short story over time: wind loading, snowfall, warming, settling, and changing instability.</p>
+        </div>
+      </div>
+      <div class="card-grid reveal delay-2">
+        <article class="card">
+          <h3>Potential benefit</h3>
+          <p>Better use of multi-day weather and snowpack sequences.</p>
+        </article>
+        <article class="card">
+          <h3>Current boundary</h3>
+          <p>Candidate lane only; it needs reviewed data, benchmark gates, and drift checks before activation.</p>
+        </article>
+      </div>
+      ${dashboardEvidence([
+        { src: screenshots.uaMtsLstm, alt: 'MTS-LSTM candidate model layer screenshot.', label: 'MTS-LSTM layer' },
+        { src: screenshots.uaTests, alt: 'Tests and CI gates layer screenshot.', label: 'Candidate gates' },
+      ])}
+    `,
+  }),
+  slideSection({
+    id: 'd6-10',
+    kicker: 'Deck 6 of 6',
+    eyebrow: 'Remote sensing',
+    title: 'SAR Shadow Lane',
+    subtitle: 'Satellite radar can reveal avalanche deposits in places with sparse ground reports, but this lane remains shadow-gated because transferability and false positives are real scientific risks.',
+    proof: [
+      { label: 'Technical evidence', kind: 'internal' },
+      { label: 'Research agenda', kind: 'future' },
+    ],
+    source: 'SAR qualification scripts • SnowSlide and AvalCD artifacts',
+    content: `
+      <div class="stack reveal delay-1">
+        ${frame(screenshots.uaSarShadow, 'Understand Anything layer view for the SAR shadow lane.', 'frame--wide frame--dashboard', 'SAR shadow lane')}
+      </div>
+      <div class="stack reveal delay-2">
+        <div class="card-grid">
+          <article class="card"><h3>Why it helps</h3><p>Sentinel-1 can monitor large remote areas through cloud cover.</p></article>
+          <article class="card"><h3>Why it is gated</h3><p>Wet snow, crevasses, shadow/layover, small events, and scene transfer can distort detections.</p></article>
+          <article class="card"><h3>Current posture</h3><p>AvalCD and SnowSlide evidence are valuable, but SAR stays out of public scoring until held-out gates pass.</p></article>
+        </div>
+      </div>
+    `,
+  }),
+  slideSection({
+    id: 'd6-11',
+    kicker: 'Deck 6 of 6',
+    eyebrow: 'European evidence',
+    title: 'What Europe Adds To The Method',
+    subtitle: 'European datasets and papers improve the methodology: label discipline, common danger language, spatial interpolation, aggregation, and remote-sensing caution.',
+    proof: [
+      { label: 'Technical evidence', kind: 'internal' },
+      { label: 'Research agenda', kind: 'future' },
+    ],
+    source: 'EAWS • NHESS 2022 • GMD 2024 • The Cryosphere 2024 • AvalCD arXiv 2026',
+    shellClass: 'split-2',
+    content: `
+      <div class="stack reveal delay-1">
+        ${frame(screenshots.uaSwiss, 'Understand Anything Swiss RAvaFcast reproduction layer screenshot.', 'frame--compact frame--dashboard', 'Swiss RAvaFcast research lane')}
+      </div>
+      <div class="stack reveal delay-2">
+        <div class="matrix">
+          <h3 class="matrix-title">European method lessons</h3>
+          <div class="matrix-table">
+            <div class="matrix-row"><div><strong>EAWS scale</strong><p>Shared 1-5 danger language.</p></div><div><strong>NHESS 2022</strong><p><code>D_tidy</code> labels and Random Forest baseline discipline.</p></div></div>
+            <div class="matrix-row"><div><strong>GMD 2024</strong><p>Swiss RAvaFcast RF, GPxyz, and refined aggregation.</p></div><div><strong>The Cryosphere 2024</strong><p>SAR transfer limits, wet-snow false positives, small misses, shadow/layover.</p></div></div>
+            <div class="matrix-row"><div><strong>AvalCD</strong><p>SAR change-detection benchmark context.</p></div><div><strong>Claim discipline</strong><p>Method transfer only; Himalayan proof needs local reviewed data.</p></div></div>
+          </div>
+        </div>
+      </div>
+    `,
+  }),
+  slideSection({
+    id: 'd6-12',
+    kicker: 'Deck 6 of 6',
+    eyebrow: 'Himalayan transfer',
+    title: 'Why This Helps Himalayas, But Is Not Enough',
+    subtitle: 'The European work gives a strong blueprint. Himalayan readiness still needs local reviewed labels, station coverage, event truth, warning-region geometry, and an independent holdout.',
+    proof: [
+      { label: 'Research agenda', kind: 'future' },
+    ],
+    source: 'Himalayan v3 partner evidence contract',
+    content: `
+      <div class="stack reveal delay-1">
+        ${frame(screenshots.uaHimalayan, 'Understand Anything layer view for the Himalayan partner evidence contract.', 'frame--wide frame--dashboard', 'Himalayan partner evidence')}
+      </div>
+      <div class="stack reveal delay-2">
+        <div class="lead-panel">
+          <div class="section-label">Critical boundary</div>
+          <p>Swiss and European evidence can improve the playbook, feature discipline, and validation gates. It cannot substitute for Himalayan station X/Y/Z metadata, D_tidy-grade local labels, event evidence, polygons, and a leakage-checked holdout.</p>
+        </div>
+      </div>
+    `,
+  }),
+  slideSection({
+    id: 'd6-13',
+    kicker: 'Deck 6 of 6',
+    eyebrow: 'Partner checklist',
+    title: 'Himalayan Data Checklist',
+    subtitle: 'This is the practical input list partners and scientists must fill before local claims can advance.',
+    proof: [
+      { label: 'Research agenda', kind: 'future' },
+    ],
+    source: 'partner_evidence_templates/*.csv',
+    shellClass: 'split-2',
+    content: `
+      <div class="stack reveal delay-1">
+        <div class="matrix">
+          <h3 class="matrix-title">Core files to fill</h3>
+          <div class="matrix-table">
+            <div class="matrix-row"><div><strong>Station X/Y/Z</strong><p><code>station_metadata.csv</code></p></div><div><strong>Weather</strong><p><code>weather_station_observations.csv</code></p></div></div>
+            <div class="matrix-row"><div><strong>Snowpack</strong><p><code>snowpack_profile_features.csv</code></p></div><div><strong>D_tidy labels</strong><p><code>danger_labels_and_bulletins.csv</code></p></div></div>
+            <div class="matrix-row"><div><strong>Events and terrain</strong><p><code>historical_avalanche_events.csv</code>, <code>terrain_ates_runout_validation.csv</code></p></div><div><strong>Regions and holdout</strong><p><code>warning_region_polygons.csv</code>, <code>independent_himalayan_holdout.csv</code></p></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="stack reveal delay-2">
+        <div class="lead-panel">
+          <div class="section-label">Fields that matter most</div>
+          <ul class="bullet-list">
+            <li><code>source_ref</code>, <code>license_scope</code>, <code>review_status</code>, <code>reviewer_id</code>, and <code>reviewed_at</code>.</li>
+            <li>Latitude, longitude, elevation, validity windows, avalanche regime, label source, and reviewer notes.</li>
+          </ul>
+        </div>
+        ${dashboardEvidence([
+          { src: screenshots.uaHimalayan, alt: 'Himalayan partner evidence contract screenshot.', label: 'Partner contract' },
+          { src: screenshots.uaDomain, alt: 'Domain overview screenshot.', label: 'Evidence domains' },
+        ])}
+      </div>
+    `,
+  }),
+  slideSection({
+    id: 'd6-14',
+    kicker: 'Deck 6 of 6',
+    eyebrow: 'Technology FAQ',
+    title: 'Beginner FAQ',
+    subtitle: 'The technology stack is easier to understand when each tool is tied to a simple job.',
+    proof: [
+      { label: 'Technical evidence', kind: 'internal' },
+    ],
+    source: 'README • package and backend scan',
+    shellClass: 'split-3',
+    content: `
+      <article class="card reveal delay-1"><h3>React + Vite</h3><p>Builds the website screens and packages the frontend quickly.</p></article>
+      <article class="card reveal delay-2"><h3>Supabase + PostGIS</h3><p>Stores database tables, auth, storage, functions, and geospatial map facts.</p></article>
+      <article class="card reveal delay-3"><h3>Python + scikit-learn</h3><p>Runs data preparation, Random Forest, calibration, evaluation, and reports.</p></article>
+      <article class="card reveal delay-1"><h3>PyTorch</h3><p>Supports MTS-LSTM candidate models and SAR segmentation experiments.</p></article>
+      <article class="card reveal delay-2"><h3>Modal</h3><p>Runs bounded heavier compute jobs outside the public click path when authorized.</p></article>
+      <article class="card reveal delay-3"><h3>Understand Anything</h3><p>Creates visual codebase maps so reviewers can see how the system fits together.</p></article>
+      ${dashboardEvidence([
+        { src: screenshots.uaStructural, alt: 'Structural graph screenshot showing frameworks.', label: 'Code map' },
+        { src: screenshots.uaModal, alt: 'Modal and remote compute layer screenshot.', label: 'Remote compute' },
+        { src: screenshots.uaBackend, alt: 'Backend support layer screenshot.', label: 'Backend' },
+      ])}
+    `,
+  }),
+  slideSection({
+    id: 'd6-15',
+    kicker: 'Deck 6 of 6',
+    eyebrow: 'Next actions',
+    title: 'What To Do Next, And What Not To Say',
+    subtitle: 'The path forward is practical: collect local evidence, run triage, validate with scientists, then decide whether a narrow Himalayan pilot is justified.',
+    proof: [
+      { label: 'Technical evidence', kind: 'internal' },
+      { label: 'Research agenda', kind: 'future' },
+    ],
+    source: 'MVP V2 claim locks and partner handoff plan',
+    shellClass: 'split-2',
+    content: `
+      <div class="stack reveal delay-1">
+        <div class="lead-panel">
+          <div class="section-label">Next actions</div>
+          <ul class="bullet-list">
+            <li>Send partner handoff packet and ask for reviewed Himalayan source packages.</li>
+            <li>Run partner package triage and source-manifest validation.</li>
+            <li>Have scientists adjudicate label quality, station coverage, event truth, and holdout validity.</li>
+            <li>Advance only a narrow pilot if local gates pass.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="stack reveal delay-2">
+        <div class="warning-band">
+          <p><strong>Do not say:</strong> Himalayan accuracy is established, SAR is activated for public scoring, or the platform replaces regional avalanche forecasters.</p>
+        </div>
+        <div class="lead-panel">
+          <div class="section-label">Allowed current framing</div>
+          <p>Evidence-governed MVP V2 with a live technical proof region, active Random Forest baseline, research-only Swiss and SAR lanes, and a Himalayan partner evidence path.</p>
+        </div>
+        ${dashboardEvidence([
+          { src: screenshots.uaHimalayan, alt: 'Himalayan partner evidence contract screenshot.', label: 'Next evidence path' },
+          { src: screenshots.uaEvaluation, alt: 'Evaluation and release governance screenshot.', label: 'Release gates' },
+        ])}
       </div>
     `,
   }),
@@ -2798,9 +3383,14 @@ async function main() {
     'avalanche-insight-hub-deck-3-scientist-validation.html',
     deck2Html,
   );
+  const collaborationTranscript = renderTranscriptMarkdown('Avalanche Insight Hub — Collaboration', deck2Html);
   await writeTranscript(
     'avalanche-insight-hub-deck-3-scientist-validation-transcript.md',
-    renderTranscriptMarkdown('Avalanche Insight Hub — Collaboration', deck2Html),
+    collaborationTranscript,
+  );
+  await writeTranscript(
+    'avalanche-insight-hub-deck-2-collaboration-transcript.md',
+    collaborationTranscript,
   );
 
   const techMarkdown = await fs.readFile(path.join(__dirname, 'Tech_deck_final.md'), 'utf8');
@@ -2816,9 +3406,14 @@ async function main() {
     'avalanche-insight-hub-deck-4-technical-architecture.html',
     techHtml,
   );
+  const technicalArchitectureTranscript = renderTranscriptMarkdown('Avalanche Insight Hub — Technical Architecture', techHtml);
   await writeTranscript(
     'avalanche-insight-hub-deck-4-technical-architecture-transcript.md',
-    renderTranscriptMarkdown('Avalanche Insight Hub — Technical Architecture', techHtml),
+    technicalArchitectureTranscript,
+  );
+  await writeTranscript(
+    'avalanche-insight-hub-technical-architecture-transcript.md',
+    technicalArchitectureTranscript,
   );
 
   const challengeMarkdown = await fs.readFile(path.join(__dirname, 'deck_challenge_alignment_final.md'), 'utf8');
@@ -2865,6 +3460,23 @@ async function main() {
   await writeTranscript(
     'avalanche-insight-hub-deck-5-technology-glossary-transcript.md',
     renderTranscriptMarkdown('Avalanche Insight Hub — Technology Glossary', termsHtml),
+  );
+
+  const mlUnderstandingHtml = sanitizeClientFacingHtml(
+    renderHtml({
+      bodyClass: 'deck-ml-understanding',
+      deckName: 'Avalanche Insight Hub — Database, ML Models, And Himalayan Accuracy Path',
+      deckSubtitle: 'Beginner-friendly MVP V2 guide to the Understand Anything graphs, database, model lanes, and validation gates.',
+      slides: deck6Slides,
+    }),
+  );
+  await writeDeck(
+    'avalanche-insight-hub-deck-6-ml-understanding.html',
+    mlUnderstandingHtml,
+  );
+  await writeTranscript(
+    'avalanche-insight-hub-deck-6-ml-understanding-transcript.md',
+    renderTranscriptMarkdown('Avalanche Insight Hub — Database, ML Models, And Himalayan Accuracy Path', mlUnderstandingHtml),
   );
 }
 

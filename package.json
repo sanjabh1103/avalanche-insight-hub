@@ -1,7 +1,7 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "avalanche-insight-hub",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,10 +13,7 @@
     "test:browser:phase6": "playwright test --config=playwright.config.ts tests/e2e/phase6-browser-smoke.spec.ts --project=chromium",
     "test": "vitest run",
     "test:watch": "vitest",
-    "jobs:snow-cover": "echo 'Trigger snow-cover refresh job - uses ingest-snow-cover edge function'",
-    "jobs:activity": "echo 'Trigger recent activity refresh - uses recent-activity-refresh edge function'",
-    "jobs:label": "echo 'Trigger forecast outcome labeling - uses label-forecast-outcomes edge function'",
-    "jobs:evaluate": "echo 'Trigger evaluation run - uses run-evaluation edge function'"
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -91,6 +88,7 @@
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react-swc": "^3.11.0",
+    "@vitest/coverage-v8": "^3.2.6",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",

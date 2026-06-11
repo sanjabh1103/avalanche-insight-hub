@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { authorizeJobRequest } from "../_shared/auth.ts";
 import { buildElevationBand } from "../_shared/evaluationMetadata.ts";
+
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -257,6 +259,14 @@ export async function handleRunEvaluation(req: Request) {
 
   try {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+    const authResult = await authorizeJobRequest("run_evaluation", req, supabase);
+    if (!authResult.authorized) {
+      return new Response(JSON.stringify({ error: authResult.error }), {
+        status: authResult.status || 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Get model version if not specified
     let targetModelVersion = modelVersion;

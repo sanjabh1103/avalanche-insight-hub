@@ -6,7 +6,7 @@ import { chromium } from 'playwright';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const baseUrl = process.env.DECK_BASE_URL || 'http://127.0.0.1:4380';
 const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const today = '2026-05-09';
+const today = '2026-05-28';
 
 const decks = [
   {
@@ -48,6 +48,14 @@ const decks = [
     pdf: 'avalanche-insight-hub-deck-5-technology-glossary.pdf',
     slideCount: 15,
     requiredProofSlides: ['d5-2', 'd5-6', 'd5-11'],
+  },
+  {
+    slug: 'ml-understanding',
+    label: 'Deck 6 — ML Understanding',
+    html: 'avalanche-insight-hub-deck-6-ml-understanding.html',
+    pdf: 'avalanche-insight-hub-deck-6-ml-understanding.pdf',
+    slideCount: 15,
+    requiredProofSlides: ['d6-3', 'd6-4', 'd6-6', 'd6-11', 'd6-15'],
   },
 ];
 
@@ -152,6 +160,9 @@ function getPdfPageCount(pdfPath) {
 async function exportPdf(page, deck) {
   await page.goto(`${baseUrl}/${deck.html}`, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForTimeout(1800);
+  await page.evaluate(() => {
+    document.querySelectorAll('.slide').forEach((slide) => slide.classList.add('revealed'));
+  });
   const pdfPath = path.join(__dirname, deck.pdf);
   await page.pdf({
     path: pdfPath,
@@ -176,6 +187,17 @@ function inventoryRows() {
     ['2026-05-07_hosted-public_share-workflow.png', 'Live platform', 'D1-8 workflow state'],
     ['2026-05-07_hosted-public_events-workflow.png', 'Live platform', 'Optional alternate workflow crop if needed'],
     ['2026-05-07_hosted-admin-gate.png', 'Live platform', 'Fallback gate view if hosted-auth screenshots are unavailable'],
+    ['ua-structural-overview.png', 'Technical evidence', 'D6 structural graph overview: 10 ML/backend layers'],
+    ['ua-domain-overview.png', 'Technical evidence', 'D6 domain graph overview: domains, flows, and steps'],
+    ['ua-active-rf-layer.png', 'Technical evidence', 'D6 active Random Forest forecast pipeline layer'],
+    ['ua-mts-lstm-layer.png', 'Technical evidence', 'D6 MTS-LSTM candidate model layer'],
+    ['ua-sar-shadow-layer.png', 'Technical evidence', 'D6 SAR shadow segmentation lane'],
+    ['ua-swiss-ravafcast-layer.png', 'Technical evidence', 'D6 Swiss RAvaFcast research lane'],
+    ['ua-himalayan-evidence-layer.png', 'Technical evidence', 'D6 Himalayan partner evidence contract lane'],
+    ['ua-evaluation-governance-layer.png', 'Technical evidence', 'D6 evaluation, publication, and release governance layer'],
+    ['ua-modal-compute-layer.png', 'Technical evidence', 'D6 Modal and remote compute orchestration layer'],
+    ['ua-tests-ci-layer.png', 'Technical evidence', 'D6 tests and CI gates layer'],
+    ['ua-backend-support-layer.png', 'Technical evidence', 'D6 backend support and shared infrastructure layer'],
   ];
 }
 
@@ -232,7 +254,7 @@ function markdownSummary(results) {
   lines.push('');
   lines.push('## Manual QA Follow-Up');
   lines.push('');
-  lines.push('- Open all five decks in Google Chrome at `http://127.0.0.1:4380/` and verify first, mid, and final slides with native keyboard navigation.');
+  lines.push('- Open all six decks in Google Chrome at `http://127.0.0.1:4380/` and verify first, mid, and final slides with native keyboard navigation.');
   lines.push('- If meeting-day hosted auth fails in a later rerun, replace D1-9 authenticated imagery with the gate screenshot or a reconstructed evidence table.');
   lines.push('');
   return lines.join('\n');

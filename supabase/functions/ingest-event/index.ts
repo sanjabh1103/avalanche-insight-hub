@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { extractBearerToken } from "../_shared/auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -211,7 +212,7 @@ function safeJson(value: unknown) {
 }
 
 async function findExistingEvent(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   args: { fieldReportId?: string; clientReportId?: string },
 ) {
   if (args.fieldReportId) {
@@ -240,7 +241,7 @@ async function findExistingEvent(
 }
 
 async function loadFieldReport(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   fieldReportId: string,
 ): Promise<FieldReportRow | null> {
   const { data, error } = await supabase
@@ -351,9 +352,29 @@ async function classifyDepositZone(description: string, slopeAngleDeg: number): 
   return { trainingEligible: true, reason: null, method: 'heuristic' };
 }
 
-serve(async (req: Request) => {
+export async function handleIngestEvent(req: Request) {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
+  }
+
+  const authHeader = req.headers.get("authorization");
+  const token = extractBearerToken(authHeader);
+  const systemToken = Deno.env.get("JOB_DISPATCH_TOKEN");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  const requireJobAuth = Deno.env.get("REQUIRE_JOB_AUTH");
+  const enforceAuth = requireJobAuth !== "false" && requireJobAuth !== "0" && requireJobAuth !== "off" && requireJobAuth !== "no";
+
+  if (enforceAuth) {
+    if (!token || (
+      (!systemToken || token !== systemToken) &&
+      (!serviceRoleKey || token !== serviceRoleKey)
+    )) {
+      return new Response(JSON.stringify({ error: "Unauthorized system call" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
   }
 
   let jobId: string | null = null;
@@ -497,6 +518,21 @@ serve(async (req: Request) => {
     // heuristic can use slope angle as a corroborating signal.
     const classification = await classifyDepositZone(description, topo.slopeAngleDeg);
 
+    let trainingEligible = classification.trainingEligible;
+    let trainingEligibleReason = classification.reason;
+
+    // Milestone 3.5: news-sourced events require at least 2 corroboration sources or manual promotion
+    if (source === 'gemini_news' || source === 'newsdata_gemini') {
+      const corroborationSources = metadata.corroboration_sources;
+      const hasMultipleSources = Array.isArray(corroborationSources) && corroborationSources.length >= 2;
+      if (!hasMultipleSources) {
+        trainingEligible = false;
+        trainingEligibleReason = trainingEligibleReason
+          ? `${trainingEligibleReason}_uncorroborated_news`
+          : 'uncorroborated_news';
+      }
+    }
+
     const { data: event, error: eventErr } = await supabase
       .from('avalanche_events')
       .insert({
@@ -523,8 +559,8 @@ serve(async (req: Request) => {
         aspect_deg: topo.aspectDeg,
         topo_source: 'open-elevation',
         topo_resolution_m: topo.topoResolutionM,
-        training_eligible: classification.trainingEligible,
-        training_eligible_reason: classification.reason,
+        training_eligible: trainingEligible,
+        training_eligible_reason: trainingEligibleReason,
         topo_profile: {
           ...topo.topoProfile,
           hazard_type: hazardType,
@@ -536,7 +572,7 @@ serve(async (req: Request) => {
           deposit_zone_classifier: {
             method: classification.method,
             reason: classification.reason,
-            training_eligible: classification.trainingEligible,
+            training_eligible: trainingEligible,
           },
           label_governance: {
             label_confidence: labelConfidence,
@@ -559,7 +595,7 @@ serve(async (req: Request) => {
           field_report_id: payload.fieldReportId || null,
           client_report_id: governedFieldReport?.client_report_id ?? payload.clientReportId ?? null,
           location_name: payload.location_name || null,
-          training_eligible: classification.trainingEligible,
+          training_eligible: trainingEligible,
           source_model: sourceModel,
           source_scene_ids: sourceSceneIds,
           geometry_type: geometryType,
@@ -587,8 +623,8 @@ serve(async (req: Request) => {
           aspect_deg: topo.aspectDeg,
           slope_band: topo.slopeBand,
           aspect_bucket: topo.aspectBucket,
-          training_eligible: classification.trainingEligible,
-          training_eligible_reason: classification.reason,
+          training_eligible: trainingEligible,
+          training_eligible_reason: trainingEligibleReason,
           deposit_zone_method: classification.method,
           label_confidence: labelConfidence,
           training_weight: trainingWeight,
@@ -611,8 +647,8 @@ serve(async (req: Request) => {
         topo_resolution_m: topo.topoResolutionM,
       },
       governance: {
-        training_eligible: classification.trainingEligible,
-        training_eligible_reason: classification.reason,
+        training_eligible: trainingEligible,
+        training_eligible_reason: trainingEligibleReason,
         classifier_method: classification.method,
         label_confidence: labelConfidence,
         training_weight: trainingWeight,
@@ -644,4 +680,8 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-});
+}
+
+if (import.meta.main) {
+  serve(handleIngestEvent);
+}

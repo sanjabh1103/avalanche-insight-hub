@@ -4,7 +4,7 @@
 
 _Architecture addendum_
 
-The deployed architecture proves a live public route, a live admin route, same-day full-grid cell publication, and a hosted authenticated admin observability view. Scientist validation and operational qualification remain the next hardening items before stronger operational claims.
+The deployed architecture proves a live public route, a live admin route, same-day full-grid cell publication, and a hosted authenticated admin observability view. MVP V2 adds a research-only Swiss RAvaFcast lane and a Himalayan v3 partner-evidence pipeline, while scientist validation and operational qualification remain required before stronger claims.
 
 Evidence lanes: Live platform; Technical evidence
 
@@ -17,6 +17,8 @@ Current state and future strategy
 - Hosted authenticated admin smoke succeeded on May 8, 2026
 
 - Metadata and preview assets use Avalanche Insight Hub branding
+
+- `production_scoring_allowed=false` and `himalayan_accuracy_claim_allowed=false` remain the governing boundaries for new evidence lanes
 
 Evidence level:
 `Hosted production` plus `Repo/admin verified`
@@ -41,7 +43,7 @@ Scientist review decides which technical paths become stronger operational claim
 
 _Architecture addendum_
 
-The current platform separates presentation, storage, artifact delivery, batch compute, machine learning, governance, remote compute, and offline reliability.
+The current platform separates presentation, storage, artifact delivery, batch compute, machine learning, governance, partner evidence intake, remote compute, and offline reliability.
 
 Evidence lanes: Technical evidence
 
@@ -56,6 +58,8 @@ Current state and future strategy
 - Batch compute: Python jobs
 
 - Governance: model status, benchmark, release gates
+
+- Research evidence: Swiss reproduction artifacts and Himalayan partner-package triage outputs
 
 Evidence level:
 `Repo/admin verified`
@@ -337,7 +341,7 @@ Scientist review decides which technical paths become stronger operational claim
 
 _Architecture addendum_
 
-Modal.com supports heavier candidate workflows away from the public route. It is separate from the proof behind current public forecast scoring.
+Modal.com supports heavier candidate workflows away from the public route. It is separate from the proof behind current public forecast scoring and from the Himalayan partner-evidence intake pipeline.
 
 Evidence lanes: Technical evidence
 
@@ -352,6 +356,8 @@ Current state and future strategy
 - Authenticated worker endpoints
 
 - Current public scorer remains Random Forest baseline
+
+- No GPU run is authorized by partner handoff or synthetic validation success
 
 Evidence level:
 `Repo/admin verified`
@@ -413,23 +419,21 @@ Scientist review decides which technical paths become stronger operational claim
 
 _Architecture addendum_
 
-The proposed architecture simplifies future publication around topographic enrichment, <code>forecast_grids</code>, JSONB payloads, and optional PostGIS support.
+The proposed architecture now has two tracks: public forecast publication and research-only partner evidence governance.
 
 Evidence lanes: Research agenda
 
 Current state and future strategy
 
-- `avalanche_events`
+- Public path: `avalanche_events`, topographic enrichment, `forecast_grids`, `grid_geojson`, and `runout_polygons`
 
-- topographic enrichment: elevation, slope angle, aspect
+- Himalayan v3 path: ten evidence CSV templates, `partner_source_manifest`, `source_ref` hashes, and release-gate attestations
 
-- `forecast_grids`
+- Partner packet: `partner_handoff_readme.md`, `partner_field_dictionary.md`, checksum guide, source manifest template, and blank evidence CSVs
 
-- `grid_geojson`
+- Triage outputs: source-manifest validation, evidence validation, leakage audit, artifact manifest, source traceability, and status dashboard
 
-- `runout_polygons`
-
-- PostGIS as proposed geospatial extension
+- PostGIS remains a proposed geospatial extension, not current partner-evidence proof
 
 Evidence level:
 `Artifact/doc proof only`
@@ -454,7 +458,7 @@ Scientist review decides which technical paths become stronger operational claim
 
 _Architecture addendum_
 
-The proposed future pipeline combines rare-event balancing, feature selection, calibrated Random Forest inference, uncertainty bounds, and memory-safe Alpha-Beta runout processing.
+The proposed future pipeline combines rare-event balancing, feature selection, calibrated Random Forest inference, uncertainty bounds, research-only RAvaFcast reproduction, and memory-safe Alpha-Beta runout processing.
 
 Evidence lanes: Research agenda
 
@@ -465,6 +469,8 @@ Current state and future strategy
 - Recursive Feature Elimination for feature discipline
 
 - Calibrated Random Forest
+
+- Swiss RAvaFcast research lane: Stage 1 RF4, Stage 2 GPxyz blocked until station coordinates, Stage 3 aggregation blocked until grid/polygons
 
 - Tree variance for uncertainty bounds
 
@@ -495,7 +501,7 @@ Scientist review decides which technical paths become stronger operational claim
 
 _Architecture addendum_
 
-The technical deck should prevent architecture overclaim by classifying every major system path.
+The technical deck should prevent architecture overclaim by classifying every major system path and evidence lane.
 
 Evidence lanes: Technical evidence; Research agenda
 
@@ -506,6 +512,8 @@ Current state and future strategy
 - Partial/current: offline report queueing
 
 - Candidate/gated: MTS-LSTM, SAR, TreeSHAP refresh for the active full-grid run
+
+- Research-only: Swiss RAvaFcast reproduction and Himalayan partner-package triage
 
 - Proposed/validation: GitHub Actions/VPS batch compute, PostGIS terrain enrichment, WhiteboxTools runout
 
@@ -532,7 +540,7 @@ Scientist review decides which technical paths become stronger operational claim
 
 _Architecture addendum_
 
-The next engineering work is to harden freshness, validate architecture choices, and promote only what passes gates.
+The next engineering work is to harden freshness, execute partner handoff, validate architecture choices, and promote only what passes gates.
 
 Evidence lanes: Research agenda
 
@@ -543,6 +551,10 @@ Current state and future strategy
 - Benchmark packaging
 
 - Admin proof refresh before each customer-send reuse
+
+- Generate and send the v3 handoff packet without synthetic rows
+
+- Run `run_himalayan_partner_package_triage` only after real SASE/DGRE evidence arrives
 
 - Schema and PostGIS migration decision
 

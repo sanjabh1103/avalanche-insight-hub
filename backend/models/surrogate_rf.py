@@ -283,6 +283,45 @@ def compute_tree_shap(
     return ({item['feature']: float(item['shap_value']) for item in ordered}, ordered)
 
 
+def compute_tree_shap_batch(
+    explainer: object,
+    selected_frame: pd.DataFrame,
+    selected_features: list[str],
+) -> list[tuple[dict[str, float], list[dict[str, float | str | int]]]]:
+    """Compute TreeSHAP for many inference rows in one explainer call."""
+    shap_values = explainer.shap_values(selected_frame)
+    if isinstance(shap_values, list):
+        shap_matrix = np.asarray(shap_values[-1])
+    else:
+        shap_array = np.asarray(shap_values)
+        if shap_array.ndim == 3:
+            shap_matrix = shap_array[:, :, -1]
+        else:
+            shap_matrix = shap_array
+    if shap_matrix.ndim == 1:
+        shap_matrix = shap_matrix.reshape(1, -1)
+
+    packets: list[tuple[dict[str, float], list[dict[str, float | str | int]]]] = []
+    for row_index, shap_vector in enumerate(shap_matrix):
+        feature_values = selected_frame.iloc[row_index].to_dict()
+        ordered = sorted(
+            [
+                {
+                    'feature': feature,
+                    'shap_value': float(value),
+                    'feature_value': float(feature_values[feature]),
+                }
+                for feature, value in zip(selected_features, shap_vector)
+            ],
+            key=lambda item: abs(float(item['shap_value'])),
+            reverse=True,
+        )[:5]
+        for rank, item in enumerate(ordered, start=1):
+            item['rank'] = rank
+        packets.append(({item['feature']: float(item['shap_value']) for item in ordered}, ordered))
+    return packets
+
+
 def fit_surrogate_bundle(
     *,
     frame: pd.DataFrame,

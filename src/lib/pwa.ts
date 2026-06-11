@@ -11,7 +11,9 @@ let queuedFieldReportSyncRegistered = false;
 
 async function flushQueuedFieldReportsOnReconnect(reason: 'startup' | 'online') {
   try {
-    const queued = await flushQueuedFieldReports(submitQueuedFieldReport);
+    const queued = await flushQueuedFieldReports(async (report) => {
+      await submitQueuedFieldReport(report);
+    });
     if (queued > 0) {
       console.info(`[pwa] Flushed ${queued} queued field report${queued === 1 ? '' : 's'} on ${reason}.`);
     }
@@ -58,12 +60,12 @@ export async function initPwa() {
         // No toast here; handled by the in-app offline banner.
         console.info('[pwa] Offline-ready: field reports can now be queued while offline.');
       },
-      onRegistered: (registration) => {
+      onRegistered: (registration: ServiceWorkerRegistration | undefined) => {
         if (registration) {
           console.info('[pwa] Service worker registered.');
         }
       },
-      onRegisterError: (error) => {
+      onRegisterError: (error: unknown) => {
         console.warn('[pwa] Service worker registration error:', error);
       },
     });

@@ -4,7 +4,7 @@
 
 _Challenge alignment_
 
-This deck maps the top systemic avalanche-forecasting challenges to the current MVP response, without converting partial progress into completed science.
+This deck maps the top systemic avalanche-forecasting challenges to the MVP V2 response, without converting partial progress, synthetic checks, or partner-intake readiness into completed Himalayan science.
 
 Evidence lanes: Research agenda
 
@@ -17,6 +17,8 @@ Current state and future strategy
 - Hosted proof is same-day full-grid technical publication, not scientist validation closure
 
 - Candidate methods stay gated until supporting evidence exists
+
+- MVP V2 adds a Himalayan v3 partner-evidence contract, Swiss RAvaFcast reproduction lane, and SAR shadow gates
 
 Evidence level:
 `Artifact/doc proof only`
@@ -41,7 +43,7 @@ Scientist review decides which technical paths become stronger operational claim
 
 _Challenge alignment_
 
-The MVP reduces dependence on manual observations, but it does not replace field snowpack truth.
+The MVP reduces dependence on manual observations, but it does not replace field snowpack truth or quality-controlled danger labels.
 
 Evidence lanes: Research agenda
 
@@ -55,7 +57,9 @@ Current state and future strategy
 
 - Open-Meteo and snowpack proxies reduce dependence on dense local stations
 
-- Future strategy: scientist-reviewed field and observatory data integration
+- Raw public bulletins are useful inputs but not `D_tidy`-grade training truth
+
+- Future strategy: scientist-reviewed nowcasts, observer evidence, station observations, and event corroboration
 
 Evidence level:
 `Artifact/doc proof only`
@@ -80,7 +84,7 @@ Scientist review decides which technical paths become stronger operational claim
 
 _Challenge alignment_
 
-Governed evidence fusion is useful because avalanche occurrence records are incomplete, delayed, and noisy.
+Governed evidence fusion is useful because avalanche occurrence records, public bulletins, and human forecasts can be incomplete, delayed, and noisy.
 
 Evidence lanes: Technical evidence; Research agenda
 
@@ -92,7 +96,9 @@ Current state and future strategy
 
 - News and field reports are staged before they influence training or review
 
-- Future strategy: scientist-owned adjudication rules and regional gold cases
+- V2 contract requires `label_source`, `tidy_label_review_basis`, nowcast refs, observer refs, regime, and timing fields
+
+- Future strategy: scientist-owned adjudication rules, regional gold cases, and local holdout release gates
 
 Evidence level:
 `Repo/admin verified` plus `Artifact/doc proof only`
@@ -131,7 +137,9 @@ Current state and future strategy
 
 - Public users do not directly see this mitigation, so it remains technical evidence
 
-- Future strategy: benchmark slices that expose miss, false-alarm, and calibration behavior
+- Swiss RF4 remains an initial research signal, not paper parity or Himalayan proof
+
+- Future strategy: benchmark slices that expose miss, false-alarm, calibration, and high-danger recall behavior
 
 Evidence level:
 `Repo/admin verified` plus `Artifact/doc proof only`
@@ -193,7 +201,7 @@ Scientist review decides which technical paths become stronger operational claim
 
 _Challenge alignment_
 
-The hosted workspace meaningfully fuses where and when risk changes, while still requiring scientific review of the forecast content.
+The hosted workspace meaningfully fuses where and when risk changes, while still requiring scientific review of the forecast content and station-density coverage.
 
 Evidence lanes: Live platform; Research agenda
 
@@ -205,7 +213,9 @@ Current state and future strategy
 
 - Hosted proof: same-day `20x20` / `72h` full-grid technical publication
 
-- Future strategy: region-specific validation cases and scientist review of daypart shifts
+- RAvaFcast-style GPxyz interpolation requires station `latitude`, `longitude`, and `elevation_m`
+
+- Future strategy: region-specific validation cases, station-density diagnostics, and scientist review of daypart shifts
 
 Evidence level:
 `Hosted production` plus `Artifact/doc proof only`
@@ -218,7 +228,7 @@ Hosted route proof
 
 _Challenge alignment_
 
-The platform reduces ad hoc promotion decisions with gates, but it does not eliminate calibration ambiguity.
+The platform reduces ad hoc promotion decisions with gates, but it does not eliminate calibration, threshold, or discretization ambiguity.
 
 Evidence lanes: Technical evidence; Research agenda
 
@@ -232,7 +242,9 @@ Current state and future strategy
 
 - Current stability evidence is conservative and should not be framed as closure
 
-- Future strategy: scientist-owned threshold and calibration review
+- RAvaFcast refined discretization must be learned from training/OOB distributions only, never validation or final holdout labels
+
+- Future strategy: scientist-owned threshold, calibration, and false-alarm tolerance review
 
 Evidence level:
 `Repo/admin verified` plus `Artifact/doc proof only`
@@ -331,7 +343,7 @@ Scientist review decides which technical paths become stronger operational claim
 
 _Challenge alignment_
 
-SAR is an important future evidence stream, but it remains candidate-gated in the current MVP.
+SAR and remote sensing are important future evidence streams, but they remain shadow-gated in the current MVP V2 strategy.
 
 Evidence lanes: Technical evidence; Research agenda
 
@@ -342,6 +354,8 @@ Current state and future strategy
 - Current state: SAR coverage flags and candidate worker paths
 
 - Do not describe SAR as operational or promoted
+
+- Current SAR work is evidence-rich but blocked from production by held-out precision/F1 and fresh-final-holdout gates
 
 - Future strategy: labels, revisit-aware handling, shadow/layover review, and held-out qualification
 
@@ -454,6 +468,8 @@ Current state and future strategy
 
 - Technical evidence: rare-event training discipline and benchmark gates
 
+- MVP V2 evidence: Swiss RAvaFcast reproduction lane, Himalayan v3 partner contract, and one-command partner-package triage
+
 - Future strategy: scientist-led validation, SAR qualification, and candidate-model promotion rules
 
 Evidence level:
@@ -479,13 +495,17 @@ Scientist review decides which technical paths become stronger operational claim
 
 _Challenge alignment_
 
-The next work should concentrate on the gaps that most affect scientific credibility and customer confidence.
+The next work should concentrate on partner handoff and the gaps that most affect scientific credibility and customer confidence.
 
 Evidence lanes: Research agenda
 
 Current state and future strategy
 
 - Full-grid scientist validation over selected regional cases
+
+- SASE/DGRE handoff packet with `partner_handoff_readme.md`, `partner_field_dictionary.md`, checksum guide, source manifest template, and ten blank v3 CSV templates
+
+- One-command triage via `run_himalayan_partner_package_triage`
 
 - TreeSHAP refresh for active full-grid artifacts
 
@@ -518,7 +538,7 @@ Scientist review decides which technical paths become stronger operational claim
 
 _Challenge alignment_
 
-The decision is whether to use the current MVP as the shared workbench for the validation program.
+The decision is whether to use MVP V2 as the shared workbench for partner evidence intake, scientist validation, and later claim review.
 
 Evidence lanes: Research agenda
 
@@ -527,6 +547,8 @@ Current state and future strategy
 - Approve the current-state MVP as the validation workbench
 
 - Select priority regions and challenge categories
+
+- Execute SASE/DGRE partner handoff without sending synthetic rows as evidence
 
 - Agree benchmark and release-gate ownership
 

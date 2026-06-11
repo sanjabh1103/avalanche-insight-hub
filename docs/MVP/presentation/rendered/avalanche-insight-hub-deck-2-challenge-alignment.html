@@ -111,6 +111,20 @@ body.deck-terms {
     linear-gradient(180deg, #f8f6f0 0%, #efece4 100%);
 }
 
+body.deck-ml-understanding {
+  --proof-live: #1c7c74;
+  --proof-internal: #1f3340;
+  --proof-future: #9f6b19;
+  --accent-main: #1c7c74;
+  --accent-soft: rgba(28, 124, 116, 0.13);
+  --accent-alt: #9f6b19;
+  --accent-alt-soft: rgba(159, 107, 25, 0.14);
+  background:
+    radial-gradient(circle at top left, rgba(28, 124, 116, 0.10), transparent 30%),
+    radial-gradient(circle at top right, rgba(159, 107, 25, 0.08), transparent 25%),
+    linear-gradient(180deg, #f4f8f7 0%, #eef1ed 100%);
+}
+
 body::before {
   content: '';
   position: fixed;
@@ -406,6 +420,11 @@ body::before {
   min-height: 53vh;
 }
 
+.frame--compact {
+  height: 34vh;
+  min-height: 0;
+}
+
 .frame--public img {
   object-position: center top;
 }
@@ -424,6 +443,58 @@ body::before {
 
 .frame--admin img {
   object-position: center top;
+}
+
+.frame--dashboard {
+  background: #101010;
+}
+
+.frame--dashboard img {
+  object-fit: contain;
+  object-position: center center;
+}
+
+.evidence-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 0.48rem;
+}
+
+.evidence-shot {
+  margin: 0;
+  min-height: clamp(3.7rem, 8vh, 5.4rem);
+  border: 1px solid var(--line-soft);
+  border-radius: 0.95rem;
+  overflow: hidden;
+  position: relative;
+  background: #101010;
+  box-shadow: var(--shadow-soft);
+}
+
+.evidence-shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  display: block;
+}
+
+.evidence-shot figcaption {
+  position: absolute;
+  left: 0.45rem;
+  bottom: 0.45rem;
+  max-width: calc(100% - 0.9rem);
+  padding: 0.28rem 0.48rem;
+  border-radius: 999px;
+  background: rgba(9, 11, 16, 0.76);
+  color: #f6f4ef;
+  font-size: var(--small-size);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .frame-label {
@@ -882,6 +953,7 @@ a {
   .timeline,
   .flow,
   .matrix-table,
+  .evidence-strip,
   .row-list {
     gap: 0.48rem;
   }
@@ -893,6 +965,8 @@ a {
 
   .frame--wide { min-height: 34vh; }
   .frame--tall { min-height: 44vh; }
+  .frame--compact { height: 28vh; }
+  .evidence-shot { min-height: 3.8rem; }
 }
 
 @media (max-height: 620px) {
@@ -951,6 +1025,8 @@ a {
 
   .frame--wide { min-height: 30vh; }
   .frame--tall { min-height: 38vh; }
+  .frame--compact { height: 14vh; }
+  .evidence-shot { min-height: 3.6rem; }
 }
 
 @media (max-width: 640px) {
@@ -1022,6 +1098,9 @@ a {
 
   .frame--wide { min-height: 18vh; }
   .frame--tall { min-height: 22vh; }
+  .frame--compact { height: 16vh; }
+  .evidence-strip { display: none; }
+  .evidence-shot figcaption { display: none; }
 }
 
 @media (max-width: 640px) and (max-height: 760px) {
@@ -1032,8 +1111,14 @@ a {
   }
 
   .frame--wide,
-  .frame--tall {
-    min-height: 16vh;
+  .frame--tall,
+  .frame--compact {
+    height: 16vh;
+    min-height: 0;
+  }
+
+  .evidence-shot {
+    min-height: 3.4rem;
   }
 }
 
@@ -1077,6 +1162,11 @@ a {
     display: none !important;
   }
 
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
   .slide {
     width: 13.333in;
     height: 7.5in;
@@ -1100,7 +1190,7 @@ a {
             <div class="kicker">Deck 2 of 5</div>
             <div class="eyebrow">Challenge alignment</div>
             <h1 class="slide-title">Challenge Alignment Contract</h1>
-            <p class="slide-subtitle">This deck maps the top systemic avalanche-forecasting challenges to the current MVP response, without converting partial progress into completed science.</p>
+            <p class="slide-subtitle">This deck maps the top systemic avalanche-forecasting challenges to the MVP V2 response, without converting partial progress, synthetic checks, or partner-intake readiness into completed Himalayan science.</p>
           </div>
           <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
         </div>
@@ -1114,6 +1204,7 @@ a {
 <li>Current state is separated from future strategy</li>
 <li>Hosted proof is same-day full-grid technical publication, not scientist validation closure</li>
 <li>Candidate methods stay gated until supporting evidence exists</li>
+<li>MVP V2 adds a Himalayan v3 partner-evidence contract, Swiss RAvaFcast reproduction lane, and SAR shadow gates</li>
               </ul>
             </div>
             <div class="warning-band">
@@ -1134,7 +1225,7 @@ a {
         </div>
         <div class="footer">
           <span class="slide-id">D2 1</span>
-          <span><a href="../../source/Top_challanges.md">Top Challenges</a>, <a href="../../source/Scientist_claim_ledger.md">Claim Ledger</a></span>
+          <span><a href="../../source/Top_challanges.md">Top Challenges</a>, <a href="../../source/Scientist_claim_ledger.md">Claim Ledger</a>, <a href="../../../MVP%20V2/Himalayan_PrePartner_Evidence_Finite_Checkpoint.md">Himalayan Pre-Partner Evidence</a></span>
         </div>
       </div>
     </section>
@@ -1147,7 +1238,7 @@ a {
             <div class="kicker">Deck 2 of 5</div>
             <div class="eyebrow">Challenge alignment</div>
             <h1 class="slide-title">Data Collection And Observation Scarcity</h1>
-            <p class="slide-subtitle">The MVP reduces dependence on manual observations, but it does not replace field snowpack truth.</p>
+            <p class="slide-subtitle">The MVP reduces dependence on manual observations, but it does not replace field snowpack truth or quality-controlled danger labels.</p>
           </div>
           <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
         </div>
@@ -1161,7 +1252,8 @@ a {
 <li>Sparse AWS networks: revised rating <code>3/5</code></li>
 <li>Field reports and news ingest augment the evidence base</li>
 <li>Open-Meteo and snowpack proxies reduce dependence on dense local stations</li>
-<li>Future strategy: scientist-reviewed field and observatory data integration</li>
+<li>Raw public bulletins are useful inputs but not <code>D_tidy</code>-grade training truth</li>
+<li>Future strategy: scientist-reviewed nowcasts, observer evidence, station observations, and event corroboration</li>
               </ul>
             </div>
             <div class="warning-band">
@@ -1182,7 +1274,7 @@ a {
         </div>
         <div class="footer">
           <span class="slide-id">D2 2</span>
-          <span><a href="../../source/Top_challanges.md">Top Challenges</a>, <a href="../../source/Reserches.md">Research Base</a></span>
+          <span><a href="../../source/Top_challanges.md">Top Challenges</a>, <a href="../../source/Reserches.md">Research Base</a>, <a href="../../../EnviDat_to_Partner_Schema_Mapping.md">Partner Schema Mapping</a></span>
         </div>
       </div>
     </section>
@@ -1195,7 +1287,7 @@ a {
             <div class="kicker">Deck 2 of 5</div>
             <div class="eyebrow">Challenge alignment</div>
             <h1 class="slide-title">Occurrence Records And Autonomous Evidence</h1>
-            <p class="slide-subtitle">Governed evidence fusion is useful because avalanche occurrence records are incomplete, delayed, and noisy.</p>
+            <p class="slide-subtitle">Governed evidence fusion is useful because avalanche occurrence records, public bulletins, and human forecasts can be incomplete, delayed, and noisy.</p>
           </div>
           <div class="proof-row"><span class="proof-chip internal">Technical evidence</span><span class="proof-chip future">Research agenda</span></div>
         </div>
@@ -1208,7 +1300,8 @@ a {
                 <li>Uncertainty in occurrence records: revised rating <code>3/5</code></li>
 <li>Current evidence: deduplication, <code>label_confidence</code>, and <code>training_weight</code></li>
 <li>News and field reports are staged before they influence training or review</li>
-<li>Future strategy: scientist-owned adjudication rules and regional gold cases</li>
+<li>V2 contract requires <code>label_source</code>, <code>tidy_label_review_basis</code>, nowcast refs, observer refs, regime, and timing fields</li>
+<li>Future strategy: scientist-owned adjudication rules, regional gold cases, and local holdout release gates</li>
               </ul>
             </div>
             <div class="warning-band">
@@ -1256,7 +1349,8 @@ a {
 <li>Feature redundancy and overfitting: revised rating <code>4/5</code></li>
 <li>Current technical path references rare-event metrics, KMeansSMOTE, and Recursive Feature Elimination</li>
 <li>Public users do not directly see this mitigation, so it remains technical evidence</li>
-<li>Future strategy: benchmark slices that expose miss, false-alarm, and calibration behavior</li>
+<li>Swiss RF4 remains an initial research signal, not paper parity or Himalayan proof</li>
+<li>Future strategy: benchmark slices that expose miss, false-alarm, calibration, and high-danger recall behavior</li>
               </ul>
             </div>
             <div class="warning-band">
@@ -1337,7 +1431,7 @@ a {
             <div class="kicker">Deck 2 of 5</div>
             <div class="eyebrow">Challenge alignment</div>
             <h1 class="slide-title">Spatial And Temporal Hazard Fusion</h1>
-            <p class="slide-subtitle">The hosted workspace meaningfully fuses where and when risk changes, while still requiring scientific review of the forecast content.</p>
+            <p class="slide-subtitle">The hosted workspace meaningfully fuses where and when risk changes, while still requiring scientific review of the forecast content and station-density coverage.</p>
           </div>
           <div class="proof-row"><span class="proof-chip live">Live platform</span><span class="proof-chip future">Research agenda</span></div>
         </div>
@@ -1350,7 +1444,8 @@ a {
                 <li>Spatial-temporal disconnect: revised rating <code>4/5</code></li>
 <li>Current state: published grid, timeline, daypart bulletin, and optional 3D inspection</li>
 <li>Hosted proof: same-day <code>20x20</code> / <code>72h</code> full-grid technical publication</li>
-<li>Future strategy: region-specific validation cases and scientist review of daypart shifts</li>
+<li>RAvaFcast-style GPxyz interpolation requires station <code>latitude</code>, <code>longitude</code>, and <code>elevation_m</code></li>
+<li>Future strategy: region-specific validation cases, station-density diagnostics, and scientist review of daypart shifts</li>
               </ul>
             </div>
             <div class="warning-band">
@@ -1382,7 +1477,7 @@ a {
             <div class="kicker">Deck 2 of 5</div>
             <div class="eyebrow">Challenge alignment</div>
             <h1 class="slide-title">Weighting, Calibration, And Multiple Optima</h1>
-            <p class="slide-subtitle">The platform reduces ad hoc promotion decisions with gates, but it does not eliminate calibration ambiguity.</p>
+            <p class="slide-subtitle">The platform reduces ad hoc promotion decisions with gates, but it does not eliminate calibration, threshold, or discretization ambiguity.</p>
           </div>
           <div class="proof-row"><span class="proof-chip internal">Technical evidence</span><span class="proof-chip future">Research agenda</span></div>
         </div>
@@ -1396,7 +1491,8 @@ a {
 <li>Multiple optima in calibration: revised rating <code>3/5</code></li>
 <li>Current state: benchmark summaries, PSS/Brier gates, and stability summaries</li>
 <li>Current stability evidence is conservative and should not be framed as closure</li>
-<li>Future strategy: scientist-owned threshold and calibration review</li>
+<li>RAvaFcast refined discretization must be learned from training/OOB distributions only, never validation or final holdout labels</li>
+<li>Future strategy: scientist-owned threshold, calibration, and false-alarm tolerance review</li>
               </ul>
             </div>
             <div class="warning-band">
@@ -1524,7 +1620,7 @@ a {
             <div class="kicker">Deck 2 of 5</div>
             <div class="eyebrow">Challenge alignment</div>
             <h1 class="slide-title">SAR And Remote Sensing Limits</h1>
-            <p class="slide-subtitle">SAR is an important future evidence stream, but it remains candidate-gated in the current MVP.</p>
+            <p class="slide-subtitle">SAR and remote sensing are important future evidence streams, but they remain shadow-gated in the current MVP V2 strategy.</p>
           </div>
           <div class="proof-row"><span class="proof-chip internal">Technical evidence</span><span class="proof-chip future">Research agenda</span></div>
         </div>
@@ -1537,6 +1633,7 @@ a {
                 <li>Topographic radar shadowing: revised rating <code>2/5</code></li>
 <li>Current state: SAR coverage flags and candidate worker paths</li>
 <li>Do not describe SAR as operational or promoted</li>
+<li>Current SAR work is evidence-rich but blocked from production by held-out precision/F1 and fresh-final-holdout gates</li>
 <li>Future strategy: labels, revisit-aware handling, shadow/layover review, and held-out qualification</li>
               </ul>
             </div>
@@ -1678,6 +1775,7 @@ a {
                 <li>Current state: public route, admin route, full-grid publication proof, workflow controls</li>
 <li>Current state: masked terrain, uncertainty, and current-state bulletin semantics</li>
 <li>Technical evidence: rare-event training discipline and benchmark gates</li>
+<li>MVP V2 evidence: Swiss RAvaFcast reproduction lane, Himalayan v3 partner contract, and one-command partner-package triage</li>
 <li>Future strategy: scientist-led validation, SAR qualification, and candidate-model promotion rules</li>
               </ul>
             </div>
@@ -1712,7 +1810,7 @@ a {
             <div class="kicker">Deck 2 of 5</div>
             <div class="eyebrow">Challenge alignment</div>
             <h1 class="slide-title">Immediate Improvement Areas</h1>
-            <p class="slide-subtitle">The next work should concentrate on the gaps that most affect scientific credibility and customer confidence.</p>
+            <p class="slide-subtitle">The next work should concentrate on partner handoff and the gaps that most affect scientific credibility and customer confidence.</p>
           </div>
           <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
         </div>
@@ -1723,6 +1821,8 @@ a {
               <div class="section-label">Current state and future strategy</div>
               <ul class="bullet-list">
                 <li>Full-grid scientist validation over selected regional cases</li>
+<li>SASE/DGRE handoff packet with <code>partner_handoff_readme.md</code>, <code>partner_field_dictionary.md</code>, checksum guide, source manifest template, and ten blank v3 CSV templates</li>
+<li>One-command triage via <code>run_himalayan_partner_package_triage</code></li>
 <li>TreeSHAP refresh for active full-grid artifacts</li>
 <li>WhiteboxTools runout qualification beyond smoke proof</li>
 <li>SAR held-out evidence and promotion gates</li>
@@ -1747,7 +1847,7 @@ a {
         </div>
         <div class="footer">
           <span class="slide-id">D2 14</span>
-          <span><a href="../../source/Scientist_validation_protocol_v0.md">Validation Protocol</a>, <a href="../../source/Scientist_meeting_checklist.md">Scientist Meeting Checklist</a></span>
+          <span><a href="../../source/Scientist_validation_protocol_v0.md">Validation Protocol</a>, <a href="../../source/Scientist_meeting_checklist.md">Scientist Meeting Checklist</a>, <a href="../../../SASE_DGRE_Outreach_Kit.md">SASE/DGRE Outreach Kit</a></span>
         </div>
       </div>
     </section>
@@ -1760,7 +1860,7 @@ a {
             <div class="kicker">Deck 2 of 5</div>
             <div class="eyebrow">Challenge alignment</div>
             <h1 class="slide-title">Discussion Close</h1>
-            <p class="slide-subtitle">The decision is whether to use the current MVP as the shared workbench for the validation program.</p>
+            <p class="slide-subtitle">The decision is whether to use MVP V2 as the shared workbench for partner evidence intake, scientist validation, and later claim review.</p>
           </div>
           <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
         </div>
@@ -1772,6 +1872,7 @@ a {
               <ul class="bullet-list">
                 <li>Approve the current-state MVP as the validation workbench</li>
 <li>Select priority regions and challenge categories</li>
+<li>Execute SASE/DGRE partner handoff without sending synthetic rows as evidence</li>
 <li>Agree benchmark and release-gate ownership</li>
 <li>Keep customer-facing claims tied to proof buckets</li>
               </ul>

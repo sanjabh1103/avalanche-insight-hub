@@ -269,6 +269,7 @@ export async function handleRunForecast(
         publishedAt: freshGrid.created_at ?? null,
         now,
       });
+      console.warn(`[run-forecast] Warning: Accessing deprecated legacy read path forecast_grids for regionKey=${regionKey}, regionName=${regionName}`);
       return jsonResponse({
         ok: true,
         stale: freshness.stale,
@@ -341,6 +342,7 @@ export async function handleRunForecast(
       now,
     });
 
+    console.warn(`[run-forecast] Warning: Accessing deprecated legacy read path forecast_grids (latest/fallback) for regionKey=${regionKey}, regionName=${regionName}`);
     return jsonResponse({
       ok: true,
       stale: true,

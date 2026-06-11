@@ -14,6 +14,7 @@ from backend.models.surrogate_rf import (
     build_tree_shap_explainer,
     collect_tree_probabilities,
     compute_tree_shap,
+    compute_tree_shap_batch,
     fit_surrogate_bundle,
     try_smote,
 )
@@ -84,6 +85,28 @@ class SurrogateRfBundleTests(unittest.TestCase):
         )
         ordered_magnitudes = [abs(float(item['shap_value'])) for item in top_features]
         self.assertEqual(ordered_magnitudes, sorted(ordered_magnitudes, reverse=True))
+
+    def test_tree_shap_batch_matches_single_row_shape(self) -> None:
+        bundle = fit_surrogate_bundle(
+            frame=_build_training_frame(),
+            feature_columns=FEATURE_COLUMNS,
+            seed=24,
+            time_series_splits=3,
+        )
+        selected_frame = pd.DataFrame(
+            bundle['selector'].transform(_build_training_frame().iloc[:3][FEATURE_COLUMNS].astype(float)),
+            columns=bundle['selected_features'],
+        )
+        explainer = build_tree_shap_explainer(bundle['base_model'])
+
+        packets = compute_tree_shap_batch(explainer, selected_frame, bundle['selected_features'])
+
+        self.assertEqual(len(packets), 3)
+        for shap_values, top_features in packets:
+            self.assertTrue(shap_values)
+            self.assertGreaterEqual(len(top_features), 1)
+            self.assertLessEqual(len(top_features), 5)
+            self.assertEqual(top_features[0]['rank'], 1)
 
     def test_tree_shap_unavailable_error_is_explicit(self) -> None:
         bundle = fit_surrogate_bundle(

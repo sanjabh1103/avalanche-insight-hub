@@ -66,6 +66,18 @@ Do not use `presentation/rendered/assets/tmp/*.png` in fresh deck-source Markdow
 
 Each deck is capped at 15 slides for NotebookLM and rendered-deck generation.
 
+## Post-MVP Addendum Pack
+
+The five rendered MVP decks above are frozen as historical May MVP discussion artifacts. Do not silently rewrite their rendered Markdown, transcripts, or PDFs for the scientist co-working phase unless a new meeting-specific deck generation task is opened.
+
+Use the post-MVP addendum sources for the next scientist-facing update:
+
+| Addendum | Source | Purpose |
+|---|---|---|
+| Scientist co-working update | [01_Scientist_Coworking_Update.md](presentation/post_mvp/01_Scientist_Coworking_Update.md) | Role separation, validation workbench, review governance, daily verification, and remaining external proof needs. |
+| European shadow and SAR status | [02_European_Shadow_And_SAR_Status.md](presentation/post_mvp/02_European_Shadow_And_SAR_Status.md) | European shadow evidence pack, SnowSlide v8 status, SAR blockers, and Himalaya transfer boundary. |
+| Modal.com / GPU compute role | [03_Modal_GPU_Compute_Role.md](presentation/post_mvp/03_Modal_GPU_Compute_Role.md) | Off-path candidate training, SAR shadow segmentation, release evaluation, and scientist promotion gates. |
+
 ## Recommended Source Order
 
 1. Start with [01_Agenda.md](presentation/01_Agenda.md) to choose the deck flow.

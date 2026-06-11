@@ -17,7 +17,7 @@ import { Canvas, ThreeEvent, useFrame } from '@react-three/fiber';
 import { OrbitControls, Instances, Instance } from '@react-three/drei';
 import { useTheme } from 'next-themes';
 import * as THREE from 'three';
-import { fetchOverpassJson } from '@/lib/overpassClient';
+import { fetchOverpassJson, OverpassDegraded } from '@/lib/overpassClient';
 
 // ---- types ----
 interface BaseBlock {
@@ -259,10 +259,10 @@ async function fetchOSMData(bbox: [number, number, number, number]): Promise<Fet
   });
 
   if (!result.ok) {
-    console.warn('Failed to load OSM voxel data, using terrain fallback', result.message);
+    console.warn('Failed to load OSM voxel data, using terrain fallback', (result as OverpassDegraded).message);
     return {
       voxels: buildTerrainFallback(bbox),
-      degradedMessage: result.message,
+      degradedMessage: (result as OverpassDegraded).message,
       cacheable: false,
     };
   }

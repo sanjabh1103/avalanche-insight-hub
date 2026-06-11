@@ -1,0 +1,1087 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Avalanche Insight Hub - Technology Explainer</title>
+  <style>
+    :root {
+      --bg: #f7f8f2;
+      --ink: #172126;
+      --muted: #5d686c;
+      --line: #d8ddd2;
+      --panel: #ffffff;
+      --teal: #168b86;
+      --amber: #c77d16;
+      --red: #c13f3f;
+      --blue: #3267a8;
+      --green: #3d8749;
+      --violet: #6d5aa7;
+      --shadow: 0 14px 36px rgba(22, 33, 38, 0.08);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .app {
+      max-width: 1480px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: start;
+      margin-bottom: 16px;
+    }
+
+    .eyebrow {
+      margin: 0 0 6px;
+      color: var(--teal);
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      margin-bottom: 8px;
+      max-width: 780px;
+      font-size: clamp(2rem, 5vw, 4.2rem);
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin-bottom: 0;
+      font-size: clamp(1.2rem, 2.4vw, 1.95rem);
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin-bottom: 0;
+      font-size: 0.95rem;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    .summary {
+      margin: 0;
+      max-width: 760px;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.45;
+    }
+
+    .proof-stack {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+      max-width: 420px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .workbench {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr) 330px;
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .rail,
+    .stage,
+    .inspector,
+    .evidence-band {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .rail,
+    .inspector {
+      padding: 14px;
+    }
+
+    .section-label {
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 0.75rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .step-list,
+    .lane-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .step-button,
+    .lane-button,
+    .play-button {
+      width: 100%;
+      min-height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcf7;
+      color: var(--ink);
+      cursor: pointer;
+      font-weight: 800;
+      text-align: left;
+      transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+    }
+
+    .step-button {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 9px;
+    }
+
+    .step-button span {
+      display: grid;
+      width: 26px;
+      height: 26px;
+      place-items: center;
+      border-radius: 50%;
+      background: #eef4ef;
+      color: var(--teal);
+      font-size: 0.78rem;
+    }
+
+    .step-button:hover,
+    .lane-button:hover,
+    .play-button:hover,
+    .step-button.active,
+    .lane-button.active {
+      border-color: var(--teal);
+      background: #eef9f7;
+    }
+
+    .step-button:active,
+    .lane-button:active,
+    .play-button:active {
+      transform: translateY(1px);
+    }
+
+    .range-stack {
+      display: grid;
+      gap: 12px;
+      margin: 16px 0;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+
+    .range-control {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .range-control .range-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--teal);
+    }
+
+    .play-button {
+      margin-top: 2px;
+      padding: 9px 12px;
+      text-align: center;
+    }
+
+    .timeline {
+      margin-top: 12px;
+    }
+
+    .stage {
+      min-width: 0;
+      padding: 16px;
+    }
+
+    .stage-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 150px;
+      gap: 12px;
+      align-items: start;
+      margin-bottom: 14px;
+    }
+
+    .risk-card {
+      min-height: 88px;
+      border: 1px solid #f1d3bd;
+      border-radius: 8px;
+      background: #fff7ef;
+      padding: 10px;
+      text-align: right;
+    }
+
+    .risk-card strong {
+      display: block;
+      color: var(--red);
+      font-size: 2.1rem;
+      line-height: 1.12;
+    }
+
+    .risk-card span {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .tech-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
+      gap: 12px;
+    }
+
+    .panel {
+      min-width: 0;
+      min-height: 196px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcf8;
+      padding: 12px;
+      transition: border-color 160ms ease, box-shadow 160ms ease;
+    }
+
+    .panel.active {
+      border-color: var(--teal);
+      box-shadow: inset 0 0 0 2px rgba(22, 139, 134, 0.12);
+    }
+
+    .panel header {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: start;
+      margin-bottom: 12px;
+    }
+
+    .panel header span,
+    .mini-note {
+      color: var(--muted);
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .vector-list,
+    .contrib-list {
+      display: grid;
+      gap: 9px;
+    }
+
+    .contrib-list {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }
+
+    .feature-row,
+    .contrib-row {
+      display: grid;
+      grid-template-columns: 96px minmax(70px, 1fr) 50px;
+      gap: 8px;
+      align-items: center;
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .feature-row span,
+    .contrib-row span {
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .bar,
+    .contrib-track {
+      position: relative;
+      height: 11px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #e8ece3;
+    }
+
+    .bar i,
+    .contrib-fill {
+      display: block;
+      height: 100%;
+      width: 40%;
+      border-radius: inherit;
+      background: var(--teal);
+      transition: width 180ms ease;
+    }
+
+    .contrib-fill.negative {
+      margin-left: auto;
+      background: var(--blue);
+    }
+
+    .contrib-fill.warning,
+    .bar i.warning {
+      background: var(--amber);
+    }
+
+    .vote-grid {
+      display: grid;
+      grid-template-columns: repeat(10, minmax(10px, 1fr));
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .tree-cell {
+      aspect-ratio: 1;
+      border-radius: 5px;
+      background: #e2e9df;
+      border: 1px solid #d2dbcc;
+      transition: background 180ms ease, transform 180ms ease;
+    }
+
+    .tree-cell.hot {
+      background: var(--red);
+      border-color: #af3434;
+      transform: scale(1.03);
+    }
+
+    .vote-readout {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 800;
+    }
+
+    .vote-readout strong {
+      color: var(--red);
+    }
+
+    .calibration-plot {
+      position: relative;
+      height: 112px;
+      margin: 8px 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background:
+        linear-gradient(90deg, rgba(61, 135, 73, 0.12) 0 56%, rgba(193, 63, 63, 0.13) 56% 100%),
+        repeating-linear-gradient(0deg, transparent 0 27px, rgba(23, 33, 38, 0.08) 28px),
+        repeating-linear-gradient(90deg, transparent 0 24%, rgba(23, 33, 38, 0.08) 25%);
+    }
+
+    .threshold-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 62%;
+      width: 2px;
+      background: var(--red);
+    }
+
+    .marker {
+      position: absolute;
+      bottom: 20px;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      transform: translateX(-50%);
+      border: 2px solid #fff;
+      box-shadow: 0 0 0 2px rgba(23, 33, 38, 0.2);
+      transition: left 180ms ease, bottom 180ms ease;
+    }
+
+    .marker.raw {
+      background: var(--amber);
+    }
+
+    .marker.cal {
+      background: var(--teal);
+    }
+
+    .plot-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 0.74rem;
+      font-weight: 800;
+    }
+
+    .gate-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .gate-item {
+      display: grid;
+      grid-template-columns: 22px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      font-size: 0.76rem;
+      font-weight: 800;
+    }
+
+    .gate-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--red);
+    }
+
+    .gate-item.pass .gate-dot {
+      background: var(--green);
+    }
+
+    .gate-item.hold .gate-dot {
+      background: var(--amber);
+    }
+
+    .gate-state {
+      color: var(--muted);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+    }
+
+    .inspector {
+      display: grid;
+      align-content: start;
+      gap: 12px;
+    }
+
+    .inspector-card,
+    .lane-card,
+    .timing-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcf8;
+      padding: 12px;
+    }
+
+    .inspector-card p,
+    .lane-panel p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.38;
+    }
+
+    .lane-button {
+      min-height: 34px;
+      padding: 7px 9px;
+      font-size: 0.8rem;
+    }
+
+    .lane-panel {
+      margin-top: 10px;
+      border-left: 4px solid var(--violet);
+      padding-left: 10px;
+    }
+
+    .lane-panel strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 0.9rem;
+    }
+
+    .timing-list {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .timing-list li {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 800;
+    }
+
+    .evidence-band {
+      margin-top: 16px;
+      padding: 14px;
+    }
+
+    .evidence-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .source-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fbfcf8;
+    }
+
+    .source-card strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 0.82rem;
+    }
+
+    .source-card code {
+      color: var(--teal);
+      font-size: 0.72rem;
+      overflow-wrap: anywhere;
+    }
+
+    .footer-note {
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.4;
+    }
+
+    @media (max-width: 1180px) {
+      .workbench {
+        grid-template-columns: 190px minmax(0, 1fr);
+      }
+
+      .inspector {
+        grid-column: 1 / -1;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .evidence-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 820px) {
+      .app {
+        padding: 12px;
+      }
+
+      .topbar,
+      .workbench,
+      .tech-grid,
+      .stage-head,
+      .inspector,
+      .evidence-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .proof-stack {
+        justify-content: flex-start;
+      }
+
+      .rail {
+        display: grid;
+        gap: 12px;
+      }
+
+      .step-list {
+        grid-template-columns: repeat(5, minmax(88px, 1fr));
+        overflow-x: auto;
+        padding-bottom: 2px;
+      }
+
+      .step-button {
+        grid-template-columns: 1fr;
+        justify-items: center;
+        min-width: 88px;
+        text-align: center;
+      }
+
+      .range-stack {
+        margin: 0;
+      }
+
+      .risk-card {
+        text-align: left;
+      }
+
+      h1 {
+        font-size: clamp(2rem, 12vw, 3rem);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="topbar" aria-label="Explainer summary">
+      <div>
+        <p class="eyebrow">Avalanche Insight Hub / technology explainer</p>
+        <h1>Inspect the model path, not just the story.</h1>
+        <p class="summary">Teaching artifact for repo architecture: tabular RF surrogate, calibration, research lanes, and Himalayan claim gates. It does not validate public avalanche safety.</p>
+      </div>
+      <div class="proof-stack" aria-label="Proof status">
+        <span class="chip">Depth: practitioner</span>
+        <span class="chip">Runtime: 85s</span>
+        <span class="chip">Proof: artifact-only</span>
+      </div>
+    </section>
+
+    <section class="workbench" aria-label="Interactive technology workbench">
+      <aside class="rail">
+        <p class="section-label">States</p>
+        <div class="step-list" role="tablist" aria-label="Explainer states">
+          <button class="step-button active" type="button" role="tab" aria-selected="true" data-step="inputs"><span>1</span>Inputs</button>
+          <button class="step-button" type="button" role="tab" aria-selected="false" data-step="votes"><span>2</span>RF votes</button>
+          <button class="step-button" type="button" role="tab" aria-selected="false" data-step="calibrate"><span>3</span>Calibrate</button>
+          <button class="step-button" type="button" role="tab" aria-selected="false" data-step="gate"><span>4</span>Gate</button>
+          <button class="step-button" type="button" role="tab" aria-selected="false" data-step="research"><span>5</span>Research</button>
+        </div>
+
+        <div class="range-stack" aria-label="Causal inputs">
+          <label class="range-control">
+            <span class="range-head"><span>Snowfall</span><output id="snowOut">44 cm</output></span>
+            <input id="snowfall" type="range" min="0" max="90" value="44">
+          </label>
+          <label class="range-control">
+            <span class="range-head"><span>Wind</span><output id="windOut">52 km/h</output></span>
+            <input id="wind" type="range" min="0" max="110" value="52">
+          </label>
+          <label class="range-control">
+            <span class="range-head"><span>Slope</span><output id="slopeOut">38 deg</output></span>
+            <input id="slope" type="range" min="20" max="50" value="38">
+          </label>
+        </div>
+
+        <button class="play-button" id="playButton" type="button">Play</button>
+        <input class="timeline" id="timeline" type="range" min="0" max="4" value="0" aria-label="Timeline state">
+      </aside>
+
+      <section class="stage" aria-live="polite">
+        <div class="stage-head">
+          <div>
+            <p class="eyebrow" id="stepKicker">State 1 / inputs</p>
+            <h2 id="stepTitle">Inputs become a feature vector</h2>
+          </div>
+          <div class="risk-card" aria-label="Computed probability">
+            <strong id="riskScore">0.61</strong>
+            <span>calibrated probability</span>
+          </div>
+        </div>
+
+        <div class="tech-grid">
+          <article class="panel active" data-panel="inputs">
+            <header>
+              <h3>Feature vector</h3>
+              <span>tabular surrogate</span>
+            </header>
+            <div class="vector-list">
+              <div class="feature-row"><span>snow_24h</span><div class="bar"><i id="barSnow"></i></div><b id="featSnow">44</b></div>
+              <div class="feature-row"><span>wind_speed</span><div class="bar"><i id="barWind" class="warning"></i></div><b id="featWind">52</b></div>
+              <div class="feature-row"><span>slope_angle</span><div class="bar"><i id="barSlope"></i></div><b id="featSlope">38</b></div>
+              <div class="feature-row"><span>snowpack</span><div class="bar"><i id="barPack" class="warning"></i></div><b id="featPack">61</b></div>
+            </div>
+            <div class="contrib-list" aria-label="Selected feature contributions">
+              <div class="contrib-row"><span>snow contrib</span><div class="contrib-track"><i id="contribSnow" class="contrib-fill"></i></div><b id="contribSnowVal">+0.16</b></div>
+              <div class="contrib-row"><span>terrain contrib</span><div class="contrib-track"><i id="contribSlope" class="contrib-fill warning"></i></div><b id="contribSlopeVal">+0.14</b></div>
+              <div class="contrib-row"><span>stability offset</span><div class="contrib-track"><i id="contribOffset" class="contrib-fill negative"></i></div><b id="contribOffsetVal">-0.06</b></div>
+            </div>
+            <p class="mini-note">Sliders are teaching inputs, not live sensor data.</p>
+          </article>
+
+          <article class="panel" data-panel="votes">
+            <header>
+              <h3>Random Forest vote grid</h3>
+              <span>30 cells = 300 trees</span>
+            </header>
+            <div class="vote-grid" id="voteGrid" aria-label="Random Forest vote groups"></div>
+            <div class="vote-readout"><span><strong id="voteCount">183</strong> hazard votes</span><span id="voteShare">61%</span></div>
+            <p class="mini-note">Each cell represents ten trees in the baseline concept.</p>
+          </article>
+
+          <article class="panel" data-panel="calibrate">
+            <header>
+              <h3>Calibration + threshold</h3>
+              <span>PSS / ROC / calib</span>
+            </header>
+            <div class="calibration-plot" aria-label="Calibration plot">
+              <div class="threshold-line" title="Release threshold"></div>
+              <span class="marker raw" id="rawMarker" title="Raw score"></span>
+              <span class="marker cal" id="calMarker" title="Calibrated probability"></span>
+            </div>
+            <div class="plot-legend"><span>raw score</span><span>calibrated probability</span><span>threshold</span></div>
+          </article>
+
+          <article class="panel" data-panel="gate">
+            <header>
+              <h3>Claim gate</h3>
+              <span>Himalayan contract</span>
+            </header>
+            <div class="gate-list">
+              <div class="gate-item hold" id="thresholdGate"><span class="gate-dot"></span><span>model threshold</span><span class="gate-state">hold</span></div>
+              <div class="gate-item"><span class="gate-dot"></span><span>holdout passed</span><span class="gate-state">locked</span></div>
+              <div class="gate-item"><span class="gate-dot"></span><span>scientist review</span><span class="gate-state">locked</span></div>
+              <div class="gate-item"><span class="gate-dot"></span><span>promotion approved</span><span class="gate-state">locked</span></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <aside class="inspector" aria-label="Inspector">
+        <section class="inspector-card">
+          <p class="eyebrow">Now showing</p>
+          <h3 id="inspectorTitle">Feature vector</h3>
+          <p id="inspectorBody">Weather, terrain, and snowpack signals become tabular features before the RF surrogate votes.</p>
+        </section>
+
+        <section class="lane-card">
+          <p class="section-label">Lanes</p>
+          <div class="lane-list" role="tablist" aria-label="Model lanes">
+            <button class="lane-button active" type="button" data-lane="rf">RF active</button>
+            <button class="lane-button" type="button" data-lane="mts">MTS-LSTM</button>
+            <button class="lane-button" type="button" data-lane="sar">SAR</button>
+            <button class="lane-button" type="button" data-lane="rava">RAvaFcast</button>
+            <button class="lane-button" type="button" data-lane="evidence">Evidence</button>
+          </div>
+          <div class="lane-panel" id="lanePanel">
+            <strong>RF surrogate is the teaching lane.</strong>
+            <p>It exposes tabular features, tree votes, calibration, and release gates.</p>
+          </div>
+        </section>
+
+        <section class="timing-card">
+          <p class="section-label">Timing map</p>
+          <ol class="timing-list" id="timingList"></ol>
+        </section>
+      </aside>
+    </section>
+
+    <section class="evidence-band" aria-label="Source to visual mapping">
+      <p class="section-label">Source-to-visual mapping</p>
+      <div class="evidence-grid">
+        <div class="source-card"><strong>Feature vector</strong><code>backend/models/surrogate_rf.py :: TARGET_FEATURE_COUNT</code></div>
+        <div class="source-card"><strong>RF votes</strong><code>surrogate_rf.py :: RF_N_ESTIMATORS=300</code></div>
+        <div class="source-card"><strong>Contributions</strong><code>surrogate_rf.py :: selected_feature_contributions</code></div>
+        <div class="source-card"><strong>Calibration</strong><code>surrogate_rf.py :: _pss_score / ROC</code></div>
+        <div class="source-card"><strong>MTS-LSTM</strong><code>backend/models/mts_lstm.py :: BranchedMTSLSTM</code></div>
+        <div class="source-card"><strong>SAR lane</strong><code>training and SAR bootstrap notes</code></div>
+        <div class="source-card"><strong>RAvaFcast</strong><code>research lane; not promoted</code></div>
+        <div class="source-card"><strong>Claim gate</strong><code>himalayan_accuracy_contract.py :: required gates</code></div>
+      </div>
+      <p class="footer-note">Proof boundary: this local HTML explains architecture and governance. It is not a validated Himalayan operational warning system or public-safety claim.</p>
+    </section>
+  </main>
+
+  <script>
+    const steps = [
+      {
+        id: "inputs",
+        title: "Inputs become a feature vector",
+        kicker: "State 1 / inputs",
+        panel: "inputs",
+        inspectorTitle: "Feature vector",
+        inspectorBody: "Weather, terrain, and snowpack signals become tabular features before the RF surrogate votes.",
+        seconds: 14
+      },
+      {
+        id: "votes",
+        title: "Trees vote on the tabular state",
+        kicker: "State 2 / RF votes",
+        panel: "votes",
+        inspectorTitle: "300-tree baseline",
+        inspectorBody: "The grid compresses the 300-tree baseline into thirty visible vote groups.",
+        seconds: 18
+      },
+      {
+        id: "calibrate",
+        title: "Scores meet calibration and threshold",
+        kicker: "State 3 / calibration",
+        panel: "calibrate",
+        inspectorTitle: "PSS / ROC / calibration",
+        inspectorBody: "The raw score is adjusted before threshold logic decides whether the model itself would hold or flag.",
+        seconds: 16
+      },
+      {
+        id: "gate",
+        title: "Claim gates block unsafe promotion",
+        kicker: "State 4 / gate",
+        panel: "gate",
+        inspectorTitle: "Release contract",
+        inspectorBody: "Even a high score is not a public claim until holdout, scientist review, licensing, and approval gates pass.",
+        seconds: 17
+      },
+      {
+        id: "research",
+        title: "Research lanes stay visibly separate",
+        kicker: "State 5 / research",
+        panel: "gate",
+        inspectorTitle: "Not promoted",
+        inspectorBody: "MTS-LSTM, SAR, and RAvaFcast can be explained without implying operational validation.",
+        seconds: 12
+      }
+    ];
+
+    const lanes = {
+      rf: {
+        title: "RF surrogate is the teaching lane.",
+        body: "It exposes tabular features, tree votes, calibration, and release gates.",
+        color: "#168b86"
+      },
+      mts: {
+        title: "MTS-LSTM is candidate research.",
+        body: "The sequence model has hourly, daily, and static branches; it is not promoted here.",
+        color: "#3267a8"
+      },
+      sar: {
+        title: "SAR is a shadow lane.",
+        body: "Remote-sensing evidence can support analysis, but this view keeps it outside release claims.",
+        color: "#c77d16"
+      },
+      rava: {
+        title: "RAvaFcast remains research.",
+        body: "It can inspire terrain or forecast visuals without becoming a validated claim.",
+        color: "#6d5aa7"
+      },
+      evidence: {
+        title: "Evidence gate is mandatory.",
+        body: "The artifact maps visuals to files and keeps proof status visible.",
+        color: "#3d8749"
+      }
+    };
+
+    const els = {
+      stepButtons: [...document.querySelectorAll(".step-button")],
+      laneButtons: [...document.querySelectorAll(".lane-button")],
+      panels: [...document.querySelectorAll(".panel")],
+      timeline: document.getElementById("timeline"),
+      playButton: document.getElementById("playButton"),
+      stepTitle: document.getElementById("stepTitle"),
+      stepKicker: document.getElementById("stepKicker"),
+      inspectorTitle: document.getElementById("inspectorTitle"),
+      inspectorBody: document.getElementById("inspectorBody"),
+      riskScore: document.getElementById("riskScore"),
+      voteCount: document.getElementById("voteCount"),
+      voteShare: document.getElementById("voteShare"),
+      voteGrid: document.getElementById("voteGrid"),
+      rawMarker: document.getElementById("rawMarker"),
+      calMarker: document.getElementById("calMarker"),
+      thresholdGate: document.getElementById("thresholdGate"),
+      lanePanel: document.getElementById("lanePanel"),
+      timingList: document.getElementById("timingList"),
+      snow: document.getElementById("snowfall"),
+      wind: document.getElementById("wind"),
+      slope: document.getElementById("slope")
+    };
+
+    const fields = {
+      snowOut: document.getElementById("snowOut"),
+      windOut: document.getElementById("windOut"),
+      slopeOut: document.getElementById("slopeOut"),
+      featSnow: document.getElementById("featSnow"),
+      featWind: document.getElementById("featWind"),
+      featSlope: document.getElementById("featSlope"),
+      featPack: document.getElementById("featPack"),
+      barSnow: document.getElementById("barSnow"),
+      barWind: document.getElementById("barWind"),
+      barSlope: document.getElementById("barSlope"),
+      barPack: document.getElementById("barPack"),
+      contribSnow: document.getElementById("contribSnow"),
+      contribSlope: document.getElementById("contribSlope"),
+      contribOffset: document.getElementById("contribOffset"),
+      contribSnowVal: document.getElementById("contribSnowVal"),
+      contribSlopeVal: document.getElementById("contribSlopeVal"),
+      contribOffsetVal: document.getElementById("contribOffsetVal")
+    };
+
+    let activeStep = 0;
+    let playTimer = null;
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function buildVoteGrid() {
+      els.voteGrid.innerHTML = "";
+      for (let index = 0; index < 30; index += 1) {
+        const cell = document.createElement("span");
+        cell.className = "tree-cell";
+        cell.title = `Tree group ${index + 1}`;
+        els.voteGrid.appendChild(cell);
+      }
+    }
+
+    function renderTiming() {
+      const rows = [["Intro", 8], ...steps.map((step) => [step.stepLabel || step.id, step.seconds]), ["Pause", 6]];
+      els.timingList.innerHTML = rows.map(([name, seconds]) => `<li><span>${name}</span><strong>${seconds}s</strong></li>`).join("");
+    }
+
+    function modelState() {
+      const snow = Number(els.snow.value);
+      const wind = Number(els.wind.value);
+      const slope = Number(els.slope.value);
+      const snowpack = Math.round(clamp(snow * 0.55 + wind * 0.2 + (slope - 20) * 1.1, 0, 100));
+      const raw = clamp(0.12 + snow / 90 * 0.32 + wind / 110 * 0.2 + (slope - 20) / 30 * 0.28 + snowpack / 100 * 0.12, 0.03, 0.97);
+      const calibrated = clamp(0.06 + raw * 0.9, 0.04, 0.96);
+      const votes = Math.round(calibrated * 300);
+      return { snow, wind, slope, snowpack, raw, calibrated, votes };
+    }
+
+    function updateModel() {
+      const state = modelState();
+      fields.snowOut.value = `${state.snow} cm`;
+      fields.windOut.value = `${state.wind} km/h`;
+      fields.slopeOut.value = `${state.slope} deg`;
+      fields.featSnow.textContent = state.snow;
+      fields.featWind.textContent = state.wind;
+      fields.featSlope.textContent = state.slope;
+      fields.featPack.textContent = state.snowpack;
+      fields.barSnow.style.width = `${clamp(state.snow / 90 * 100, 4, 100)}%`;
+      fields.barWind.style.width = `${clamp(state.wind / 110 * 100, 4, 100)}%`;
+      fields.barSlope.style.width = `${clamp((state.slope - 20) / 30 * 100, 4, 100)}%`;
+      fields.barPack.style.width = `${clamp(state.snowpack, 4, 100)}%`;
+      const snowContribution = state.snow / 90 * 0.24;
+      const slopeContribution = (state.slope - 20) / 30 * 0.2;
+      const offsetContribution = -0.06 - (state.wind < 25 ? 0.04 : 0);
+      fields.contribSnow.style.width = `${clamp(snowContribution / 0.24 * 100, 4, 100)}%`;
+      fields.contribSlope.style.width = `${clamp(slopeContribution / 0.2 * 100, 4, 100)}%`;
+      fields.contribOffset.style.width = `${clamp(Math.abs(offsetContribution) / 0.1 * 100, 4, 100)}%`;
+      fields.contribSnowVal.textContent = `+${snowContribution.toFixed(2)}`;
+      fields.contribSlopeVal.textContent = `+${slopeContribution.toFixed(2)}`;
+      fields.contribOffsetVal.textContent = offsetContribution.toFixed(2);
+      els.riskScore.textContent = state.calibrated.toFixed(2);
+      els.voteCount.textContent = state.votes;
+      els.voteShare.textContent = `${Math.round(state.votes / 3)}%`;
+      [...els.voteGrid.children].forEach((cell, index) => {
+        cell.classList.toggle("hot", index < Math.round(state.votes / 10));
+      });
+      els.rawMarker.style.left = `${state.raw * 100}%`;
+      els.rawMarker.style.bottom = `${20 + state.raw * 60}px`;
+      els.calMarker.style.left = `${state.calibrated * 100}%`;
+      els.calMarker.style.bottom = `${20 + state.calibrated * 60}px`;
+      const passesThreshold = state.calibrated >= 0.62;
+      els.thresholdGate.classList.toggle("pass", passesThreshold);
+      els.thresholdGate.classList.toggle("hold", !passesThreshold);
+      els.thresholdGate.querySelector(".gate-state").textContent = passesThreshold ? "flag" : "hold";
+    }
+
+    function setStep(index) {
+      activeStep = clamp(index, 0, steps.length - 1);
+      const step = steps[activeStep];
+      els.stepTitle.textContent = step.title;
+      els.stepKicker.textContent = step.kicker;
+      els.inspectorTitle.textContent = step.inspectorTitle;
+      els.inspectorBody.textContent = step.inspectorBody;
+      els.timeline.value = activeStep;
+      els.stepButtons.forEach((button, buttonIndex) => {
+        const active = buttonIndex === activeStep;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-selected", String(active));
+      });
+      els.panels.forEach((panel) => {
+        panel.classList.toggle("active", panel.dataset.panel === step.panel);
+      });
+    }
+
+    function pausePlayback() {
+      if (playTimer) {
+        clearTimeout(playTimer);
+        playTimer = null;
+        els.playButton.textContent = "Play";
+      }
+    }
+
+    function scheduleNext() {
+      const delay = steps[activeStep].seconds * 1000;
+      playTimer = setTimeout(() => {
+        setStep((activeStep + 1) % steps.length);
+        scheduleNext();
+      }, delay);
+    }
+
+    function togglePlay() {
+      if (playTimer) {
+        pausePlayback();
+        return;
+      }
+      els.playButton.textContent = "Pause";
+      scheduleNext();
+    }
+
+    function setLane(laneId) {
+      const lane = lanes[laneId];
+      els.laneButtons.forEach((button) => button.classList.toggle("active", button.dataset.lane === laneId));
+      els.lanePanel.style.borderLeftColor = lane.color;
+      els.lanePanel.innerHTML = `<strong>${lane.title}</strong><p>${lane.body}</p>`;
+    }
+
+    buildVoteGrid();
+    renderTiming();
+    updateModel();
+    setStep(0);
+
+    els.stepButtons.forEach((button, index) => {
+      button.addEventListener("click", () => {
+        pausePlayback();
+        setStep(index);
+      });
+    });
+
+    els.laneButtons.forEach((button) => {
+      button.addEventListener("click", () => setLane(button.dataset.lane));
+    });
+
+    [els.snow, els.wind, els.slope].forEach((input) => {
+      input.addEventListener("input", () => {
+        pausePlayback();
+        updateModel();
+      });
+    });
+
+    els.timeline.addEventListener("input", () => {
+      pausePlayback();
+      setStep(Number(els.timeline.value));
+    });
+
+    els.playButton.addEventListener("click", togglePlay);
+  </script>
+</body>
+</html>

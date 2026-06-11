@@ -1,6 +1,6 @@
 # Deck 5 Final: Technology Glossary And Future Strategy
 
-Updated: May 9, 2026
+Updated: May 24, 2026
 
 ## Deck Design System
 
@@ -16,12 +16,13 @@ Updated: May 9, 2026
 
 **Background:** Deep Slate
 **Customer message:**
-This deck explains the terminology behind the MVP while keeping each term tied to its current status.
+This deck explains the terminology behind MVP V2 while keeping each term tied to its current status and claim boundary.
 
 **Current state and future strategy:**
 - Terms are grouped by platform layer and proof status
 - Current terms describe live or repo/admin verified behavior
 - Candidate terms describe gated implementation paths
+- Research-only terms describe Swiss RAvaFcast and Himalayan partner-evidence work
 - Future terms describe architecture direction, not completed product
 
 **Evidence level:** `Artifact/doc proof only`
@@ -104,7 +105,7 @@ The offline field-report path supports capture and replay, but field reliability
 
 **Background:** Light Paper
 **Customer message:**
-Forecast communication terms must remain bounded because the MVP is decision support, not an official warning authority.
+Forecast communication terms must remain bounded because the MVP is decision support, not a statutory warning service.
 
 **Current state and future strategy:**
 - `Forecast Bulletin`: structured danger, problem, uncertainty, and terrain summary
@@ -122,7 +123,7 @@ Forecast communication terms must remain bounded because the MVP is decision sup
 
 **Background:** Deep Slate
 **Customer message:**
-The live MVP is anchored on an explainable Random Forest baseline and rare-event-aware training discipline.
+The live MVP is anchored on an explainable Random Forest baseline and rare-event-aware training discipline. Swiss RF4 reproduction is a separate research lane.
 
 **Current state and future strategy:**
 - `Random Forest`: current active baseline model family
@@ -130,6 +131,7 @@ The live MVP is anchored on an explainable Random Forest baseline and rare-event
 - `Brier Score`: probability calibration metric
 - `PSS`: rare-event discrimination metric
 - `KMeansSMOTE` and `Recursive Feature Elimination`: training and feature-discipline concepts
+- `RF4 reproduction`: research-only Swiss danger-level signal, not paper parity and not Himalayan proof
 
 **Evidence level:** `Repo/admin verified`
 **Supporting sources:** [Current Architecture](../../source/Technical_Architecture_Current_Platform.md), [Benchmark Pack](../../source/Scientist_benchmark_pack_v0.md)
@@ -183,6 +185,7 @@ Remote sensing is important to the strategy, but SAR remains a candidate evidenc
 - `Sentinel-1`: SAR mission context
 - `U-Net`: segmentation model family for masks and pixel regions
 - Current status: shadow/candidate workflows and coverage caveats
+- Current boundary: shadow-gated, no SAR production claim
 - Future strategy: label coverage, revisit handling, shadow/layover review, and qualification artifacts
 
 **Evidence level:** `Repo/admin verified` plus `Artifact/doc proof only`
@@ -230,17 +233,19 @@ Terrain and runout terms should be framed as consequence-aware review and valida
 
 **Background:** Deep Slate
 **Customer message:**
-The customer-safe strategy is to preserve data lineage so synthetic or proof-mode data can be removed quickly without contaminating scientist validation.
+The customer-safe strategy is to preserve data lineage so synthetic, proof-mode, or partner-intake data cannot contaminate scientist validation.
 
 **Current state and future strategy:**
 - `Data Lineage`: records where a training or publication input came from
-- `Synthetic Inputs Present`: flag that must remain visible when synthetic support exists
-- Current active proof: non-synthetic full-grid technical publication
-- Future strategy: strict separation of technical proof, training augmentation, and customer-visible validation data
+- `source_ref`: SHA-256-qualified pointer from each partner evidence row to a reviewed source package
+- `partner_source_manifest`: partner-declared source owner, license, review, date range, and evidence-package reference
+- `triage_artifact_manifest`: generated inventory of output files, sizes, hashes, and purposes
+- Current active proof: non-synthetic full-grid technical publication; synthetic support remains visibly flagged where present
+- Future strategy: strict separation of technical proof, partner intake, training eligibility, and customer-visible validation data
 - Cleanup rule: isolate synthetic seeds, weights, manifests, and claims behind explicit lineage fields
 
 **Evidence level:** `Artifact/doc proof only` plus `Repo/admin verified`
-**Supporting sources:** [Proof Manifest](../06_Proof_Status_And_Screenshot_Manifest.md), [Claim Ledger](../../source/Scientist_claim_ledger.md)
+**Supporting sources:** [Proof Manifest](../06_Proof_Status_And_Screenshot_Manifest.md), [Claim Ledger](../../source/Scientist_claim_ledger.md), [Partner Schema Mapping](../../../EnviDat_to_Partner_Schema_Mapping.md)
 
 ---
 
@@ -248,17 +253,21 @@ The customer-safe strategy is to preserve data lineage so synthetic or proof-mod
 
 **Background:** Light Paper
 **Customer message:**
-Standards are part of the future architecture discussion, not current operational certification.
+Standards are part of the future architecture discussion, not current operational certification. MVP V2 adds evidence-governance vocabulary for partner data.
 
 **Current state and future strategy:**
 - `COG`: Cloud Optimized GeoTIFF for efficient future raster access
 - `OGC APIs`: future geospatial interoperability direction
 - `CAP`: Common Alerting Protocol for future alert integration discussions
-- Current state: not an official warning-service or standards-certified alerting system
+- `D_forecast`: raw or official forecast label that may contain human forecast noise
+- `D_tidy`: quality-controlled danger label backed by nowcast, observer, event, or reanalysis evidence
+- `GPxyz`: Gaussian-process interpolation using latitude, longitude, and elevation in the Swiss RAvaFcast setting
+- `Refined discretization`: expected-danger thresholding learned only from training or out-of-bag distributions
+- Current state: not a statutory warning-service or standards-certified alerting system
 - Future strategy: standards mapping after scientist and operator validation
 
 **Evidence level:** `Artifact/doc proof only`
-**Supporting sources:** [Technical Glossary](../../source/Technical_Glossary_And_Acronyms.md), [Future Core Model](../../source/Technical_Architecture_Future_Core_Model.md)
+**Supporting sources:** [Technical Glossary](../../source/Technical_Glossary_And_Acronyms.md), [Future Core Model](../../source/Technical_Architecture_Future_Core_Model.md), [Swiss Reproduction Lane](../../../MVP%20V2/Swiss_Reproduction_Lane.md)
 
 ---
 
@@ -273,6 +282,8 @@ The proof-bucket vocabulary is the control system for customer-safe technical di
 - `Repo/admin verified`: inspectable in source, artifacts, tests, or admin
 - `Artifact/doc proof only`: documented or proposed, not public proof
 - `Candidate/gated`: implemented path blocked from promotion until evidence passes
+- `Research-only`: Swiss RAvaFcast and Himalayan partner intake artifacts that must keep `production_scoring_allowed=false`
+- `Claims blocked`: `himalayan_accuracy_claim_allowed=false` until local evidence, holdout, scientist review, and release gates pass
 - Future strategy: move terms upward only when artifacts and scientist review support promotion
 
 **Evidence level:** `Artifact/doc proof only`

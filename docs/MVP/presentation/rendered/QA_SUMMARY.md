@@ -1,6 +1,6 @@
 # Deck QA Summary
 
-Updated: 2026-05-09
+Updated: 2026-05-28
 
 ## Outputs
 
@@ -19,6 +19,9 @@ Updated: 2026-05-09
 - Deck 5 — Technology Glossary: `avalanche-insight-hub-deck-5-technology-glossary.html` and `avalanche-insight-hub-deck-5-technology-glossary.pdf`
   - slide count: `15`
   - pdf pages: `15`
+- Deck 6 — ML Understanding: `avalanche-insight-hub-deck-6-ml-understanding.html` and `avalanche-insight-hub-deck-6-ml-understanding.pdf`
+  - slide count: `15`
+  - pdf pages: `15`
 
 ## Screenshot Inventory
 
@@ -31,6 +34,17 @@ Updated: 2026-05-09
 | `2026-05-07_hosted-public_share-workflow.png` | `Live platform` | D1-8 workflow state |
 | `2026-05-07_hosted-public_events-workflow.png` | `Live platform` | Optional alternate workflow crop if needed |
 | `2026-05-07_hosted-admin-gate.png` | `Live platform` | Fallback gate view if hosted-auth screenshots are unavailable |
+| `ua-structural-overview.png` | `Technical evidence` | D6 structural graph overview: 10 ML/backend layers |
+| `ua-domain-overview.png` | `Technical evidence` | D6 domain graph overview: domains, flows, and steps |
+| `ua-active-rf-layer.png` | `Technical evidence` | D6 active Random Forest forecast pipeline layer |
+| `ua-mts-lstm-layer.png` | `Technical evidence` | D6 MTS-LSTM candidate model layer |
+| `ua-sar-shadow-layer.png` | `Technical evidence` | D6 SAR shadow segmentation lane |
+| `ua-swiss-ravafcast-layer.png` | `Technical evidence` | D6 Swiss RAvaFcast research lane |
+| `ua-himalayan-evidence-layer.png` | `Technical evidence` | D6 Himalayan partner evidence contract lane |
+| `ua-evaluation-governance-layer.png` | `Technical evidence` | D6 evaluation, publication, and release governance layer |
+| `ua-modal-compute-layer.png` | `Technical evidence` | D6 Modal and remote compute orchestration layer |
+| `ua-tests-ci-layer.png` | `Technical evidence` | D6 tests and CI gates layer |
+| `ua-backend-support-layer.png` | `Technical evidence` | D6 backend support and shared infrastructure layer |
 
 ## Hosted Authenticated Admin Proof
 
@@ -61,6 +75,10 @@ Updated: 2026-05-09
 | Deck 5 — Technology Glossary | `1280x720` | pass | no overflow; navigation ok; proof chips visible |
 | Deck 5 — Technology Glossary | `768x1024` | pass | no overflow; navigation ok; proof chips visible |
 | Deck 5 — Technology Glossary | `390x844` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 6 — ML Understanding | `1920x1080` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 6 — ML Understanding | `1280x720` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 6 — ML Understanding | `768x1024` | pass | no overflow; navigation ok; proof chips visible |
+| Deck 6 — ML Understanding | `390x844` | pass | no overflow; navigation ok; proof chips visible |
 
 ## Fallback Decisions Used
 
@@ -72,5 +90,5 @@ Updated: 2026-05-09
 
 ## Manual QA Follow-Up
 
-- Open all five decks in Google Chrome at `http://127.0.0.1:4380/` and verify first, mid, and final slides with native keyboard navigation.
+- Open all six decks in Google Chrome at `http://127.0.0.1:4380/` and verify first, mid, and final slides with native keyboard navigation.
 - If meeting-day hosted auth fails in a later rerun, replace D1-9 authenticated imagery with the gate screenshot or a reconstructed evidence table.

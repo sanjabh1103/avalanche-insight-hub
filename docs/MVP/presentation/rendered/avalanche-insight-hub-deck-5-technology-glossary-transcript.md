@@ -4,7 +4,7 @@
 
 _Technical field guide_
 
-This deck explains the terminology behind the MVP while keeping each term tied to its current status.
+This deck explains the terminology behind MVP V2 while keeping each term tied to its current status and claim boundary.
 
 Evidence lanes: Research agenda
 
@@ -15,6 +15,8 @@ Current state and future strategy
 - Current terms describe live or repo/admin verified behavior
 
 - Candidate terms describe gated implementation paths
+
+- Research-only terms describe Swiss RAvaFcast and Himalayan partner-evidence work
 
 - Future terms describe architecture direction, not completed product
 
@@ -195,7 +197,7 @@ Scientist review decides which technical paths become stronger operational claim
 
 _Technical field guide_
 
-Forecast communication terms must remain bounded because the MVP is decision support, not an official warning authority.
+Forecast communication terms must remain bounded because the MVP is decision support, not a statutory warning service.
 
 Evidence lanes: Live platform; Research agenda
 
@@ -234,7 +236,7 @@ Scientist review decides which technical paths become stronger operational claim
 
 _Technical field guide_
 
-The live MVP is anchored on an explainable Random Forest baseline and rare-event-aware training discipline.
+The live MVP is anchored on an explainable Random Forest baseline and rare-event-aware training discipline. Swiss RF4 reproduction is a separate research lane.
 
 Evidence lanes: Technical evidence
 
@@ -249,6 +251,8 @@ Current state and future strategy
 - `PSS`: rare-event discrimination metric
 
 - `KMeansSMOTE` and `Recursive Feature Elimination`: training and feature-discipline concepts
+
+- `RF4 reproduction`: research-only Swiss danger-level signal, not paper parity and not Himalayan proof
 
 Evidence level:
 `Repo/admin verified`
@@ -365,6 +369,8 @@ Current state and future strategy
 
 - Current status: shadow/candidate workflows and coverage caveats
 
+- Current boundary: shadow-gated, no SAR production claim
+
 - Future strategy: label coverage, revisit handling, shadow/layover review, and qualification artifacts
 
 Evidence level:
@@ -468,7 +474,7 @@ Scientist review decides which technical paths become stronger operational claim
 
 _Technical field guide_
 
-The customer-safe strategy is to preserve data lineage so synthetic or proof-mode data can be removed quickly without contaminating scientist validation.
+The customer-safe strategy is to preserve data lineage so synthetic, proof-mode, or partner-intake data cannot contaminate scientist validation.
 
 Evidence lanes: Technical evidence; Research agenda
 
@@ -476,11 +482,15 @@ Current state and future strategy
 
 - `Data Lineage`: records where a training or publication input came from
 
-- `Synthetic Inputs Present`: flag that must remain visible when synthetic support exists
+- `source_ref`: SHA-256-qualified pointer from each partner evidence row to a reviewed source package
 
-- Current active proof: non-synthetic full-grid technical publication
+- `partner_source_manifest`: partner-declared source owner, license, review, date range, and evidence-package reference
 
-- Future strategy: strict separation of technical proof, training augmentation, and customer-visible validation data
+- `triage_artifact_manifest`: generated inventory of output files, sizes, hashes, and purposes
+
+- Current active proof: non-synthetic full-grid technical publication; synthetic support remains visibly flagged where present
+
+- Future strategy: strict separation of technical proof, partner intake, training eligibility, and customer-visible validation data
 
 - Cleanup rule: isolate synthetic seeds, weights, manifests, and claims behind explicit lineage fields
 
@@ -507,7 +517,7 @@ Scientist review decides which technical paths become stronger operational claim
 
 _Technical field guide_
 
-Standards are part of the future architecture discussion, not current operational certification.
+Standards are part of the future architecture discussion, not current operational certification. MVP V2 adds evidence-governance vocabulary for partner data.
 
 Evidence lanes: Research agenda
 
@@ -519,7 +529,15 @@ Current state and future strategy
 
 - `CAP`: Common Alerting Protocol for future alert integration discussions
 
-- Current state: not an official warning-service or standards-certified alerting system
+- `D_forecast`: raw or official forecast label that may contain human forecast noise
+
+- `D_tidy`: quality-controlled danger label backed by nowcast, observer, event, or reanalysis evidence
+
+- `GPxyz`: Gaussian-process interpolation using latitude, longitude, and elevation in the Swiss RAvaFcast setting
+
+- `Refined discretization`: expected-danger thresholding learned only from training or out-of-bag distributions
+
+- Current state: not a statutory warning-service or standards-certified alerting system
 
 - Future strategy: standards mapping after scientist and operator validation
 
@@ -559,6 +577,10 @@ Current state and future strategy
 - `Artifact/doc proof only`: documented or proposed, not public proof
 
 - `Candidate/gated`: implemented path blocked from promotion until evidence passes
+
+- `Research-only`: Swiss RAvaFcast and Himalayan partner intake artifacts that must keep `production_scoring_allowed=false`
+
+- `Claims blocked`: `himalayan_accuracy_claim_allowed=false` until local evidence, holdout, scientist review, and release gates pass
 
 - Future strategy: move terms upward only when artifacts and scientist review support promotion
 

@@ -32,6 +32,10 @@ __pycache__/
 *.py[cod]
 backend/artifacts/
 backend/data/models/
+backend/data/swiss_envidat/*
+!backend/data/swiss_envidat/.gitkeep
+backend/data/swiss_warning_regions/*
+!backend/data/swiss_warning_regions/.gitkeep
 
 # vite-plugin-pwa generated artifacts under dist/
 dev-dist/

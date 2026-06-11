@@ -54,7 +54,7 @@ async function waitForUserSession(): Promise<User | null> {
 export default function AdminAccessGate({ children }: { children: ReactNode }) {
   const [accessState, setAccessState] = useState<AdminAccessState>('loading');
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [email, setEmail] = useState('admin@insight-hub.local');
+  const [email, setEmail] = useState(import.meta.env.DEV ? 'admin@insight-hub.local' : '');
   const [password, setPassword] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);

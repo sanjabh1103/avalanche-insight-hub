@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import SnowpackProxyCard from '@/components/SnowpackProxyCard';
+import CellEvidenceDrawer from '@/components/CellEvidenceDrawer';
 import { supabase } from '@/integrations/supabase/client';
 import type { GridCell } from '@/lib/gridUtils';
 
@@ -28,6 +29,12 @@ interface Props {
   hourlyGrids: Array<GridCell[] | null> | null;
   selectedCell: GridCell | null;
   regionBbox: [number, number, number, number];
+  regionKey?: string | null;
+  regionName?: string | null;
+  forecastRunId?: string | null;
+  forecastGridId?: string | null;
+  forecastHour?: number | null;
+  modelMetadata?: Record<string, unknown> | null;
   onToggle3D: () => void;
 }
 
@@ -48,6 +55,7 @@ export default function ExpertModePanel({
   showInfra, onToggleInfra,
   showVectorPolygons, onToggleVectorPolygons,
   hourlyGrids, selectedCell, regionBbox,
+  regionKey, regionName, forecastRunId, forecastGridId, forecastHour, modelMetadata,
   onToggle3D,
 }: Props) {
   const [alertsDialogOpen, setAlertsDialogOpen] = useState(false);
@@ -125,6 +133,16 @@ export default function ExpertModePanel({
 
             {/* Story 20: Class-II snowpack proxy visibility */}
             <SnowpackProxyCard selectedCell={selectedCell} />
+
+            <CellEvidenceDrawer
+              selectedCell={selectedCell}
+              regionKey={regionKey}
+              regionName={regionName}
+              forecastRunId={forecastRunId}
+              forecastGridId={forecastGridId}
+              forecastHour={forecastHour}
+              modelMetadata={modelMetadata}
+            />
 
             {/* Hydrograph */}
             <Suspense fallback={<HydrographFallback />}>

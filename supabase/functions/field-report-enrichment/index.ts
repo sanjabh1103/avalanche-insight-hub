@@ -1,12 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { extractBearerToken } from "../_shared/auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-serve(async (req: Request) => {
+export async function handleFieldReportEnrichment(req: Request) {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -30,6 +31,54 @@ serve(async (req: Request) => {
       serviceRoleKey,
     );
 
+    // Load the field report to verify ownership
+    const { data: fieldReport, error: frErr } = await supabase
+      .from('field_reports')
+      .select('user_id')
+      .eq('id', fieldReportId)
+      .maybeSingle();
+
+    if (frErr || !fieldReport) {
+      return new Response(JSON.stringify({ error: 'Field report not found' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Ownership validation check
+    const requireJobAuth = Deno.env.get("REQUIRE_JOB_AUTH");
+    const enforceAuth = requireJobAuth !== "false" && requireJobAuth !== "0" && requireJobAuth !== "off" && requireJobAuth !== "no";
+
+    if (enforceAuth) {
+      const authHeader = req.headers.get("authorization");
+      const token = extractBearerToken(authHeader);
+
+      if (token) {
+        // Logged-in user
+        const { data: authData, error: authErr } = await supabase.auth.getUser(token);
+        if (authErr || !authData?.user) {
+          return new Response(JSON.stringify({ error: 'Invalid user session' }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        if (fieldReport.user_id !== authData.user.id) {
+          return new Response(JSON.stringify({ error: 'Access denied: report does not belong to user' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      } else {
+        // Anonymous submission
+        if (fieldReport.user_id !== null) {
+          return new Response(JSON.stringify({ error: 'Access denied: login required to enrich this report' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+    }
+
     const { data: job, error: jobErr } = await supabase
       .from('compute_jobs')
       .insert({
@@ -43,14 +92,13 @@ serve(async (req: Request) => {
     if (!job?.id) throw new Error('Failed to create compute_job row');
 
     const publicFunctionKey = Deno.env.get('SUPABASE_ANON_KEY') ?? serviceRoleKey;
+    const systemToken = Deno.env.get('JOB_DISPATCH_TOKEN') || serviceRoleKey;
 
     const ingestResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/ingest-event`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // The public wrapper owns the governance for the browser-facing path.
-        // The downstream ingest function validates field_report inputs against the
-        // persisted field_reports row, so this hop does not depend on caller JWTs.
+        Authorization: `Bearer ${systemToken}`,
         apikey: publicFunctionKey,
       },
       body: JSON.stringify({
@@ -146,4 +194,8 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-});
+}
+
+if (import.meta.main) {
+  serve(handleFieldReportEnrichment);
+}

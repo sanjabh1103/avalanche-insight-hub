@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { DEFAULT_BBOX } from '@/lib/constants';
+import ScientistValidationWorkbench from '@/components/ScientistValidationWorkbench';
 
 type JobType = 'daily_enrichment' | 'sentinel_refresh' | 'fine_tune' | 'static_precompute' | 'snow_cover_refresh' | 'recent_activity_refresh' | 'label_forecast_outcomes' | 'run_evaluation' | 'retrain_avalanche_model' | 'field_report_enrichment' | 'model_optimization';
 
@@ -509,6 +510,17 @@ export default function AdminDashboard() {
   const latestSourceHealth = asRecord(latestForecastMetadata?.source_health) as SourceHealthSummary | null;
   const latestDecisionProvenance = asRecord(latestForecastMetadata?.decision_provenance) as DecisionProvenanceSummary | null;
   const latestGovernanceScope = asRecord(latestForecastMetadata?.governance_scope);
+  const latestForecastSyntheticInputs = latestForecastMetadata?.synthetic_inputs_present === true
+    || Number(latestForecastMetadata?.synthetic_cell_count ?? 0) > 0;
+  const latestForecastHasRealLineage = latestForecastMetadata?.data_lineage === 'observed_or_derived_real'
+    && !latestForecastSyntheticInputs;
+  const activeScorerHasForecastEvidence = Boolean(
+    latestForecastMetadata?.pss_metrics
+    || latestForecastMetadata?.tree_shap_status
+    || latestForecastMetadata?.active_model_version
+    || modelStatus?.pss_reported
+    || modelStatus?.active_model_version,
+  );
   const capabilityMode = modelStatus?.capability_summary || modelStatus?.capabilities?.summary || 'Edge-only fallback';
   const activeModelLabel = modelStatus?.active_model_type || modelStatus?.feature_version || 'surrogate_rf_v1';
   const activeModelVersion = modelStatus?.active_model_version || modelStatus?.calibration_profile_version || 'n/a';
@@ -523,12 +535,61 @@ export default function AdminDashboard() {
       ? 'promotion passed'
       : 'promotion hold';
   const optimizationSummary = modelStatus?.optimization_summary;
+  const optimizationFallback = !optimizationSummary || optimizationSummary?.origin === 'hardcoded_fallback';
+  const showSyntheticBootstrapWarning = !latestForecastHasRealLineage
+    && (!activeScorerHasForecastEvidence || !modelStatus?.last_trained || modelStatus.version?.includes('-sim') || syntheticBootstrapSkipped);
+  const showOptimizationFallbackNote = !showSyntheticBootstrapWarning && optimizationFallback;
   const abcEnabled = optimizationSummary?.abc_enabled;
   const snowpackMetrics = modelStatus?.snowpack_metrics;
   const satelliteStats = modelStatus?.satellite_detection_stats;
   const evidenceSummary = modelStatus?.autonomous_evidence_summary;
   const stabilitySummary = modelStatus?.stability_summary;
   const latestBenchmarkSummary = modelStatus?.latest_benchmark_summary;
+  const latestRunoutMethodCounts = asRecord(latestForecastMetadata?.runout_method_counts);
+  const latestTreeShapStatus = typeof latestForecastMetadata?.tree_shap_status === 'string'
+    ? latestForecastMetadata.tree_shap_status
+    : typeof latestForecastMetadata?.explainability_mode === 'string'
+      ? latestForecastMetadata.explainability_mode
+      : 'unknown';
+  const latestRunoutMethodSample = typeof latestForecastMetadata?.runout_method_sample === 'string'
+    ? latestForecastMetadata.runout_method_sample
+    : Object.keys(latestRunoutMethodCounts ?? {})[0] ?? 'unknown';
+  const latestWhiteboxRunoutCount = Number(latestRunoutMethodCounts?.alpha_beta_whitebox ?? 0);
+  const latestWhiteboxRunoutCurrent = latestRunoutMethodSample === 'alpha_beta_whitebox' || latestWhiteboxRunoutCount > 0;
+  const scientistGateStatuses = useMemo(() => [
+    {
+      key: 'tree_shap',
+      label: 'TreeSHAP explanation',
+      status: latestTreeShapStatus === 'ready' || latestTreeShapStatus === 'tree_shap' ? 'current' as const : 'fallback' as const,
+      detail: latestTreeShapStatus === 'ready' || latestTreeShapStatus === 'tree_shap'
+        ? 'Current artifact reports TreeSHAP-ready explanations.'
+        : `Current artifact reports ${latestTreeShapStatus}; keep explanation proof gated.`,
+    },
+    {
+      key: 'whitebox_runout',
+      label: 'Whitebox runout',
+      status: latestWhiteboxRunoutCurrent ? 'current' as const : 'fallback' as const,
+      detail: latestWhiteboxRunoutCurrent
+        ? 'Current artifact includes Whitebox-backed Alpha-Beta runout output.'
+        : `Current artifact uses ${latestRunoutMethodSample}; Whitebox remains validation-gated.`,
+    },
+    {
+      key: 'sar_candidate',
+      label: 'SAR candidate',
+      status: evidenceSummary?.promoted_sar_volume?.sar_unet_promoted_count ? 'candidate' as const : 'gated' as const,
+      detail: evidenceSummary?.promoted_sar_volume?.sar_unet_promoted_count
+        ? 'SAR evidence exists for candidate review; promotion still needs release artifacts.'
+        : 'No promoted SAR volume is visible; keep SAR as gated candidate evidence.',
+    },
+    {
+      key: 'mts_lstm',
+      label: 'MTS-LSTM candidate',
+      status: modelStatus?.dynamic_model_candidate?.ready_for_activation ? 'candidate' as const : 'gated' as const,
+      detail: modelStatus?.dynamic_model_candidate?.ready_for_activation
+        ? 'Candidate reports ready_for_activation; require release review before public promotion.'
+        : `Candidate remains blocked by ${candidateGate}.`,
+    },
+  ], [candidateGate, evidenceSummary, latestRunoutMethodSample, latestTreeShapStatus, modelStatus]);
   const extractLocationName = (features: Record<string, unknown> | null) => (
     typeof features?.location_name === 'string' && features.location_name.trim().length > 0
       ? features.location_name.trim()
@@ -614,13 +675,15 @@ export default function AdminDashboard() {
               Dynamic scorer (candidate): {candidateModelLabel} • Gate: {candidateGate}
             </div>
             <div className="text-[10px] text-muted-foreground">
-              Authoritative SAR: artifact-gated • Whitebox runout: artifact-gated
+              Authoritative SAR: artifact-gated • Whitebox runout: {latestWhiteboxRunoutCurrent ? 'active artifact includes Alpha-Beta Whitebox output' : 'artifact-gated'}
             </div>
             <div className="text-[10px] text-muted-foreground">
               Current-state interpretation: governance evidence and benchmark traces for gated promotion review.
             </div>
           </CardContent>
       </Card>
+
+      <ScientistValidationWorkbench gateStatuses={scientistGateStatuses} />
 
       <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
         <CardHeader className="p-2 pb-1">
@@ -1124,7 +1187,7 @@ export default function AdminDashboard() {
                 Authoritative SAR: unavailable until an active held-out artifact exists
               </div>
               <div className="text-[10px] text-muted-foreground">
-                Whitebox runout: exploratory until `runout_physics_smoke.json` passes
+                Whitebox runout: {latestWhiteboxRunoutCurrent ? `active artifact includes Alpha-Beta Whitebox output (${latestWhiteboxRunoutCount || 1} method count)` : 'exploratory until `runout_physics_smoke.json` passes'}
               </div>
               <div className="text-[10px] text-muted-foreground">
                 Evidence volume: auto {evidenceSummary?.autonomous_positive_count ?? 0}/{evidenceSummary?.positive_count ?? 0} • manual {evidenceSummary?.manual_positive_count ?? 0} • promoted SAR {evidenceSummary?.promoted_sar_volume?.sar_unet_promoted_count ?? 0}
@@ -1167,13 +1230,21 @@ export default function AdminDashboard() {
               <div className="text-[10px] text-muted-foreground">
                 Operator/public split: admin observability stays richer than customer-facing products by design
               </div>
-              {(!modelStatus.last_trained || modelStatus.version?.includes('-sim') || syntheticBootstrapSkipped || !optimizationSummary || optimizationSummary?.origin === 'hardcoded_fallback') && (
+              {showSyntheticBootstrapWarning && (
                 <div className="mt-1.5 rounded-md bg-amber-500/10 border border-amber-500/30 px-2 py-1">
                   <span className="text-[10px] font-mono text-amber-300 uppercase tracking-wider">SYNTHETIC BOOTSTRAP</span>
                   <div className="text-[10px] text-amber-200/70 mt-0.5">
                     {syntheticBootstrapSkipped
                       ? 'Latest fine-tune was skipped, so the bootstrap model remains active.'
                       : 'Model was never trained. Run Model Optimization to replace with real weights.'}
+                  </div>
+                </div>
+              )}
+              {showOptimizationFallbackNote && (
+                <div className="mt-1.5 rounded-md bg-sky-500/10 border border-sky-500/30 px-2 py-1">
+                  <span className="text-[10px] font-mono text-sky-200 uppercase tracking-wider">Optimization Evidence Note</span>
+                  <div className="text-[10px] text-sky-100/70 mt-0.5">
+                    Optimization summary is unavailable or fallback-derived; active forecast proof is taken from the published run metadata and release gates.
                   </div>
                 </div>
               )}
