@@ -129,7 +129,7 @@ GPU acceleration showed the compute burden is real and belongs off the interacti
 
 2020
 
-HIM-STRAT reinforced that snowpack memory and stability indexing matter beyond simple snowfall totals.
+HIM-STRAT reinforced that snowpack memory and stability indexing matter beyond simple snowfall totals. In the current platform, these insights are delivered as a Weather-Driven Heuristic Proxy derived from cumulative weather variables — not a full thermodynamic stratigraphic simulation. Transition to a physical model (WSL/SLF SNOWPACK-class) is a future-phase target.
 
 2025
 

@@ -56,7 +56,7 @@ The platform builds around a long Himalayan avalanche research lineage rather th
 - 2008: artificial neural network lineage
 - 2015: calibration and weighting burden
 - 2017: GPU acceleration for expensive calibration
-- 2020: HIM-STRAT and snowpack memory
+- 2020: HIM-STRAT and snowpack memory (currently implemented as a Weather-Driven Heuristic Proxy; transition to thermodynamic physical modeling is a future-phase target)
 - 2025: feature selection and class-imbalance discipline
 
 **Evidence level:** `Artifact/doc proof only`

@@ -53,6 +53,65 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+// --- Prompt-injection guard for news-sourced descriptions ---
+// Detects patterns commonly used to hijack LLM extraction: role directives,
+// base64 payloads, HTML/script tags, excessive URL density, and oversized text.
+// Returns sanitized text plus a flag indicating whether sanitization fired.
+const INJECTION_PATTERNS = [
+  /\b(system|assistant|user)\s*:/gi,       // Role-injection directives
+  /\bignore\s+(previous|above|all)\b/gi,    // "Ignore previous instructions"
+  /\b(do\s+not|don'?t)\s+follow\b/gi,      // Counter-instruction patterns
+  /<\/?script\b/gi,                          // HTML script tags
+  /data:[a-z]+\/[a-z]+;base64,/gi,          // Base64 data URIs
+  /\{[^}]{0,20}(role|content|function)[^}]{0,20}\}/gi, // JSON role injection
+];
+const MAX_DESCRIPTION_LENGTH = 2000;
+const MAX_URL_DENSITY = 3;
+
+type SanitizeResult = {
+  text: string;
+  wasSanitized: boolean;
+  sanitizeReasons: string[];
+};
+
+function sanitizeNewsDescription(raw: string): SanitizeResult {
+  const reasons: string[] = [];
+  let text = raw;
+
+  // Length gate
+  if (text.length > MAX_DESCRIPTION_LENGTH) {
+    text = text.slice(0, MAX_DESCRIPTION_LENGTH) + ' [truncated]';
+    reasons.push('length_exceeded');
+  }
+
+  // Pattern scrubbing
+  for (const pattern of INJECTION_PATTERNS) {
+    if (pattern.test(text)) {
+      text = text.replace(pattern, '[redacted]');
+      reasons.push(`pattern_${pattern.source.slice(0, 20)}`);
+    }
+  }
+
+  // URL density check
+  const urlMatches = text.match(/https?:\/\/\S+/gi) || [];
+  if (urlMatches.length > MAX_URL_DENSITY) {
+    // Keep first MAX_URL_DENSITY URLs, redact the rest
+    let count = 0;
+    text = text.replace(/https?:\/\/\S+/gi, (match) => {
+      count++;
+      return count <= MAX_URL_DENSITY ? match : '[url-redacted]';
+    });
+    reasons.push('url_density_exceeded');
+  }
+
+  return {
+    text: text.trim(),
+    wasSanitized: reasons.length > 0,
+    sanitizeReasons: reasons,
+  };
+}
+// --- End prompt-injection guard ---
+
 function sourceWeightFor(source: string, fusionSource?: string): number {
   const weights: Record<string, number> = {
     field_report: 1.0,
@@ -480,12 +539,34 @@ export async function handleIngestEvent(req: Request) {
     }
 
     const topo = slopeAspectFromSamples(elevationSamples, lat);
-    const description = typeof governedFieldReport?.description === 'string' && governedFieldReport.description.trim().length > 0
+    let rawDescription = typeof governedFieldReport?.description === 'string' && governedFieldReport.description.trim().length > 0
       ? governedFieldReport.description.trim()
       : typeof payload.description === 'string' && payload.description.trim().length > 0
         ? payload.description.trim()
         : 'Observed avalanche-related event';
+
+    // Apply prompt-injection guard for news-sourced events
+    let descriptionSanitized = false;
+    let sanitizeReasons: string[] = [];
+    if (source === 'gemini_news' || source === 'newsdata_gemini') {
+      const sanitizeResult = sanitizeNewsDescription(rawDescription);
+      rawDescription = sanitizeResult.text;
+      descriptionSanitized = sanitizeResult.wasSanitized;
+      sanitizeReasons = sanitizeResult.sanitizeReasons;
+      if (descriptionSanitized) {
+        console.warn(`Prompt-injection guard fired for ${source} event: ${sanitizeReasons.join(', ')}`);
+      }
+    }
+    const description = rawDescription;
     const metadata = safeJson(payload.metadata);
+    // Merge sanitize audit into metadata for traceability
+    if (descriptionSanitized) {
+      (metadata as Record<string, unknown>).injection_guard = {
+        sanitized: true,
+        reasons: sanitizeReasons,
+        guarded_at: new Date().toISOString(),
+      };
+    }
     const hazardType = payload.hazard_type || 'avalanche';
     const eventType = payload.event_type || 'unknown';
     const severity = Number.isFinite(payload.severity as number) ? Number(payload.severity) : 3;
@@ -561,6 +642,7 @@ export async function handleIngestEvent(req: Request) {
         topo_resolution_m: topo.topoResolutionM,
         training_eligible: trainingEligible,
         training_eligible_reason: trainingEligibleReason,
+        verification_status: descriptionSanitized ? 'needs_review' : null,
         topo_profile: {
           ...topo.topoProfile,
           hazard_type: hazardType,

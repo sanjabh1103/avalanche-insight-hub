@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BookOpen, BrainCircuit, CheckCircle2, Download, FileCheck2, RefreshCw, ShieldAlert } from 'lucide-react';
+import { BookOpen, BrainCircuit, CheckCircle2, Download, FileCheck2, Flag, RefreshCw, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -95,6 +95,7 @@ export default function ScientistValidationWorkbench({ gateStatuses = [] }: Prop
   const [failureMode, setFailureMode] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [updatingActionId, setUpdatingActionId] = useState<string | null>(null);
+  const [escalationLog, setEscalationLog] = useState<Array<{ caseId: string; title: string; reason: string; escalatedAt: string }>>([]);
 
   const loadWorkbench = useCallback(async () => {
     setLoading(true);
@@ -381,6 +382,30 @@ export default function ScientistValidationWorkbench({ gateStatuses = [] }: Prop
                     }}>
                       Review
                     </Button>
+                    {(caseRow.disagreement_count ?? 0) > 0 && (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-7 rounded-xl px-2 text-[10px]"
+                        data-testid={`escalate-btn-${caseRow.id}`}
+                        onClick={() => {
+                          const reason = prompt('Escalation reason (required for SLA routing):');
+                          if (reason && reason.trim()) {
+                            const entry = {
+                              caseId: caseRow.id,
+                              title: caseRow.title,
+                              reason: reason.trim(),
+                              escalatedAt: new Date().toISOString(),
+                            };
+                            setEscalationLog((prev) => [entry, ...prev]);
+                            toast.success(`Case "${caseRow.title}" escalated to Senior Admin for SLA routing.`);
+                          }
+                        }}
+                      >
+                        <Flag className="mr-1 h-3 w-3" />
+                        Escalate
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -423,6 +448,25 @@ export default function ScientistValidationWorkbench({ gateStatuses = [] }: Prop
             </div>
           )}
         </div>
+
+        {escalationLog.length > 0 && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-2">
+            <div className="mb-1 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-red-300">
+              <Flag className="h-3 w-3" />
+              Escalation Log ({escalationLog.length})
+            </div>
+            <div className="space-y-1 max-h-32 overflow-y-auto">
+              {escalationLog.map((entry, idx) => (
+                <div key={`${entry.caseId}-${idx}`} className="rounded-md border border-red-500/20 bg-black/10 px-2 py-1 text-[10px]">
+                  <div className="font-mono text-red-200">{entry.title}</div>
+                  <div className="text-muted-foreground">
+                    Reason: {entry.reason} · {new Date(entry.escalatedAt).toLocaleString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </CardContent>
 
       <Dialog open={Boolean(selectedCase)} onOpenChange={(open) => {

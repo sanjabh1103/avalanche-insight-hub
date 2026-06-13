@@ -5,6 +5,7 @@ import ForecastSidebar from '@/components/ForecastSidebar';
 import ForecastTopControls from '@/components/ForecastTopControls';
 import ForecastActionControls from '@/components/ForecastActionControls';
 import { MapSurfaceFallback, ExpertPanelFallback, ModalFallback } from '@/components/ForecastFallbacks';
+import DataLatencyBanner from '@/components/DataLatencyBanner';
 import DisclaimerBanner from '@/components/DisclaimerBanner';
 import RiskLegend from '@/components/RiskLegend';
 import TimeSlider from '@/components/TimeSlider';
@@ -55,6 +56,14 @@ export default function Index() {
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-foreground">
       <DisclaimerBanner />
+      {state.hourlyGrids && (
+        <div className="px-4 py-1 z-50">
+          <DataLatencyBanner
+            lastForecastDate={state.activeForecastRow?.forecast_date ?? null}
+            publishedAt={(state.activeForecastRow as Record<string, unknown> | null)?.published_at as string | null}
+          />
+        </div>
+      )}
 
       <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top_left,_hsl(156_74%_45%_/_0.14),_transparent_30%),radial-gradient(circle_at_80%_0%,_hsl(199_90%_60%_/_0.09),_transparent_22%)]" />
 
