@@ -72,7 +72,7 @@ function classifyFreshness(ageHours: number): {
   if (ageHours <= 12) {
     return {
       label: 'Fresh — within same-day batch window',
-      tone: 'border-emerald-500/30 bg-emerald-500/8 text-emerald-300',
+      tone: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
       Icon: CheckCircle,
     };
   }

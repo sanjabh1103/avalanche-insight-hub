@@ -86,8 +86,9 @@ function sanitizeNewsDescription(raw: string): SanitizeResult {
 
   // Pattern scrubbing
   for (const pattern of INJECTION_PATTERNS) {
-    if (pattern.test(text)) {
-      text = text.replace(pattern, '[redacted]');
+    const nextText = text.replace(pattern, '[redacted]');
+    if (nextText !== text) {
+      text = nextText;
       reasons.push(`pattern_${pattern.source.slice(0, 20)}`);
     }
   }

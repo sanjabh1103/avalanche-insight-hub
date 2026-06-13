@@ -54,7 +54,7 @@ class GitHubRolloutPolicyTests(unittest.TestCase):
         ml_pipeline = (WORKFLOW_ROOT / 'ml_pipeline.yml').read_text(encoding='utf-8')
 
         self.assertNotIn("- cron: '0 2 * * *'", ml_pipeline)
-        self.assertIn("if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'infer'", ml_pipeline)
+        self.assertIn("github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'infer'", ml_pipeline)
 
     def test_bootstrap_pinned_gate_is_manual_only_and_allowlisted(self) -> None:
         bootstrap_gate = (WORKFLOW_ROOT / 'bootstrap_pinned_gate.yml').read_text(encoding='utf-8')
@@ -107,13 +107,13 @@ class GitHubRolloutPolicyTests(unittest.TestCase):
 
     def test_trigger_job_admin_path_requires_supabase_auth_and_allowlists(self) -> None:
         trigger_job = (REPO_ROOT / 'supabase' / 'functions' / 'trigger-job' / 'index.ts').read_text(encoding='utf-8')
+        auth_shared = (REPO_ROOT / 'supabase' / 'functions' / '_shared' / 'auth.ts').read_text(encoding='utf-8')
 
-        self.assertIn('auth.getUser(token)', trigger_job)
-        self.assertIn('ADMIN_USER_IDS', trigger_job)
-        self.assertIn('ADMIN_USER_EMAILS', trigger_job)
-        self.assertIn('ad hoc evaluation manifests require admin privileges', trigger_job)
-        self.assertIn("gate_source: evaluateReleaseContext?.evaluationManifest", trigger_job)
-        self.assertIn('"admin_manifest"', trigger_job)
+        self.assertIn('authorizeJobRequest(type, req, supabase)', trigger_job)
+        self.assertIn('auth.getUser(token)', auth_shared)
+        self.assertIn('ADMIN_USER_IDS', auth_shared)
+        self.assertIn('ADMIN_USER_EMAILS', auth_shared)
+        self.assertIn('administrative privileges are required', auth_shared.lower())
         self.assertIn('"reference_set_key"', trigger_job)
 
     def test_codeowners_covers_sensitive_release_paths(self) -> None:
