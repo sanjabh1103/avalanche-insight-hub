@@ -69,7 +69,7 @@ jobs:
         id: trigger
         env:
           # Security: Service role key from GitHub Secrets
-          SUPABASE_URL: https://fzheroisjhxnairglelv.supabase.co
+          SUPABASE_URL: https://cyjqvqwpdgluivjoxcfl.supabase.co
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           TRAINING_MODE: ${{ github.event.inputs.training_mode || 'incremental' }}
           DAYS_BACK: ${{ github.event.inputs.days_back || '30' }}
@@ -132,7 +132,7 @@ jobs:
       - name: Wait for Training Job Completion
         if: steps.trigger.outputs.job_id != ''
         env:
-          SUPABASE_URL: https://fzheroisjhxnairglelv.supabase.co
+          SUPABASE_URL: https://cyjqvqwpdgluivjoxcfl.supabase.co
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           JOB_ID: ${{ steps.trigger.outputs.job_id }}
         run: |
@@ -162,7 +162,7 @@ jobs:
           done
           
           echo "⏱️ Polling timeout - job still running. Check Supabase Dashboard for results."
-          echo "Dashboard: https://supabase.com/dashboard/project/fzheroisjhxnairglelv/database/jobs"
+          echo "Dashboard: https://supabase.com/dashboard/project/cyjqvqwpdgluivjoxcfl/database/jobs"
 
   # Job 2: Run evaluation on new model candidate
   run-evaluation:
@@ -180,7 +180,7 @@ jobs:
       - name: Run Model Evaluation
         id: evaluate
         env:
-          SUPABASE_URL: https://fzheroisjhxnairglelv.supabase.co
+          SUPABASE_URL: https://cyjqvqwpdgluivjoxcfl.supabase.co
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           EVAL_DAYS: ${{ github.event.inputs.evaluation_days || '14' }}
         run: |
@@ -254,4 +254,4 @@ jobs:
           echo "2. Check metrics against 4.5/5 accuracy targets" >> $GITHUB_STEP_SUMMARY
           echo "3. Promote candidate model if metrics improve" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Dashboard**: https://supabase.com/dashboard/project/fzheroisjhxnairglelv" >> $GITHUB_STEP_SUMMARY
+          echo "**Dashboard**: https://supabase.com/dashboard/project/cyjqvqwpdgluivjoxcfl" >> $GITHUB_STEP_SUMMARY

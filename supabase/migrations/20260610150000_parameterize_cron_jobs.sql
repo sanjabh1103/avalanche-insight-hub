@@ -17,7 +17,7 @@ BEGIN
   END IF;
   
   -- Fallback to the current production URL
-  RETURN 'https://fzheroisjhxnairglelv.supabase.co';
+  RETURN 'https://cyjqvqwpdgluivjoxcfl.supabase.co';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

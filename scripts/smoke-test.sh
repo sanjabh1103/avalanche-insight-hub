@@ -3,7 +3,7 @@ set -e
 
 ANON_KEY=$(grep "^SUPABASE_ANON_KEY=" .env | cut -d= -f2- | tr -d '"')
 SR_KEY=$(grep "^SUPABASE_SERVICE_ROLE_KEY=" .env | cut -d= -f2- | tr -d '"')
-URL="https://fzheroisjhxnairglelv.supabase.co/functions/v1"
+URL="https://cyjqvqwpdgluivjoxcfl.supabase.co/functions/v1"
 
 echo "=== 1. Netlify Frontend ==="
 curl -s -o /dev/null -w "HTTP %{http_code}\n" https://avalanche-insight-hub.netlify.app
