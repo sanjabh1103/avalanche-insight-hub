@@ -115,6 +115,7 @@ class NewsIngestTests(unittest.TestCase):
         self.assertEqual(payload['label_confidence'], 0.82)
         self.assertEqual(payload['source_model'], news_ingest.GEMINI_MODEL)
         self.assertEqual(payload['geometry_type'], 'point')
+        self.assertEqual(payload['event_type'], 'unknown')
 
 
 if __name__ == '__main__':

@@ -16,6 +16,7 @@ from backend.models.surrogate_rf import (
     compute_tree_shap,
     compute_tree_shap_batch,
     fit_surrogate_bundle,
+    physically_valid_surrogate_rows,
     try_smote,
 )
 
@@ -44,6 +45,49 @@ class TrySmoteTests(unittest.TestCase):
         self.assertEqual(meta['strategy'], 'class_weight_only')
         self.assertEqual(meta['k_neighbors_target'], 5)
 
+    def test_try_smote_filters_unphysical_synthetic_weather_rows(self) -> None:
+        x_train = pd.DataFrame({
+            'temperature_2m': [-6.0, -5.5, -7.0, -4.5, -8.0, -6.5, -3.0, -2.5, -4.0, -3.5, -5.0, -4.8],
+            'elevation_m': [3100.0, 3000.0, 3200.0, 3050.0, 3300.0, 3150.0, 2100.0, 2200.0, 2050.0, 2150.0, 2250.0, 2300.0],
+            'snowfall_24h': [0.2] * 12,
+            'precipitation_24h': [0.2] * 12,
+            'snow_settlement_index': [0.4] * 12,
+        })
+        y_train = pd.Series([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1])
+
+        class FakeSampler:
+            def __init__(self, **_kwargs: object) -> None:
+                pass
+
+            def fit_resample(self, _x: pd.DataFrame, _y: pd.Series) -> tuple[pd.DataFrame, pd.Series]:
+                synthetic = pd.DataFrame([
+                    {
+                        'temperature_2m': 11.0,
+                        'elevation_m': 3400.0,
+                        'snowfall_24h': 0.1,
+                        'precipitation_24h': 0.1,
+                        'snow_settlement_index': 0.4,
+                    },
+                    {
+                        'temperature_2m': -3.0,
+                        'elevation_m': 2800.0,
+                        'snowfall_24h': 0.2,
+                        'precipitation_24h': 0.2,
+                        'snow_settlement_index': 0.5,
+                    },
+                ])
+                return pd.concat([x_train, synthetic], ignore_index=True), pd.Series([*y_train.tolist(), 1, 1])
+
+        with patch('backend.models.surrogate_rf.KMeansSMOTE', FakeSampler):
+            x_res, y_res, meta = try_smote(x_train, y_train, seed=17)
+
+        self.assertEqual(meta['strategy'], 'kmeanssmote')
+        self.assertEqual(meta['synthetic_generated'], 2)
+        self.assertEqual(meta['synthetic_rejected_physical'], 1)
+        self.assertEqual(len(x_res), len(y_res))
+        self.assertEqual(len(x_res), len(x_train) + 1)
+        self.assertTrue(physically_valid_surrogate_rows(x_res).all())
+
 
 class SurrogateRfBundleTests(unittest.TestCase):
     def test_fit_surrogate_bundle_preserves_rf_policy_and_metadata(self) -> None:
@@ -71,7 +115,10 @@ class SurrogateRfBundleTests(unittest.TestCase):
             bundle['selector'].transform(_build_training_frame().iloc[[0]][FEATURE_COLUMNS].astype(float)),
             columns=bundle['selected_features'],
         )
-        explainer = build_tree_shap_explainer(bundle['base_model'])
+        try:
+            explainer = build_tree_shap_explainer(bundle['base_model'])
+        except TreeShapUnavailableError as exc:
+            self.skipTest(str(exc))
 
         shap_values, top_features = compute_tree_shap(explainer, selected_frame, bundle['selected_features'])
 
@@ -97,7 +144,10 @@ class SurrogateRfBundleTests(unittest.TestCase):
             bundle['selector'].transform(_build_training_frame().iloc[:3][FEATURE_COLUMNS].astype(float)),
             columns=bundle['selected_features'],
         )
-        explainer = build_tree_shap_explainer(bundle['base_model'])
+        try:
+            explainer = build_tree_shap_explainer(bundle['base_model'])
+        except TreeShapUnavailableError as exc:
+            self.skipTest(str(exc))
 
         packets = compute_tree_shap_batch(explainer, selected_frame, bundle['selected_features'])
 

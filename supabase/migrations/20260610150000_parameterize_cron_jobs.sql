@@ -33,22 +33,19 @@ BEGIN
     RETURN val;
   END IF;
 
-  -- 2. Fallback to service_role_key from Vault
+  -- 2. Fallback to the dedicated dispatch token from Vault.
+  -- Do not fall back to service_role or anon here: cron should have the
+  -- narrow job token, and missing configuration should fail closed.
   SELECT decrypted_secret INTO val
   FROM vault.decrypted_secrets
-  WHERE name = 'service_role_key' OR name = 'service_key'
+  WHERE name = 'job_dispatch_token'
   LIMIT 1;
+
   IF val IS NOT NULL AND val <> '' THEN
     RETURN val;
   END IF;
 
-  -- 3. Fallback to anon_key from Vault
-  SELECT decrypted_secret INTO val
-  FROM vault.decrypted_secrets
-  WHERE name = 'anon_key'
-  LIMIT 1;
-  
-  RETURN COALESCE(val, '');
+  RAISE EXCEPTION 'Missing job dispatch token. Set app.settings.job_dispatch_token or vault secret job_dispatch_token.';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -67,17 +64,13 @@ BEGIN
     RETURN val;
   END IF;
 
-  -- 2. Try to get service_role_key from Vault
-  SELECT decrypted_secret INTO val
-  FROM vault.decrypted_secrets
-  WHERE name = 'service_role_key' OR name = 'service_key'
-  LIMIT 1;
+  -- 2. Fallback to database setting.
+  val := current_setting('app.settings.supabase_anon_key', true);
   IF val IS NOT NULL AND val <> '' THEN
     RETURN val;
   END IF;
 
-  -- 3. Fallback to database setting
-  RETURN COALESCE(current_setting('app.settings.job_dispatch_token', true), '');
+  RAISE EXCEPTION 'Missing Supabase anon key. Set vault secret anon_key or app.settings.supabase_anon_key.';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -100,7 +93,7 @@ BEGIN
         'apikey', private.get_supabase_apikey()
       ),
       body := jsonb_build_object('type', 'daily_enrichment')
-    )$$$
+    )$$
   );
 
   -- 2. snow-cover-refresh-job
@@ -119,7 +112,7 @@ BEGIN
         'apikey', private.get_supabase_apikey()
       ),
       body := jsonb_build_object('type', 'snow_cover_refresh', 'hazard_type', 'avalanche')
-    )$$$
+    )$$
   );
 
   -- 3. recent-activity-refresh-job
@@ -138,7 +131,7 @@ BEGIN
         'apikey', private.get_supabase_apikey()
       ),
       body := jsonb_build_object('type', 'recent_activity_refresh', 'hazard_type', 'avalanche')
-    )$$$
+    )$$
   );
 
   -- 4. weekly-evaluation-job
@@ -157,7 +150,7 @@ BEGIN
         'apikey', private.get_supabase_apikey()
       ),
       body := jsonb_build_object('type', 'run_evaluation', 'hazard_type', 'avalanche')
-    )$$$
+    )$$
   );
 
   -- 5. forecast-grid-precompute-job
@@ -182,7 +175,26 @@ BEGIN
         'forecast_hours', 72,
         'grid_size', 20
       )
-    )$$$
+    )$$
+  );
+
+  -- 6. weekly-model-optimization-job
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'weekly-model-optimization-job') THEN
+    PERFORM cron.unschedule('weekly-model-optimization-job');
+  END IF;
+
+  PERFORM cron.schedule(
+    'weekly-model-optimization-job',
+    '0 2 * * 0',
+    $$SELECT net.http_post(
+      url := private.get_supabase_url() || '/functions/v1/trigger-job',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || private.get_job_dispatch_token(),
+        'apikey', private.get_supabase_apikey()
+      ),
+      body := jsonb_build_object('type', 'model_optimization', 'hazard_type', 'avalanche')
+    )$$
   );
 
 END $cron$;

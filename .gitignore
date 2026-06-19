@@ -28,6 +28,8 @@ dist-ssr
 .netlify
 
 # Python
+.venv/
+venv/
 __pycache__/
 *.py[cod]
 backend/artifacts/
@@ -58,3 +60,7 @@ backend/data/dem/raw/
 
 # Local Supabase CLI temp state
 supabase/.temp/
+
+# Local migration/recovery outputs
+scripts/migration_backup/
+scripts/migration_errors.log

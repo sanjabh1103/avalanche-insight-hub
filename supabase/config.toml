@@ -1,10 +1,10 @@
-project_id = "fzheroisjhxnairglelv"
+project_id = "cyjqvqwpdgluivjoxcfl"
 
 [functions.trigger-job]
 verify_jwt = false
 
 [functions.run-forecast]
-verify_jwt = false
+verify_jwt = true
 
 [functions.field-report-enrichment]
 verify_jwt = false
@@ -19,7 +19,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.recent-activity-refresh]
-verify_jwt = false
+verify_jwt = true
 
 [functions.run-evaluation]
 verify_jwt = false

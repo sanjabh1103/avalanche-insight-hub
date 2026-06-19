@@ -39,6 +39,7 @@ describe('Historical events layer helpers', () => {
       label_confidence: 0.82,
       description: 'Observed slab release above Khumbu Icefall',
       source: 'field_report',
+      fusion_source: 'field_report_enrichment',
       event_type: 'unknown',
       timestamp: '2026-05-02T04:30:00.000Z',
       verification_status: 'unverified',
@@ -52,8 +53,32 @@ describe('Historical events layer helpers', () => {
     expect(event?.confidence).toBe(0.82);
     expect(event?.location_name).toBe('Khumbu Icefall');
     expect(event?.source).toBe('field_report');
+    expect(event?.fusionSource).toBe('field_report_enrichment');
     expect(event?.description).toContain('Khumbu Icefall');
     expect(event?.verificationStatus).toBe('unverified');
+  });
+
+  it('falls back to features.fusion_source for historical display-only imports', () => {
+    const event = parseAvalancheEventRow({
+      id: 'hiaval-event-1',
+      location: 'SRID=4326;POINT(86.925 27.988)',
+      severity: 3,
+      confidence: 0.7,
+      label_confidence: 0.65,
+      description: 'HiAVAL inventory row',
+      source: 'historical_import',
+      event_type: 'unknown',
+      timestamp: '2025-01-01T12:00:00Z',
+      verification_status: 'verified',
+      features: {
+        fusion_source: 'hiaval_v1_3_0',
+        dataset: 'HiAVAL',
+      },
+    });
+
+    expect(event).not.toBeNull();
+    expect(event?.source).toBe('historical_import');
+    expect(event?.fusionSource).toBe('hiaval_v1_3_0');
   });
 
   it('maps governed field-report events to pending, corroborated, and verified marker semantics', () => {

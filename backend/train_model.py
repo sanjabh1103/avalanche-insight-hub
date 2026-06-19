@@ -46,6 +46,7 @@ from backend.models.surrogate_rf import fit_surrogate_bundle, peirce_skill_score
 # trained model artifact to be accepted. Set via env so CI can promote models
 # only after a cold-start warmup period.
 PSS_FLOOR = float(os.getenv('PSS_FLOOR', '0.45'))
+BRIER_SCORE_CEILING = float(os.getenv('BRIER_SCORE_CEILING', '0.15'))
 TIME_SERIES_SPLITS = int(os.getenv('TIME_SERIES_SPLITS', '5'))
 
 # Precheck: refuse to attempt training when the ground-truth corpus is too
@@ -410,11 +411,27 @@ def persist_phase2_evaluation_plane(
         return summary
 
 
-def publish_guard_reason(*, is_synthetic: bool, allow_publish: bool) -> str | None:
+def publish_guard_reason(
+    *,
+    is_synthetic: bool,
+    allow_publish: bool,
+    pss_reported: float | None = None,
+    brier_score: float | None = None,
+    pss_floor: float = PSS_FLOOR,
+    brier_ceiling: float = BRIER_SCORE_CEILING,
+) -> str | None:
     if is_synthetic:
         return 'synthetic_bootstrap_not_published'
     if not allow_publish:
         return 'shadow_only_remote_training'
+    if pss_reported is not None:
+        if pss_floor <= 0.0:
+            if pss_reported < pss_floor:
+                return 'pss_gate_failed'
+        elif pss_reported <= pss_floor:
+            return 'pss_gate_failed'
+    if brier_score is not None and brier_score > brier_ceiling:
+        return 'brier_score_gate_failed'
     return None
 
 
@@ -862,19 +879,26 @@ def main() -> int:
     # Cold-start allowance: when PSS_FLOOR is explicitly set to 0.0 we accept
     # pss == 0 so the first synthetic-data artifact can ship. At any positive
     # floor (prod default 0.45) we keep the strict > rule per PRD.
+    brier_score = bundle['metrics'].get('brier_score')
+    brier_gate_passed = bool(brier_score is None or float(brier_score) <= BRIER_SCORE_CEILING)
     if PSS_FLOOR <= 0.0:
-        gate_passed = pss_reported >= PSS_FLOOR
+        pss_gate_passed = pss_reported >= PSS_FLOOR
     else:
-        gate_passed = pss_reported > PSS_FLOOR
+        pss_gate_passed = pss_reported > PSS_FLOOR
+    gate_passed = bool(pss_gate_passed and brier_gate_passed)
     bundle['metrics']['pss_reported'] = pss_reported
-    bundle['metrics']['pss_gate_passed'] = gate_passed
+    bundle['metrics']['pss_gate_passed'] = pss_gate_passed
+    bundle['metrics']['brier_gate_passed'] = brier_gate_passed
+    bundle['metrics']['brier_score_ceiling'] = BRIER_SCORE_CEILING
 
     metadata_publish_started_at = perf_counter()
     metadata = publish_metadata(artifact_dir, bundle)
     stage_breakdown_seconds['artifact_publish_seconds'] = round(perf_counter() - metadata_publish_started_at, 3)
     metadata['pss_reported'] = pss_reported
-    metadata['pss_gate_passed'] = gate_passed
+    metadata['pss_gate_passed'] = pss_gate_passed
     metadata['pss_gate_floor'] = PSS_FLOOR
+    metadata['brier_gate_passed'] = brier_gate_passed
+    metadata['brier_score_ceiling'] = BRIER_SCORE_CEILING
     metadata['drift_stats'] = drift_stats
     phase2_started_at = perf_counter()
     phase2_summary = persist_phase2_evaluation_plane(
@@ -900,7 +924,8 @@ def main() -> int:
 
     if not gate_passed:
         print(
-            f"[train_model] PSS gate FAILED: reported={pss_reported:.3f} <= floor={PSS_FLOOR:.3f}. "
+            f"[train_model] model quality gate FAILED: pss={pss_reported:.3f} floor={PSS_FLOOR:.3f}; "
+            f"brier={brier_score} ceiling={BRIER_SCORE_CEILING:.3f}. "
             "Refusing to publish artifact to Supabase.",
             file=sys.stderr,
         )
@@ -985,6 +1010,8 @@ def main() -> int:
     publish_skip_reason = publish_guard_reason(
         is_synthetic=is_synthetic,
         allow_publish=ALLOW_MODEL_STATUS_PUBLISH,
+        pss_reported=pss_reported,
+        brier_score=float(brier_score) if brier_score is not None else None,
     )
     if publish_skip_reason is not None:
         metadata['publish_skipped'] = publish_skip_reason
@@ -999,7 +1026,7 @@ def main() -> int:
             file=sys.stderr,
         )
 
-    if has_supabase_credentials() and not is_synthetic and ALLOW_MODEL_STATUS_PUBLISH:
+    if has_supabase_credentials() and publish_skip_reason is None:
         truth_payload = build_model_status_truth(bundle, artifact_dir=artifact_dir)
         payload: dict[str, object] = {
             'version': f"async-{artifact_dir.name}",

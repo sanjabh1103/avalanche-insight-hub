@@ -86,6 +86,28 @@ class TrainModelPublishGuardTests(unittest.TestCase):
         reason = publish_guard_reason(is_synthetic=False, allow_publish=True)
         self.assertIsNone(reason)
 
+    def test_publish_guard_blocks_low_pss(self) -> None:
+        reason = publish_guard_reason(
+            is_synthetic=False,
+            allow_publish=True,
+            pss_reported=0.44,
+            brier_score=0.10,
+            pss_floor=0.45,
+            brier_ceiling=0.15,
+        )
+        self.assertEqual(reason, 'pss_gate_failed')
+
+    def test_publish_guard_blocks_poor_brier_calibration(self) -> None:
+        reason = publish_guard_reason(
+            is_synthetic=False,
+            allow_publish=True,
+            pss_reported=0.52,
+            brier_score=0.16,
+            pss_floor=0.45,
+            brier_ceiling=0.15,
+        )
+        self.assertEqual(reason, 'brier_score_gate_failed')
+
     def test_build_model_status_truth_keeps_rf_active_until_promotion_gate(self) -> None:
         truth = build_model_status_truth({
             'created_at': '2026-04-25T00:00:00+00:00',

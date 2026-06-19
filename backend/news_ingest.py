@@ -4,7 +4,7 @@ Pipeline (runs daily via GitHub Actions):
 
 1. Query newsdata.io for recent avalanche-related articles across a small
    multilingual keyword set.
-2. For each article, ask Gemini 2.0 Flash to extract a structured event record
+2. For each article, ask Gemini Flash to extract a structured event record
    (is_event, lat/lng, severity, event_date, confidence).
 3. Drop anything that is not a real avalanche OR does not fall inside one of
    our 8 configured regional bboxes.
@@ -14,8 +14,9 @@ Pipeline (runs daily via GitHub Actions):
    they go through the standard topo-snap + deposit-zone classifier pipeline.
 
 All credentials are read from environment. Missing any of ``NEWSDATA_API_KEY``,
-``GEMINI_API_KEY``, ``SUPABASE_URL``, ``SUPABASE_SERVICE_ROLE_KEY`` causes a
-clean ``exit 0`` (graceful skip) so the workflow job never fails the pipeline.
+``GEMINI_API_KEY``, ``SUPABASE_URL``/``VITE_SUPABASE_URL``, or
+``SUPABASE_SERVICE_ROLE_KEY`` causes a clean ``exit 0`` (graceful skip) so the
+workflow job never fails the pipeline.
 """
 from __future__ import annotations
 
@@ -31,14 +32,14 @@ import requests
 from backend.common.regions import Region, load_regions
 
 NEWSDATA_ENDPOINT = 'https://newsdata.io/api/1/latest'
-GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-flash-latest')
+GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')
 GEMINI_ENDPOINT = (
     f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent'
 )
 
 NEWSDATA_KEY = os.getenv('NEWSDATA_API_KEY')
 GEMINI_KEY = os.getenv('GEMINI_API_KEY')
-SUPABASE_URL = os.getenv('SUPABASE_URL', '').rstrip('/')
+SUPABASE_URL = (os.getenv('SUPABASE_URL') or os.getenv('VITE_SUPABASE_URL') or '').rstrip('/')
 SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
 
 NEWS_LOOKBACK_HOURS = int(os.getenv('NEWS_LOOKBACK_HOURS', '48'))
@@ -64,7 +65,7 @@ def _has_all_credentials() -> bool:
         name for name, value in (
             ('NEWSDATA_API_KEY', NEWSDATA_KEY),
             ('GEMINI_API_KEY', GEMINI_KEY),
-            ('SUPABASE_URL', SUPABASE_URL),
+            ('SUPABASE_URL/VITE_SUPABASE_URL', SUPABASE_URL),
             ('SUPABASE_SERVICE_ROLE_KEY', SUPABASE_SERVICE_ROLE_KEY),
         ) if not value
     ]
@@ -284,7 +285,7 @@ def post_ingest_event(article: dict[str, Any], record: dict[str, Any], region: R
         'description': record.get('summary') or article.get('title') or 'News-sourced avalanche event',
         'hazard_type': 'avalanche',
         'source': 'gemini_news',
-        'event_type': 'reported',
+        'event_type': 'unknown',
         'severity': int(record.get('severity') or 3),
         'confidence': float(record.get('confidence') or 0.6),
         'label_confidence': float(record.get('confidence') or 0.6),

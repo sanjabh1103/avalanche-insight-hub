@@ -20,7 +20,7 @@ class LabelGovernanceTests(unittest.TestCase):
             'timestamp': (now - timedelta(days=5)).isoformat(),
             'source': 'gemini_news',
             'fusion_source': 'newsdata_gemini',
-            'source_model': 'gemini-flash-latest',
+            'source_model': 'gemini-2.5-flash',
             'label_confidence': 0.8,
             'training_eligible': True,
             'metadata': {
