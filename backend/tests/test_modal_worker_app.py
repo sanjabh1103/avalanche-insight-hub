@@ -42,10 +42,27 @@ from backend.modal_worker_app import (
     submit_train_sar_unet_job_async,
     submit_train_mtslstm_job,
     submit_train_mtslstm_job_async,
+    create_fastapi_app,
 )
 
 
 class ModalWorkerAppTests(unittest.TestCase):
+    def test_health_route_reports_gpu_function_names(self) -> None:
+        app = create_fastapi_app()
+        routes = {route.path for route in app.routes}
+
+        self.assertIn('/health', routes)
+        health_route = next(route for route in app.routes if route.path == '/health')
+        body = asyncio.run(health_route.endpoint())
+
+        self.assertEqual(body['status'], 'ok')
+        self.assertEqual(body['runtime_provider'], 'modal')
+        self.assertIn('sar_segment_remote', body['gpu_functions'])
+        self.assertIn('train_sar_unet_remote', body['gpu_functions'])
+        self.assertIn('evaluate_sar_checkpoint_remote', body['gpu_functions'])
+        self.assertIn('train_mts_lstm_remote', body['gpu_functions'])
+        self.assertIn('/train-mtslstm', body['routes'])
+
     def test_modal_pinned_runtime_packages_match_requirements(self) -> None:
         self.assertEqual(
             MODAL_PINNED_RUNTIME_PACKAGES,

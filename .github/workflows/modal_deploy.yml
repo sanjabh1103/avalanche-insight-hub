@@ -66,4 +66,4 @@ jobs:
         run: |
           echo "::notice::Worker deployed as a single ASGI app."
           echo "::notice::Set MODAL_WORKER_URL to the base URL printed by Modal for the deployed ASGI worker app."
-          echo "::notice::Expected routes: /sar-segment, /train-sar-unet, /train-mtslstm, /infer-mtslstm, /evaluate-release"
+          echo "::notice::Expected routes: /health, /sar-segment, /train-sar-unet, /train-mtslstm, /infer-mtslstm, /evaluate-release"

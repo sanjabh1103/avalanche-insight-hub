@@ -709,6 +709,26 @@ def create_fastapi_app(volume_reload: Callable[[], None] | None = None, volume_c
 
     app = FastAPI(title='avalanche-modal-worker')
 
+    @app.get('/health')
+    async def health() -> dict[str, Any]:
+        return {
+            'status': 'ok',
+            'app': MODAL_APP_NAME,
+            'runtime_provider': 'modal',
+            'worker_api': 'asgi',
+            'gpu_functions': [
+                MODAL_REMOTE_SEGMENT_FUNCTION,
+                MODAL_REMOTE_TRAIN_SAR_FUNCTION,
+                MODAL_REMOTE_EVALUATE_SAR_CHECKPOINT_FUNCTION,
+                MODAL_REMOTE_TRAIN_FUNCTION,
+            ],
+            'cpu_dispatch_functions': [
+                MODAL_REMOTE_EVALUATE_RELEASE_FUNCTION,
+                MODAL_REMOTE_INFER_FUNCTION,
+            ],
+            'routes': sorted(_route_handlers().keys()),
+        }
+
     def _authorize_or_raise(authorization_header: str | None) -> None:
         try:
             authorize_bearer_request(authorization_header)
