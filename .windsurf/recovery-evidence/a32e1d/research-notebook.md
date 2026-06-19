@@ -153,3 +153,66 @@ Next action:
 - Prepare a PR/merge decision for the focused recovery commits.
 - Do not claim scheduled daily recovery on `main` until those workflow changes
   are present on `main`.
+
+## Checkpoint 2026-06-19T11:41:30Z
+
+Focus: GEE/SAR commit integration, live preview smoke, and hosted Supabase
+operational inventory.
+
+Evidence gathered:
+
+- User-provided GEE/SAR recovery commit `2ac53fe fix: resolve GEE Earth
+  Engine API block and commit reaudit improvements` was verified locally and
+  pushed to `feature/european-data-shadow-pipeline`.
+- Pre-push checks passed:
+  `bash scripts/secret_scan.sh`, Python `compileall` for `backend` and
+  `scripts`, and `git diff --check origin/feature/european-data-shadow-pipeline..HEAD`.
+- PR #1 remained mergeable at head
+  `2ac53fe596cd80baa31023c744bbbfd272afd7ae`.
+- PR checks passed on the pushed head:
+  Backend CI run `27823364490`, Frontend Trust Checks runs `27823364489` and
+  `27823362461`, and Netlify deploy preview.
+- Live demo readiness passed against new project `cyjqvqwpdgluivjoxcfl`:
+  public `forecast-products` bucket, 715 HiAVAL display-only rows, zero
+  synthetic display rows, active same-day Colorado/Himalayas forecast runs, and
+  strict `run-forecast` HTTP 200 with 72 hours for both regions.
+- Modal worker health check returned HTTP 200 with `ok=true`,
+  `runtime_provider=modal`, and no missing expected GPU functions/routes.
+- Browser smoke on the Netlify preview loaded `/`, `/admin`, `/scientist`, and
+  `/scientist/daily-verification` with HTTP 200 and no app console errors after
+  filtering the known Netlify deploy-preview access-control 428 noise.
+- Browser network calls used the new Supabase ref only; `run-forecast`,
+  `avalanche_events`, `model_status`, manifest, hour-000, and runout storage
+  requests returned HTTP 200.
+- Hosted Postgres inventory proved 6 active cron jobs, zero old-project cron
+  references, all cron commands using private URL/token helpers, helper URL
+  resolving to `https://cyjqvqwpdgluivjoxcfl.supabase.co`, and helper tokens
+  resolving without printing values.
+- Core tables exist with live rows: `forecast_runs`, `forecast_run_hours`,
+  `forecast_grids`, `model_status`, `avalanche_events`, and scientist
+  validation tables. `forecast-products` bucket is public. RLS is enabled on
+  forecast/event/scientist tables. `forecast_active_runs` is
+  `security_invoker=true`.
+
+Interpretation:
+
+- New-project demo recovery is materially stronger than the earlier branch
+  state: public forecast, events, Modal health, cron targeting, and preview
+  routing are all backed by current evidence.
+- The public forecast remains correctly framed as RF/batch publication.
+  Modal/GPU is proven as an online compute plane, not as a promoted public
+  SAR/MTS-LSTM forecast driver.
+
+Marginal value of more work:
+
+- Medium. The highest remaining value is merge/deploy coordination to get the
+  green PR onto `main`, followed by production Netlify smoke and optional
+  authenticated admin/scientist role smoke. Further code changes have lower
+  value unless new production smoke failures appear.
+
+Next action:
+
+- Ask for or receive approval before merging PR #1 to `main`, because that is
+  a production-affecting action.
+- After merge, verify production Netlify, scheduled workflows on `main`, and
+  authenticated admin/scientist access if demo credentials are available.
