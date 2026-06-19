@@ -42,7 +42,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
           pip install "fastapi[standard]>=0.115.0" "modal>=0.73.82" "PyYAML>=6.0.2" "pytest>=8.0.0"
-          pip uninstall -y coverage || true
+          pip install "coverage>=7.6.1"
 
       - name: Validate workflow YAML syntax
         run: |
