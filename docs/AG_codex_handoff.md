@@ -346,11 +346,12 @@ Observed results:
   `/health`, `/sar-segment`, `/train-sar-unet`, `/train-mtslstm`,
   `/infer-mtslstm`, and `/evaluate-release`. The worker declares T4 GPU
   functions for SAR segmentation, SAR U-Net training, SAR checkpoint
-  evaluation, and MTS-LSTM training. GitHub deployment run `25589982702`
-  succeeded on 2026-05-09, but live probes on 2026-06-18 and a `/health` probe
-  on 2026-06-19 return HTTP 404 because the Modal workspace is disabled. The
-  worker code path is restored; the live worker is not currently available and
-  is not part of the public forecast proof.
+  evaluation, and MTS-LSTM training. GitHub deployment run `27808891166`
+  redeployed the worker from `feature/european-data-shadow-pipeline` on
+  2026-06-19. A non-mutating `/health` probe returned HTTP 200 with all expected
+  routes and GPU function names present. The worker is online again, but no
+  SAR/MTS-LSTM GPU job was launched and the public forecast proof still rests on
+  the RF/batch forecast path.
 - Production browser login smoke passed for `/admin`, `/scientist`, and
   `/scientist/daily-verification` using the local demo accounts.
 - Edge `trigger-job` smoke rejected missing auth with HTTP 401 and accepted the
@@ -400,12 +401,10 @@ Observed results:
   across all 8 regions is not true until Cascades and Japanese Alps terrain
   gaps are resolved. Colorado Rockies and Himalayas Nepal pass the strict
   same-day demo readiness gate.
-- Modal/GPU code and CI route checks have been restored locally, including a
-  non-mutating `/health` route and `scripts/modal_worker_health_check.py`, but
-  the current configured Modal workspace still returns HTTP 404
-  `workspace ... is disabled`. Live GPU proof requires enabling the Modal
-  workspace or deploying the worker into an enabled Modal workspace/profile,
-  then rerunning the health check and the relevant dispatch workflow.
+- Modal/GPU worker availability has been restored at the ASGI health level:
+  `scripts/modal_worker_health_check.py` returns `ok=true` against the canonical
+  Modal worker URL. Scientific SAR/MTS-LSTM promotion is still gated; a health
+  check is not evidence that SAR or MTS-LSTM drives public scoring.
 - Residual Security Advisor warnings are `extension_in_public` for `pg_net` and
   disabled leaked-password protection. `pg_net` is `extrelocatable=false` and
   cron SQL calls `net.http_post`, so clearing it requires destructive

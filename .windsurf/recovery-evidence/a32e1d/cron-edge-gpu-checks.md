@@ -116,14 +116,35 @@ Observed:
 - Error text: `modal-http: workspace ... is disabled`
 - No authorization token was sent and no GPU/training job was launched.
 
+Redeploy and live health restoration on 2026-06-19:
+
+- Commit: `4763d71 fix: restore modal health and all-region recovery gates`
+- Workflow run:
+  `https://github.com/sanjabh1103/avalanche-insight-hub/actions/runs/27808891166`
+- Result: success
+- Canonical endpoint:
+  `https://sanjabh11--avalanche-modal-worker-worker-api.modal.run`
+- Health check:
+
+```bash
+MODAL_WORKER_URL='https://sanjabh11--avalanche-modal-worker-worker-api.modal.run' \
+.venv/bin/python scripts/modal_worker_health_check.py
+```
+
+Observed:
+
+- HTTP 200
+- `ok=true`
+- `missing_routes=[]`
+- `missing_gpu_functions=[]`
+- No authorization token was sent and no GPU/training job was launched.
+
 This proves the Modal worker ASGI app and expected candidate routes exist in the
-repo and were historically deployed successfully. It also proves the current
-live Modal workspace is disabled, so the worker is not presently available and
-there is no current GPU execution proof. The demo claim remains bounded:
+repo and are currently reachable through the public Modal endpoint. It does not
+prove a SAR/MTS-LSTM model is scientifically promoted or that GPU drives public
+forecast scoring. The demo claim remains bounded:
 
 Modal/GPU is implemented as an off-path candidate compute plane. It is not part of the current live public scorer proof.
 
-Do not claim the Modal worker is currently online. Do not claim SAR U-Net,
-MTS-LSTM, or GPU drives the public forecast unless the Modal workspace is
-restored, a fresh route/workflow health check passes, and a separate release
-gate is run.
+Do not claim SAR U-Net, MTS-LSTM, or GPU drives the public forecast unless the
+relevant dispatch workflow runs successfully and a separate release gate is run.

@@ -78,3 +78,39 @@ Next action:
 - Commit and push only the focused recovery/Modal/workflow files.
 - Dispatch `modal_deploy.yml` from the pushed ref.
 - Probe `/health`; do not launch SAR or MTS-LSTM GPU jobs until health passes.
+
+## Checkpoint 2026-06-19T06:14:20Z
+
+Focus: Modal redeploy and health restoration.
+
+Evidence gathered:
+
+- Focused commit pushed:
+  `4763d71 fix: restore modal health and all-region recovery gates` on
+  `feature/european-data-shadow-pipeline`.
+- Modal deploy workflow `27808891166` ran from that pushed ref and succeeded.
+- Deploy log printed canonical endpoint
+  `https://sanjabh11--avalanche-modal-worker-worker-api.modal.run`.
+- `scripts/modal_worker_health_check.py` against that endpoint returned
+  HTTP 200 and `ok=true`.
+- Health response reported no missing expected routes and no missing expected
+  GPU functions.
+
+Interpretation:
+
+- The live Modal ASGI worker is online again.
+- This is a GPU compute-plane readiness proof, not a SAR/MTS-LSTM scientific
+  promotion proof. No GPU training/inference job was launched during this
+  checkpoint.
+
+Marginal value of more work:
+
+- Medium. Next useful work is to wire/update runtime secrets if any consumer
+  still points at stale values, then run Supabase/forecast/demo gates. Launching
+  GPU jobs has lower marginal value until a specific SAR/MTS-LSTM demo action is
+  required and authorized.
+
+Next action:
+
+- Rerun the Supabase demo readiness gate.
+- Verify repository/workflow state after the pushed commit.
