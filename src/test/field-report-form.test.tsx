@@ -127,7 +127,7 @@ describe('FieldReportForm', () => {
 
     const queuedReport = submitQueuedFieldReport.mock.calls[0][0];
     expect(queuedReport.clientReportId).toMatch(/^field-/);
-    expect(queuedReport.observedAt).toBe('2026-05-02T04:30:00.000Z');
+    expect(queuedReport.observedAt).toBe(new Date('2026-05-02T10:00').toISOString());
     expect(queuedReport.locationName).toBe('Himalayas (Nepal)');
 
     expect(submitted).toHaveLength(2);
