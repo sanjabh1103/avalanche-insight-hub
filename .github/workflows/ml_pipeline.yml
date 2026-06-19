@@ -81,10 +81,6 @@ on:
         options:
           - 'false'
           - 'true'
-      evaluation_manifest_json:
-        description: 'Optional ad hoc JSON manifest for manual evaluate_release experiments. The official gate uses reference_set_key instead.'
-        required: false
-        default: ''
       reference_set_key:
         description: 'Authoritative SnowSlide held-out reference-set key for the official evaluate_release gate.'
         required: false
@@ -99,10 +95,6 @@ on:
         default: ''
       sar_candidate_model_version:
         description: 'Optional SAR candidate model version override for train_sar_unet.'
-        required: false
-        default: ''
-      sar_initial_checkpoint_path:
-        description: 'Optional local path inside the worker container for fine-tuning from an existing SAR checkpoint.'
         required: false
         default: ''
       sar_patch_size:
@@ -513,7 +505,7 @@ jobs:
           MODAL_WORKER_TOKEN: ${{ secrets.MODAL_WORKER_TOKEN }}
           SAR_TRAINING_MANIFEST_PATH: ${{ github.event.inputs.sar_training_manifest_path }}
           SAR_CANDIDATE_MODEL_VERSION: ${{ github.event.inputs.sar_candidate_model_version }}
-          SAR_INITIAL_CHECKPOINT_PATH: ${{ github.event.inputs.sar_initial_checkpoint_path }}
+          SAR_INITIAL_CHECKPOINT_PATH: ''
           SAR_PATCH_SIZE: ${{ github.event.inputs.sar_patch_size || '128' }}
           SAR_PATCH_STRIDE: ${{ github.event.inputs.sar_patch_stride || '64' }}
           SAR_EPOCHS: ${{ github.event.inputs.sar_epochs || '8' }}
