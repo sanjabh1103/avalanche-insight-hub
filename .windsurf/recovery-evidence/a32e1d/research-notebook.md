@@ -216,3 +216,70 @@ Next action:
   a production-affecting action.
 - After merge, verify production Netlify, scheduled workflows on `main`, and
   authenticated admin/scientist access if demo credentials are available.
+
+## Checkpoint 2026-06-19T12:36:00Z
+
+Focus: approved merge, production Netlify smoke, and scheduled workflow
+readiness on `main`.
+
+Evidence gathered:
+
+- PR #1 was merged to `main` with merge commit
+  `47cfbb34dcf1c973f7243a174cbb92e02ae3e59a`.
+- Main received two follow-up workflow hotfixes:
+  `7fd8440 fix: keep ml pipeline dispatch within input limit` and
+  `9cfdff6 fix: restore recovery model for scheduled inference`.
+- Netlify production deploy for commit
+  `9cfdff66621c68734e1330cff5115089cc16b162` is ready at
+  `https://avalanche-insight-hub.netlify.app`, published at
+  `2026-06-19T12:20:00.827Z`.
+- Production routes returned HTTP 200 for `/`, `/admin`, `/scientist`, and
+  `/scientist/daily-verification`.
+- Browser smoke on production loaded the app shell. Network calls used the new
+  Supabase project `cyjqvqwpdgluivjoxcfl`: `run-forecast`,
+  `avalanche_events`, `model_status`, forecast manifest, hour-000, and runout
+  storage requests all returned HTTP 200. No old project ref
+  `fzheroisjhxnairglelv` appeared in the production index HTML or browser
+  network logs.
+- The only browser console item was the known Netlify access-control 428 side
+  request, not an app or Supabase failure.
+- GitHub Actions manual infer proof run `27825296080` completed successfully on
+  `main` at `9cfdff6` in 6m38s.
+- The infer run restored `model.joblib`, `training_metrics.json`, and
+  `feature_schema.json` from the private Supabase `model-artifacts` bucket,
+  then skipped synthetic fallback and published same-day forecasts.
+- Publication proof passed for Colorado Rockies and Himalayas Nepal:
+  72 hours, 400/400 ready cells per region, same-day published, zero stale
+  cells, zero synthetic cells, and manifest paths under `forecast-products`.
+- Live `scripts/demo_readiness_check.py` passed against new project
+  `cyjqvqwpdgluivjoxcfl`: public `forecast-products`, 715 HiAVAL display-only
+  rows, zero synthetic display rows, active same-day forecast runs, and strict
+  `run-forecast` HTTP 200 for both proof regions.
+- Modal health initially timed out once, then passed on retry with HTTP 200,
+  `runtime_provider=modal`, and no missing expected routes or GPU functions.
+
+Interpretation:
+
+- The main production surface is now aligned with the migrated Supabase project
+  and the PR recovery gates.
+- Scheduled inference readiness is materially improved: the workflow no longer
+  depends on a same-run training artifact and no longer silently proceeds when
+  the new-project corpus has zero `training_eligible` severe events.
+- Scientific guardrails remain intact. The workflow restores a named vetted
+  recovery model artifact and otherwise requires real-data training; it does
+  not reintroduce a synthetic fallback model.
+
+Residual risks:
+
+- Full all-region scheduled inference was not rerun in this checkpoint; the
+  proof run used Colorado Rockies and Himalayas Nepal as the fast demo-primary
+  subset.
+- The `model-artifacts` restore bucket is a new private operational dependency
+  and should remain private with service-role-only workflow access.
+- Authenticated admin/scientist role checks were not repeated because no demo
+  credentials were supplied in this checkpoint.
+
+Next action:
+
+- Let the normal `0 6 * * *` UTC scheduled run exercise the all-region default,
+  or manually dispatch an all-region run during a wider verification window.
