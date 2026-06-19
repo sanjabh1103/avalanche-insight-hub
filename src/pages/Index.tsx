@@ -60,7 +60,8 @@ export default function Index() {
         <div className="px-4 py-1 z-50">
           <DataLatencyBanner
             lastForecastDate={state.activeForecastRow?.forecast_date ?? null}
-            publishedAt={(state.activeForecastRow as Record<string, unknown> | null)?.published_at as string | null}
+            publishedAt={state.activeForecastRow?.published_at ?? null}
+            freshnessHours={state.activeForecastRow?.freshness_hours ?? null}
           />
         </div>
       )}
