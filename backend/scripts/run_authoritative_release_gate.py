@@ -73,13 +73,14 @@ def resolve_local_model_path(raw_model_path: str, override: Path | None = None) 
         return override.expanduser().resolve()
 
     candidate = Path(raw_model_path).expanduser()
-    if candidate.exists():
-        return candidate.resolve()
 
     if candidate.is_absolute() and tuple(candidate.parts[:2]) == ('/', 'artifacts') and len(candidate.parts) >= 4:
         fallback = (repo_root() / 'backend' / 'data' / candidate.parts[2] / candidate.name).resolve()
         if fallback.exists():
             return fallback
+
+    if candidate.exists():
+        return candidate.resolve()
 
     return candidate
 

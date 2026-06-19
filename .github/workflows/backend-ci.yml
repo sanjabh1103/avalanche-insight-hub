@@ -41,7 +41,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
-          pip install "fastapi[standard]>=0.115.0" "modal>=0.73.82" "PyYAML>=6.0.2"
+          pip install "fastapi[standard]>=0.115.0" "modal>=0.73.82" "PyYAML>=6.0.2" "pytest>=8.0.0"
 
       - name: Validate workflow YAML syntax
         run: |
@@ -75,4 +75,5 @@ jobs:
       - name: Run backend unit and gate-lock tests
         env:
           PYTHONPATH: ${{ github.workspace }}
+          NUMBA_DISABLE_COVERAGE: '1'
         run: python -m unittest discover -s backend/tests -p 'test_*.py'
