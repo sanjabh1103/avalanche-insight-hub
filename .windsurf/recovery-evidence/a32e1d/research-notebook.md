@@ -114,3 +114,42 @@ Next action:
 
 - Rerun the Supabase demo readiness gate.
 - Verify repository/workflow state after the pushed commit.
+
+## Checkpoint 2026-06-19T06:36:30Z
+
+Focus: Backend CI stabilization after Modal/Supabase recovery commits.
+
+Evidence gathered:
+
+- Focused CI fix committed and pushed:
+  `0309d36 fix: pin ci coverage for numba shap` on
+  `feature/european-data-shadow-pipeline`.
+- Local workflow YAML parse passed for:
+  `.github/workflows/backend-ci.yml`, `.github/workflows/ml_pipeline.yml`, and
+  `.github/workflows/modal_deploy.yml`.
+- Local focused Python gate passed:
+  `NUMBA_DISABLE_COVERAGE=1 .venv/bin/python -m unittest backend.tests.test_surrogate_rf backend.tests.test_run_authoritative_release_gate`
+  with 15 tests run and 2 skipped.
+- GitHub Backend CI workflow run `27809709380` completed successfully against
+  head SHA `0309d36b43a6aabb9ddbb065cc1e246af09ff2b0`.
+- The successful run included dependency installation, workflow YAML syntax
+  validation, Modal app import smoke, and backend unit/gate-lock tests.
+
+Interpretation:
+
+- The previous GitHub runner failure was a dependency compatibility issue in
+  the SHAP/Numba/Coverage import path, not a recovery-code correctness failure.
+- Pinning a compatible `coverage>=7.6.1` in Backend CI resolves the GitHub
+  runner failure while preserving the existing `NUMBA_DISABLE_COVERAGE` guard.
+
+Marginal value of more work:
+
+- Medium. The branch-level automation gate is now clean, but scheduled
+  production workflows on `main` will not receive these recovery changes until
+  the branch is merged or cherry-picked.
+
+Next action:
+
+- Prepare a PR/merge decision for the focused recovery commits.
+- Do not claim scheduled daily recovery on `main` until those workflow changes
+  are present on `main`.
