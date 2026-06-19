@@ -7,7 +7,7 @@ declare module 'virtual:pwa-register' {
     onOfflineReady?: () => void;
     onNeedRefresh?: () => void;
     onRegistered?: (registration: ServiceWorkerRegistration | undefined) => void;
-    onRegisterError?: (error: any) => void;
+    onRegisterError?: (error: unknown) => void;
   }
   export function registerSW(options?: RegisterSWOptions): (reloadPage?: boolean) => Promise<void>;
 }

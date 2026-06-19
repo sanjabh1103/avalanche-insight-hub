@@ -370,8 +370,28 @@ export function isSyntheticDemoCase(caseRow: ScientistValidationCase): boolean {
   );
 }
 
+type SupabaseQueryResult = {
+  data: unknown;
+  error: {
+    message?: string;
+    code?: string;
+    status?: number;
+  } | null;
+};
+
+type SupabaseQuery = PromiseLike<SupabaseQueryResult> & {
+  select: (columns?: string) => SupabaseQuery;
+  order: (column: string, options?: Record<string, unknown>) => SupabaseQuery;
+  limit: (count: number) => SupabaseQuery;
+  in: (column: string, values: unknown[]) => SupabaseQuery;
+  eq: (column: string, value: unknown) => SupabaseQuery;
+  update: (payload: Record<string, unknown>) => SupabaseQuery;
+  insert: (payload: unknown) => SupabaseQuery;
+  single: () => Promise<SupabaseQueryResult>;
+};
+
 const db = supabase as unknown as {
-  from: (table: string) => any;
+  from: (table: string) => SupabaseQuery;
   auth: typeof supabase.auth;
 };
 
@@ -482,7 +502,7 @@ export async function fetchCellEvidenceLinks(params: {
   } else if (forecastGridId) {
     outcomesQuery = outcomesQuery.eq('forecast_grid_id', forecastGridId);
   }
-  let fieldReportsQuery = db
+  const fieldReportsQuery = db
     .from('field_reports')
     .select('*')
     .limit(5);

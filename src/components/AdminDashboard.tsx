@@ -589,7 +589,7 @@ export default function AdminDashboard() {
         ? 'Candidate reports ready_for_activation; require release review before public promotion.'
         : `Candidate remains blocked by ${candidateGate}.`,
     },
-  ], [candidateGate, evidenceSummary, latestRunoutMethodSample, latestTreeShapStatus, modelStatus]);
+  ], [candidateGate, evidenceSummary, latestRunoutMethodSample, latestTreeShapStatus, latestWhiteboxRunoutCurrent, modelStatus]);
   const extractLocationName = (features: Record<string, unknown> | null) => (
     typeof features?.location_name === 'string' && features.location_name.trim().length > 0
       ? features.location_name.trim()
