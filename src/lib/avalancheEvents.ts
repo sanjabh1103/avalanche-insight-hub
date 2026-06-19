@@ -10,6 +10,7 @@ export interface AvalancheEvent {
   labelConfidence?: number | null;
   description: string;
   source: string;
+  fusionSource?: string | null;
   event_type: string;
   timestamp: string;
   location_name?: string;
@@ -28,6 +29,7 @@ type AvalancheEventRow = Pick<
   | 'label_confidence'
   | 'description'
   | 'source'
+  | 'fusion_source'
   | 'event_type'
   | 'timestamp'
   | 'verification_status'
@@ -143,6 +145,9 @@ export function parseAvalancheEventRow(row: Partial<AvalancheEventRow> & Record<
     labelConfidence,
     description: String(row.description ?? ''),
     source: String(row.source ?? 'unknown'),
+    fusionSource: typeof row.fusion_source === 'string' && row.fusion_source.trim()
+      ? row.fusion_source.trim()
+      : extractFeatureString(features, 'fusion_source'),
     event_type: String(row.event_type ?? 'unknown'),
     timestamp: String(row.timestamp ?? ''),
     location_name: extractFeatureString(features, 'location_name') ?? '',

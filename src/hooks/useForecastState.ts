@@ -456,6 +456,9 @@ export function useForecastState() {
       },
       status: response.stale ? 'stale' : response.status,
       created_at: manifest.issueTime,
+      published_at: response.publishedAt ?? null,
+      freshness_hours: response.freshnessHours ?? null,
+      same_day_published: response.sameDayPublished ?? false,
     };
     return {
       row,
@@ -486,9 +489,15 @@ export function useForecastState() {
         .maybeSingle();
       if (error) throw error;
       if (data) {
+        const row = {
+          ...(data as ForecastGridRowRecord),
+          published_at: response.publishedAt ?? null,
+          freshness_hours: response.freshnessHours ?? null,
+          same_day_published: response.sameDayPublished ?? false,
+        } as ForecastGridRowRecord;
         return {
-          row: data as ForecastGridRowRecord,
-          grids: forecastGridRowToHourlyGrids(data as ForecastGridRowRecord),
+          row,
+          grids: forecastGridRowToHourlyGrids(row),
           source: response.source,
           notice: response.message ?? null,
           artifactHours: null,
@@ -530,7 +539,7 @@ export function useForecastState() {
     Promise.resolve(
       supabase
         .from('avalanche_events')
-        .select('id, location, severity, confidence, label_confidence, verification_status, description, source, event_type, timestamp, features')
+        .select('id, location, severity, confidence, label_confidence, verification_status, description, source, fusion_source, event_type, timestamp, features')
         .order('timestamp', { ascending: false })
         .limit(300)
     )
