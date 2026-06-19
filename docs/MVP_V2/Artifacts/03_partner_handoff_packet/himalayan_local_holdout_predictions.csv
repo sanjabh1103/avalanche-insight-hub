@@ -1,0 +1,1 @@
+holdout_id,valid_at,region_id,elevation_band,true_danger_level_1_to_4,predicted_danger_level_1_to_4,probability_level_1,probability_level_2,probability_level_3,probability_level_4

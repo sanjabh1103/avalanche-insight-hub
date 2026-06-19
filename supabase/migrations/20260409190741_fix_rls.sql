@@ -1,5 +1,5 @@
 -- IMMEDIATE RLS FIX - Run this in Supabase Dashboard SQL Editor
--- Project: fzheroisjhxnairglelv (or qnymbecjgeaoxsfphrti if different)
+-- Historical RLS repair migration; target the currently linked Supabase project.
 
 -- =====================================================
 -- FIX 1: Enable RLS on ALL tables (idempotent - safe to re-run)

@@ -4,7 +4,7 @@ import L from 'leaflet';
 import booleanIntersects from '@turf/boolean-intersects';
 import { lineString, point, polygon } from '@turf/helpers';
 import type { Feature, Polygon } from 'geojson';
-import { fetchOverpassJson } from '@/lib/overpassClient';
+import { fetchOverpassJson, OverpassDegraded } from '@/lib/overpassClient';
 
 interface Props {
   bbox: [number, number, number, number];
@@ -106,7 +106,7 @@ export default function ImpactOverlays({ bbox, showRoads, showInfrastructure, ru
           .then((result) => {
             if (cancelled) return;
             if (!result.ok) {
-              setStatusMessage(result.message);
+              setStatusMessage((result as OverpassDegraded).message);
               return;
             }
             const data = result.data;
@@ -151,7 +151,7 @@ export default function ImpactOverlays({ bbox, showRoads, showInfrastructure, ru
           .then((result) => {
             if (cancelled) return;
             if (!result.ok) {
-              setStatusMessage(result.message);
+              setStatusMessage((result as OverpassDegraded).message);
               return;
             }
             const data = result.data;

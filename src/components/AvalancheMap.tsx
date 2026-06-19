@@ -243,7 +243,7 @@ export default function AvalancheMap({
                   </div>
                   <div>{evt.description}</div>
                   <div className={isDark ? 'text-gray-400' : 'text-gray-600'}>
-                    Source: {evt.source} • Confidence: {(evt.confidence * 100).toFixed(0)}%
+                    Source: {evt.fusionSource || evt.source} • Confidence: {(evt.confidence * 100).toFixed(0)}%
                   </div>
                   <div className={isDark ? 'text-amber-300' : 'text-amber-700'}>
                     Status: {governanceLabel}

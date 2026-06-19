@@ -41,6 +41,10 @@ on:
         description: 'Forecast horizon hours'
         required: false
         default: '72'
+      region_keys:
+        description: 'Comma-separated region keys for inference publication proof. Defaults to all 8 configured public regions.'
+        required: false
+        default: 'colorado_rockies,swiss_alps,french_alps,himalayas_nepal,andes_patagonia,cascades_wa,scandinavia_norway,japanese_alps'
       snowpack_proxy_mode:
         description: 'Snowpack proxy mode for public inference publication. Synthetic is intentionally excluded from this workflow input.'
         required: false
@@ -69,6 +73,14 @@ on:
         description: 'Enable WhiteboxTools/rasterio Alpha-Beta runout physics (requires DEMs in backend/data/dem)'
         required: false
         default: 'false'
+      require_full_grid_publication:
+        description: 'Fail inference unless every requested region is full-grid-ready. Use true for demo-primary proof subsets, not broad all-region accumulation.'
+        required: false
+        type: choice
+        default: 'false'
+        options:
+          - 'false'
+          - 'true'
       evaluation_manifest_json:
         description: 'Optional ad hoc JSON manifest for manual evaluate_release experiments. The official gate uses reference_set_key instead.'
         required: false
@@ -117,6 +129,18 @@ on:
         description: 'SAR training loss name.'
         required: false
         default: 'focal_tversky'
+      gee_region_keys:
+        description: 'Comma-separated region keys for GEE extraction. Defaults to the Himalayan demo region.'
+        required: false
+        default: 'himalayas_nepal'
+      gee_dry_run:
+        description: 'Run GEE extraction without inserting rows.'
+        required: false
+        type: choice
+        default: 'false'
+        options:
+          - 'false'
+          - 'true'
 
 permissions:
   contents: read
@@ -190,17 +214,58 @@ jobs:
           path: backend/artifacts
         continue-on-error: true
 
+      - name: Train model if inference artifact is unavailable
+        env:
+          ARTIFACT_ROOT: backend/artifacts
+          SAMPLES_PER_REGION: ${{ github.event.inputs.samples_per_region || '500' }}
+          ML_SEED: '42'
+          PSS_FLOOR: ${{ github.event.inputs.pss_floor || '0.45' }}
+          MIN_EVENTS_FOR_TRAINING: '10'
+          PYTHONPATH: ${{ github.workspace }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -d backend/artifacts ] && find backend/artifacts -name model.joblib -print -quit | grep -q .; then
+            echo "Existing model.joblib found; skipping fallback training."
+            exit 0
+          fi
+          mkdir -p backend/artifacts
+          echo "No model.joblib restored for inference; training a fresh real-data model."
+          python -m backend.train_model
+
       - name: Run daily inference
         env:
           ARTIFACT_ROOT: backend/artifacts
           FORECAST_HOURS: ${{ github.event.inputs.forecast_hours || '72' }}
+          REGION_KEYS: ${{ github.event.inputs.region_keys || 'colorado_rockies,swiss_alps,french_alps,himalayas_nepal,andes_patagonia,cascades_wa,scandinavia_norway,japanese_alps' }}
           GRID_SIZE: '20'
           SNOWPACK_PROXY_MODE: ${{ github.event.inputs.snowpack_proxy_mode || 'regional' }}
           RUN_PHYSICS_RUNOUT: ${{ github.event.inputs.run_physics_runout || 'false' }}
+          REQUIRE_FULL_GRID_PUBLICATION: ${{ github.event.inputs.require_full_grid_publication || 'false' }}
           PYTHONPATH: ${{ github.workspace }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python -m backend.daily_inference --forecast-hours "${FORECAST_HOURS}" --snowpack-proxy-mode "${SNOWPACK_PROXY_MODE}" --require-full-grid-publication
+        run: |
+          set -euo pipefail
+          region_args=()
+          IFS=',' read -ra requested_regions <<< "${REGION_KEYS}"
+          for region_key in "${requested_regions[@]}"; do
+            region_key="$(echo "${region_key}" | xargs)"
+            if [ -n "${region_key}" ]; then
+              region_args+=(--region-key "${region_key}")
+            fi
+          done
+          proof_args=(--require-same-day-publication)
+          if [ "${REQUIRE_FULL_GRID_PUBLICATION}" = "true" ]; then
+            proof_args+=(--require-full-grid-publication)
+          fi
+          python -m backend.daily_inference \
+            --forecast-hours "${FORECAST_HOURS}" \
+            --snowpack-proxy-mode "${SNOWPACK_PROXY_MODE}" \
+            "${proof_args[@]}" \
+            --emit-stage-metrics \
+            "${region_args[@]}"
 
       # P0.2: Surface the inference manifest as a step output so failures show
       # the last-known-good state inline in the GitHub UI.
@@ -295,13 +360,15 @@ jobs:
           GEE_SERVICE_ACCOUNT_JSON: ${{ secrets.GEE_SERVICE_ACCOUNT_JSON }}
           GEE_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GEE_SERVICE_ACCOUNT_EMAIL }}
           GEE_LOOKBACK_DAYS: '7'
+          GEE_REGION_KEYS: ${{ github.event.inputs.gee_region_keys || 'himalayas_nepal' }}
+          GEE_DRY_RUN: ${{ github.event.inputs.gee_dry_run || 'false' }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python -m backend.gee_extractor
 
   news:
     # Daily Gemini-assisted news ingest. Queries newsdata.io for avalanche
-    # articles, extracts structured events via Gemini 2.0 Flash, and POSTs
+    # articles, extracts structured events via Gemini Flash, and POSTs
     # qualifying events through the ingest-event edge function (so they go
     # through the standard topo-snap + deposit-zone pipeline). Skips cleanly
     # (exit 0) when NEWSDATA_API_KEY or GEMINI_API_KEY secrets are absent.

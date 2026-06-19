@@ -78,6 +78,7 @@ from backend.models.surrogate_rf import (
     build_tree_shap_explainer,
     collect_tree_probabilities,
     compute_tree_shap,
+    compute_tree_shap_batch,
 )
 
 
@@ -312,6 +313,11 @@ def build_publication_proof(
             and structured_bulletin
             and bool(lineage.get('publish_eligible'))
         )
+        full_grid_compute_ready = bool(
+            full_grid_ready
+            and structured_bulletin
+            and bool(lineage.get('publish_eligible'))
+        )
         regions.append({
             'forecast_run_id': forecast_run_id,
             'forecast_date': forecast_date,
@@ -333,6 +339,7 @@ def build_publication_proof(
             'max_hourly_stale_cell_count': max_hourly_stale_cell_count,
             'full_grid_cells_present': full_grid_cells_present,
             'full_grid_ready': full_grid_ready,
+            'full_grid_compute_ready': full_grid_compute_ready,
             'full_grid_publication_ready': full_grid_publication_ready,
             'data_lineage': lineage.get('data_lineage'),
             'publish_eligible': lineage.get('publish_eligible'),
@@ -363,6 +370,9 @@ def build_publication_proof(
     full_grid_publication_ready_count = sum(
         1 for region in regions if region.get('full_grid_publication_ready')
     )
+    full_grid_compute_ready_count = sum(
+        1 for region in regions if region.get('full_grid_compute_ready')
+    )
     failures = [
         str(region.get('region_key') or region.get('region_name') or 'unknown')
         for region in regions
@@ -380,7 +390,9 @@ def build_publication_proof(
         'supabase_enabled': supabase_enabled,
         'region_count': len(regions),
         'same_day_published_count': same_day_published_count,
+        'full_grid_compute_ready_count': full_grid_compute_ready_count,
         'full_grid_publication_ready_count': full_grid_publication_ready_count,
+        'compute_proof_status': 'passed' if regions and full_grid_compute_ready_count == len(regions) else 'failed',
         'proof_status': 'passed' if not failures and regions else 'failed',
         'failures': failures,
         'regions': regions,
@@ -996,6 +1008,14 @@ def _build_rows_for_timestamp(
     )
     probability_matrix = np.asarray(collect_tree_probabilities(base_model, selected_frame_all))
     rf_probabilities = np.asarray(calibrated_model.predict_proba(selected_frame_all)[:, 1], dtype=float)
+    tree_shap_packets: list[tuple[dict[str, float], list[dict[str, float | str | int]]]] = []
+    if not proof_options.skip_tree_shap and explainer is not None:
+        try:
+            tree_shap_packets = compute_tree_shap_batch(explainer, selected_frame_all, selected_features)
+        except Exception:
+            # Preserve the existing single-row TreeSHAP fallback for mocked
+            # explainers and runtimes where batch SHAP fails unexpectedly.
+            tree_shap_packets = []
 
     for ready_index, ready_item in enumerate(ready_items):
         cell = ready_item['cell']
@@ -1088,7 +1108,10 @@ def _build_rows_for_timestamp(
                 else None
             )
         else:
-            shap_values, shap_context = compute_tree_shap(explainer, selected_frame, selected_features)
+            if ready_index < len(tree_shap_packets):
+                shap_values, shap_context = tree_shap_packets[ready_index]
+            else:
+                shap_values, shap_context = compute_tree_shap(explainer, selected_frame, selected_features)
             dominant_driver = shap_context[0]['feature'] if shap_context else None
             explainability_mode = 'tree_shap'
             explainability_reason = None
@@ -1294,6 +1317,35 @@ def build_hourly_grids(
                 proof_options=proof_options,
             )
         )
+        if stage_metrics is not None:
+            stage_metrics['hourly_grid_progress'] = {
+                'completed_hours': hour_offset + 1,
+                'total_hours': effective_horizon_hours,
+                'latest_hour_offset': hour_offset,
+                'updated_at': datetime.now(timezone.utc).isoformat(),
+            }
+            if artifact_dir is not None:
+                dump_json(
+                    artifact_dir / f'{region.key}_hourly_progress.json',
+                    {
+                        'region_key': region.key,
+                        'completed_hours': hour_offset + 1,
+                        'total_hours': effective_horizon_hours,
+                        'latest_hour_offset': hour_offset,
+                        'updated_at': stage_metrics['hourly_grid_progress']['updated_at'],
+                    },
+                )
+            if hour_offset == 0 or (hour_offset + 1) % 6 == 0 or (hour_offset + 1) == effective_horizon_hours:
+                print(
+                    json.dumps({
+                        'stage': 'hourly_grid_progress',
+                        'region_key': region.key,
+                        'completed_hours': hour_offset + 1,
+                        'total_hours': effective_horizon_hours,
+                    }),
+                    file=sys.stderr,
+                    flush=True,
+                )
     return hourly_grids
 
 
@@ -2195,7 +2247,14 @@ def main(argv: list[str] | None = None) -> int:
         require_full_grid=bool(args.require_full_grid_publication),
     )
     dump_json(artifact_dir / 'publication_proof.json', publication_proof)
-    if (args.require_same_day_publication or args.require_full_grid_publication) and publication_proof.get('proof_status') != 'passed':
+    required_proof_status = publication_proof.get('proof_status')
+    if (
+        bool(args.dry_run)
+        and args.require_full_grid_publication
+        and not args.require_same_day_publication
+    ):
+        required_proof_status = publication_proof.get('compute_proof_status')
+    if (args.require_same_day_publication or args.require_full_grid_publication) and required_proof_status != 'passed':
         failures = publication_proof.get('failures')
         raise RuntimeError(
             'publication proof failed for region(s): '

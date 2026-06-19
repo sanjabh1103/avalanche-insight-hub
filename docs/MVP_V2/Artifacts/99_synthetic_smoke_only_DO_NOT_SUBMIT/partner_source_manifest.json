@@ -1,0 +1,126 @@
+{
+  "schema_version": "himalayan_accuracy_partner_source_manifest_v1",
+  "sources": [
+    {
+      "dataset_name": "Synthetic validation source for station_metadata",
+      "date_range": "2026-02-22/2026-05-22",
+      "evidence_package_ref": "sha256:84a4f13d1efa7d5767f30ec50baae79590944438cc935b9e5cdc825b0f0cbddf",
+      "license_scope": "internal_research_validation",
+      "review_status": "reviewed",
+      "reviewed_at": "2026-05-16T13:13:35.688901+00:00",
+      "reviewer_id": "synthetic_validation_fixture_reviewer",
+      "sha256": "84a4f13d1efa7d5767f30ec50baae79590944438cc935b9e5cdc825b0f0cbddf",
+      "source_id": "synthetic_station_metadata",
+      "source_owner": "Synthetic validation fixture generator"
+    },
+    {
+      "dataset_name": "Synthetic validation source for weather_station_observations",
+      "date_range": "2026-02-22/2026-05-22",
+      "evidence_package_ref": "sha256:d6861633743d1d9ad7ac2d3cd4c52ab2549dcacdae0d4d61c00c774856ba452b",
+      "license_scope": "internal_research_validation",
+      "review_status": "reviewed",
+      "reviewed_at": "2026-05-16T13:13:35.688901+00:00",
+      "reviewer_id": "synthetic_validation_fixture_reviewer",
+      "sha256": "d6861633743d1d9ad7ac2d3cd4c52ab2549dcacdae0d4d61c00c774856ba452b",
+      "source_id": "synthetic_weather_station_observations",
+      "source_owner": "Synthetic validation fixture generator"
+    },
+    {
+      "dataset_name": "Synthetic validation source for snowpack_profile_features",
+      "date_range": "2026-02-22/2026-05-22",
+      "evidence_package_ref": "sha256:3e9d85aa611c0c42944c8e57bea206101e32fe016fb1e66f889f5ca936e21edc",
+      "license_scope": "internal_research_validation",
+      "review_status": "reviewed",
+      "reviewed_at": "2026-05-16T13:13:35.688901+00:00",
+      "reviewer_id": "synthetic_validation_fixture_reviewer",
+      "sha256": "3e9d85aa611c0c42944c8e57bea206101e32fe016fb1e66f889f5ca936e21edc",
+      "source_id": "synthetic_snowpack_profile_features",
+      "source_owner": "Synthetic validation fixture generator"
+    },
+    {
+      "dataset_name": "Synthetic validation source for danger_labels_and_bulletins",
+      "date_range": "2026-02-22/2026-05-22",
+      "evidence_package_ref": "sha256:3c1de6c55c1799fd4cee12dd65104925f42ba6a52832d1a9ac979f49f873b820",
+      "license_scope": "internal_research_validation",
+      "review_status": "reviewed",
+      "reviewed_at": "2026-05-16T13:13:35.688901+00:00",
+      "reviewer_id": "synthetic_validation_fixture_reviewer",
+      "sha256": "3c1de6c55c1799fd4cee12dd65104925f42ba6a52832d1a9ac979f49f873b820",
+      "source_id": "synthetic_danger_labels_and_bulletins",
+      "source_owner": "Synthetic validation fixture generator"
+    },
+    {
+      "dataset_name": "Synthetic validation source for warning_region_polygons",
+      "date_range": "2026-02-22/2026-05-22",
+      "evidence_package_ref": "sha256:3f431644e603daaf55f44fdfe7e1b89ae1b464f50bf5999e1a7cda7911ee182b",
+      "license_scope": "internal_research_validation",
+      "review_status": "reviewed",
+      "reviewed_at": "2026-05-16T13:13:35.688901+00:00",
+      "reviewer_id": "synthetic_validation_fixture_reviewer",
+      "sha256": "3f431644e603daaf55f44fdfe7e1b89ae1b464f50bf5999e1a7cda7911ee182b",
+      "source_id": "synthetic_warning_region_polygons",
+      "source_owner": "Synthetic validation fixture generator"
+    },
+    {
+      "dataset_name": "Synthetic validation source for historical_avalanche_events",
+      "date_range": "2026-02-22/2026-05-22",
+      "evidence_package_ref": "sha256:1be7e50b6663c298dd36a5d49b067992e946f603a76fe5a5116eb0b3c800be84",
+      "license_scope": "internal_research_validation",
+      "review_status": "reviewed",
+      "reviewed_at": "2026-05-16T13:13:35.688901+00:00",
+      "reviewer_id": "synthetic_validation_fixture_reviewer",
+      "sha256": "1be7e50b6663c298dd36a5d49b067992e946f603a76fe5a5116eb0b3c800be84",
+      "source_id": "synthetic_historical_avalanche_events",
+      "source_owner": "Synthetic validation fixture generator"
+    },
+    {
+      "dataset_name": "Synthetic validation source for remote_sensing_validation_scenes",
+      "date_range": "2026-02-22/2026-05-22",
+      "evidence_package_ref": "sha256:4104e09ec0413cc4999f4cd88c3598a9847bcb1bc227cb8591e9195b71ce047e",
+      "license_scope": "internal_research_validation",
+      "review_status": "reviewed",
+      "reviewed_at": "2026-05-16T13:13:35.688901+00:00",
+      "reviewer_id": "synthetic_validation_fixture_reviewer",
+      "sha256": "4104e09ec0413cc4999f4cd88c3598a9847bcb1bc227cb8591e9195b71ce047e",
+      "source_id": "synthetic_remote_sensing_validation_scenes",
+      "source_owner": "Synthetic validation fixture generator"
+    },
+    {
+      "dataset_name": "Synthetic validation source for terrain_ates_runout_validation",
+      "date_range": "2026-02-22/2026-05-22",
+      "evidence_package_ref": "sha256:0dcccd670c041587b8ca8806ec22b929d0b4a0c88213e7e7613bf51dc26faf5a",
+      "license_scope": "internal_research_validation",
+      "review_status": "reviewed",
+      "reviewed_at": "2026-05-16T13:13:35.688901+00:00",
+      "reviewer_id": "synthetic_validation_fixture_reviewer",
+      "sha256": "0dcccd670c041587b8ca8806ec22b929d0b4a0c88213e7e7613bf51dc26faf5a",
+      "source_id": "synthetic_terrain_ates_runout_validation",
+      "source_owner": "Synthetic validation fixture generator"
+    },
+    {
+      "dataset_name": "Synthetic validation source for scientist_reviews",
+      "date_range": "2026-02-22/2026-05-22",
+      "evidence_package_ref": "sha256:a928da8882daaeff7443374d607eef325e6f17d06229c11e1608c10ffb708ff3",
+      "license_scope": "internal_research_validation",
+      "review_status": "reviewed",
+      "reviewed_at": "2026-05-16T13:13:35.688901+00:00",
+      "reviewer_id": "synthetic_validation_fixture_reviewer",
+      "sha256": "a928da8882daaeff7443374d607eef325e6f17d06229c11e1608c10ffb708ff3",
+      "source_id": "synthetic_scientist_reviews",
+      "source_owner": "Synthetic validation fixture generator"
+    },
+    {
+      "dataset_name": "Synthetic validation source for independent_himalayan_holdout",
+      "date_range": "2026-02-22/2026-05-22",
+      "evidence_package_ref": "sha256:da11c0c00de58d3a5c14dc293f050fed310f6bc31a27df1214340fdf30ab8cb3",
+      "license_scope": "internal_research_validation",
+      "review_status": "reviewed",
+      "reviewed_at": "2026-05-16T13:13:35.688901+00:00",
+      "reviewer_id": "synthetic_validation_fixture_reviewer",
+      "sha256": "da11c0c00de58d3a5c14dc293f050fed310f6bc31a27df1214340fdf30ab8cb3",
+      "source_id": "synthetic_independent_himalayan_holdout",
+      "source_owner": "Synthetic validation fixture generator"
+    }
+  ],
+  "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+}

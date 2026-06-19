@@ -15,6 +15,7 @@ from backend.scripts.bootstrap_release_gate import load_rollout_env
 DEFAULT_PREDICTION_MODEL_VERSION = 'swin_transformer_v2_tiny_coldstart_v1'
 DEFAULT_MODEL_FAMILY = 'swinunet_tiny_diff'
 DEFAULT_LOCAL_MODEL_PATH = Path('backend/data/models/swin_transformer_v2_tiny_coldstart_v1.pt')
+DEFAULT_PREDICTION_MASK_DTYPE = 'uint8'
 
 
 def _apply_rollout_env(env_file: Path) -> dict[str, str]:
@@ -49,6 +50,7 @@ def materialize_authoritative_prediction_masks(
     device: str,
     threshold: float,
     hazard_type: str,
+    prediction_mask_dtype: str = DEFAULT_PREDICTION_MASK_DTYPE,
 ) -> dict[str, Any]:
     _apply_rollout_env(env_file)
     resolved_model_path = local_model_path.expanduser().resolve()
@@ -85,6 +87,7 @@ def materialize_authoritative_prediction_masks(
             promoted=False,
             model_version=prediction_model_version,
             model_family=model_family,
+            prediction_mask_dtype=prediction_mask_dtype,
         )
         if str(result.get('status')) != 'ok':
             raise RuntimeError(f'prediction materialization failed for scene "{scene_id}": {json.dumps(result, sort_keys=True)}')
@@ -101,6 +104,7 @@ def materialize_authoritative_prediction_masks(
         'status': 'ok',
         'reference_set_key': reference_set_key,
         'prediction_model_version': prediction_model_version,
+        'prediction_mask_dtype': prediction_mask_dtype,
         'scene_count': len(scenes),
         'uploaded_prediction_masks': len(uploaded_refs),
         'mask_asset_refs': uploaded_refs,
@@ -122,6 +126,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument('--device', default='cpu')
     parser.add_argument('--threshold', type=float, default=float(os.environ.get('SAR_UNET_SEGMENTATION_THRESHOLD', '0.5')))
     parser.add_argument('--hazard-type', default=settings.hazard_type)
+    parser.add_argument('--prediction-mask-dtype', default=DEFAULT_PREDICTION_MASK_DTYPE)
     return parser.parse_args(argv)
 
 
@@ -137,6 +142,7 @@ def main(argv: list[str] | None = None) -> int:
         device=args.device,
         threshold=args.threshold,
         hazard_type=args.hazard_type,
+        prediction_mask_dtype=args.prediction_mask_dtype,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0

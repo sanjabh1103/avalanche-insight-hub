@@ -1,9 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { authorizeJobRequest } from "../_shared/auth.ts";
 import {
   fetchPublishedRunByCompatibilityForecastGridId,
   loadHourlyGridsFromForecastRun,
 } from "../_shared/forecastArtifacts.ts";
+
 import {
   getCellDryWetDomain,
   getCellElevation,
@@ -77,6 +79,7 @@ interface LabelForecastOutcomesDeps {
   fetchEligibleEventsFallback: (params: Omit<ForecastEventLookupParams, 'bbox'>) => Promise<EligibleEvent[]>;
   insertForecastOutcomeBatch: (outcomes: ForecastOutcomeInsert[]) => Promise<void>;
   runWithTimeout: <T>(work: () => Promise<T>, timeoutMs: number, timeoutMessage: string) => Promise<T>;
+  supabase?: any;
 }
 
 function jsonResponse(body: unknown, status = 200) {
@@ -242,6 +245,7 @@ function defaultDeps(): LabelForecastOutcomesDeps {
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   return {
+    supabase,
     async createJob({ hazardType, forecastId, daysBack }) {
       const { data: job, error: jobErr } = await supabase
         .from('compute_jobs')
@@ -378,6 +382,19 @@ export async function handleLabelForecastOutcomes(
   }
 
   try {
+    const supabase = deps.supabase ?? createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    );
+
+    const authResult = await authorizeJobRequest("label_forecast_outcomes", req, supabase);
+    if (!authResult.authorized) {
+      return new Response(JSON.stringify({ error: authResult.error }), {
+        status: authResult.status || 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const requestBody = await req.json() as LabelForecastRequestBody;
     const forecastId = typeof requestBody.forecast_id === 'string' && requestBody.forecast_id
       ? requestBody.forecast_id

@@ -508,6 +508,8 @@ class SarPatchDataset(Dataset[dict[str, Any]]):
             'mask': mask,
             'event_id': str(record['event_id']),
             'scene_id': str(record['scene_id']),
+            'region_key': str(record.get('region_key') or 'unknown'),
+            'source_dataset': str(record.get('source_dataset') or 'unknown'),
             'patch_id': str(record['patch_id']),
             'positive_pixels': int(record.get('positive_pixels') or 0),
             'total_pixels': int(record.get('total_pixels') or mask.numel()),

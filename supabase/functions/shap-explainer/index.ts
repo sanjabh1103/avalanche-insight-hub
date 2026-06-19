@@ -1,9 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isGeminiSpendCapExceeded, incrementGeminiUsage } from "../_shared/auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
 
 interface TopFeature {
   feature: string;
@@ -46,9 +49,19 @@ function fallbackSummary(features: TopFeature[], problemType: string): string {
   return `${sentenceOne} ${sentenceTwo}`;
 }
 
-async function generateGeminiSummary(features: TopFeature[], riskScore: number, problemType: string): Promise<string | null> {
+async function generateGeminiSummary(supabase: any, features: TopFeature[], riskScore: number, problemType: string): Promise<string | null> {
   const apiKey = Deno.env.get('GEMINI_API_KEY');
   if (!apiKey || features.length === 0) return null;
+
+  try {
+    const isExceeded = await isGeminiSpendCapExceeded(supabase);
+    if (isExceeded) {
+      console.warn("[shap-explainer] Gemini spend cap exceeded. Falling back to deterministic summary.");
+      return null;
+    }
+  } catch (capErr) {
+    console.error("[shap-explainer] Spend cap check failed:", (capErr as Error).message);
+  }
 
   const prompt = [
     'You are an avalanche risk translator.',
@@ -61,27 +74,39 @@ async function generateGeminiSummary(features: TopFeature[], riskScore: number, 
     `Top features: ${JSON.stringify(features)}`,
   ].join('\n');
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0,
-          maxOutputTokens: 120,
-        },
-      }),
-    },
-  );
-  if (!response.ok) return null;
-  const payload = await response.json();
-  const text = String(payload?.candidates?.[0]?.content?.parts?.[0]?.text ?? '').trim();
-  if (!text) return null;
-  const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean).slice(0, 2);
-  if (sentences.length === 0) return null;
-  return sentences.join(' ');
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0,
+            maxOutputTokens: 120,
+          },
+        }),
+      },
+    );
+    if (!response.ok) return null;
+
+    try {
+      await incrementGeminiUsage(supabase);
+    } catch (incErr) {
+      console.error("[shap-explainer] Failed to increment Gemini usage:", (incErr as Error).message);
+    }
+
+    const payload = await response.json();
+    const text = String(payload?.candidates?.[0]?.content?.parts?.[0]?.text ?? '').trim();
+    if (!text) return null;
+    const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean).slice(0, 2);
+    if (sentences.length === 0) return null;
+    return sentences.join(' ');
+  } catch (err) {
+    console.error("[shap-explainer] Gemini API call error:", (err as Error).message);
+    return null;
+  }
 }
 
 serve(async (req: Request) => {
@@ -90,11 +115,15 @@ serve(async (req: Request) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
+
     const body = await req.json();
     const topFeatures = normalizeTopFeatures(body?.shap_context);
     const riskScore = Number(body?.risk_score ?? 0);
     const problemType = String(body?.problem_type ?? 'Avalanche');
-    const summary = await generateGeminiSummary(topFeatures, riskScore, problemType)
+    const summary = await generateGeminiSummary(supabase, topFeatures, riskScore, problemType)
       ?? fallbackSummary(topFeatures, problemType);
 
     return new Response(JSON.stringify({

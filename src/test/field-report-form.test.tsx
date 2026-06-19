@@ -53,6 +53,10 @@ describe('FieldReportForm', () => {
     flushQueuedFieldReports.mockClear();
     getUser.mockClear();
     mapHandlers = {};
+    Object.defineProperty(window.navigator, 'onLine', {
+      configurable: true,
+      value: true,
+    });
     Object.defineProperty(window.navigator, 'geolocation', {
       configurable: true,
       value: {
@@ -123,7 +127,7 @@ describe('FieldReportForm', () => {
 
     const queuedReport = submitQueuedFieldReport.mock.calls[0][0];
     expect(queuedReport.clientReportId).toMatch(/^field-/);
-    expect(queuedReport.observedAt).toBe('2026-05-02T04:30:00.000Z');
+    expect(queuedReport.observedAt).toBe(new Date('2026-05-02T10:00').toISOString());
     expect(queuedReport.locationName).toBe('Himalayas (Nepal)');
 
     expect(submitted).toHaveLength(2);
@@ -131,4 +135,38 @@ describe('FieldReportForm', () => {
     expect(submitted[0].clientReportId).toMatch(/^field-/);
     expect(submitted[1].id).toBe('event-1');
   }, 30_000);
+
+  it('queues reports locally while offline for tablet field use', async () => {
+    Object.defineProperty(window.navigator, 'onLine', {
+      configurable: true,
+      value: false,
+    });
+    const submitted: AvalancheEvent[] = [];
+
+    render(
+      <FieldReportForm
+        open
+        onClose={() => undefined}
+        onSubmitted={(event) => submitted.push(event)}
+        regionCenter={[27.98, 86.92]}
+        regionBbox={[27.8, 86.7, 28.1, 87.1]}
+        regionName="Himalayas (Nepal)"
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Description'), {
+      target: { value: 'Offline tablet observation near test slope' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /submit report/i }));
+
+    await waitFor(() => {
+      expect(enqueueFieldReport).toHaveBeenCalledTimes(1);
+    });
+    expect(submitQueuedFieldReport).not.toHaveBeenCalled();
+    expect(enqueueFieldReport.mock.calls[0][0]).toMatchObject({
+      submittedOffline: true,
+      locationName: 'Himalayas (Nepal)',
+    });
+    expect(submitted[0].optimistic).toBe(true);
+  });
 });

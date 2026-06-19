@@ -1,0 +1,1281 @@
+{
+  "version": "1.0.0",
+  "kind": "codebase",
+  "project": {
+    "name": "Avalanche Insight Hub",
+    "languages": [
+      "Python",
+      "TypeScript",
+      "JavaScript",
+      "JSON",
+      "YAML",
+      "Markdown",
+      "Shell"
+    ],
+    "frameworks": [
+      "Python",
+      "React",
+      "Supabase",
+      "Modal",
+      "scikit-learn",
+      "PyTorch",
+      "Vite"
+    ],
+    "description": "Business-domain map of the Avalanche Insight Hub ML, SAR validation, scientific reproduction, Himalayan partner evidence, and governance workflows.",
+    "analyzedAt": "2026-05-28T07:55:43.890158Z",
+    "gitCommitHash": "ba06c5c280ef8253a775801e2ee39f172c09c8ec"
+  },
+  "nodes": [
+    {
+      "id": "domain:forecast-decision-support",
+      "type": "domain",
+      "name": "Forecast Decision Support",
+      "summary": "Handles the public avalanche decision-support workflow: turn weather, terrain, snowpack proxies, and model status into publishable grid forecasts with explicit claim controls.",
+      "tags": [
+        "forecast",
+        "random-forest",
+        "publication",
+        "decision-support"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entities": [
+          "forecast grid",
+          "risk probability",
+          "terrain cell",
+          "snowpack proxy",
+          "publication proof",
+          "model status"
+        ],
+        "businessRules": [
+          "Public output is batch-first, not an unrestricted live warning service.",
+          "Model outputs pass publication eligibility and lineage checks before public use.",
+          "Current active scorer is the RF-style surrogate path, with sequence and SAR lanes gated separately."
+        ],
+        "crossDomainInteractions": [
+          "Consumes governance gates before publication.",
+          "Can incorporate future partner evidence once Himalayan readiness passes."
+        ]
+      }
+    },
+    {
+      "id": "domain:remote-sensing-shadow-validation",
+      "type": "domain",
+      "name": "Remote-Sensing Shadow Validation",
+      "summary": "Handles SAR/Sentinel avalanche-detection research and qualification using AvalCD/SnowSlide evaluation, acceptance floors, diagnostics, and manual review packets. It is deliberately shadow-gated and does not authorize production SAR scoring.",
+      "tags": [
+        "sar",
+        "snowslide",
+        "avalcd",
+        "shadow-gated",
+        "segmentation"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entities": [
+          "SAR scene",
+          "probability mask",
+          "truth mask",
+          "component review",
+          "acceptance report",
+          "manual review decision"
+        ],
+        "businessRules": [
+          "SnowSlide and AvalCD gates must pass without weakening floors.",
+          "Manual component review is required for unresolved heldout failures.",
+          "Shadow evidence cannot silently become production scoring."
+        ],
+        "crossDomainInteractions": [
+          "Feeds release governance with pass/fail evidence.",
+          "May support client/scientist narrative but remains separate from public forecast claims."
+        ]
+      }
+    },
+    {
+      "id": "domain:scientific-reproduction-and-parity",
+      "type": "domain",
+      "name": "Scientific Reproduction And Parity",
+      "summary": "Handles research-only Swiss RAvaFcast reproduction, RF4 feature audits, calibration, GPxyz station interpolation, refined aggregation, and paper-parity blocker reporting.",
+      "tags": [
+        "swiss-ravafcast",
+        "reproduction",
+        "gpxyz",
+        "calibration",
+        "research-only"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entities": [
+          "RF4 feature set",
+          "calibration season",
+          "station metadata",
+          "GPxyz grid",
+          "warning region aggregation",
+          "parity report"
+        ],
+        "businessRules": [
+          "Swiss reproduction is evidence for method discipline, not Himalayan accuracy proof.",
+          "GPxyz requires station X/Y/Z metadata before spatial interpolation.",
+          "Refined discretization thresholds must not leak validation or holdout distributions."
+        ],
+        "crossDomainInteractions": [
+          "Informs Himalayan partner-contract requirements.",
+          "Feeds governance docs but not production model status directly."
+        ]
+      }
+    },
+    {
+      "id": "domain:himalayan-partner-evidence-readiness",
+      "type": "domain",
+      "name": "Himalayan Partner Evidence Readiness",
+      "summary": "Handles partner data intake readiness for Himalayan validation: source manifests, station metadata, D_tidy-grade labels, holdout evidence, and triage outputs before any local accuracy claim.",
+      "tags": [
+        "himalayan",
+        "partner-evidence",
+        "d-tidy",
+        "holdout",
+        "governance"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entities": [
+          "partner package",
+          "source manifest",
+          "station metadata",
+          "D_tidy label",
+          "independent holdout",
+          "triage blocker"
+        ],
+        "businessRules": [
+          "Public bulletins are not enough for D_tidy-grade training truth.",
+          "Station latitude, longitude, and elevation are mandatory for spatial readiness.",
+          "Himalayan accuracy claims stay blocked until partner-reviewed evidence and local holdout gates pass."
+        ],
+        "crossDomainInteractions": [
+          "Supplies validated evidence to forecast and reproduction lanes.",
+          "Requires scientist adjudication for label quality and holdout release."
+        ]
+      }
+    },
+    {
+      "id": "domain:release-governance-and-compute-operations",
+      "type": "domain",
+      "name": "Release Governance And Compute Operations",
+      "summary": "Handles acceptance policy, model-status mutation controls, publication proof, Modal/GPU job boundaries, CI tests, and operational guardrails that prevent accidental overclaiming.",
+      "tags": [
+        "release-gate",
+        "modal",
+        "ci",
+        "claim-boundary",
+        "governance"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entities": [
+          "release gate",
+          "model status",
+          "Modal job",
+          "CI workflow",
+          "artifact manifest",
+          "claim lock"
+        ],
+        "businessRules": [
+          "Production scoring and client-readiness predicates are separate.",
+          "Heavy compute must be bounded and traceable.",
+          "Tests and CI enforce acceptance and no-promotion gates."
+        ],
+        "crossDomainInteractions": [
+          "Controls whether forecast, SAR, reproduction, or partner evidence can influence claims.",
+          "Provides operator evidence back to all domains."
+        ]
+      }
+    },
+    {
+      "id": "flow:train-calibrate-rf-surrogate",
+      "type": "flow",
+      "name": "Train And Calibrate RF Surrogate",
+      "summary": "Builds the active tabular surrogate model with chronological splits, calibration, feature contribution support, and publish-guard metadata.",
+      "tags": [
+        "forecast",
+        "training",
+        "calibration"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entryPoint": "backend/train_model.py",
+        "entryType": "cli"
+      }
+    },
+    {
+      "id": "step:train-calibrate-rf-surrogate:load-training-frame",
+      "type": "step",
+      "name": "Load Training Dataset",
+      "summary": "Loads event/training rows and dataset manifests for model fitting.",
+      "tags": [
+        "data",
+        "training"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/train_model.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:train-calibrate-rf-surrogate:fit-rf-bundle",
+      "type": "step",
+      "name": "Fit RF Bundle",
+      "summary": "Fits the RandomForest-based surrogate bundle with feature selection, calibration, and reliability metrics.",
+      "tags": [
+        "random-forest",
+        "model"
+      ],
+      "complexity": "complex",
+      "filePath": "backend/models/surrogate_rf.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:train-calibrate-rf-surrogate:evaluate-and-snapshot",
+      "type": "step",
+      "name": "Evaluate And Snapshot",
+      "summary": "Builds evaluation planes, drift stats, and dataset snapshot IDs for reproducible model status.",
+      "tags": [
+        "evaluation",
+        "governance"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/train_model.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:train-calibrate-rf-surrogate:publish-metadata",
+      "type": "step",
+      "name": "Publish Metadata",
+      "summary": "Writes model metadata only when publish guards allow it.",
+      "tags": [
+        "publication",
+        "claim-boundary"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/train_model.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "flow:build-public-forecast-grid",
+      "type": "flow",
+      "name": "Build Public Forecast Grid",
+      "summary": "Runs daily inference over region grids, applies terrain/snowpack coverage logic, computes risk levels, and writes/upserts forecast rows.",
+      "tags": [
+        "inference",
+        "forecast-grid",
+        "publication"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entryPoint": "backend/daily_inference.py",
+        "entryType": "cli"
+      }
+    },
+    {
+      "id": "step:build-public-forecast-grid:prepare-region-context",
+      "type": "step",
+      "name": "Prepare Region Context",
+      "summary": "Loads DEM, region, SAR summary, and lineage inputs needed for grid generation.",
+      "tags": [
+        "region",
+        "lineage"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/daily_inference.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:build-public-forecast-grid:construct-grid-rows",
+      "type": "step",
+      "name": "Construct Grid Rows",
+      "summary": "Builds timestamped forecast rows from weather, terrain, snowpack proxy, and model probability inputs.",
+      "tags": [
+        "grid",
+        "features"
+      ],
+      "complexity": "complex",
+      "filePath": "backend/daily_inference.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:build-public-forecast-grid:compute-risk-and-uncertainty",
+      "type": "step",
+      "name": "Compute Risk And Uncertainty",
+      "summary": "Converts probabilities and terrain signals into risk levels, uncertainty classes, and coverage flags.",
+      "tags": [
+        "risk",
+        "uncertainty"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/daily_inference.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:build-public-forecast-grid:record-publication-proof",
+      "type": "step",
+      "name": "Record Publication Proof",
+      "summary": "Upserts forecast grid output and records publication event/proof metadata.",
+      "tags": [
+        "publication",
+        "proof"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/daily_inference.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "flow:train-and-evaluate-sar-segmentation",
+      "type": "flow",
+      "name": "Train And Evaluate SAR Segmentation",
+      "summary": "Runs SAR segmentation training/evaluation, threshold selection, scene-blended validation, and checkpoint diagnostics for shadow research gates.",
+      "tags": [
+        "sar",
+        "training",
+        "segmentation"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entryPoint": "backend/sar_unet_training.py",
+        "entryType": "cli"
+      }
+    },
+    {
+      "id": "step:train-and-evaluate-sar-segmentation:materialize-training-request",
+      "type": "step",
+      "name": "Materialize Training Request",
+      "summary": "Builds training configuration and materialized dataset paths for SAR training/evaluation.",
+      "tags": [
+        "sar",
+        "dataset"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/sar_unet_training.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:train-and-evaluate-sar-segmentation:train-checkpoint",
+      "type": "step",
+      "name": "Train Checkpoint",
+      "summary": "Optimizes U-Net/Swin-style segmentation checkpoints with configured losses and postprocess candidates.",
+      "tags": [
+        "torch",
+        "segmentation"
+      ],
+      "complexity": "complex",
+      "filePath": "backend/sar_unet_training.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:train-and-evaluate-sar-segmentation:evaluate-thresholds",
+      "type": "step",
+      "name": "Evaluate Thresholds",
+      "summary": "Selects thresholds/postprocessing using precision, recall, F1, FPR, and scene breakdown metrics.",
+      "tags": [
+        "metrics",
+        "threshold"
+      ],
+      "complexity": "complex",
+      "filePath": "backend/sar_unet_training.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:train-and-evaluate-sar-segmentation:emit-validation-artifacts",
+      "type": "step",
+      "name": "Emit Validation Artifacts",
+      "summary": "Writes validation prediction artifacts, diagnostics, and acceptance-compatible reports.",
+      "tags": [
+        "artifacts",
+        "diagnostics"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/sar_unet_training.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "flow:close-snowslide-blocker",
+      "type": "flow",
+      "name": "Close SnowSlide Blocker",
+      "summary": "Builds error diagnostics, threshold sweeps, component-review summaries, and manual-label review workflow for the v8 SnowSlide blocker.",
+      "tags": [
+        "snowslide",
+        "manual-review",
+        "acceptance"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entryPoint": "backend/scripts/build_snowslide_error_diagnostics.py",
+        "entryType": "cli"
+      }
+    },
+    {
+      "id": "step:close-snowslide-blocker:build-error-diagnostics",
+      "type": "step",
+      "name": "Build Error Diagnostics",
+      "summary": "Summarizes scene/component FP and FN burden from existing SAR artifacts.",
+      "tags": [
+        "diagnostics",
+        "scene-review"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/scripts/build_snowslide_error_diagnostics.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:close-snowslide-blocker:run-non-gpu-sweep",
+      "type": "step",
+      "name": "Run Non-GPU Sweep",
+      "summary": "Sweeps thresholds/component areas against locked all-scene SnowSlide acceptance floors.",
+      "tags": [
+        "threshold-sweep",
+        "non-gpu"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/scripts/run_snowslide_threshold_sweep.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:close-snowslide-blocker:prepare-manual-review",
+      "type": "step",
+      "name": "Prepare Manual Review",
+      "summary": "Creates component review packets and decision worksheets for domain adjudication.",
+      "tags": [
+        "manual-review",
+        "components"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/scripts/build_snowslide_manual_label_review_packet.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:close-snowslide-blocker:resolve-review-outcome",
+      "type": "step",
+      "name": "Resolve Review Outcome",
+      "summary": "Converts scientist decisions into label-remediation, terrain-context, model-gap, or incomplete outcomes.",
+      "tags": [
+        "review-outcome",
+        "governance"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/scripts/resolve_snowslide_manual_label_review.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "flow:audit-rf4-feature-parity",
+      "type": "flow",
+      "name": "Audit RF4 Feature Parity",
+      "summary": "Compares Swiss RAvaFcast feature sets, leakage guards, uncalibrated/calibrated metrics, and paper-parity deltas.",
+      "tags": [
+        "rf4",
+        "feature-audit",
+        "calibration"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entryPoint": "backend/reproduction/swiss_ravafcast/cli.py",
+        "entryType": "cli"
+      }
+    },
+    {
+      "id": "step:audit-rf4-feature-parity:load-manifested-data",
+      "type": "step",
+      "name": "Load Manifested Data",
+      "summary": "Loads checksum-manifested Swiss RAvaFcast tables into research-only frames.",
+      "tags": [
+        "manifest",
+        "data"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/reproduction/swiss_ravafcast/data_loader.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:audit-rf4-feature-parity:guard-feature-sets",
+      "type": "step",
+      "name": "Guard Feature Sets",
+      "summary": "Applies whitelist and banned leakage-column rules before model evaluation.",
+      "tags": [
+        "feature-guard",
+        "leakage"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/reproduction/swiss_ravafcast/features.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:audit-rf4-feature-parity:train-calibrated-rf4",
+      "type": "step",
+      "name": "Train Calibrated RF4",
+      "summary": "Trains RandomForest RF4 and uses calibration-season probabilities for Brier/ECE reporting.",
+      "tags": [
+        "random-forest",
+        "calibration"
+      ],
+      "complexity": "complex",
+      "filePath": "backend/reproduction/swiss_ravafcast/train_rf4.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:audit-rf4-feature-parity:write-parity-report",
+      "type": "step",
+      "name": "Write Parity Report",
+      "summary": "Writes JSON/Markdown feature audit and reproduction summaries without production claims.",
+      "tags": [
+        "report",
+        "research-only"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/reproduction/swiss_ravafcast/evaluate.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "flow:run-gpxyz-and-aggregation-parity",
+      "type": "flow",
+      "name": "Run GPxyz And Aggregation Parity",
+      "summary": "Validates station coordinates, runs GPxyz only when metadata is sufficient, and builds refined aggregation readiness.",
+      "tags": [
+        "gpxyz",
+        "aggregation",
+        "station-metadata"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entryPoint": "backend/reproduction/swiss_ravafcast/interpolate_gpxyz.py",
+        "entryType": "cli"
+      }
+    },
+    {
+      "id": "step:run-gpxyz-and-aggregation-parity:validate-station-metadata",
+      "type": "step",
+      "name": "Validate Station Metadata",
+      "summary": "Requires station code, latitude, longitude, elevation, and coverage diagnostics before spatial GP work.",
+      "tags": [
+        "station-metadata",
+        "validation"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/reproduction/swiss_ravafcast/interpolate_gpxyz.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:run-gpxyz-and-aggregation-parity:run-gpxyz-loocv",
+      "type": "step",
+      "name": "Run GPxyz LOOCV",
+      "summary": "Runs exact GaussianProcessRegressor station-scale interpolation only when row caps and metadata gates pass.",
+      "tags": [
+        "gaussian-process",
+        "loocv"
+      ],
+      "complexity": "complex",
+      "filePath": "backend/reproduction/swiss_ravafcast/interpolate_gpxyz.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:run-gpxyz-and-aggregation-parity:build-refined-aggregation",
+      "type": "step",
+      "name": "Build Refined Aggregation",
+      "summary": "Applies elev-simple bands and training-distribution refined discretization without validation leakage.",
+      "tags": [
+        "aggregation",
+        "discretization"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/reproduction/swiss_ravafcast/aggregate.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "flow:generate-himalayan-readiness-contract",
+      "type": "flow",
+      "name": "Generate Himalayan Readiness Contract",
+      "summary": "Builds partner-facing schema/templates for Himalayan source governance, station metadata, D_tidy-style labels, and holdout evidence.",
+      "tags": [
+        "himalayan",
+        "contract",
+        "templates"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entryPoint": "backend/scripts/build_himalayan_accuracy_readiness_contract.py",
+        "entryType": "cli"
+      }
+    },
+    {
+      "id": "step:generate-himalayan-readiness-contract:define-required-fields",
+      "type": "step",
+      "name": "Define Required Fields",
+      "summary": "Defines mandatory source, station, snowpack, label provenance, and holdout columns.",
+      "tags": [
+        "schema",
+        "partner-data"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/reproduction/himalayan_accuracy_contract.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:generate-himalayan-readiness-contract:emit-v3-templates",
+      "type": "step",
+      "name": "Emit V3 Templates",
+      "summary": "Writes partner evidence CSV templates, field dictionary, checksum guide, and source manifest template.",
+      "tags": [
+        "templates",
+        "handoff"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/scripts/build_himalayan_accuracy_readiness_contract.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:generate-himalayan-readiness-contract:lock-claim-boundaries",
+      "type": "step",
+      "name": "Lock Claim Boundaries",
+      "summary": "Marks Himalayan accuracy and production scoring claims as blocked until real reviewed evidence passes.",
+      "tags": [
+        "claim-boundary",
+        "governance"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/reproduction/himalayan_accuracy_contract.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "flow:triage-partner-package",
+      "type": "flow",
+      "name": "Triage Partner Package",
+      "summary": "Validates partner-submitted Himalayan packages, source refs, checksum discipline, label provenance, and holdout readiness before any model/evaluation claim.",
+      "tags": [
+        "triage",
+        "partner-package",
+        "validation"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entryPoint": "backend/scripts/run_himalayan_partner_package_triage.py",
+        "entryType": "cli"
+      }
+    },
+    {
+      "id": "step:triage-partner-package:read-source-manifest",
+      "type": "step",
+      "name": "Read Source Manifest",
+      "summary": "Checks partner ownership, license scope, review date, and SHA-256 source references.",
+      "tags": [
+        "manifest",
+        "license"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/scripts/run_himalayan_partner_package_triage.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:triage-partner-package:validate-evidence-csvs",
+      "type": "step",
+      "name": "Validate Evidence CSVs",
+      "summary": "Validates station, weather, snowpack, labels, events, remote sensing, terrain, reviews, and holdout rows.",
+      "tags": [
+        "csv-validation",
+        "evidence"
+      ],
+      "complexity": "complex",
+      "filePath": "backend/reproduction/himalayan_accuracy_contract.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:triage-partner-package:emit-blockers-or-readiness",
+      "type": "step",
+      "name": "Emit Blockers Or Readiness",
+      "summary": "Produces readiness/blocker artifacts while keeping production and Himalayan accuracy claims false.",
+      "tags": [
+        "blockers",
+        "readiness"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/scripts/run_himalayan_partner_package_triage.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "flow:authorize-release-and-model-status",
+      "type": "flow",
+      "name": "Authorize Release And Model Status",
+      "summary": "Controls model-status mutation, candidate activation, public eligibility, and authoritative release gate decisions.",
+      "tags": [
+        "release-gate",
+        "model-status",
+        "authorization"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entryPoint": "backend/scripts/run_authoritative_release_gate.py",
+        "entryType": "cli"
+      }
+    },
+    {
+      "id": "step:authorize-release-and-model-status:evaluate-candidate-evidence",
+      "type": "step",
+      "name": "Evaluate Candidate Evidence",
+      "summary": "Checks candidate artifacts, metrics, and publish eligibility before release decisions.",
+      "tags": [
+        "candidate",
+        "evidence"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/scripts/run_authoritative_release_gate.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:authorize-release-and-model-status:apply-status-guards",
+      "type": "step",
+      "name": "Apply Status Guards",
+      "summary": "Uses model-status state and activation scripts to prevent unauthorized scorer changes.",
+      "tags": [
+        "model-status",
+        "guard"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/common/model_status_state.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:authorize-release-and-model-status:record-release-outcome",
+      "type": "step",
+      "name": "Record Release Outcome",
+      "summary": "Records release/canary outcomes for operator and CI verification.",
+      "tags": [
+        "release",
+        "canary"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/scripts/evaluate_canary_release.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "flow:run-bounded-remote-compute",
+      "type": "flow",
+      "name": "Run Bounded Remote Compute",
+      "summary": "Runs Modal/GPU training, SAR materialization, and checkpoint evaluation through explicit trigger/poll scripts and cost/status guards.",
+      "tags": [
+        "modal",
+        "gpu",
+        "bounded-compute"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entryPoint": "backend/modal_worker_app.py",
+        "entryType": "cli"
+      }
+    },
+    {
+      "id": "step:run-bounded-remote-compute:submit-modal-job",
+      "type": "step",
+      "name": "Submit Modal Job",
+      "summary": "Submits bounded remote jobs for training, inference, or SAR evaluation.",
+      "tags": [
+        "modal",
+        "job"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/modal_worker_app.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:run-bounded-remote-compute:poll-and-capture-status",
+      "type": "step",
+      "name": "Poll And Capture Status",
+      "summary": "Polls remote runs and captures run identifiers, artifacts, and failure states.",
+      "tags": [
+        "polling",
+        "artifacts"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/scripts/trigger_and_poll_training.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "step:run-bounded-remote-compute:enforce-cost-and-claim-gates",
+      "type": "step",
+      "name": "Enforce Cost And Claim Gates",
+      "summary": "Applies Modal cost guard and leaves production/promotion locks unchanged unless separate release gates pass.",
+      "tags": [
+        "cost-guard",
+        "claim-boundary"
+      ],
+      "complexity": "moderate",
+      "filePath": "backend/scripts/modal_cost_guard.py",
+      "lineRange": [
+        0,
+        0
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "source": "domain:forecast-decision-support",
+      "target": "flow:train-calibrate-rf-surrogate",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:train-calibrate-rf-surrogate",
+      "target": "step:train-calibrate-rf-surrogate:load-training-frame",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.2
+    },
+    {
+      "source": "flow:train-calibrate-rf-surrogate",
+      "target": "step:train-calibrate-rf-surrogate:fit-rf-bundle",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:train-calibrate-rf-surrogate",
+      "target": "step:train-calibrate-rf-surrogate:evaluate-and-snapshot",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "flow:train-calibrate-rf-surrogate",
+      "target": "step:train-calibrate-rf-surrogate:publish-metadata",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:forecast-decision-support",
+      "target": "flow:build-public-forecast-grid",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:build-public-forecast-grid",
+      "target": "step:build-public-forecast-grid:prepare-region-context",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.2
+    },
+    {
+      "source": "flow:build-public-forecast-grid",
+      "target": "step:build-public-forecast-grid:construct-grid-rows",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:build-public-forecast-grid",
+      "target": "step:build-public-forecast-grid:compute-risk-and-uncertainty",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "flow:build-public-forecast-grid",
+      "target": "step:build-public-forecast-grid:record-publication-proof",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:remote-sensing-shadow-validation",
+      "target": "flow:train-and-evaluate-sar-segmentation",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:train-and-evaluate-sar-segmentation",
+      "target": "step:train-and-evaluate-sar-segmentation:materialize-training-request",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.2
+    },
+    {
+      "source": "flow:train-and-evaluate-sar-segmentation",
+      "target": "step:train-and-evaluate-sar-segmentation:train-checkpoint",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:train-and-evaluate-sar-segmentation",
+      "target": "step:train-and-evaluate-sar-segmentation:evaluate-thresholds",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "flow:train-and-evaluate-sar-segmentation",
+      "target": "step:train-and-evaluate-sar-segmentation:emit-validation-artifacts",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:remote-sensing-shadow-validation",
+      "target": "flow:close-snowslide-blocker",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:close-snowslide-blocker",
+      "target": "step:close-snowslide-blocker:build-error-diagnostics",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.2
+    },
+    {
+      "source": "flow:close-snowslide-blocker",
+      "target": "step:close-snowslide-blocker:run-non-gpu-sweep",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:close-snowslide-blocker",
+      "target": "step:close-snowslide-blocker:prepare-manual-review",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "flow:close-snowslide-blocker",
+      "target": "step:close-snowslide-blocker:resolve-review-outcome",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:scientific-reproduction-and-parity",
+      "target": "flow:audit-rf4-feature-parity",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:audit-rf4-feature-parity",
+      "target": "step:audit-rf4-feature-parity:load-manifested-data",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.2
+    },
+    {
+      "source": "flow:audit-rf4-feature-parity",
+      "target": "step:audit-rf4-feature-parity:guard-feature-sets",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:audit-rf4-feature-parity",
+      "target": "step:audit-rf4-feature-parity:train-calibrated-rf4",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "flow:audit-rf4-feature-parity",
+      "target": "step:audit-rf4-feature-parity:write-parity-report",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:scientific-reproduction-and-parity",
+      "target": "flow:run-gpxyz-and-aggregation-parity",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:run-gpxyz-and-aggregation-parity",
+      "target": "step:run-gpxyz-and-aggregation-parity:validate-station-metadata",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.3
+    },
+    {
+      "source": "flow:run-gpxyz-and-aggregation-parity",
+      "target": "step:run-gpxyz-and-aggregation-parity:run-gpxyz-loocv",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "flow:run-gpxyz-and-aggregation-parity",
+      "target": "step:run-gpxyz-and-aggregation-parity:build-refined-aggregation",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:himalayan-partner-evidence-readiness",
+      "target": "flow:generate-himalayan-readiness-contract",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:generate-himalayan-readiness-contract",
+      "target": "step:generate-himalayan-readiness-contract:define-required-fields",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.3
+    },
+    {
+      "source": "flow:generate-himalayan-readiness-contract",
+      "target": "step:generate-himalayan-readiness-contract:emit-v3-templates",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "flow:generate-himalayan-readiness-contract",
+      "target": "step:generate-himalayan-readiness-contract:lock-claim-boundaries",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:himalayan-partner-evidence-readiness",
+      "target": "flow:triage-partner-package",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:triage-partner-package",
+      "target": "step:triage-partner-package:read-source-manifest",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.3
+    },
+    {
+      "source": "flow:triage-partner-package",
+      "target": "step:triage-partner-package:validate-evidence-csvs",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "flow:triage-partner-package",
+      "target": "step:triage-partner-package:emit-blockers-or-readiness",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:release-governance-and-compute-operations",
+      "target": "flow:authorize-release-and-model-status",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:authorize-release-and-model-status",
+      "target": "step:authorize-release-and-model-status:evaluate-candidate-evidence",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.3
+    },
+    {
+      "source": "flow:authorize-release-and-model-status",
+      "target": "step:authorize-release-and-model-status:apply-status-guards",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "flow:authorize-release-and-model-status",
+      "target": "step:authorize-release-and-model-status:record-release-outcome",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:release-governance-and-compute-operations",
+      "target": "flow:run-bounded-remote-compute",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:run-bounded-remote-compute",
+      "target": "step:run-bounded-remote-compute:submit-modal-job",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.3
+    },
+    {
+      "source": "flow:run-bounded-remote-compute",
+      "target": "step:run-bounded-remote-compute:poll-and-capture-status",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "flow:run-bounded-remote-compute",
+      "target": "step:run-bounded-remote-compute:enforce-cost-and-claim-gates",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:forecast-decision-support",
+      "target": "domain:release-governance-and-compute-operations",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "Forecast outputs require publication eligibility, model-status, and release-gate controls before public claims.",
+      "weight": 0.8
+    },
+    {
+      "source": "domain:remote-sensing-shadow-validation",
+      "target": "domain:release-governance-and-compute-operations",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "SAR checkpoints and diagnostics feed acceptance policy and remain blocked from production until gates pass.",
+      "weight": 0.8
+    },
+    {
+      "source": "domain:scientific-reproduction-and-parity",
+      "target": "domain:himalayan-partner-evidence-readiness",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "Swiss RAvaFcast reproduction informs the Himalayan evidence contract, especially D_tidy labels and GPxyz X/Y/Z requirements.",
+      "weight": 0.7
+    },
+    {
+      "source": "domain:himalayan-partner-evidence-readiness",
+      "target": "domain:forecast-decision-support",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "Validated Himalayan partner evidence is the prerequisite for local forecast improvement and eventual region expansion.",
+      "weight": 0.7
+    },
+    {
+      "source": "domain:release-governance-and-compute-operations",
+      "target": "domain:remote-sensing-shadow-validation",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "Governance gates determine whether SAR remains shadow-only or can move to a future promotion review.",
+      "weight": 0.6
+    },
+    {
+      "source": "domain:release-governance-and-compute-operations",
+      "target": "domain:scientific-reproduction-and-parity",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "Governance preserves research-only boundaries for reproduction artifacts and blocks paper-parity overclaims.",
+      "weight": 0.6
+    }
+  ],
+  "layers": [],
+  "tour": []
+}

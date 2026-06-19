@@ -4,29 +4,29 @@
 
 _Credibility arc • scientist-first contract_
 
-A governed decision-support platform for avalanche forecasting, review, and scientific collaboration.
+MVP V2: a governed decision-support platform for avalanche forecasting, partner evidence intake, review, and scientific collaboration.
 
 Evidence lanes: Technical evidence; Research agenda
 
 Meeting objective
 
-- Show the live platform, the administration view, and the operating model.
+- Show the live platform, the administration view, and the MVP V2 evidence-governance model.
 
-- Distinguish current capabilities from candidate methods, research precedent, and the next research program.
+- Distinguish hosted product proof from Swiss RAvaFcast research, Himalayan v3 partner intake, SAR shadow evidence, and future promotion gates.
 
-- Close on whether a scientist-led validation program should begin next.
+- Close on whether the SASE/DGRE partner handoff and scientist-led validation program should begin next.
 
 What this is
 
 Governed decision support
 
-Batch-first forecast publication, explicit uncertainty, and auditable model-status surfaces.
+Batch-first forecast publication, explicit uncertainty, auditable model-status surfaces, and partner evidence intake.
 
 What this is not
 
 Autonomy-first launch
 
-No active MTS-LSTM claim, no promoted SAR claim, no authority-grade warning claim.
+No active MTS-LSTM claim, no promoted SAR claim, no Himalayan accuracy claim, no authority-grade warning claim.
 
 Discussion lane
 
@@ -44,9 +44,9 @@ Discussion lane
 
 Research agenda
 
-Critical-layer validation, SAR qualification, and candidate-model advancement remain part of the next research program.
+Critical-layer validation, SAR qualification, Himalayan holdout evidence, and candidate-model advancement remain part of the next research program.
 
-Use the deck to establish context first, then focus the discussion on the next scientific frontier.
+Use the deck to establish context first, then focus the discussion on the partner handoff and next scientific frontier.
 
 Keep the three discussion lanes visible throughout
 
@@ -129,7 +129,7 @@ GPU acceleration showed the compute burden is real and belongs off the interacti
 
 2020
 
-HIM-STRAT reinforced that snowpack memory and stability indexing matter beyond simple snowfall totals.
+HIM-STRAT reinforced that snowpack memory and stability indexing matter beyond simple snowfall totals. In the current platform, these insights are delivered as a Weather-Driven Heuristic Proxy derived from cumulative weather variables — not a full thermodynamic stratigraphic simulation. Transition to a physical model (WSL/SLF SNOWPACK-class) is a future-phase target.
 
 2025
 
@@ -345,45 +345,30 @@ if hosted-auth access is unavailable later, revert to the gate screenshot plus r
 
 ---
 
-## D1-10 — RF Baseline, Explanation Fallback, And Modal.com Compute Split
+## D1-10 — RF Baseline, RAvaFcast Research, And Modal.com Split
 
 _Current ML truth_
 
-The live platform is anchored on the Random Forest baseline. The current active publication uses heuristic explanation fallback; TreeSHAP refresh remains a technical hardening gate.
+The live platform is anchored on the Random Forest baseline. Swiss RAvaFcast work is research-only, and the current active publication uses heuristic explanation fallback.
 
 Evidence lanes: Technical evidence; Research agenda
 
 What is active now
 
 Public scorer
-`surrogate_rf_v1` is the active public-facing scorer on the live route.
+`surrogate_rf_v1` is active; the current run reports `heuristic_fallback`, not active TreeSHAP proof.
 
-Explanation layer
-The current active run reports `heuristic_fallback`; TreeSHAP remains implemented evidence, not a stronger live-run claim for this artifact.
+Candidate lanes
+`mts_lstm_v1`, SAR, and Modal-backed training/segmentation remain gated and off the public scoring path.
 
-Candidate scorer
-`mts_lstm_v1` remains shadow-gated and blocked behind explicit release evidence.
+Swiss research lane
+RAvaFcast is an initial research signal; GPxyz remains blocked until station coordinates exist.
 
-Remote sensing
-SAR flows exist as candidate evidence paths, not as current public forecast support.
+Himalayan evidence lane
+The v3 partner contract validates package structure, provenance, and claim locks, not Himalayan accuracy.
 
-GPU-backed today
-
-SAR segmentation and model training
-
-`train_mts_lstm_remote`, `train_sar_unet_remote`, and `sar_segment_remote` use GPU-backed Modal workers.
-
-CPU-sized today
-
-MTS-LSTM remote inference
-
-`infer_mts_lstm_remote` is Modal-backed today but still CPU or memory sized, not GPU-backed production scoring.
-
-Current description
-
-Off-path compute for candidate workflows
-
-That is the most accurate current description of Modal.com in the platform story.
+Recommended framing:
+Modal.com supports bounded candidate compute; partner intake and synthetic checks do not authorize GPU, production scoring, or public claim changes.
 
 ---
 
@@ -429,7 +414,7 @@ Fresh, diversified capture or robust regional transfer strong enough for autonom
 
 _Release-gate posture_
 
-This slide is about discipline, not theater. The current evidence should be read as governance metadata and bounded observability, not as broad robustness closure.
+This slide is about discipline, not theater. Current evidence should be read as governance metadata, partner-readiness infrastructure, and bounded observability, not broad robustness closure.
 
 Evidence lanes: Technical evidence
 
@@ -450,7 +435,7 @@ Promotion rule
 
 Blocked until earned
 
-Candidate models stay gated until release artifacts and scientist review justify stronger claims.
+Candidate models and Himalayan claims stay gated until local evidence, holdout metrics, release artifacts, and scientist review justify stronger claims.
 
 Current bounded evidence
 
@@ -461,13 +446,13 @@ Threshold drift
 `0.157726` is visible and should remain visible in the scientist discussion.
 
 Source of truth
-Current admin surfaces, benchmark pack v0, validation protocol v0, and the stability summary artifact.
+Current admin surfaces, benchmark pack v0, validation protocol v0, v3 partner evidence contract, and the stability summary artifact.
 
 Current reading
 “We have explicit benchmark and stability traces, and they are conservative enough to keep stronger claims blocked.”
 
 Avoid saying:
-“the shadow path is stable and production-ready.” The artifact supports only cautious governance language.
+“the shadow path is stable and ready for production.” The artifact supports only cautious governance language.
 
 ---
 
@@ -513,7 +498,7 @@ Current strongest proposition for scientist trust
 
 _Boundary slide_
 
-Trust increases when we draw the line before the scientist has to do it for us.
+Trust increases when we draw the line before the scientist or partner agency has to do it for us.
 
 Evidence lanes: Technical evidence
 
@@ -523,13 +508,13 @@ Algorithm novelty
 ANNs, SHAP, SAR segmentation, LSTM-style modeling, and GPU workers are not unique by themselves.
 
 Operational status
-No active public MTS-LSTM claim, no promoted SAR claim, and no authority-grade warning status.
+No active public MTS-LSTM claim, no promoted SAR claim, no Himalayan accuracy claim, and no authority-grade warning status.
 
 Snow science closure
 No solved weak-layer or critical-layer validation story.
 
 Autonomy closure
-No field-certified autonomous truth-generation claim.
+No field-certified autonomous truth-generation claim and no `D_tidy`-equivalent Himalayan truth yet.
 
 Safe substitute language
 
@@ -538,6 +523,8 @@ Safe substitute language
 - “Modal.com supports candidate compute, not the current public platform surface.”
 
 - “SAR is promising but still qualification-bound.”
+
+- “The SASE/DGRE packet is a partner-evidence handoff, not prediction success.”
 
 - “The current value is disciplined integration under sparse-data constraints.”
 
@@ -551,7 +538,7 @@ Recent avalanche ML literature • used conservatively
 
 _Conditional close_
 
-The right close is not certainty. It is whether the next scientist-led validation step should begin now.
+The right close is not certainty. It is whether the SASE/DGRE handoff and next scientist-owned validation step are worth doing now.
 
 Evidence lanes: Technical evidence; Research agenda
 
@@ -569,9 +556,9 @@ Coverage signaling exists; scientist-grade qualification still does not.
 
 Blocked claim
 
-No critical-layer closure
+No Himalayan or weak-layer closure
 
-Weak-layer review and snowpack validation are explicitly next-phase work.
+V3 intake validates structure/provenance only; weak-layer and snowpack validation remain next-phase work.
 
 Decision close
 
@@ -580,4 +567,4 @@ Decision close
 - The missing science is visible rather than hidden, which makes the next research step concrete.
 
 - Meeting question:
-should the scientist team help shape the benchmark, validation, and advancement program from here?
+should the scientist team and SASE/DGRE partner contacts help own the benchmark, validation, and promotion frontier from here?

@@ -14,7 +14,7 @@ type OverpassOk<T> = {
   cacheHit: boolean;
 };
 
-type OverpassDegraded = {
+export type OverpassDegraded = {
   ok: false;
   degraded: true;
   reason: 'cooldown' | 'rate_limited' | 'gateway_timeout' | 'network_error';

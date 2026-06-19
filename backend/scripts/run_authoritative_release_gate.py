@@ -8,6 +8,7 @@ from typing import Any
 
 from backend.common.config import load_settings
 from backend.common.regions import repo_root
+from backend.common.sar_acceptance_policy import assert_sar_acceptance_for_promotion
 from backend.common.supabase_io import has_supabase_credentials, rest_insert
 from backend.sar_release_manifest import ReleaseManifestOptions, build_release_manifest_from_reference_set
 from backend.sar_release_promote import promote_from_report
@@ -72,27 +73,37 @@ def resolve_local_model_path(raw_model_path: str, override: Path | None = None) 
         return override.expanduser().resolve()
 
     candidate = Path(raw_model_path).expanduser()
-    if candidate.exists():
-        return candidate.resolve()
 
     if candidate.is_absolute() and tuple(candidate.parts[:2]) == ('/', 'artifacts') and len(candidate.parts) >= 4:
         fallback = (repo_root() / 'backend' / 'data' / candidate.parts[2] / candidate.name).resolve()
-        if fallback.exists():
-            return fallback
+        return fallback
+
+    if candidate.exists():
+        return candidate.resolve()
 
     return candidate
 
 
-def _decision_reason(report: dict[str, Any]) -> str:
+def _acceptance_blocker(acceptance_report: dict[str, Any] | None) -> str | None:
+    try:
+        assert_sar_acceptance_for_promotion(acceptance_report)
+    except ValueError as exc:
+        return str(exc)
+    return None
+
+
+def _decision_reason(report: dict[str, Any], *, acceptance_blocker: str | None = None) -> str:
     if str(report.get('status')) != 'ok':
         return f'evaluate-release returned status={report.get("status")}'
-    if bool(report.get('beats_baseline')):
-        return 'authoritative held-out evaluation beat the configured baseline gate'
     baseline = report.get('baseline_f1_floor_used')
     f1 = report.get('f1')
-    if baseline is not None and f1 is not None:
-        return f'evaluate-release did not beat baseline gate (f1={f1}, floor={baseline})'
-    return 'evaluate-release did not beat baseline gate'
+    if not bool(report.get('beats_baseline')):
+        if baseline is not None and f1 is not None:
+            return f'evaluate-release did not beat baseline gate (f1={f1}, floor={baseline})'
+        return 'evaluate-release did not beat baseline gate'
+    if acceptance_blocker:
+        return f'authoritative held-out evaluation beat baseline, but {acceptance_blocker}'
+    return 'authoritative held-out evaluation beat baseline and SnowSlide research-grade acceptance gate'
 
 
 def record_promotion_event(
@@ -131,6 +142,7 @@ def run_authoritative_release_gate(
     hazard_type: str,
     dry_run: bool = False,
     local_model_path: Path | None = None,
+    acceptance_report: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     env_values = apply_authoritative_release_env(env_file)
     manifest = build_authoritative_manifest(
@@ -143,8 +155,13 @@ def run_authoritative_release_gate(
         manifest=manifest,
         request_type='authoritative_evaluate_release',
     )
-    decision = 'promote' if bool(report.get('beats_baseline')) and str(report.get('status')) == 'ok' else 'reject'
-    decision_reason = _decision_reason(report)
+    acceptance_blocker = _acceptance_blocker(acceptance_report)
+    decision = (
+        'promote'
+        if bool(report.get('beats_baseline')) and str(report.get('status')) == 'ok' and acceptance_blocker is None
+        else 'reject'
+    )
+    decision_reason = _decision_reason(report, acceptance_blocker=acceptance_blocker)
     promotion_event = None if dry_run else record_promotion_event(
         decision=decision,
         decision_reason=decision_reason,
@@ -169,6 +186,7 @@ def run_authoritative_release_gate(
     )
     promotion_result = promote_from_report(
         report,
+        acceptance_report=acceptance_report,
         scenes_manifest=manifest,
         model_path=promotion_model_path,
         artifact_root=artifact_root,
@@ -203,6 +221,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument('--hazard-type', default=settings.hazard_type)
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--local-model-path', type=Path)
+    parser.add_argument('--acceptance-report', type=Path, required=True)
     return parser.parse_args(argv)
 
 
@@ -218,6 +237,7 @@ def main(argv: list[str] | None = None) -> int:
         hazard_type=args.hazard_type,
         dry_run=args.dry_run,
         local_model_path=args.local_model_path,
+        acceptance_report=json.loads(args.acceptance_report.read_text(encoding='utf-8')),
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0

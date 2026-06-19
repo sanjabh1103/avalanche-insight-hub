@@ -45,7 +45,7 @@ Use these mostly in speaker notes or sparingly on slides. Keep each quote subord
 | 2008 ANN paper | Shows nonlinear avalanche forecasting is already part of the client’s history. | Deck 1 slides `3-4` |
 | 2015 calibration and weighting paper | Supports the calibration ambiguity, weighting discipline, and release-gate story. | Deck 1 slide `4`; Deck 2 slide `8` |
 | 2017 GPU acceleration paper | Supports the claim that heavy compute belongs off the critical user path. | Deck 1 slides `10-12`; Deck 2 slide `14` |
-| 2020 HIM-STRAT | Supports the snowpack-memory and weak-layer relevance story. | Deck 1 slide `4`; Deck 2 slide `7` |
+| 2020 HIM-STRAT | Supports the snowpack-memory and weak-layer relevance story. **Note:** In the current platform, HIM-STRAT insights are implemented as a Weather-Driven Heuristic Proxy, not a thermodynamic stratigraphic simulation. | Deck 1 slide `4`; Deck 2 slide `7` |
 | 2025 feature-selection paper | Supports feature discipline over feature sprawl. | Deck 1 slide `4`; Deck 2 slide `12` |
 | 2025 class-imbalance paper | Supports rare-event evaluation, benchmark discipline, and release gates. | Deck 1 slide `4`; Deck 2 slides `5-8` |
 

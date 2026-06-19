@@ -6,12 +6,14 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 os.environ.setdefault('AVALANCHE_SKIP_MODAL_IMPORT', '1')
 
 from backend.modal_worker_app import (
     MODAL_PINNED_RUNTIME_PACKAGES,
+    _request_model_path,
+    _require_volume_path,
     authorize_bearer_request,
     dispatch_modal_route,
     handle_evaluate_release,
@@ -26,6 +28,8 @@ from backend.modal_worker_app import (
     poll_train_sar_unet_job_async,
     poll_train_mtslstm_job,
     poll_train_mtslstm_job_async,
+    run_remote_evaluate_release,
+    run_remote_evaluate_sar_checkpoint,
     run_remote_sar_segment,
     run_remote_train_sar_unet,
     run_remote_infer_mtslstm,
@@ -38,10 +42,27 @@ from backend.modal_worker_app import (
     submit_train_sar_unet_job_async,
     submit_train_mtslstm_job,
     submit_train_mtslstm_job_async,
+    create_fastapi_app,
 )
 
 
 class ModalWorkerAppTests(unittest.TestCase):
+    def test_health_route_reports_gpu_function_names(self) -> None:
+        app = create_fastapi_app()
+        routes = {route.path for route in app.routes}
+
+        self.assertIn('/health', routes)
+        health_route = next(route for route in app.routes if route.path == '/health')
+        body = asyncio.run(health_route.endpoint())
+
+        self.assertEqual(body['status'], 'ok')
+        self.assertEqual(body['runtime_provider'], 'modal')
+        self.assertIn('sar_segment_remote', body['gpu_functions'])
+        self.assertIn('train_sar_unet_remote', body['gpu_functions'])
+        self.assertIn('evaluate_sar_checkpoint_remote', body['gpu_functions'])
+        self.assertIn('train_mts_lstm_remote', body['gpu_functions'])
+        self.assertIn('/train-mtslstm', body['routes'])
+
     def test_modal_pinned_runtime_packages_match_requirements(self) -> None:
         self.assertEqual(
             MODAL_PINNED_RUNTIME_PACKAGES,
@@ -82,6 +103,39 @@ class ModalWorkerAppTests(unittest.TestCase):
         payload = {'hazard_type': 'avalanche', 'scenes': [{'scene_id': 'S1A_001'}]}
         handle_evaluate_release(payload)
         dispatch_mock.assert_called_once_with('evaluate-release', payload)
+
+    @patch('backend.modal_worker_app.run_worker_request', return_value={'status': 'ok', 'beats_baseline': False})
+    def test_run_remote_evaluate_release_forces_dry_run(self, worker_mock) -> None:
+        reload_mock = Mock()
+        commit_mock = Mock()
+        with TemporaryDirectory() as tmpdir:
+            result = run_remote_evaluate_release(
+                {'reference_set_key': 'snowslide-heldout-v1', 'dry_run': False},
+                artifact_root=Path(tmpdir),
+                volume_reload=reload_mock,
+                volume_commit=commit_mock,
+            )
+
+        self.assertEqual(result['status'], 'ok')
+        reload_mock.assert_called_once()
+        commit_mock.assert_called_once()
+        call_args = worker_mock.call_args
+        self.assertEqual(call_args.args[0], 'evaluate-release')
+        self.assertTrue(call_args.args[1]['dry_run'])
+        self.assertTrue(call_args.kwargs['dry_run'])
+
+    def test_request_model_path_requires_artifact_volume_path(self) -> None:
+        self.assertEqual(_request_model_path({'model_path': '/artifacts/20260516T164730Z/sar_model.pt'}), Path('/artifacts/20260516T164730Z/sar_model.pt'))
+        with self.assertRaisesRegex(ValueError, 'under /artifacts'):
+            _request_model_path({'model_path': '/tmp/sar_model.pt'})
+
+    def test_require_volume_path_rejects_non_artifact_path(self) -> None:
+        self.assertEqual(
+            _require_volume_path({'checkpoint_path': '/artifacts/run/sar_model.pt'}, ('checkpoint_path',)),
+            Path('/artifacts/run/sar_model.pt'),
+        )
+        with self.assertRaisesRegex(ValueError, 'under /artifacts'):
+            _require_volume_path({'checkpoint_path': '/tmp/sar_model.pt'}, ('checkpoint_path',))
 
     @patch.dict('os.environ', {'MODAL_WORKER_TOKEN': 'secret-token'}, clear=False)
     def test_authorize_bearer_request_rejects_missing_token(self) -> None:
@@ -751,11 +805,91 @@ class ModalWorkerAppTests(unittest.TestCase):
         self.assertEqual(result['status'], 'ok')
         self.assertEqual(result['candidate_model_version'], 'shadow-v2')
         self.assertEqual(calls, ['reload', 'commit'])
-        run_train_mock.assert_called_once_with(
-            {'training_manifest_path': 'sar-data/train.json'},
+        run_train_mock.assert_called_once()
+        _, kwargs = run_train_mock.call_args
+        self.assertEqual(kwargs['artifact_root'], Path('/artifacts'))
+        self.assertEqual(kwargs['device'], 'cuda')
+        self.assertTrue(callable(kwargs['progress_callback']))
+
+    def test_run_remote_train_sar_unet_commits_volume_on_progress_callback(self) -> None:
+        calls: list[str] = []
+
+        def _reload() -> None:
+            calls.append('reload')
+
+        def _commit() -> None:
+            calls.append('commit')
+
+        def _run_train(payload: dict[str, object], **kwargs: object) -> dict[str, object]:
+            progress_callback = kwargs.get('progress_callback')
+            self.assertTrue(callable(progress_callback))
+            progress_callback({'phase': 'initializing'})
+            progress_callback({'phase': 'materializing_dataset'})
+            return {'status': 'ok', 'candidate_model_version': 'shadow-progress'}
+
+        with patch('backend.modal_worker_app.run_train_sar_unet', side_effect=_run_train):
+            result = run_remote_train_sar_unet(
+                {'training_manifest_path': 'sar-data/train.json'},
+                artifact_root=Path('/artifacts'),
+                device='cuda',
+                volume_reload=_reload,
+                volume_commit=_commit,
+            )
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(calls, ['reload', 'commit', 'commit', 'commit'])
+
+    @patch('backend.modal_worker_app.evaluate_sar_checkpoint', return_value={'status': 'ok', 'quality_gate': {'passed': True}})
+    def test_run_remote_evaluate_sar_checkpoint_reloads_and_commits_volume(self, evaluate_mock) -> None:
+        calls: list[str] = []
+        payload = {
+            'training_manifest_path': '/artifacts/european-shadow-sar/manifest.json',
+            'checkpoint_path': '/artifacts/20260516T164730Z/sar_model.pt',
+        }
+
+        def _reload() -> None:
+            calls.append('reload')
+
+        def _commit() -> None:
+            calls.append('commit')
+
+        result = run_remote_evaluate_sar_checkpoint(
+            payload,
             artifact_root=Path('/artifacts'),
             device='cuda',
+            volume_reload=_reload,
+            volume_commit=_commit,
         )
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(calls, ['reload', 'commit'])
+        evaluate_mock.assert_called_once_with(payload, artifact_root=Path('/artifacts'), device='cuda')
+
+    @patch('backend.modal_worker_app.build_sar_validation_error_diagnostics', return_value={'status': 'ok'})
+    def test_run_remote_evaluate_sar_checkpoint_diagnostics_branch(self, diagnostics_mock) -> None:
+        payload = {
+            'training_manifest_path': '/artifacts/european-shadow-sar/manifest.json',
+            'checkpoint_path': '/artifacts/20260516T164730Z/sar_model.pt',
+            'diagnostics': True,
+        }
+
+        result = run_remote_evaluate_sar_checkpoint(payload, artifact_root=Path('/artifacts'), device='cuda')
+
+        self.assertEqual(result['status'], 'ok')
+        diagnostics_mock.assert_called_once_with(payload, artifact_root=Path('/artifacts'), device='cuda')
+
+    @patch('backend.modal_worker_app.evaluate_sar_checkpoint_scene_blended', return_value={'status': 'ok', 'evaluation_mode': 'scene_blended'})
+    def test_run_remote_evaluate_sar_checkpoint_scene_blended_branch(self, scene_blended_mock) -> None:
+        payload = {
+            'training_manifest_path': '/artifacts/european-shadow-sar/manifest.json',
+            'checkpoint_path': '/artifacts/20260516T164730Z/sar_model.pt',
+            'evaluation_mode': 'scene_blended',
+        }
+
+        result = run_remote_evaluate_sar_checkpoint(payload, artifact_root=Path('/artifacts'), device='cuda')
+
+        self.assertEqual(result['status'], 'ok')
+        scene_blended_mock.assert_called_once_with(payload, artifact_root=Path('/artifacts'), device='cuda')
 
     @patch('backend.modal_worker_app.handle_infer_mtslstm', return_value={'status': 'ok', 'cells_with_shap': 5})
     def test_run_remote_infer_mtslstm_reloads_and_commits_volume(self, handle_infer_mock) -> None:
@@ -804,6 +938,32 @@ class ModalWorkerAppTests(unittest.TestCase):
         self.assertEqual(run_worker_request_mock.call_args.args[0], 'sar-segment')
         self.assertEqual(run_worker_request_mock.call_args.args[1], {'reference_set_key': 'snowslide-heldout-v1', 'shadow_mode': True})
         self.assertEqual(run_worker_request_mock.call_args.kwargs['device'], 'cuda')
+
+    @patch(
+        'backend.modal_worker_app.run_worker_request',
+        return_value={
+            'status': 'ok',
+            'prediction_mask_dtype': 'float32',
+            'scene_count': 2,
+            'detections_count': 2,
+            'mask_asset_refs': ['sar-masks/a.tif', 'sar-masks/b.tif'],
+            'detections': [{'large': 'geometry'}],
+        },
+    )
+    def test_run_remote_sar_segment_compact_response_omits_detection_payload(self, run_worker_request_mock) -> None:
+        result = run_remote_sar_segment(
+            {'reference_set_key': 'snowslide-heldout-v1', 'compact_response': True},
+            artifact_root=Path('/artifacts'),
+            device='cuda',
+        )
+
+        self.assertEqual(result['status'], 'ok')
+        self.assertTrue(result['compact_response'])
+        self.assertEqual(result['prediction_mask_dtype'], 'float32')
+        self.assertEqual(result['mask_asset_ref_count'], 2)
+        self.assertEqual(result['mask_asset_refs'], ['sar-masks/a.tif', 'sar-masks/b.tif'])
+        self.assertNotIn('detections', result)
+        run_worker_request_mock.assert_called_once()
 
     def test_seed_dem_directory_copies_missing_dems_only(self) -> None:
         with TemporaryDirectory() as tmpdir:

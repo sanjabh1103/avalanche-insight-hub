@@ -1,0 +1,590 @@
+{
+  "decision": "templates_written_pending_partner_evidence",
+  "deprecated_schema_versions": [
+    "himalayan_accuracy_readiness_contract_v1",
+    "himalayan_accuracy_partner_evidence_templates_v1",
+    "himalayan_accuracy_partner_evidence_validation_v1"
+  ],
+  "generated_at": "2026-05-23T13:13:35.699020+00:00",
+  "himalayan_accuracy_claim_allowed": false,
+  "production_scoring_allowed": false,
+  "schema_version": "himalayan_accuracy_partner_evidence_templates_v2",
+  "templates": [
+    {
+      "category": "himalayan_station_network",
+      "columns": [
+        "station_id",
+        "region_key",
+        "latitude",
+        "longitude",
+        "elevation_m",
+        "active_date_range",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "controlled_values": {
+        "license_scope": [
+          "blocked_license_scope",
+          "cc_by_nc_research_only",
+          "commercial_deployment_approved",
+          "external_imagery_share_approved",
+          "internal_research_validation",
+          "internal_shadow_presentation",
+          "partner_restricted_research",
+          "pending_license_review",
+          "public_presentation_with_attribution",
+          "research_validation_only",
+          "unknown"
+        ]
+      },
+      "filename": "station_metadata.csv",
+      "max_review_age_days": 365.0,
+      "minimum_distinct_counts": {
+        "station_id": 10
+      },
+      "minimum_numeric_spans": {
+        "elevation_m": 500.0
+      },
+      "minimum_rows_for_availability": 10,
+      "minimum_temporal_span_days": {},
+      "needed_for_world_class": "Reviewed Himalayan station coordinates and elevations for GPxyz and local validation.",
+      "requirement_key": "station_metadata",
+      "unlocks_top10_feature": "Himalayan station + snowpack data contract"
+    },
+    {
+      "category": "weather_features",
+      "columns": [
+        "station_id",
+        "observed_at",
+        "air_temp_c",
+        "precipitation_mm",
+        "snowfall_cm",
+        "snow_depth_cm",
+        "wind_speed_ms",
+        "wind_dir_deg",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "controlled_values": {
+        "license_scope": [
+          "blocked_license_scope",
+          "cc_by_nc_research_only",
+          "commercial_deployment_approved",
+          "external_imagery_share_approved",
+          "internal_research_validation",
+          "internal_shadow_presentation",
+          "partner_restricted_research",
+          "pending_license_review",
+          "public_presentation_with_attribution",
+          "research_validation_only",
+          "unknown"
+        ]
+      },
+      "filename": "weather_station_observations.csv",
+      "max_review_age_days": 365.0,
+      "minimum_distinct_counts": {
+        "observed_at": 10,
+        "station_id": 3
+      },
+      "minimum_numeric_spans": {},
+      "minimum_rows_for_availability": 30,
+      "minimum_temporal_span_days": {
+        "observed_at": 7.0
+      },
+      "needed_for_world_class": "Partner-observed weather station series aligned to local danger labels.",
+      "requirement_key": "weather_station_observations",
+      "unlocks_top10_feature": "Calibrated 4-class danger-level model"
+    },
+    {
+      "category": "snowpack_weak_layer",
+      "columns": [
+        "station_id",
+        "observed_at",
+        "layer_index",
+        "layer_depth_cm",
+        "grain_type",
+        "hardness_index",
+        "stability_index",
+        "quality_flag",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "controlled_values": {
+        "license_scope": [
+          "blocked_license_scope",
+          "cc_by_nc_research_only",
+          "commercial_deployment_approved",
+          "external_imagery_share_approved",
+          "internal_research_validation",
+          "internal_shadow_presentation",
+          "partner_restricted_research",
+          "pending_license_review",
+          "public_presentation_with_attribution",
+          "research_validation_only",
+          "unknown"
+        ],
+        "quality_flag": [
+          "corrected",
+          "estimated",
+          "measured",
+          "modeled",
+          "provisional",
+          "reviewed_suspect",
+          "reviewed_valid",
+          "unknown"
+        ]
+      },
+      "filename": "snowpack_profile_features.csv",
+      "max_review_age_days": 365.0,
+      "minimum_distinct_counts": {
+        "observed_at": 5,
+        "station_id": 3
+      },
+      "minimum_numeric_spans": {},
+      "minimum_rows_for_availability": 20,
+      "minimum_temporal_span_days": {
+        "observed_at": 4.0
+      },
+      "needed_for_world_class": "HIM-STRAT/SNOWPACK-like local profile features and weak-layer validation.",
+      "requirement_key": "snowpack_profile_features",
+      "unlocks_top10_feature": "Distributed snowpack / weak-layer evidence"
+    },
+    {
+      "category": "danger_ground_truth",
+      "columns": [
+        "region_id",
+        "valid_from",
+        "valid_to",
+        "danger_scale_standard",
+        "danger_level_1_to_5",
+        "danger_level_1_to_4",
+        "avalanche_problem",
+        "elevation_band_policy",
+        "forecaster_or_reviewer_id",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "controlled_values": {
+        "avalanche_problem": [
+          "cornice_fall",
+          "deep_persistent_weak_layer",
+          "gliding_snow",
+          "loose_dry",
+          "loose_wet",
+          "multiple",
+          "new_snow",
+          "no_distinct_problem",
+          "other_reviewed",
+          "persistent_weak_layer",
+          "persistent_weak_layers",
+          "unknown",
+          "wet_snow",
+          "wind_slab"
+        ],
+        "danger_scale_standard": [
+          "eaws_5_level",
+          "local_4_level",
+          "partner_custom_reviewed",
+          "unknown"
+        ],
+        "license_scope": [
+          "blocked_license_scope",
+          "cc_by_nc_research_only",
+          "commercial_deployment_approved",
+          "external_imagery_share_approved",
+          "internal_research_validation",
+          "internal_shadow_presentation",
+          "partner_restricted_research",
+          "pending_license_review",
+          "public_presentation_with_attribution",
+          "research_validation_only",
+          "unknown"
+        ]
+      },
+      "filename": "danger_labels_and_bulletins.csv",
+      "max_review_age_days": 365.0,
+      "minimum_distinct_counts": {
+        "danger_level_1_to_4": 2,
+        "region_id": 3
+      },
+      "minimum_numeric_spans": {},
+      "minimum_rows_for_availability": 10,
+      "minimum_temporal_span_days": {
+        "valid_from": 7.0
+      },
+      "needed_for_world_class": "Reviewed Himalayan danger labels and bulletin archive by region/elevation band.",
+      "requirement_key": "danger_labels_and_bulletins",
+      "unlocks_top10_feature": "Calibrated 4-class danger-level model"
+    },
+    {
+      "category": "spatial_forecast_units",
+      "columns": [
+        "region_id",
+        "polygon_geometry",
+        "crs",
+        "elevation_policy",
+        "valid_date_range",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "controlled_values": {
+        "license_scope": [
+          "blocked_license_scope",
+          "cc_by_nc_research_only",
+          "commercial_deployment_approved",
+          "external_imagery_share_approved",
+          "internal_research_validation",
+          "internal_shadow_presentation",
+          "partner_restricted_research",
+          "pending_license_review",
+          "public_presentation_with_attribution",
+          "research_validation_only",
+          "unknown"
+        ]
+      },
+      "filename": "warning_region_polygons.csv",
+      "max_review_age_days": 365.0,
+      "minimum_distinct_counts": {
+        "region_id": 1
+      },
+      "minimum_numeric_spans": {},
+      "minimum_rows_for_availability": 1,
+      "minimum_temporal_span_days": {},
+      "needed_for_world_class": "Official or partner-reviewed Himalayan warning-region geometries.",
+      "requirement_key": "warning_region_polygons",
+      "unlocks_top10_feature": "Elevation-band warning-region aggregation"
+    },
+    {
+      "category": "event_outcomes",
+      "columns": [
+        "event_id",
+        "observed_at",
+        "latitude",
+        "longitude",
+        "elevation_m",
+        "aspect",
+        "avalanche_problem",
+        "observed_outcome",
+        "confidence",
+        "source",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "controlled_values": {
+        "avalanche_problem": [
+          "cornice_fall",
+          "deep_persistent_weak_layer",
+          "gliding_snow",
+          "loose_dry",
+          "loose_wet",
+          "multiple",
+          "new_snow",
+          "no_distinct_problem",
+          "other_reviewed",
+          "persistent_weak_layer",
+          "persistent_weak_layers",
+          "unknown",
+          "wet_snow",
+          "wind_slab"
+        ],
+        "license_scope": [
+          "blocked_license_scope",
+          "cc_by_nc_research_only",
+          "commercial_deployment_approved",
+          "external_imagery_share_approved",
+          "internal_research_validation",
+          "internal_shadow_presentation",
+          "partner_restricted_research",
+          "pending_license_review",
+          "public_presentation_with_attribution",
+          "research_validation_only",
+          "unknown"
+        ],
+        "observed_outcome": [
+          "avalanche_observed",
+          "incident",
+          "near_miss",
+          "no_avalanche_observed",
+          "partial_evidence",
+          "unknown"
+        ]
+      },
+      "filename": "historical_avalanche_events.csv",
+      "max_review_age_days": 365.0,
+      "minimum_distinct_counts": {
+        "event_id": 10
+      },
+      "minimum_numeric_spans": {
+        "elevation_m": 500.0
+      },
+      "minimum_rows_for_availability": 10,
+      "minimum_temporal_span_days": {
+        "observed_at": 7.0
+      },
+      "needed_for_world_class": "Partner-confirmed Himalayan events for false-positive/false-negative assessment.",
+      "requirement_key": "historical_avalanche_events",
+      "unlocks_top10_feature": "Field reports and event-outcome feedback loop"
+    },
+    {
+      "category": "remote_sensing",
+      "columns": [
+        "scene_id",
+        "sensor",
+        "acquired_at",
+        "preprocessing_level",
+        "truth_mask_or_event_ref",
+        "holdout_split",
+        "license_scope",
+        "source_ref",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "controlled_values": {
+        "license_scope": [
+          "blocked_license_scope",
+          "cc_by_nc_research_only",
+          "commercial_deployment_approved",
+          "external_imagery_share_approved",
+          "internal_research_validation",
+          "internal_shadow_presentation",
+          "partner_restricted_research",
+          "pending_license_review",
+          "public_presentation_with_attribution",
+          "research_validation_only",
+          "unknown"
+        ],
+        "preprocessing_level": [
+          "analysis_ready",
+          "co_registered",
+          "orthorectified",
+          "radiometrically_calibrated",
+          "raw",
+          "reviewed_analysis_ready",
+          "terrain_corrected",
+          "unknown"
+        ]
+      },
+      "filename": "remote_sensing_validation_scenes.csv",
+      "max_review_age_days": 365.0,
+      "minimum_distinct_counts": {
+        "scene_id": 5
+      },
+      "minimum_numeric_spans": {},
+      "minimum_rows_for_availability": 5,
+      "minimum_temporal_span_days": {
+        "acquired_at": 4.0
+      },
+      "needed_for_world_class": "Himalayan SAR/optical/InSAR validation scenes with independent holdouts.",
+      "requirement_key": "remote_sensing_validation_scenes",
+      "unlocks_top10_feature": "Remote-sensing avalanche evidence"
+    },
+    {
+      "category": "terrain_exposure",
+      "columns": [
+        "region_id",
+        "dem_ref",
+        "slope",
+        "aspect",
+        "terrain_class",
+        "runout_validation_ref",
+        "quality_flag",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "controlled_values": {
+        "license_scope": [
+          "blocked_license_scope",
+          "cc_by_nc_research_only",
+          "commercial_deployment_approved",
+          "external_imagery_share_approved",
+          "internal_research_validation",
+          "internal_shadow_presentation",
+          "partner_restricted_research",
+          "pending_license_review",
+          "public_presentation_with_attribution",
+          "research_validation_only",
+          "unknown"
+        ],
+        "quality_flag": [
+          "corrected",
+          "estimated",
+          "measured",
+          "modeled",
+          "provisional",
+          "reviewed_suspect",
+          "reviewed_valid",
+          "unknown"
+        ],
+        "terrain_class": [
+          "challenging",
+          "complex",
+          "extreme",
+          "non_avalanche",
+          "simple",
+          "unknown"
+        ]
+      },
+      "filename": "terrain_ates_runout_validation.csv",
+      "max_review_age_days": 365.0,
+      "minimum_distinct_counts": {
+        "region_id": 3
+      },
+      "minimum_numeric_spans": {
+        "slope": 10.0
+      },
+      "minimum_rows_for_availability": 3,
+      "minimum_temporal_span_days": {},
+      "needed_for_world_class": "Reviewed terrain classes and runout validation for pilot regions.",
+      "requirement_key": "terrain_ates_runout_validation",
+      "unlocks_top10_feature": "Terrain, ATES, runout and exposure features"
+    },
+    {
+      "category": "human_validation",
+      "columns": [
+        "review_id",
+        "reviewer_id",
+        "reviewed_at",
+        "case_id",
+        "verdict",
+        "label_quality",
+        "model_error_type",
+        "confidence",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_notes"
+      ],
+      "controlled_values": {
+        "label_quality": [
+          "incomplete",
+          "invalid",
+          "needs_terrain_context",
+          "suspect",
+          "unknown",
+          "valid"
+        ],
+        "license_scope": [
+          "blocked_license_scope",
+          "cc_by_nc_research_only",
+          "commercial_deployment_approved",
+          "external_imagery_share_approved",
+          "internal_research_validation",
+          "internal_shadow_presentation",
+          "partner_restricted_research",
+          "pending_license_review",
+          "public_presentation_with_attribution",
+          "research_validation_only",
+          "unknown"
+        ],
+        "model_error_type": [
+          "calibration_error",
+          "domain_shift",
+          "false_negative",
+          "false_positive",
+          "localization_error",
+          "not_applicable",
+          "true_negative",
+          "true_positive",
+          "unknown"
+        ],
+        "verdict": [
+          "label_remediation_required",
+          "label_valid",
+          "model_error",
+          "review_incomplete",
+          "terrain_context_required",
+          "uncertain"
+        ]
+      },
+      "filename": "scientist_reviews.csv",
+      "max_review_age_days": 365.0,
+      "minimum_distinct_counts": {
+        "case_id": 20,
+        "review_id": 20
+      },
+      "minimum_numeric_spans": {},
+      "minimum_rows_for_availability": 20,
+      "minimum_temporal_span_days": {
+        "reviewed_at": 7.0
+      },
+      "needed_for_world_class": "Enough completed scientist reviews to support model-vs-human and label-quality analysis.",
+      "requirement_key": "scientist_reviews",
+      "unlocks_top10_feature": "Explainability, calibration and model-vs-human diagnostics"
+    },
+    {
+      "category": "release_gate",
+      "columns": [
+        "holdout_id",
+        "source_refs",
+        "region_ids",
+        "date_range",
+        "leakage_check",
+        "acceptance_floors",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "controlled_values": {
+        "license_scope": [
+          "blocked_license_scope",
+          "cc_by_nc_research_only",
+          "commercial_deployment_approved",
+          "external_imagery_share_approved",
+          "internal_research_validation",
+          "internal_shadow_presentation",
+          "partner_restricted_research",
+          "pending_license_review",
+          "public_presentation_with_attribution",
+          "research_validation_only",
+          "unknown"
+        ]
+      },
+      "filename": "independent_himalayan_holdout.csv",
+      "max_review_age_days": 365.0,
+      "minimum_distinct_counts": {
+        "holdout_id": 1
+      },
+      "minimum_numeric_spans": {},
+      "minimum_rows_for_availability": 1,
+      "minimum_temporal_span_days": {},
+      "needed_for_world_class": "Independent Himalayan final holdout not used in model or threshold selection.",
+      "requirement_key": "independent_himalayan_holdout",
+      "unlocks_top10_feature": "Release gates, uncertainty and claim governance"
+    }
+  ],
+  "usage_boundary": "research_validation_only",
+  "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+}

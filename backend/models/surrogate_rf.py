@@ -20,6 +20,8 @@ SURROGATE_KMEANS_SMOTE_K_NEIGHBORS = 5
 SURROGATE_RF_TREES = 300
 SURROGATE_CV_RF_TREES = 200
 SURROGATE_MIN_SAMPLES_LEAF = 2
+SURROGATE_MAX_SYNTHETIC_WINTER_HIGH_ELEVATION_TEMP_C = 5.0
+SURROGATE_HIGH_ELEVATION_M = 2500.0
 
 
 class TreeShapUnavailableError(RuntimeError):
@@ -112,6 +114,61 @@ def resampled_sample_weights(original_frame: pd.DataFrame, resampled_y: np.ndarr
     return np.concatenate([base_weights, np.full(synthetic_count, synthetic_weight, dtype=float)])
 
 
+def _finite_column(frame: pd.DataFrame, column: str) -> pd.Series:
+    if column not in frame.columns:
+        return pd.Series(np.nan, index=frame.index)
+    return pd.to_numeric(frame[column], errors='coerce')
+
+
+def physically_valid_surrogate_rows(frame: pd.DataFrame) -> pd.Series:
+    valid = pd.Series(True, index=frame.index)
+    temperature = _finite_column(frame, 'temperature_2m')
+    elevation = _finite_column(frame, 'elevation_m')
+    snowfall = _finite_column(frame, 'snowfall_24h')
+    precipitation = _finite_column(frame, 'precipitation_24h')
+    settlement = _finite_column(frame, 'snow_settlement_index')
+
+    if 'temperature_2m' in frame.columns:
+        valid &= temperature.between(-60.0, 25.0) | temperature.isna()
+    if 'snowfall_24h' in frame.columns:
+        valid &= (snowfall >= 0.0) | snowfall.isna()
+    if 'precipitation_24h' in frame.columns:
+        valid &= (precipitation >= 0.0) | precipitation.isna()
+    if {'temperature_2m', 'elevation_m'}.issubset(frame.columns):
+        valid &= ~(
+            (elevation >= SURROGATE_HIGH_ELEVATION_M)
+            & (temperature > SURROGATE_MAX_SYNTHETIC_WINTER_HIGH_ELEVATION_TEMP_C)
+        )
+    if {'temperature_2m', 'snow_settlement_index', 'precipitation_24h'}.issubset(frame.columns):
+        valid &= ~(
+            (temperature > 2.0)
+            & (settlement > 0.85)
+            & (precipitation <= 0.0)
+        )
+    return valid.fillna(True)
+
+
+def filter_unphysical_synthetic_samples(
+    x_train: pd.DataFrame,
+    y_train: pd.Series,
+    x_res: pd.DataFrame,
+    y_res: pd.Series,
+) -> tuple[pd.DataFrame, pd.Series, dict[str, int]]:
+    original_count = len(x_train)
+    synthetic_count = max(0, len(x_res) - original_count)
+    if synthetic_count == 0:
+        return x_res, y_res, {'synthetic_generated': 0, 'synthetic_rejected_physical': 0}
+    original_mask = pd.Series([True] * original_count + [False] * synthetic_count, index=x_res.index)
+    physical_mask = physically_valid_surrogate_rows(x_res)
+    keep_mask = original_mask | physical_mask
+    filtered_x = x_res.loc[keep_mask].reset_index(drop=True)
+    filtered_y = y_res.loc[keep_mask].reset_index(drop=True)
+    return filtered_x, filtered_y, {
+        'synthetic_generated': int(synthetic_count),
+        'synthetic_rejected_physical': int((~keep_mask & ~original_mask).sum()),
+    }
+
+
 def try_smote(x_train: pd.DataFrame, y_train: pd.Series, seed: int) -> tuple[pd.DataFrame, pd.Series, dict[str, object]]:
     """Use the locked KMeansSMOTE config for the tabular surrogate path."""
     class_counts = Counter(y_train.tolist())
@@ -135,11 +192,15 @@ def try_smote(x_train: pd.DataFrame, y_train: pd.Series, seed: int) -> tuple[pd.
             cluster_balance_threshold=0.1,
         )
         x_res, y_res = sampler.fit_resample(x_train, y_train)
+        x_res = pd.DataFrame(x_res, columns=x_train.columns)
+        y_res = pd.Series(y_res)
+        x_res, y_res, physical_filter_meta = filter_unphysical_synthetic_samples(x_train, y_train, x_res, y_res)
         return x_res, y_res, {
             'strategy': 'kmeanssmote',
             'k_neighbors': SURROGATE_KMEANS_SMOTE_K_NEIGHBORS,
             'class_counts_before': dict(class_counts),
             'class_counts_after': dict(Counter(y_res.tolist())),
+            **physical_filter_meta,
         }
     except Exception as exc:  # pragma: no cover - intentional fallback
         return x_train, y_train, {
@@ -242,9 +303,9 @@ def collect_tree_probabilities(base_model: object, x_sel: pd.DataFrame | np.ndar
 def build_tree_shap_explainer(base_model: object) -> object:
     try:
         import shap
-    except ModuleNotFoundError as exc:  # pragma: no cover - exercised via patched tests/runtime
+    except Exception as exc:  # pragma: no cover - exercised via patched tests/runtime
         raise TreeShapUnavailableError(
-            'TreeSHAP dependency unavailable: install backend/requirements.txt before running explainability paths.'
+            f'TreeSHAP dependency unavailable or incompatible: {exc}'
         ) from exc
 
     return shap.TreeExplainer(base_model)
@@ -281,6 +342,45 @@ def compute_tree_shap(
     for rank, item in enumerate(ordered, start=1):
         item['rank'] = rank
     return ({item['feature']: float(item['shap_value']) for item in ordered}, ordered)
+
+
+def compute_tree_shap_batch(
+    explainer: object,
+    selected_frame: pd.DataFrame,
+    selected_features: list[str],
+) -> list[tuple[dict[str, float], list[dict[str, float | str | int]]]]:
+    """Compute TreeSHAP for many inference rows in one explainer call."""
+    shap_values = explainer.shap_values(selected_frame)
+    if isinstance(shap_values, list):
+        shap_matrix = np.asarray(shap_values[-1])
+    else:
+        shap_array = np.asarray(shap_values)
+        if shap_array.ndim == 3:
+            shap_matrix = shap_array[:, :, -1]
+        else:
+            shap_matrix = shap_array
+    if shap_matrix.ndim == 1:
+        shap_matrix = shap_matrix.reshape(1, -1)
+
+    packets: list[tuple[dict[str, float], list[dict[str, float | str | int]]]] = []
+    for row_index, shap_vector in enumerate(shap_matrix):
+        feature_values = selected_frame.iloc[row_index].to_dict()
+        ordered = sorted(
+            [
+                {
+                    'feature': feature,
+                    'shap_value': float(value),
+                    'feature_value': float(feature_values[feature]),
+                }
+                for feature, value in zip(selected_features, shap_vector)
+            ],
+            key=lambda item: abs(float(item['shap_value'])),
+            reverse=True,
+        )[:5]
+        for rank, item in enumerate(ordered, start=1):
+            item['rank'] = rank
+        packets.append(({item['feature']: float(item['shap_value']) for item in ordered}, ordered))
+    return packets
 
 
 def fit_surrogate_bundle(

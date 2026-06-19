@@ -143,6 +143,9 @@ export interface ForecastGridRowRecord {
   model_metadata?: ForecastModelMetadata | unknown;
   status?: string;
   created_at?: string;
+  published_at?: string | null;
+  freshness_hours?: number | null;
+  same_day_published?: boolean;
 }
 
 function normalizeUncertaintyClass(span: number | undefined): 'low' | 'medium' | 'high' | undefined {

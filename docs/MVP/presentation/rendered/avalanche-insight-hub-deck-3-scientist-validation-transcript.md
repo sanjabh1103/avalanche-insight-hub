@@ -1,10 +1,10 @@
 # Avalanche Insight Hub — Collaboration Transcript
 
-## D3-1 — Why Scientist Co-Development Is Necessary Now
+## D3-1 — Why Scientist And Partner Co-Development Is Necessary Now
 
 _Collaboration arc_
 
-The platform is ready for a serious scientific discussion. It is not yet a finished validation story.
+MVP V2 proves enough to justify SASE/DGRE partner handoff and scientist review. It does not prove enough to skip local Himalayan validation.
 
 Evidence lanes: Technical evidence; Research agenda
 
@@ -12,23 +12,25 @@ Transition after Deck 1
 
 - The current platform already includes a public route, administration observability, an explainable baseline, and governance surfaces.
 
-- The science gap is also real: weak layers, regional transfer, qualification, and promotion evidence are unfinished.
+- The V2 infrastructure is real: Swiss RAvaFcast research, Himalayan v3 evidence templates, and one-command package triage.
 
-- That gap is exactly where the scientist team becomes central rather than decorative.
+- The science gap is also real: weak layers, regional transfer, quality-controlled labels, station coverage, and promotion evidence are unfinished.
+
+- That gap is exactly where SASE/DGRE partners and the scientist team become central rather than decorative.
 
 Ready now
 
 Decision-support platform
 
-Public-facing platform shell and operational evidence surfaces already exist.
+Public-facing product shell, operator evidence surfaces, and partner-intake templates already exist.
 
 Not ready now
 
 Scientific closure
 
-The next phase is about benchmark and validation ownership, not about declaring victory.
+The next phase is about SASE/DGRE evidence handoff, benchmark ownership, and validation ownership, not declaring victory.
 
-The strongest collaboration pitch is: “help us decide what should count as real evidence here.”
+The strongest collaboration pitch is: “help us decide what should count as real Himalayan evidence here.”
 
 Scientist-first framing
 
@@ -141,68 +143,68 @@ Scientist-in-the-loop model
 
 ---
 
-## D3-5 — Benchmark Pack v0
+## D3-5 — Himalayan v3 Partner Handoff Packet
 
 _Immediate work surface_
 
-The first reviewable package already exists. It is deliberately small and explicitly not field-validation closure.
+The immediate packet is machine-readable intake infrastructure. It is deliberately not a Himalayan accuracy result.
 
 Evidence lanes: Technical evidence
 
-What v0 already includes
+What partners receive (20+ artifacts, summarized here; full list in the handout)
 
-Case inventory
-Public route evidence, administration observability, inference manifest, stability summary, evaluation contracts, and governance contracts.
+Start here
+README, field dictionary, checksum guide, package index, and source-manifest template.
 
-Region slices
-`cascades_wa`, `colorado_rockies`, `french_alps`, `himalayas_nepal`, `japanese_alps`, `swiss_alps`.
+Evidence to fill
+Ten blank v3 CSVs for stations, weather, snowpack, labels, polygons, events, sensing, terrain, reviews, and holdout.
 
-Failure slices
-Reduced confidence, source support gaps, candidate-gate failure, stability drift, narrow evidence mix, evaluation sparsity.
+Validation and triage
+Preflight, evidence validation, source checks, quality score, acceptance checklist, manifest diff, summary, and ledger.
 
-Critical-layer questions
-Explicit prompts for weak-layer review, slice choice, and minimally credible benchmark deltas.
+Holdout and claim locks
+Pre-registered holdout protocol, leakage audit, metric report, release attestation, and explicit claim gates.
 
-v0 boundary:
-this pack makes the discussion disciplined. It does not pretend the review is complete, fresh, or field-validated yet.
+Boundary:
+blank templates and instructions only. Synthetic fixtures are validator smoke-tests, never partner evidence. See `Scientist_Handout_OnePager.md` for the complete inventory.
 
 ---
 
-## D3-6 — Validation Protocol v0
+## D3-6 — Validation Protocol v0 And V3 Triage Loop
 
 _Review loop_
 
-The minimum scientist-in-the-loop protocol is already structured: event labels, critical layers, benchmark acceptance, and promotion review.
+The minimum scientist-in-the-loop protocol is now tied to partner package triage: source governance, evidence validation, leakage checks, and promotion review.
 
 Evidence lanes: Technical evidence
 
 01
 
-Review label confidence, training weights, and field-report linkage.
+Validate source manifest coverage and reject rows with missing or stale `source_ref` evidence.
 
 02
 
-Define weak-layer and critical-layer review expectations.
+Review `D_tidy`-equivalent label provenance, nowcast/observer refs, regime, and timing fields.
 
 03
 
-Accept or reject benchmark artifacts and runtime traces.
+Check station X/Y/Z coverage, GPxyz readiness, snowpack provenance, event truth, and remote-sensing scope.
 
 04
 
-Check candidate-model gates and downgrade language if a gate fails.
+Run holdout leakage and metric reports only after package evidence is complete and independent.
 
 05
 
-Carry sign-off checkpoints back into deck, docs, and release phrasing.
+Carry scientist decisions back into release-gate attestations, deck language, docs, and claim state.
 
 Why this matters now
 
-- The protocol gives the scientist team a real review surface from day one.
+- The protocol gives the scientist team and partner reviewers a real review surface from day one.
 
-- It turns “validation” into explicit checkpoints instead of vague reassurance.
+- It turns “validation” into explicit package, source, label, station, holdout, and release-gate checkpoints.
 
-- It keeps blocked claims blocked until someone can point to the supporting artifact.
+- It keeps blocked claims blocked until someone can point to the proving artifact and reviewed local evidence.
 
 ---
 
@@ -320,25 +322,31 @@ A credible near-term pilot is structured around benchmark ownership, review cade
 
 Evidence lanes: Research agenda
 
-Week 0-2
+Weeks 1-3 · Activate
 
-Lock benchmark scope, region slices, and critical-layer questions.
+Partner handoff session (W1), source-manifest discipline + SHA-256 walkthrough (W2), station metadata + GPxyz readiness gate (W3). Acceptance: ≥1 priority region exits `blocked_station_coordinates_required`.
 
-Week 3-6
+Weeks 4-6 · Evidence
 
-Run governed evidence and evaluation slices against the agreed case pack.
+`D_tidy` label provenance + weak-layer slice definitions (W4), full validator/leakage triage + 100-point score (W5), Stage-1 RF4 feasibility spike + SAR read-only review (W6). Acceptance: ≥1 region scores ≥50/100; SAR not promoted.
 
-Week 7-10
+Weeks 7-9 · Audit + protocol lock
 
-Review failures, drift, weak-layer misses, and candidate-model gate posture together.
+Refined-discretization audit (W7), weak-layer evidence pack round 1 (W8), pre-registered
+local holdout protocol with scientist co-signature (W9). Acceptance: protocol SHA-256 captured, immutable thereafter.
 
-Week 11-12
+Weeks 10-12 · Review + attestation
 
-Decide whether to extend, constrain, or terminate the next qualification loop.
+Weak-layer round 2 + spike iteration (W10), failure-mode review + pre-decision memo (W11), release-gate attestation or claim_review_blocked ledger entry
+(W12). No silent failures.
 
-Exit
+Week 13 · Decision
 
-Produce a scientist-owned go, no-go, or narrow-pilot recommendation.
+60-min session producing one of: `Phase_2_Scoping.md`, `Narrow_Pilot_Charter.md`, or `Pilot_Termination_Memo.md`. Scientist Lead can extend, narrow, block, or terminate at any prior weekly gate.
+
+Per-week handout
+
+The week-by-week plan with deliverables, owners, acceptance gates, risk triggers, and contingencies (Swiss-only sandbox, synthetic-pseudo-stations, re-submission cycle, scientist-led narrow pilot) lives in `MVP_V2_13_Week_Pilot_Plan.md`. Companion artifacts: `MVP_V2_Action_List.md` and `MVP_V2_Weekly_Progress_Template.md`.
 
 Success is not “the model looked good.” Success is a benchmark result the scientist team is willing to stand behind narrowly and carefully.
 
@@ -348,37 +356,37 @@ Success is not “the model looked good.” Success is a benchmark result the sc
 
 _Requirements_
 
-The next phase needs concrete contributions: case definitions, field context, weak-layer interpretation, and evidence-quality review.
+The next phase needs concrete contributions: reviewed source packages, case definitions, field context, weak-layer interpretation, and evidence-quality review.
 
 Evidence lanes: Research agenda
 
 Scientist input
 
-Weak-layer and critical-layer cases
+D_tidy-quality danger labels
 
-Choose the slices that matter before any promotion rhetoric returns.
+Separate raw bulletins from reviewed nowcast, observer, event, or reanalysis-backed truth.
 
 Field context
 
-Local terrain interpretation
+Station and terrain metadata
 
-Benchmark cases need ground-informed review, not purely remote or statistical interpretation.
+GPxyz needs latitude, longitude, elevation, density diagnostics, and region coverage before spatial claims.
 
 Event curation
 
-Label arbitration support
+Label arbitration and event truth
 
-Ambiguous, duplicated, or thinly sourced avalanche events need shared review.
+Ambiguous, duplicated, or thinly sourced avalanche events need shared review and source-manifest backing.
 
 Honest caveat
 
 Offline report replay is not the same as field reliability
 
-The queue-and-replay mechanism exists, but the deck should not treat it as validated mountain-device robustness.
+The queue-and-replay mechanism and v3 intake validators exist, but neither proves field-device robustness or Himalayan accuracy.
 
 ---
 
-## D3-12 — Engineering And Platform Workstreams Are Already Structured
+## D3-12 — Engineering And Partner Workstreams Are Already Structured
 
 _Execution realism_
 
@@ -394,9 +402,9 @@ Every major statement is now mapped to a clear evidence lane and blocked-claim r
 
 Workstream
 
-Evidence-surface verification
+Partner-package triage
 
-Every meaningful claim is tied to a route, artifact, test, or admin surface.
+`run_himalayan_partner_package_triage` produces preflight, source, evidence, holdout, ledger, dashboard, manifest, and traceability outputs.
 
 Workstream
 
@@ -408,7 +416,7 @@ Workstream
 
 Benchmark and protocol packaging
 
-Benchmark pack v0 and validation protocol v0 are ready as discussion starters.
+Benchmark pack v0, validation protocol v0, and the v3 handoff packet are ready as discussion starters.
 
 These workstreams improve the next conversation and pilot design. They do not by themselves convert future research into present-day operating readiness.
 
@@ -497,23 +505,23 @@ Infrastructure assumptions
 
 _Specific ask_
 
-End the meeting with a choice, not with generic enthusiasm.
+End the meeting with a choice, not with generic enthusiasm or prediction-success language.
 
 Evidence lanes: Research agenda
 
 Option 1
 
-Benchmark-design workshop
+SASE/DGRE handoff session
 
-- Define cases, slices, and validation questions.
+- Walk through README, field dictionary, checksum guide, source manifest, and blank v3 CSVs.
 
-- Low commitment, high clarity.
+- Low commitment, high clarity before data formatting begins.
 
 Option 2
 
-90-day pilot
+90-day evidence pilot
 
-- Shared benchmark pack, review cadence, and go or no-go gates.
+- Partner package submission, triage, scientist review, and go or no-go gates.
 
 - Turns curiosity into inspectable pilot evidence.
 
@@ -525,6 +533,6 @@ Deeper co-development track
 
 - Best only if the scientist team wants to shape the roadmap materially.
 
-The ideal immediate ask is a scientist-led benchmark-design session with selected regional cases and explicit validation criteria.
+The ideal immediate ask is a partner handoff session followed by a scientist-led benchmark-design session with selected regional cases and explicit validation criteria.
 
 Close on a concrete next step, not on AI transformation language

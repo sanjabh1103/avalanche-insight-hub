@@ -1,0 +1,121 @@
+{
+  "claim_boundary": {
+    "himalayan_accuracy_claim_allowed": false,
+    "production_scoring_allowed": false,
+    "reason": "The dashboard summarizes package and review state. It is not local Himalayan validation, model performance evidence, release-gate approval, or production authorization."
+  },
+  "current_status": {
+    "claim_review_ready": false,
+    "latest_first_blocker": "intake_preflight",
+    "latest_quality_score": 0.0,
+    "latest_readiness_band": "not_run",
+    "latest_submission_id": "69b9a8ff37a381b3",
+    "missing_file_count": 1,
+    "package_artifact_sequence_count": 24,
+    "quality_score_max": 100.0,
+    "scientist_review_ready": false,
+    "submission_count": 1,
+    "top10_blocked_feature_count": 10,
+    "top10_feature_count": 10
+  },
+  "dashboard_is_prediction_evidence": false,
+  "decision": "partner_submission_status_dashboard_blocked_partner_action_required",
+  "generated_at": "2026-05-23T13:13:35.699020+00:00",
+  "himalayan_accuracy_claim_allowed": false,
+  "missing_files": [
+    "partner_source_manifest.json"
+  ],
+  "next_actions": [
+    "Supply partner_source_manifest.json and all ten evidence CSV files.",
+    "Validate source owner, license, reviewer, freshness, and evidence package refs.",
+    "Fix missing, stale, undersized, unreviewed, unlicensed, or invalid evidence rows.",
+    "Supply release-gate attestations for holdout, scientist review, license clearance, and promotion approval.",
+    "Map every source_ref SHA-256 to owner, dataset, license, date range, reviewer, and evidence package.",
+    "Fill every evidence CSV with enough reviewed rows to meet the row floor.",
+    "Broaden station, region, scene, case, time, elevation, or slope coverage where required.",
+    "Ensure every row is reviewed, fresh, license-supported, and linked to the source manifest.",
+    "Supply accepted holdout, scientist-review, license-clearance, and promotion attestations after evidence passes.",
+    "Supply all missing required package files before scientist review.",
+    "Obtain a complete partner source manifest and filled station/weather/snowpack/danger CSVs.",
+    "Run calibrated model evaluation only after local partner labels and holdout are available.",
+    "Validate station coordinate coverage, then run GPxyz LOOCV and grid generation.",
+    "Acquire reviewed warning-region polygons and elevation-band policy.",
+    "Add reviewed snowpack profile exports and map fields to controlled partner schema."
+  ],
+  "operator_guardrails": [
+    "Use this dashboard as a status export, not as prediction evidence.",
+    "Do not open scientist review until scientist_review_ready=true.",
+    "Do not open claim review until claim_review_ready=true.",
+    "Do not claim Himalayan accuracy until all release gates pass with validated evidence.",
+    "Do not enable production scoring from this research artifact."
+  ],
+  "production_scoring_allowed": false,
+  "release_gate_status": {
+    "license_clearance_complete": false,
+    "local_himalayan_holdout_passed": false,
+    "production_promotion_approved": false,
+    "scientist_review_complete": false
+  },
+  "schema_version": "himalayan_accuracy_partner_submission_status_dashboard_v1",
+  "source_artifacts": [
+    {
+      "artifact": "partner_package_index.json",
+      "decision": "partner_package_index_written_pending_partner_submission",
+      "schema_version": "himalayan_accuracy_partner_package_index_v1"
+    },
+    {
+      "artifact": "partner_submission_review_ledger.json",
+      "decision": "partner_submission_review_ledger_updated_blocked",
+      "schema_version": "himalayan_accuracy_partner_submission_review_ledger_v1"
+    },
+    {
+      "artifact": "partner_submission_summary.json",
+      "decision": "blocked_submission_checks_not_run",
+      "schema_version": "himalayan_accuracy_partner_submission_status_v1"
+    },
+    {
+      "artifact": "partner_submission_quality_score.json",
+      "decision": "blocked_quality_checks_not_run",
+      "schema_version": "himalayan_accuracy_partner_submission_quality_score_v1"
+    },
+    {
+      "artifact": "partner_submission_acceptance_checklist.json",
+      "decision": "blocked_acceptance_checklist_partner_fixes_required",
+      "schema_version": "himalayan_accuracy_partner_submission_acceptance_checklist_v1"
+    },
+    {
+      "artifact": "himalayan_top10_feature_gap_matrix.json",
+      "decision": "top10_feature_gap_matrix_written_pending_partner_evidence",
+      "schema_version": "himalayan_accuracy_top10_feature_gap_matrix_v1"
+    },
+    {
+      "artifact": "readiness_contract.json",
+      "decision": "blocked_pending_himalayan_evidence",
+      "schema_version": "himalayan_accuracy_readiness_contract_v2"
+    }
+  ],
+  "standards_anchors": [
+    {
+      "name": "NIST AI Risk Management Framework",
+      "url": "https://www.nist.gov/itl/ai-risk-management-framework",
+      "use": "Keep AI risk decisions visible, governed, and traceable."
+    },
+    {
+      "name": "WMO WIS/WIGOS monitoring practice",
+      "url": "https://wmo-im.github.io/wis2-manual/manual/wis2-manual-APPROVED.html",
+      "use": "Expose current status and historical performance/blockers through a monitor-style dashboard."
+    },
+    {
+      "name": "ISO 19157 geospatial data quality",
+      "url": "https://www.iso.org/standard/78900.html",
+      "use": "Report completeness, lineage, and quality status for geospatial evidence."
+    },
+    {
+      "name": "FAIR data principles",
+      "url": "https://www.go-fair.org/fair-principles/",
+      "use": "Keep evidence artifacts findable, reusable, source-referenced, and auditable."
+    }
+  ],
+  "usage_boundary": "research_validation_only",
+  "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+}

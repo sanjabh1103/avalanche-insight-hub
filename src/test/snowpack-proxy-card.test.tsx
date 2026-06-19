@@ -34,7 +34,7 @@ describe('SnowpackProxyCard', () => {
       </TooltipProvider>,
     );
 
-    expect(screen.getByText('Simulated Snowpack Proxy')).toBeTruthy();
+    expect(screen.getByText('Weather-Driven Heuristic Proxy')).toBeTruthy();
     expect(screen.getByText(/not a direct field measurement/i)).toBeTruthy();
     expect(screen.getByText(/Season start:/i)).toBeTruthy();
   }, 15000);

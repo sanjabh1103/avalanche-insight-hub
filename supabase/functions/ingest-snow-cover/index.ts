@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { authorizeJobRequest } from "../_shared/auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,6 +14,7 @@ interface SnowCoverSummary {
   sourceLayer: string;
   qualityScore: number;
 }
+
 
 async function fetchGIBSSnowCoverSummary(
   bbox: [number, number, number, number],
@@ -164,6 +166,14 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
+
+    const authResult = await authorizeJobRequest("snow_cover_refresh", req, supabase);
+    if (!authResult.authorized) {
+      return new Response(JSON.stringify({ error: authResult.error }), {
+        status: authResult.status || 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Create job record
     const { data: job, error: jobErr } = await supabase

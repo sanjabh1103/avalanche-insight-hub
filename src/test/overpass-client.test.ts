@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { OverpassDegraded } from '@/lib/overpassClient';
 
 describe('overpassClient', () => {
   beforeEach(() => {
@@ -34,15 +35,17 @@ describe('overpassClient', () => {
 
     expect(first.ok).toBe(false);
     if (first.ok) {
-      throw new Error('Expected degraded result for rate-limited response');
+      throw new Error('Expected first Overpass request to degrade');
     }
-    expect(first.reason).toBe('rate_limited');
-    expect(first.message).toMatch(/rate-limited/i);
+    const firstDegraded = first as OverpassDegraded;
+    expect(firstDegraded.reason).toBe('rate_limited');
+    expect(firstDegraded.message).toMatch(/rate-limited/i);
     expect(second.ok).toBe(false);
     if (second.ok) {
-      throw new Error('Expected cooldown result');
+      throw new Error('Expected second Overpass request to degrade');
     }
-    expect(second.reason).toBe('cooldown');
+    const secondDegraded = second as OverpassDegraded;
+    expect(secondDegraded.reason).toBe('cooldown');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

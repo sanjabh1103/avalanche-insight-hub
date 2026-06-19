@@ -19,6 +19,11 @@ from backend.sar_unet_worker import (
     run_train_sar_unet,
     run_worker_request,
 )
+from backend.sar_unet_training import (
+    build_sar_validation_error_diagnostics,
+    evaluate_sar_checkpoint,
+    evaluate_sar_checkpoint_scene_blended,
+)
 
 if str(os.environ.get('AVALANCHE_SKIP_MODAL_IMPORT') or '').strip().lower() in {'1', 'true', 'yes', 'on'}:
     modal = None
@@ -46,6 +51,8 @@ WORKER_TOKEN_ENV = 'MODAL_WORKER_TOKEN'
 MODAL_APP_NAME = 'avalanche-modal-worker'
 MODAL_REMOTE_SEGMENT_FUNCTION = 'sar_segment_remote'
 MODAL_REMOTE_TRAIN_SAR_FUNCTION = 'train_sar_unet_remote'
+MODAL_REMOTE_EVALUATE_SAR_CHECKPOINT_FUNCTION = 'evaluate_sar_checkpoint_remote'
+MODAL_REMOTE_EVALUATE_RELEASE_FUNCTION = 'evaluate_release_remote'
 MODAL_REMOTE_TRAIN_FUNCTION = 'train_mts_lstm_remote'
 MODAL_REMOTE_INFER_FUNCTION = 'infer_mts_lstm_remote'
 MODAL_PINNED_RUNTIME_PACKAGES = ('shap==0.51.0', 'scikit-learn==1.8.0')
@@ -63,9 +70,44 @@ def _artifact_root() -> Path:
     return load_settings().artifact_root
 
 
+def _truthy(value: Any) -> bool:
+    return str(value or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
 def _model_path() -> Path | None:
     raw = os.environ.get('SAR_UNET_MODEL_PATH')
     return Path(raw) if raw else None
+
+
+def _request_model_path(payload: dict[str, Any]) -> Path | None:
+    raw = payload.get('model_path') or payload.get('checkpoint_path')
+    if not isinstance(raw, str) or not raw.strip():
+        return _model_path()
+    path = Path(raw.strip())
+    try:
+        path.relative_to(VOLUME_MOUNT)
+    except ValueError as exc:
+        raise ValueError(f'Modal SAR model_path must be under {VOLUME_MOUNT}: {path}') from exc
+    return path
+
+
+def _require_volume_path(payload: dict[str, Any], field_names: tuple[str, ...]) -> Path:
+    raw: Any = None
+    selected_field = field_names[0]
+    for field_name in field_names:
+        value = payload.get(field_name)
+        if isinstance(value, str) and value.strip():
+            raw = value.strip()
+            selected_field = field_name
+            break
+    if not isinstance(raw, str) or not raw:
+        raise ValueError(f'Modal request requires one of {", ".join(field_names)}')
+    path = Path(raw)
+    try:
+        path.relative_to(VOLUME_MOUNT)
+    except ValueError as exc:
+        raise ValueError(f'Modal {selected_field} must be under {VOLUME_MOUNT}: {path}') from exc
+    return path
 
 
 def _dispatch_worker_request(mode: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -112,7 +154,71 @@ def run_remote_train_sar_unet(
 ) -> dict[str, Any]:
     if volume_reload is not None:
         volume_reload()
-    report = run_train_sar_unet(payload, artifact_root=artifact_root, device=device)
+
+    progress_callback: Callable[[dict[str, Any]], None] | None = None
+    if volume_commit is not None:
+        def _commit_progress(_: dict[str, Any]) -> None:
+            volume_commit()
+
+        progress_callback = _commit_progress
+
+    report = run_train_sar_unet(
+        payload,
+        artifact_root=artifact_root,
+        device=device,
+        progress_callback=progress_callback,
+    )
+    if volume_commit is not None:
+        volume_commit()
+    return report
+
+
+def run_remote_evaluate_sar_checkpoint(
+    payload: dict[str, Any],
+    *,
+    artifact_root: Path,
+    device: str,
+    volume_reload: Callable[[], None] | None = None,
+    volume_commit: Callable[[], None] | None = None,
+) -> dict[str, Any]:
+    _require_volume_path(payload, ('training_manifest_path', 'training_manifest'))
+    _require_volume_path(payload, ('checkpoint_path', 'model_checkpoint_path', 'initial_checkpoint_path'))
+    if volume_reload is not None:
+        volume_reload()
+    if str(payload.get('diagnostics', '')).strip().lower() in {'1', 'true', 'yes', 'on'}:
+        report = build_sar_validation_error_diagnostics(payload, artifact_root=artifact_root, device=device)
+    elif (
+        str(payload.get('scene_blended', '')).strip().lower() in {'1', 'true', 'yes', 'on'}
+        or str(payload.get('evaluation_mode') or '').strip() == 'scene_blended'
+    ):
+        report = evaluate_sar_checkpoint_scene_blended(payload, artifact_root=artifact_root, device=device)
+    else:
+        report = evaluate_sar_checkpoint(payload, artifact_root=artifact_root, device=device)
+    if volume_commit is not None:
+        volume_commit()
+    return report
+
+
+def run_remote_evaluate_release(
+    payload: dict[str, Any],
+    *,
+    artifact_root: Path,
+    volume_reload: Callable[[], None] | None = None,
+    volume_commit: Callable[[], None] | None = None,
+) -> dict[str, Any]:
+    if volume_reload is not None:
+        volume_reload()
+    safe_payload = {**payload, 'dry_run': True}
+    report = run_worker_request(
+        'evaluate-release',
+        safe_payload,
+        artifact_root=artifact_root,
+        model_path=_model_path(),
+        device=os.environ.get('SAR_UNET_DEVICE', 'cpu'),
+        threshold=float(os.environ.get('SAR_UNET_SEGMENTATION_THRESHOLD', str(SAR_UNET_SEGMENTATION_THRESHOLD))),
+        hazard_type=str(safe_payload.get('hazard_type') or load_settings().hazard_type or 'avalanche'),
+        dry_run=True,
+    )
     if volume_commit is not None:
         volume_commit()
     return report
@@ -148,14 +254,29 @@ def run_remote_sar_segment(
         'sar-segment',
         payload,
         artifact_root=artifact_root,
-        model_path=_model_path(),
+        model_path=_request_model_path(payload),
         device=device,
-        threshold=float(os.environ.get('SAR_UNET_SEGMENTATION_THRESHOLD', str(SAR_UNET_SEGMENTATION_THRESHOLD))),
+        threshold=float(payload.get('threshold') or os.environ.get('SAR_UNET_SEGMENTATION_THRESHOLD', str(SAR_UNET_SEGMENTATION_THRESHOLD))),
         hazard_type=str(payload.get('hazard_type') or settings.hazard_type or 'avalanche'),
         dry_run=str(payload.get('dry_run', '')).strip().lower() in {'1', 'true', 'yes', 'on'},
     )
     if volume_commit is not None:
         volume_commit()
+    if _truthy(payload.get('compact_response')):
+        return {
+            'status': report.get('status'),
+            'shadow_mode': report.get('shadow_mode'),
+            'model_family': report.get('model_family'),
+            'model_version': report.get('model_version'),
+            'prediction_mask_dtype': report.get('prediction_mask_dtype'),
+            'scene_count': report.get('scene_count'),
+            'detections_count': report.get('detections_count'),
+            'persisted_events': report.get('persisted_events'),
+            'artifact_rows_persisted': report.get('artifact_rows_persisted'),
+            'mask_asset_ref_count': len(report.get('mask_asset_refs') or []),
+            'mask_asset_refs': report.get('mask_asset_refs') or [],
+            'compact_response': True,
+        }
     return report
 
 
@@ -588,6 +709,26 @@ def create_fastapi_app(volume_reload: Callable[[], None] | None = None, volume_c
 
     app = FastAPI(title='avalanche-modal-worker')
 
+    @app.get('/health')
+    async def health() -> dict[str, Any]:
+        return {
+            'status': 'ok',
+            'app': MODAL_APP_NAME,
+            'runtime_provider': 'modal',
+            'worker_api': 'asgi',
+            'gpu_functions': [
+                MODAL_REMOTE_SEGMENT_FUNCTION,
+                MODAL_REMOTE_TRAIN_SAR_FUNCTION,
+                MODAL_REMOTE_EVALUATE_SAR_CHECKPOINT_FUNCTION,
+                MODAL_REMOTE_TRAIN_FUNCTION,
+            ],
+            'cpu_dispatch_functions': [
+                MODAL_REMOTE_EVALUATE_RELEASE_FUNCTION,
+                MODAL_REMOTE_INFER_FUNCTION,
+            ],
+            'routes': sorted(_route_handlers().keys()),
+        }
+
     def _authorize_or_raise(authorization_header: str | None) -> None:
         try:
             authorize_bearer_request(authorization_header)
@@ -771,6 +912,48 @@ if modal is not None:  # pragma: no cover - exercised in deployment, not local t
             request,
             artifact_root=Path(VOLUME_MOUNT),
             device='cuda',
+            volume_reload=_artifact_volume.reload,
+            volume_commit=_artifact_volume.commit,
+        )
+
+    @app.function(
+        image=image,
+        secrets=_secrets,
+        volumes={VOLUME_MOUNT: _artifact_volume},
+        gpu='T4',
+        max_containers=1,
+        min_containers=MODAL_MIN_CONTAINERS,
+        buffer_containers=MODAL_BUFFER_CONTAINERS,
+        scaledown_window=MODAL_SCALEDOWN_WINDOW_SECONDS,
+        timeout=3600,
+        retries=0,
+    )
+    def evaluate_sar_checkpoint_remote(request: dict[str, Any]) -> dict[str, Any]:
+        return run_remote_evaluate_sar_checkpoint(
+            request,
+            artifact_root=Path(VOLUME_MOUNT),
+            device='cuda',
+            volume_reload=_artifact_volume.reload,
+            volume_commit=_artifact_volume.commit,
+        )
+
+    @app.function(
+        image=image,
+        secrets=_secrets,
+        volumes={VOLUME_MOUNT: _artifact_volume},
+        cpu=MODAL_INFER_CPU,
+        memory=MODAL_INFER_MEMORY_MB,
+        max_containers=1,
+        min_containers=MODAL_MIN_CONTAINERS,
+        buffer_containers=MODAL_BUFFER_CONTAINERS,
+        scaledown_window=MODAL_SCALEDOWN_WINDOW_SECONDS,
+        timeout=3600,
+        retries=0,
+    )
+    def evaluate_release_remote(request: dict[str, Any]) -> dict[str, Any]:
+        return run_remote_evaluate_release(
+            request,
+            artifact_root=Path(VOLUME_MOUNT),
             volume_reload=_artifact_volume.reload,
             volume_commit=_artifact_volume.commit,
         )

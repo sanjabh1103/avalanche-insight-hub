@@ -1,4 +1,4 @@
-# Deck 1 Final: Current MVP Proof And Customer Value
+# Deck 1 Final: MVP V2 Proof, Partner Evidence, And Customer Value
 
 
 
@@ -16,13 +16,13 @@
 
 **Background:** Deep Pine
 **Customer message:**
-This is a governed avalanche decision-support review. The goal is to decide whether the next validation phase is worth co-developing with scientists.
+This is a governed avalanche decision-support review. The goal is to decide whether the SASE/DGRE partner handoff and next validation phase are worth co-developing with scientists.
 
 **Current state and future strategy:**
 - Decision-support platform with autonomy added through governed validation
-- Current proof stays separate from candidate and proposed work
+- Current proof stays separate from Swiss RAvaFcast research, Himalayan v3 partner intake, SAR shadow work, and proposed work
 - Validation authority belongs with scientist and operator review
-- Meeting output: go, no-go, or scoped validation pilot
+- Meeting output: partner handoff, go/no-go, or scoped validation pilot
 
 **Evidence level:** `Artifact/doc proof only`
 **Supporting sources:** [Scientist Discussion Framework](../../source/Scientist_discussion_framework.md), [Demo Decision Brief](../../source/Demo_decision_brief.md)
@@ -56,7 +56,7 @@ The platform builds around a long Himalayan avalanche research lineage rather th
 - 2008: artificial neural network lineage
 - 2015: calibration and weighting burden
 - 2017: GPU acceleration for expensive calibration
-- 2020: HIM-STRAT and snowpack memory
+- 2020: HIM-STRAT and snowpack memory (currently implemented as a Weather-Driven Heuristic Proxy; transition to thermodynamic physical modeling is a future-phase target)
 - 2025: feature selection and class-imbalance discipline
 
 **Evidence level:** `Artifact/doc proof only`
@@ -176,7 +176,7 @@ The operator lane exposes source health, provenance, model status, stability, be
 
 **Background:** Light Ice
 **Customer message:**
-The active public scoring path is a Random Forest baseline. The current active full-grid run uses heuristic explanation fallback; TreeSHAP refresh remains a technical hardening gate. Modal.com supports off-path candidate workflows.
+The active public scoring path is a Random Forest baseline. Swiss RAvaFcast reproduction is research-only, Himalayan v3 partner intake validates package structure and provenance only, and the current active full-grid run uses heuristic explanation fallback.
 
 **Current state and future strategy:**
 - Active scorer: `surrogate_rf_v1`
@@ -185,6 +185,8 @@ The active public scoring path is a Random Forest baseline. The current active f
 - Candidate path: `mts_lstm_v1`, gated
 - Remote-sensing path: SAR candidate, gated
 - Modal.com: off-path compute, separate from active public scorer proof
+- Swiss RAvaFcast: initial research signal, not paper parity or Himalayan proof
+- Himalayan v3 contract: `production_scoring_allowed=false` and `himalayan_accuracy_claim_allowed=false`
 
 **Evidence level:** `Repo/admin verified` plus `Artifact/doc proof only`
 **Supporting sources:** [Modal/GPU Evidence Table](../07_Modal_GPU_Evidence_Table.md), [Modal/GPU Inventory](../../source/Modal_GPU_ML_Inventory.md)
@@ -213,13 +215,14 @@ Autonomous evidence enters through weighting, decay, corroboration, and audit-on
 
 **Background:** Deep Pine
 **Customer message:**
-The system is designed to block stronger model claims until benchmark, stability, SAR, and activation gates support promotion.
+The system is designed to block stronger model claims until benchmark, stability, SAR, Himalayan partner evidence, holdout, and activation gates support promotion.
 
 **Current state and future strategy:**
 - Current stability evidence is explicit and conservative
 - Current artifact evidence includes `unstable`, `3` seeds, and threshold drift
 - Runtime benchmarks are observability; field validation remains separate
 - Candidate promotion must be earned
+- Partner package triage can pass structure and source governance without proving prediction accuracy
 
 **Evidence level:** `Repo/admin verified` plus `Artifact/doc proof only`
 **Supporting sources:** [Benchmark Pack](../../source/Scientist_benchmark_pack_v0.md), [Validation Protocol](../../source/Scientist_validation_protocol_v0.md)
@@ -248,11 +251,12 @@ The strongest current differentiation is the integrated current-state discipline
 
 **Background:** Light Ice
 **Customer message:**
-The future strategy is to promote stronger model and sensing claims only when field validation, benchmark evidence, and release gates support that promotion.
+The future strategy is to promote stronger model, sensing, or Himalayan accuracy claims only when field validation, benchmark evidence, local holdouts, and release gates support that promotion.
 
 **Current state and future strategy:**
 - Public scoring remains the explainable baseline until promotion gates pass
 - SAR remains a qualified candidate until held-out evidence supports promotion
+- SASE/DGRE handoff is partner operations, not prediction success
 - Official-warning equivalence stays outside customer-facing claims
 - Weak-layer science remains a named validation workstream
 - Explainability supports review; field validation still decides confidence
@@ -266,12 +270,13 @@ The future strategy is to promote stronger model and sensing claims only when fi
 
 **Background:** Deep Pine
 **Customer message:**
-The right close is a constructive validation decision: choose the next proof-building path and set the promotion gates now.
+The right close is a constructive validation decision: choose the SASE/DGRE handoff path, the next proof-building path, and the promotion gates now.
 
 **Current state and future strategy:**
-- Option 1: benchmark-design workshop
-- Option 2: scoped 90-day validation pilot
-- Option 3: deeper co-development track
+- Option 1: SASE/DGRE handoff session using the v3 README, field dictionary, checksum guide, source manifest template, and blank CSVs
+- Option 2: benchmark-design workshop
+- Option 3: scoped 90-day validation pilot
+- Option 4: deeper co-development track
 - Default rule: align claims to available proof
 
 **Evidence level:** `Artifact/doc proof only`

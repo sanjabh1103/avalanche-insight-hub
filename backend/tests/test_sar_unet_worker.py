@@ -15,11 +15,14 @@ from backend.common.label_governance import GOVERNANCE_VERSION
 from backend.common.avalcd_manifest import build_avalcd_scene_manifest, encode_patch_payload
 from backend.sar_unet_worker import (
     LoadedUnetModel,
+    MemoryFile,
     SAR_UNET_SHADOW_REASON,
     SegmentationDetection,
     _normalize_stack,
+    _load_mask_array_from_bytes,
     build_unet_model,
     build_shadow_event_record,
+    encode_mask_geotiff,
     evaluate_scene_manifest,
     flip_to_training_eligible,
     load_bitemporal_scene_inputs,
@@ -255,7 +258,15 @@ class SarUnetWorkerTests(unittest.TestCase):
             side_effects.append(encode_patch_payload(patch_entry['stack']))
         storage_download_bytes_mock.side_effect = side_effects
         predict_bitemporal_probability_mask_batch_mock.return_value = np.ones((len(patch_entries), 128, 128), dtype=np.float32) * 0.9
-        loaded_model = LoadedUnetModel(model=object(), checkpoint_key_mismatch={}, model_family='swinunet_tiny_diff')
+        loaded_model = LoadedUnetModel(
+            model=object(),
+            checkpoint_key_mismatch={},
+            model_family='swinunet_tiny_diff',
+            normalization={
+                'img_mean': np.array([1.0, 2.0], dtype=np.float32),
+                'img_std': np.array([1.0, 2.0], dtype=np.float32),
+            },
+        )
 
         probability_mask = predict_scene_probability_mask(
             loaded_model,
@@ -269,6 +280,12 @@ class SarUnetWorkerTests(unittest.TestCase):
 
         self.assertEqual(probability_mask.shape, (80, 176))
         self.assertAlmostEqual(float(probability_mask[0, 0]), 0.9, places=5)
+        pre_batch = predict_bitemporal_probability_mask_batch_mock.call_args.args[1]
+        post_batch = predict_bitemporal_probability_mask_batch_mock.call_args.args[2]
+        self.assertAlmostEqual(float(pre_batch[0, 0, 0, 0]), 0.0, places=5)
+        self.assertAlmostEqual(float(pre_batch[0, 1, 0, 0]), 0.0, places=5)
+        self.assertAlmostEqual(float(post_batch[0, 0, 0, 0]), 2.0, places=5)
+        self.assertAlmostEqual(float(post_batch[0, 1, 0, 0]), 1.0, places=5)
 
     @patch('backend.sar_unet_worker.dump_json')
     @patch('backend.sar_unet_worker.build_unet_model')
@@ -386,6 +403,71 @@ class SarUnetWorkerTests(unittest.TestCase):
         self.assertAlmostEqual(float(loaded[0, 1]), 1.0, places=5)
         self.assertAlmostEqual(float(loaded[1, 0]), 0.8, places=5)
 
+    @unittest.skipIf(MemoryFile is None, 'rasterio is required for GeoTIFF round-trip tests')
+    def test_encode_mask_geotiff_float32_preserves_high_probability_thresholds(self) -> None:
+        probability = np.asarray([[0.998, 0.25], [1.0, 0.0]], dtype=np.float32)
+
+        payload = encode_mask_geotiff(
+            probability,
+            bbox=(-106.6, 39.4, -106.4, 39.6),
+            prediction_mask_dtype='float32',
+        )
+        loaded = _load_mask_array_from_bytes(payload, suffix='.tif')
+
+        self.assertEqual(loaded.shape, (2, 2))
+        self.assertAlmostEqual(float(loaded[0, 0]), 0.998, places=6)
+        self.assertGreaterEqual(int(np.sum(loaded >= 0.998)), 1)
+
+    @unittest.skipIf(MemoryFile is None, 'rasterio is required for GeoTIFF round-trip tests')
+    def test_encode_mask_geotiff_uint16_scales_by_uint16_range(self) -> None:
+        probability = np.asarray([[0.998, 0.25], [1.0, 0.0]], dtype=np.float32)
+
+        payload = encode_mask_geotiff(
+            probability,
+            bbox=(-106.6, 39.4, -106.4, 39.6),
+            prediction_mask_dtype='uint16',
+        )
+        loaded = _load_mask_array_from_bytes(payload, suffix='.tif')
+
+        self.assertEqual(loaded.shape, (2, 2))
+        self.assertAlmostEqual(float(loaded[0, 0]), 0.998, places=4)
+        self.assertGreater(float(loaded[0, 0]), 254.0 / 255.0)
+
+    @unittest.skipIf(MemoryFile is None, 'rasterio is required for GeoTIFF round-trip tests')
+    def test_encode_mask_geotiff_uint8_preserves_legacy_byte_quantization(self) -> None:
+        probability = np.asarray([[0.998, 0.25], [1.0, 0.0]], dtype=np.float32)
+
+        payload = encode_mask_geotiff(
+            probability,
+            bbox=(-106.6, 39.4, -106.4, 39.6),
+            prediction_mask_dtype='uint8',
+        )
+        loaded = _load_mask_array_from_bytes(payload, suffix='.tif')
+
+        self.assertEqual(loaded.shape, (2, 2))
+        self.assertAlmostEqual(float(loaded[0, 0]), 254.0 / 255.0, places=6)
+
+    @unittest.skipIf(MemoryFile is None, 'rasterio is required for GeoTIFF round-trip tests')
+    def test_load_mask_array_keeps_binary_uint8_truth_masks_unscaled(self) -> None:
+        truth = np.asarray([[0, 1], [1, 0]], dtype=np.uint8)
+
+        with MemoryFile() as memory_file:
+            with memory_file.open(
+                driver='GTiff',
+                height=truth.shape[0],
+                width=truth.shape[1],
+                count=1,
+                dtype='uint8',
+            ) as dataset:
+                dataset.write(truth, 1)
+            payload = memory_file.read()
+
+        loaded = _load_mask_array_from_bytes(payload, suffix='.tif')
+
+        self.assertEqual(loaded.shape, (2, 2))
+        self.assertEqual(float(loaded[0, 1]), 1.0)
+        self.assertEqual(int(np.sum(loaded >= 0.5)), 2)
+
     @patch('backend.sar_unet_worker.SAR_UNET_PROMOTED', False)
     def test_build_unet_model_reports_checkpoint_key_mismatch_in_shadow_mode(self) -> None:
         class _DummyModel:
@@ -460,6 +542,41 @@ class SarUnetWorkerTests(unittest.TestCase):
 
         swin_builder_mock.assert_called_once_with(image_size=128)
         self.assertEqual(loaded.model_family, 'swinunet_tiny_diff')
+
+    @patch('backend.sar_unet_worker._build_swinunet_tiny_diff_model')
+    @patch('backend.sar_unet_worker.torch')
+    def test_build_unet_model_extracts_checkpoint_normalization(self, torch_mock, swin_builder_mock) -> None:
+        class _DummyModel:
+            def load_state_dict(self, state_dict, strict=False):
+                return SimpleNamespace(missing_keys=[], unexpected_keys=[])
+
+            def to(self, device):
+                return self
+
+            def eval(self):
+                return None
+
+        swin_builder_mock.return_value = _DummyModel()
+        torch_mock.load.return_value = {
+            'state_dict': {'sar_encoder.model.patch_embed.proj.weight': 1},
+            'metadata': {
+                'normalization': {
+                    'img_mean': [1.0, 2.0],
+                    'img_std': [0.5, 0.25],
+                },
+            },
+        }
+
+        with tempfile.NamedTemporaryFile() as handle:
+            loaded = build_unet_model(
+                Path(handle.name),
+                device='cpu',
+                model_family='swinunet_tiny_diff',
+                image_size=128,
+            )
+
+        np.testing.assert_allclose(loaded.normalization['img_mean'], np.array([1.0, 2.0], dtype=np.float32))
+        np.testing.assert_allclose(loaded.normalization['img_std'], np.array([0.5, 0.25], dtype=np.float32))
 
     @patch('backend.sar_unet_worker.SAR_UNET_PROMOTED', False)
     def test_build_unet_model_rejects_cross_family_checkpoint_in_shadow_mode(self) -> None:
@@ -623,6 +740,48 @@ class SarUnetWorkerTests(unittest.TestCase):
         self.assertEqual(report['f1'], 1.0)
         self.assertFalse(report['beats_baseline'])
 
+    def test_evaluate_scene_manifest_honors_prediction_threshold(self) -> None:
+        report = evaluate_scene_manifest({
+            'baseline_f1_floor': 0.1,
+            'threshold': 0.997,
+            'scenes': [{
+                'region_key': 'colorado_rockies',
+                'prediction_mask': np.asarray([[0.996, 0.0], [0.0, 0.0]], dtype=np.float32),
+                'truth_mask': np.asarray([[1.0, 0.0], [0.0, 0.0]], dtype=np.float32),
+            }],
+        })
+
+        self.assertEqual(report['status'], 'ok')
+        self.assertEqual(report['prediction_threshold'], 0.997)
+        self.assertEqual(report['truth_threshold'], 0.5)
+        self.assertEqual(report['tp'], 0)
+        self.assertEqual(report['fn'], 1)
+        self.assertEqual(report['recall'], 0.0)
+
+    def test_evaluate_scene_manifest_applies_prediction_postprocess(self) -> None:
+        report = evaluate_scene_manifest({
+            'baseline_f1_floor': 0.1,
+            'threshold': 0.5,
+            'postprocess_min_component_area_px': 2,
+            'scenes': [{
+                'region_key': 'colorado_rockies',
+                'prediction_mask': np.asarray(
+                    [[0.9, 0.9, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.9]],
+                    dtype=np.float32,
+                ),
+                'truth_mask': np.asarray(
+                    [[1.0, 1.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+                    dtype=np.float32,
+                ),
+            }],
+        })
+
+        self.assertEqual(report['status'], 'ok')
+        self.assertEqual(report['postprocess_min_component_area_px'], 2)
+        self.assertEqual(report['tp'], 2)
+        self.assertEqual(report['fp'], 0)
+        self.assertEqual(report['precision'], 1.0)
+
     @patch('backend.sar_release_manifest.build_release_manifest_from_reference_set')
     @patch('backend.sar_unet_worker.dump_json')
     @patch('backend.sar_unet_worker.create_artifact_dir')
@@ -660,6 +819,49 @@ class SarUnetWorkerTests(unittest.TestCase):
         self.assertTrue(build_manifest_mock.called)
         dump_json_mock.assert_called_once()
 
+    @patch('backend.sar_release_manifest.build_release_manifest_from_reference_set')
+    @patch('backend.sar_unet_worker.dump_json')
+    @patch('backend.sar_unet_worker.create_artifact_dir')
+    def test_run_worker_request_evaluate_release_preserves_postprocess_from_reference_set_request(
+        self,
+        create_artifact_dir_mock,
+        dump_json_mock,
+        build_manifest_mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_dir = Path(tmpdir) / '20260425T020000Z'
+            artifact_dir.mkdir()
+            create_artifact_dir_mock.return_value = artifact_dir
+            build_manifest_mock.return_value = {
+                'baseline_f1_floor': 0.1,
+                'scenes': [{
+                    'region_key': 'colorado_rockies',
+                    'prediction_mask': np.asarray(
+                        [[0.9, 0.9, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.9]],
+                        dtype=np.float32,
+                    ),
+                    'truth_mask': np.asarray(
+                        [[1.0, 1.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+                        dtype=np.float32,
+                    ),
+                }],
+            }
+
+            report = run_worker_request(
+                'evaluate-release',
+                {
+                    'reference_set_key': 'snowslide-validation-v1',
+                    'prediction_model_version': 'sar_unet_resnet34_shadow_v1',
+                    'postprocess_min_component_area_px': 2,
+                },
+                artifact_root=Path(tmpdir),
+            )
+
+        self.assertEqual(report['status'], 'ok')
+        self.assertEqual(report['postprocess_min_component_area_px'], 2)
+        self.assertEqual(report['fp'], 0)
+        dump_json_mock.assert_called_once()
+
     @patch('backend.sar_unet_worker.run_segmentation')
     def test_run_worker_request_honors_explicit_persist_events_for_direct_scene_payloads(
         self,
@@ -692,6 +894,38 @@ class SarUnetWorkerTests(unittest.TestCase):
 
         self.assertEqual(report['status'], 'ok')
         self.assertFalse(run_segmentation_mock.call_args.kwargs['persist_events'])
+
+    @patch('backend.sar_unet_worker.run_segmentation')
+    def test_run_worker_request_passes_prediction_mask_dtype_to_segmentation(
+        self,
+        run_segmentation_mock,
+    ) -> None:
+        run_segmentation_mock.return_value = {'status': 'ok'}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            report = run_worker_request(
+                'sar-segment',
+                {
+                    'prediction_model_version': 'swin_transformer_v2_tiny_coldstart_v1',
+                    'model_family': 'swinunet_tiny_diff',
+                    'prediction_mask_dtype': 'float32',
+                    'scenes': [{
+                        'scene_id': 'S1A_009',
+                        'region_key': 'livigno',
+                        'scene_time': '2026-04-25T00:00:00+00:00',
+                        'bbox': [-106.6, 39.4, -106.4, 39.6],
+                        'stack_ref': 'sar-masks/heldout/snowslide/2026-04-25/validation/livigno/livigno_20210101_001/stack_manifest.json',
+                        'prediction_mask': 'sar-masks/heldout/snowslide/2026-04-25/validation/livigno/livigno_20210101_001/predictions/swin_transformer_v2_tiny_coldstart_v1/prediction_mask.tif',
+                    }],
+                },
+                artifact_root=Path(tmpdir),
+                model_path=Path('/tmp/dummy.ckpt'),
+                device='cpu',
+                dry_run=False,
+            )
+
+        self.assertEqual(report['status'], 'ok')
+        self.assertEqual(run_segmentation_mock.call_args.kwargs['prediction_mask_dtype'], 'float32')
 
     @patch('backend.sar_unet_worker._run_python_module')
     def test_run_train_mtslstm_returns_wave4_gate_summary(self, run_python_module_mock) -> None:

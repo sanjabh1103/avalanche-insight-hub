@@ -132,6 +132,31 @@ describe('AdminAccessGate', () => {
     expect(screen.queryByText('secret dashboard')).toBeNull();
   });
 
+  it('forbids scientist-only users from the admin route', async () => {
+    const scientist = buildUser({
+      email: 'scientist@insight-hub.local',
+      app_metadata: { roles: ['scientist'] },
+    });
+    getSessionMock.mockResolvedValue({
+      data: { session: buildSession(scientist) },
+      error: null,
+    });
+    getUserMock.mockResolvedValue({
+      data: { user: scientist },
+      error: null,
+    });
+
+    render(
+      <AdminAccessGate>
+        <div>secret dashboard</div>
+      </AdminAccessGate>,
+    );
+
+    expect(await screen.findByText('Admin Access Required')).toBeTruthy();
+    expect(screen.getByText(/scientist@insight-hub.local/i)).toBeTruthy();
+    expect(screen.queryByText('secret dashboard')).toBeNull();
+  });
+
   it('allows password sign-in and renders children for admin users', async () => {
     const adminUser = buildUser();
     const testPassword = ['fixture', 'pwd'].join('-');

@@ -1,0 +1,1482 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Avalanche ML Models, Databases, and GPU Lanes</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #182032;
+      --muted: #667085;
+      --line: #d7dfeb;
+      --paper: #ffffff;
+      --canvas: #f6f8fb;
+      --blue: #2563eb;
+      --blue-soft: #dbeafe;
+      --teal: #0f9f8f;
+      --teal-soft: #ccfbf1;
+      --violet: #7c3aed;
+      --violet-soft: #ede9fe;
+      --rose: #e11d48;
+      --rose-soft: #ffe4e6;
+      --amber: #b45309;
+      --amber-soft: #fef3c7;
+      --green: #15803d;
+      --green-soft: #dcfce7;
+      --slate-soft: #eef2f7;
+      --shadow: 0 18px 45px rgba(24, 32, 50, 0.10);
+      --radius: 8px;
+      --speed: 1;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(rgba(37, 99, 235, 0.055) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(37, 99, 235, 0.055) 1px, transparent 1px),
+        radial-gradient(circle at 15% 12%, rgba(15, 159, 143, 0.13), transparent 28%),
+        radial-gradient(circle at 85% 18%, rgba(245, 158, 11, 0.13), transparent 26%),
+        var(--canvas);
+      background-size: 28px 28px, 28px 28px, auto, auto, auto;
+      color: var(--ink);
+    }
+
+    a { color: inherit; }
+
+    button, input {
+      font: inherit;
+    }
+
+    main {
+      width: min(1520px, calc(100vw - 32px));
+      margin: 24px auto 40px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 18px;
+      align-items: stretch;
+      padding: 26px 28px;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: #475467;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 940px;
+      font-size: clamp(34px, 5vw, 66px);
+      line-height: 0.98;
+      letter-spacing: 0;
+    }
+
+    .hero p {
+      margin: 16px 0 0;
+      max-width: 880px;
+      color: #516176;
+      font-size: 17px;
+      line-height: 1.48;
+    }
+
+    .hero-stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .mini-card, .card, .panel, .source-card, .story-card {
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .mini-card {
+      padding: 12px 14px;
+      display: grid;
+      gap: 4px;
+    }
+
+    .mini-card strong, .card strong {
+      font-size: 13px;
+    }
+
+    .mini-card span, .card span {
+      color: #64748b;
+      font-size: 12px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .workbench {
+      display: grid;
+      grid-template-columns: 272px minmax(0, 1fr) 304px;
+      gap: 16px;
+      margin-top: 16px;
+      align-items: start;
+    }
+
+    .panel {
+      padding: 14px;
+      box-shadow: 0 12px 30px rgba(24, 32, 50, 0.07);
+    }
+
+    .panel-title {
+      margin: 0 0 10px;
+      font-size: 15px;
+      line-height: 1.2;
+    }
+
+    .animation-controls {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .button-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .button-row button, .speed-presets button, .scene-dot, .lane-button {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: var(--radius);
+      color: var(--ink);
+      cursor: pointer;
+    }
+
+    .primary-action {
+      background: var(--ink) !important;
+      color: #fff !important;
+      border-color: var(--ink) !important;
+    }
+
+    .button-row button {
+      min-height: 40px;
+      font-weight: 800;
+    }
+
+    .scrubber {
+      display: grid;
+      gap: 6px;
+    }
+
+    .scrubber label, .range-row label, .toggle-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #5b6678;
+      font-weight: 800;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--blue);
+    }
+
+    .speed-presets {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+
+    .speed-presets button {
+      padding: 8px 0;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .speed-presets button.active {
+      border-color: var(--blue);
+      background: var(--blue-soft);
+      color: #1d4ed8;
+    }
+
+    .scene-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .lane-button {
+      position: relative;
+      text-align: left;
+      padding: 12px 12px 12px 36px;
+      min-height: 76px;
+      transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+    }
+
+    .lane-button::before {
+      content: "";
+      position: absolute;
+      left: 12px;
+      top: 17px;
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--blue);
+    }
+
+    .lane-button[data-scene="1"]::before { background: var(--blue); }
+    .lane-button[data-scene="2"]::before { background: var(--violet); }
+    .lane-button[data-scene="3"]::before { background: var(--rose); }
+    .lane-button[data-scene="4"]::before { background: var(--teal); }
+    .lane-button[data-scene="5"]::before { background: var(--amber); }
+
+    .lane-button.active {
+      transform: translateY(-1px);
+      border-color: var(--blue);
+      background: #f8fbff;
+      box-shadow: 0 8px 18px rgba(37, 99, 235, 0.12);
+    }
+
+    .lane-button strong {
+      display: block;
+      font-size: 13px;
+      line-height: 1.12;
+    }
+
+    .lane-button span {
+      display: block;
+      margin-top: 6px;
+      color: #64748b;
+      font-size: 12px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .range-group {
+      display: grid;
+      gap: 12px;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }
+
+    .stage {
+      overflow: hidden;
+      min-height: 720px;
+    }
+
+    .stage-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 160px;
+      gap: 12px;
+      align-items: start;
+      margin-bottom: 12px;
+    }
+
+    .stage h2 {
+      margin: 0;
+      font-size: clamp(24px, 3vw, 34px);
+      line-height: 1.05;
+    }
+
+    .stage .subtitle {
+      margin: 8px 0 0;
+      color: #5b6678;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .claim-chip {
+      border: 1px solid #f59e0b;
+      background: var(--amber-soft);
+      color: #92400e;
+      border-radius: var(--radius);
+      padding: 10px;
+      font-size: 12px;
+      font-weight: 900;
+      text-align: center;
+    }
+
+    .scene-status {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .scene-dots {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .scene-dot {
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      font-weight: 900;
+      font-size: 11px;
+    }
+
+    .scene-dot.active {
+      background: var(--ink);
+      color: #fff;
+      border-color: var(--ink);
+    }
+
+    .diagram {
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      min-height: 430px;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(248, 250, 252, 0.82), rgba(255, 255, 255, 0.96)),
+        radial-gradient(circle at 25% 20%, rgba(37, 99, 235, 0.09), transparent 30%),
+        radial-gradient(circle at 70% 25%, rgba(15, 159, 143, 0.10), transparent 28%);
+    }
+
+    .rail {
+      position: absolute;
+      left: 9%;
+      right: 9%;
+      top: 56px;
+      height: 8px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--teal), var(--blue), var(--violet), var(--rose), var(--amber));
+      opacity: 0.22;
+    }
+
+    .packet {
+      position: absolute;
+      left: 9%;
+      top: 40px;
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius);
+      background: #fff;
+      border: 3px solid var(--blue);
+      box-shadow: 0 12px 30px rgba(37, 99, 235, 0.25);
+      transform: translateX(var(--packet-x, 0px)) rotate(45deg);
+      transition: transform calc(420ms / var(--speed)) linear, border-color calc(300ms / var(--speed)) ease;
+      z-index: 3;
+    }
+
+    .packet::after {
+      content: "";
+      position: absolute;
+      inset: 8px;
+      border-radius: 4px;
+      background: var(--packet-color, var(--blue));
+    }
+
+    .flow-row {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      padding: 104px 14px 18px;
+    }
+
+    .flow-card {
+      min-height: 174px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.92);
+      padding: 12px;
+      transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+    }
+
+    .flow-card.active {
+      transform: translateY(-4px);
+      border-color: var(--blue);
+      box-shadow: 0 14px 28px rgba(37, 99, 235, 0.15);
+    }
+
+    .tag {
+      display: inline-flex;
+      margin-bottom: 10px;
+      padding: 5px 8px;
+      border-radius: 999px;
+      background: var(--slate-soft);
+      color: #475467;
+      text-transform: uppercase;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+    }
+
+    .flow-card[data-kind="database"] .tag { background: var(--teal-soft); color: #0f766e; }
+    .flow-card[data-kind="model"] .tag { background: var(--blue-soft); color: #1d4ed8; }
+    .flow-card[data-kind="compute"] .tag { background: var(--violet-soft); color: #6d28d9; }
+    .flow-card[data-kind="output"] .tag { background: var(--green-soft); color: #166534; }
+    .flow-card[data-kind="gate"] .tag { background: var(--rose-soft); color: #be123c; }
+
+    .flow-card strong {
+      display: block;
+      font-size: 16px;
+      line-height: 1.16;
+      overflow-wrap: anywhere;
+    }
+
+    .flow-card span:not(.tag) {
+      display: block;
+      margin-top: 8px;
+      color: #526273;
+      font-size: 13px;
+      line-height: 1.38;
+      overflow-wrap: anywhere;
+    }
+
+    .mechanism-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+      gap: 12px;
+      padding: 0 14px 14px;
+    }
+
+    .hidden-panel, .computed-panel {
+      border: 1px dashed #b9c5d6;
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.78);
+      padding: 12px;
+    }
+
+    .hidden-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 13px;
+      color: #475467;
+      font-weight: 900;
+    }
+
+    .state-grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 7px;
+      min-height: 74px;
+    }
+
+    .state-cell {
+      position: relative;
+      min-height: 62px;
+      border-radius: var(--radius);
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      overflow: hidden;
+    }
+
+    .state-cell::before, .state-cell::after {
+      content: "";
+      position: absolute;
+      inset: 8px;
+      border-top: 2px solid rgba(37, 99, 235, 0.16);
+      transform: skewY(-24deg);
+    }
+
+    .state-cell::after {
+      border-color: rgba(225, 29, 72, 0.16);
+      transform: skewY(24deg);
+    }
+
+    .state-cell.on {
+      border-color: var(--blue);
+      background: linear-gradient(180deg, #fff, var(--blue-soft));
+    }
+
+    .code {
+      margin-top: 10px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: #101828;
+      color: #dbeafe;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .code-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 10px;
+      background: #172033;
+      color: #93c5fd;
+      font-weight: 800;
+    }
+
+    .code-head span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    pre {
+      margin: 0;
+      padding: 10px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      line-height: 1.45;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px;
+      background: #fff;
+    }
+
+    .metric + .metric {
+      margin-top: 10px;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 26px;
+      line-height: 1;
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 7px;
+      color: #64748b;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .meter {
+      margin-top: 10px;
+      height: 9px;
+      border-radius: 999px;
+      background: #e2e8f0;
+      overflow: hidden;
+    }
+
+    .meter i {
+      display: block;
+      width: 40%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--blue), var(--teal));
+      transition: width 220ms ease;
+    }
+
+    .inspector {
+      display: grid;
+      gap: 10px;
+    }
+
+    .card {
+      padding: 12px;
+    }
+
+    .status-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 8px;
+    }
+
+    .status-list li {
+      padding: 9px 10px;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      background: #fff;
+      font-size: 12px;
+      line-height: 1.3;
+    }
+
+    .status-list li.ready {
+      background: var(--green-soft);
+      border-color: #86efac;
+      color: #166534;
+    }
+
+    .status-list li.blocked {
+      background: #fff1f2;
+      border-color: #fecdd3;
+      color: #be123c;
+    }
+
+    .status-list li.pending {
+      background: #fffbeb;
+      border-color: #fde68a;
+      color: #92400e;
+    }
+
+    .state-caption {
+      margin: 10px 0 0;
+      color: #667085;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .sources, .storyboard {
+      margin-top: 16px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: 0 12px 30px rgba(24, 32, 50, 0.07);
+    }
+
+    .source-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+
+    .source-card {
+      padding: 12px;
+      text-decoration: none;
+    }
+
+    .source-card strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+
+    .source-card span {
+      color: #64748b;
+      font-size: 12px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .story-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .story-card {
+      padding: 12px;
+    }
+
+    .story-card small {
+      display: block;
+      color: #64748b;
+      line-height: 1.35;
+      margin-top: 6px;
+      overflow-wrap: anywhere;
+    }
+
+    footer {
+      margin-top: 14px;
+      color: #667085;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    @media (max-width: 1120px) {
+      main { width: min(980px, calc(100vw - 24px)); }
+      .hero, .workbench {
+        grid-template-columns: 1fr;
+      }
+      .stage { min-height: auto; }
+      .source-grid, .story-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 720px) {
+      main {
+        width: min(100vw - 18px, 520px);
+        margin-top: 10px;
+      }
+      .hero, .panel, .sources, .storyboard {
+        padding: 12px;
+      }
+      h1 { font-size: clamp(30px, 11vw, 42px); }
+      .hero p { font-size: 14px; }
+      .stage-head, .scene-status, .mechanism-grid {
+        grid-template-columns: 1fr;
+      }
+      .flow-row {
+        grid-template-columns: 1fr;
+        padding-top: 18px;
+      }
+      .rail, .packet {
+        display: none;
+      }
+      .flow-card {
+        min-height: 120px;
+      }
+      .state-grid {
+        grid-template-columns: repeat(4, 1fr);
+      }
+      .source-grid, .story-grid {
+        grid-template-columns: 1fr;
+      }
+      .button-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">Understand Anything + Polo Club-style animation</p>
+        <h1 id="page-title">ML models, databases, and GPU lanes in Avalanche Insight Hub</h1>
+        <p>
+          A source-backed animation of how repo data moves into RF, MTS-LSTM, SAR, Swiss reproduction, and Himalayan evidence gates.
+        </p>
+      </div>
+      <div class="hero-stack">
+        <div class="mini-card">
+          <strong>Learning thesis</strong>
+          <span>Better avalanche prediction comes from governed data flow, not from one magic model.</span>
+        </div>
+        <div class="mini-card">
+          <strong>Understand graph</strong>
+          <span>2,045 nodes, 4,015 edges, 10 layers. Structural evidence only.</span>
+        </div>
+        <div class="mini-card">
+          <strong>Claim locks</strong>
+          <span><code>production_scoring_allowed=false</code><br><code>himalayan_accuracy_claim_allowed=false</code></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="workbench" aria-label="Animated model data flow explainer">
+      <aside class="panel">
+        <h2 class="panel-title">Animation controls</h2>
+        <div class="animation-controls">
+          <div class="button-row">
+            <button id="play" class="primary-action" type="button">Play</button>
+            <button id="pause" type="button">Pause</button>
+          </div>
+          <div class="scrubber">
+            <label for="scrub"><span>Scene</span><strong id="scrubLabel">1 / 6</strong></label>
+            <input id="scrub" type="range" min="0" max="5" step="1" value="0">
+          </div>
+          <div class="scrubber">
+            <label for="speed"><span>Speed</span><strong id="speedLabel">1.0x</strong></label>
+            <input id="speed" type="range" min="0.25" max="2" step="0.25" value="1">
+          </div>
+          <div class="speed-presets" aria-label="Speed presets">
+            <button type="button" data-speed="0.5">0.5x</button>
+            <button class="active" type="button" data-speed="1">1x</button>
+            <button type="button" data-speed="1.5">1.5x</button>
+            <button type="button" data-speed="2">2x</button>
+          </div>
+          <label class="toggle-row">
+            <span>Pause each scene</span>
+            <input id="pauseEach" type="checkbox">
+          </label>
+        </div>
+
+        <h2 class="panel-title">Scene lanes</h2>
+        <div id="sceneList" class="scene-list"></div>
+
+        <div class="range-group">
+          <h2 class="panel-title">Causal controls</h2>
+          <div class="range-row">
+            <label for="dataQuality"><span>Data quality</span><strong id="dataQualityValue">74%</strong></label>
+            <input id="dataQuality" type="range" min="0" max="100" value="74">
+          </div>
+          <div class="range-row">
+            <label for="gpuBudget"><span>GPU budget</span><strong id="gpuBudgetValue">45%</strong></label>
+            <input id="gpuBudget" type="range" min="0" max="100" value="45">
+          </div>
+          <div class="range-row">
+            <label for="localEvidence"><span>Local evidence</span><strong id="localEvidenceValue">36%</strong></label>
+            <input id="localEvidence" type="range" min="0" max="100" value="36">
+          </div>
+        </div>
+      </aside>
+
+      <section class="panel stage" aria-live="polite">
+        <div class="stage-head">
+          <div>
+            <h2 id="stageTitle">Understand map</h2>
+            <p id="stageSubtitle" class="subtitle">The graph shows where ML, data stores, GPU workers, and gates live in the repository.</p>
+          </div>
+          <div class="claim-chip">Teaching artifact only<br>not model validation</div>
+        </div>
+
+        <div class="scene-status">
+          <div>
+            <strong id="sceneName">Scene 1: Map the codebase</strong>
+            <div class="state-caption" id="sceneGoal">Goal: see the repo as connected data/model/gate lanes.</div>
+          </div>
+          <div id="sceneDots" class="scene-dots" aria-label="Scene selector"></div>
+        </div>
+
+        <div class="diagram">
+          <div class="rail" aria-hidden="true"></div>
+          <div class="packet" id="packet" aria-hidden="true"></div>
+
+          <div class="flow-row">
+            <article class="flow-card active" data-kind="database" data-card="database">
+              <span class="tag">Data store</span>
+              <strong id="databaseTitle">Understand graph</strong>
+              <span id="databaseText">knowledge-graph.json and domain-graph.json organize the files before the animation explains them.</span>
+            </article>
+            <article class="flow-card" data-kind="model" data-card="model">
+              <span class="tag">Model</span>
+              <strong id="modelTitle">Lane map</strong>
+              <span id="modelText">The repo separates RF, MTS-LSTM, SAR, Swiss reproduction, and Himalayan evidence readiness.</span>
+            </article>
+            <article class="flow-card" data-kind="compute" data-card="compute">
+              <span class="tag">Compute</span>
+              <strong id="computeTitle">CPU + GPU lanes</strong>
+              <span id="computeText">Batch CPU handles the RF path; Modal/GPU handles selected SAR and MTS-LSTM jobs.</span>
+            </article>
+            <article class="flow-card" data-kind="output" data-card="output">
+              <span class="tag">Output</span>
+              <strong id="outputTitle">Inspectable states</strong>
+              <span id="outputText">The artifact shows hidden votes, sequence memory, masks, thresholds, and gate states.</span>
+            </article>
+            <article class="flow-card" data-kind="gate" data-card="gate">
+              <span class="tag">Gate</span>
+              <strong id="gateTitle">Claim boundary</strong>
+              <span id="gateText">Visual proof never becomes avalanche-science proof. Release gates stay explicit.</span>
+            </article>
+          </div>
+
+          <div class="mechanism-grid">
+            <div class="hidden-panel">
+              <div class="hidden-head">
+                <span id="hiddenStateLabel">Hidden state: graph clusters</span>
+                <span id="hiddenStateCount">5 lanes</span>
+              </div>
+              <div id="stateGrid" class="state-grid" aria-label="Visible hidden model state"></div>
+              <div class="code">
+                <div class="code-head"><span id="codePath">.understand-anything/knowledge-graph.json</span><span id="codeBadge">source-backed</span></div>
+                <pre id="codeBlock">nodes -> files/functions
+edges -> dependencies
+layers -> architecture map</pre>
+              </div>
+            </div>
+
+            <div class="computed-panel">
+              <div class="metric">
+                <strong id="readinessScore">59%</strong>
+                <span id="scoreText">Teaching simulation: readiness changes as data, GPU, and local evidence sliders move.</span>
+                <div class="meter"><i id="scoreMeter"></i></div>
+              </div>
+              <div class="metric">
+                <strong id="gateState">Structural map</strong>
+                <span id="gateReason">Understand helps explain the repo, but it is not accuracy evidence.</span>
+                <div class="meter"><i id="gateMeter"></i></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel inspector">
+        <h2 class="panel-title">Technology inspector</h2>
+        <div class="card">
+          <strong id="inspectorTitle">Why this scene matters</strong>
+          <span id="inspectorText">The graph is the map. Source files are the proof. The animation only teaches how the lanes relate.</span>
+        </div>
+        <div class="card">
+          <strong>Technology orientation</strong>
+          <span id="orientationText">Depth: ELI15/practitioner. Inputs: repo files, Supabase tables, artifacts, CSV templates. Output: source-backed mental model.</span>
+        </div>
+        <div class="card">
+          <strong>Scene proof</strong>
+          <span id="proofText">.understand-anything/knowledge-graph.json; .understand-anything/domain-graph.json</span>
+        </div>
+        <h2 class="panel-title">Gate status</h2>
+        <ul id="statusList" class="status-list"></ul>
+      </aside>
+    </section>
+
+    <section class="sources">
+      <h2 class="panel-title">Source basis used</h2>
+      <div class="source-grid">
+        <a class="source-card" href="../../../../.understand-anything/knowledge-graph.json">
+          <strong>Understand graph</strong>
+          <span>Structural graph: 2,045 nodes, 4,015 edges, 10 layers.</span>
+        </a>
+        <a class="source-card" href="../../../../backend/models/surrogate_rf.py">
+          <strong>Active RF</strong>
+          <span>RandomForestClassifier, calibration, TreeSHAP utilities, PSS metrics.</span>
+        </a>
+        <a class="source-card" href="../../../../backend/models/mts_lstm.py">
+          <strong>MTS-LSTM</strong>
+          <span>Hourly LSTM, daily LSTM, static encoder, candidate head.</span>
+        </a>
+        <a class="source-card" href="../../../../backend/modal_worker_app.py">
+          <strong>Modal/GPU</strong>
+          <span>T4 GPU functions for SAR segmentation, SAR training, and MTS-LSTM training.</span>
+        </a>
+        <a class="source-card" href="../../../../backend/common/sar_acceptance_policy.py">
+          <strong>SAR gate</strong>
+          <span>Precision, recall, F1, false-positive, dry-run, and shadow-only checks.</span>
+        </a>
+        <a class="source-card" href="../../../../backend/reproduction/swiss_ravafcast/aggregate.py">
+          <strong>Swiss lane</strong>
+          <span>Refined discretization, aggregation readiness, production scoring blocked.</span>
+        </a>
+        <a class="source-card" href="../../../../backend/reproduction/himalayan_accuracy_contract.py">
+          <strong>Himalayan gate</strong>
+          <span>Partner CSVs, source refs, holdout, release gates, claim taxonomy.</span>
+        </a>
+        <a class="source-card" href="https://scikit-learn.org/stable/modules/calibration.html">
+          <strong>Calibration docs</strong>
+          <span>External reference for probability calibration concepts.</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="storyboard">
+      <h2 class="panel-title">Source-mapped storyboard</h2>
+      <div id="storyGrid" class="story-grid"></div>
+    </section>
+
+    <footer>
+      Polo Club-inspired interaction pattern: live state, learner controls, progressive reveal, and source links. It does not copy Polo Club code.
+    </footer>
+  </main>
+
+  <script>
+    const scenes = [
+      {
+        id: 'understand',
+        title: 'Understand map',
+        short: 'Map',
+        goal: 'See the repo as connected data, model, compute, output, and gate lanes.',
+        subtitle: 'The graph shows where ML, data stores, GPU workers, and gates live in the repository.',
+        databaseTitle: 'Understand graph',
+        databaseText: 'knowledge-graph.json and domain-graph.json organize files before the animation explains them.',
+        modelTitle: 'Lane map',
+        modelText: 'RF, MTS-LSTM, SAR, Swiss reproduction, Himalayan evidence, and release governance become inspectable.',
+        computeTitle: 'CPU + GPU lanes',
+        computeText: 'Batch CPU handles the RF path; Modal/GPU handles selected SAR and MTS-LSTM jobs.',
+        outputTitle: 'Inspectable states',
+        outputText: 'Hidden votes, sequence memory, masks, thresholds, and gate states are exposed visually.',
+        gateTitle: 'Claim boundary',
+        gateText: 'Visual proof never becomes avalanche-science proof. Release gates stay explicit.',
+        hiddenLabel: 'Hidden state: graph clusters',
+        hiddenCount: '5 lanes',
+        activeCells: 5,
+        codePath: '.understand-anything/knowledge-graph.json',
+        codeBlock: 'nodes -> files/functions\\nedges -> dependencies\\nlayers -> architecture map',
+        inspectorTitle: 'Why this scene matters',
+        inspectorText: 'The graph is the map. Source files are the proof. The animation only teaches how the lanes relate.',
+        orientationText: 'Depth: ELI15/practitioner. Inputs: repo files, Supabase tables, artifacts, CSV templates. Output: source-backed mental model.',
+        proofText: '.understand-anything/knowledge-graph.json; .understand-anything/domain-graph.json',
+        statuses: [
+          ['ready', 'Graph present: 2,045 nodes and 4,015 edges'],
+          ['ready', 'Relevant ML/GPU files are indexed'],
+          ['pending', 'Graph is structural evidence, not forecast proof']
+        ],
+        weights: { data: 0.45, gpu: 0.20, local: 0.35 },
+        base: 18,
+        gate: 'Structural map',
+        gateReason: 'Understand helps explain the repo, but it is not accuracy evidence.',
+        source: '.understand-anything/*',
+        timing: '8s intro, auto-pauses if enabled'
+      },
+      {
+        id: 'rf',
+        title: 'Active RF scorer',
+        short: 'RF',
+        goal: 'Understand the current tabular scorer path from features to forecast grids.',
+        subtitle: 'Engineered terrain, weather, and snowpack features feed a Random Forest scorer and calibrated outputs.',
+        databaseTitle: 'Supabase + artifacts',
+        databaseText: 'avalanche_events, forecast_runs, forecast_grids, forecast_shap_cache, model_status, and local training artifacts.',
+        modelTitle: 'Random Forest',
+        modelText: 'Many trees vote on structured feature rows such as snowfall, slope, wind loading, shear, and wet-snow signals.',
+        computeTitle: 'Batch CPU path',
+        computeText: 'The active RF lane does not need GPU. It uses CPU-oriented scikit-learn training and batch inference.',
+        outputTitle: 'Grid + explanations',
+        outputText: 'Risk cells, model metadata, reliability reports, SHAP context, and publication records feed the app.',
+        gateTitle: 'Publish guard',
+        gateText: 'Feature hashes, drift checks, PSS floor, calibration quality, and synthetic-data guards control promotion.',
+        hiddenLabel: 'Hidden state: tree votes',
+        hiddenCount: '8 sampled trees',
+        activeCells: 6,
+        codePath: 'backend/models/surrogate_rf.py',
+        codeBlock: 'RandomForestClassifier(...)\\nCalibratedClassifierCV(...)\\nforecast_grids <- predict_proba(rows)',
+        inspectorTitle: 'Active path',
+        inspectorText: 'This is the implemented public scoring pattern. It is useful for technical publication but not Himalayan accuracy proof.',
+        orientationText: 'Inputs: FEATURE_COLUMNS rows. Internal state: tree votes and calibration bins. Output: forecast grid plus explanation context.',
+        proofText: 'backend/common/features.py; backend/models/surrogate_rf.py; backend/train_model.py; src/integrations/supabase/types.ts',
+        statuses: [
+          ['ready', 'RF model path exists'],
+          ['ready', 'Calibration and reliability bins exist'],
+          ['blocked', 'Himalayan claim remains blocked']
+        ],
+        weights: { data: 0.58, gpu: 0.05, local: 0.37 },
+        base: 20,
+        gate: 'Public technical lane',
+        gateReason: 'The RF lane can explain technical scoring mechanics; Himalayan validation still needs local evidence.',
+        source: 'backend/models/surrogate_rf.py',
+        timing: '11s, with vote and gate emphasis'
+      },
+      {
+        id: 'lstm',
+        title: 'MTS-LSTM candidate',
+        short: 'LSTM',
+        goal: 'See how sequence learning differs from the RF snapshot model.',
+        subtitle: 'The candidate model reads hourly history, daily history, and static terrain as separate branches.',
+        databaseTitle: 'Sequence datasets',
+        databaseText: 'MTS-LSTM loaders build hourly, daily, and static tensors from prepared training sequences.',
+        modelTitle: 'Branched MTS-LSTM',
+        modelText: 'Hourly LSTM + daily LSTM + static encoder are merged into one probability head.',
+        computeTitle: 'Modal/GPU training',
+        computeText: 'Remote training uses Modal functions; T4 GPU is declared for train_mts_lstm_remote.',
+        outputTitle: 'Candidate metrics',
+        outputText: 'The lane can produce candidate outputs, but promotion depends on local evidence and release gates.',
+        gateTitle: 'Candidate only',
+        gateText: 'MTS-LSTM is not the active public scorer. It stays candidate until promotion evidence passes.',
+        hiddenLabel: 'Hidden state: sequence memory',
+        hiddenCount: '3 branches',
+        activeCells: 3,
+        codePath: 'backend/models/mts_lstm.py',
+        codeBlock: 'hourly_lstm(hourly)\\ndaily_lstm(daily)\\nhead(cat(hourly,daily,static))',
+        inspectorTitle: 'Why GPU helps here',
+        inspectorText: 'GPU is useful for neural sequence training because many tensor operations can run in parallel.',
+        orientationText: 'Inputs: hourly, daily, static tensors. Internal state: LSTM memory. Output: candidate probability, not public claim.',
+        proofText: 'backend/models/mts_lstm.py; backend/data/mts_lstm_loader.py; backend/modal_worker_app.py',
+        statuses: [
+          ['ready', 'Branched model class exists'],
+          ['ready', 'Modal train/infer functions exist'],
+          ['blocked', 'Candidate lane is not current public scorer']
+        ],
+        weights: { data: 0.38, gpu: 0.44, local: 0.18 },
+        base: 14,
+        gate: 'Candidate lane',
+        gateReason: 'GPU can accelerate candidate training; promotion still requires local holdout evidence.',
+        source: 'backend/models/mts_lstm.py',
+        timing: '10s, shows branch merge'
+      },
+      {
+        id: 'sar',
+        title: 'SAR shadow lane',
+        short: 'SAR',
+        goal: 'Understand why satellite segmentation is powerful but blocked from production scoring.',
+        subtitle: 'SAR scenes can train/evaluate segmentation models on GPU, but the lane remains shadow-gated.',
+        databaseTitle: 'SAR artifacts',
+        databaseText: 'Scene files, masks, materialization results, benchmark reports, and local avalanche events support research review.',
+        modelTitle: 'U-Net / Swin-style masks',
+        modelText: 'Segmentation predicts avalanche-deposit masks and component diagnostics from remote-sensing scenes.',
+        computeTitle: 'Modal/GPU path',
+        computeText: 'sar_segment_remote, train_sar_unet_remote, and evaluate_sar_checkpoint_remote declare T4 GPU.',
+        outputTitle: 'Masks + diagnostics',
+        outputText: 'Precision, recall, F1, false-positive rate, scene coverage, and mask references are evaluated.',
+        gateTitle: 'Shadow-only',
+        gateText: 'evaluate_snowslide_research_grade keeps production_scoring_allowed=false.',
+        hiddenLabel: 'Hidden state: segmentation mask',
+        hiddenCount: 'scene pixels',
+        activeCells: 4,
+        codePath: 'backend/common/sar_acceptance_policy.py',
+        codeBlock: 'precision >= 0.70\\nrecall >= 0.50\\nfpr <= 0.002\\nproduction_scoring_allowed=False',
+        inspectorTitle: 'Why this lane matters',
+        inspectorText: 'SAR helps sparse regions, but wet snow, layover, scene coverage, and transfer risk keep it shadow-only.',
+        orientationText: 'Inputs: SAR scenes. Internal state: segmentation mask. Output: diagnostics. Gate: shadow-only.',
+        proofText: 'backend/common/sar_acceptance_policy.py; backend/sar_unet_training.py; backend/modal_worker_app.py',
+        statuses: [
+          ['ready', 'SAR policy floors exist'],
+          ['ready', 'GPU functions exist'],
+          ['blocked', 'SAR remains shadow-only']
+        ],
+        weights: { data: 0.30, gpu: 0.46, local: 0.24 },
+        base: 10,
+        gate: 'Shadow-only',
+        gateReason: 'Remote sensing can support research review, not production scoring in this repo state.',
+        source: 'backend/common/sar_acceptance_policy.py',
+        timing: '10s, emphasizes mask and blocker'
+      },
+      {
+        id: 'swiss',
+        title: 'Swiss methodology lane',
+        short: 'Swiss',
+        goal: 'Separate European methodology discipline from Himalayan proof.',
+        subtitle: 'Swiss RAvaFcast reproduction tests RF4, GPxyz readiness, and refined aggregation as research-only methodology.',
+        databaseTitle: 'Swiss EnviDat files',
+        databaseText: 'RF1/RF2-style source frames, station metadata, elevation bands, and warning-region aggregation inputs.',
+        modelTitle: 'RF4 + GPxyz',
+        modelText: 'RF4 classification, station coordinate readiness, GPxyz interpolation, and refined discretization.',
+        computeTitle: 'Research CPU path',
+        computeText: 'The reproduction lane focuses on parity and leakage guards, not live promotion.',
+        outputTitle: 'Parity reports',
+        outputText: 'Station-row aggregation, macro F1, thresholds, missing inputs, and GPxyz blockers.',
+        gateTitle: 'Methodology only',
+        gateText: 'production_scoring_allowed=false and no Himalayan accuracy claim follows from Swiss parity.',
+        hiddenLabel: 'Hidden state: thresholds',
+        hiddenCount: '4 danger bands',
+        activeCells: 4,
+        codePath: 'backend/reproduction/swiss_ravafcast/aggregate.py',
+        codeBlock: 'compute_refined_discretization_thresholds(...)\\nleakage_guard = training_or_oob_only\\nproduction_scoring_allowed=False',
+        inspectorTitle: 'Why this lane matters',
+        inspectorText: 'It imports discipline: labels, station coordinates, GPxyz design, aggregation, and leakage guards.',
+        orientationText: 'Inputs: Swiss research data. Internal state: thresholds and station coverage. Output: research parity report.',
+        proofText: 'backend/reproduction/swiss_ravafcast/aggregate.py; interpolate_gpxyz.py; evaluate.py',
+        statuses: [
+          ['ready', 'RF4 and aggregation code exists'],
+          ['pending', 'GPxyz needs station coordinates'],
+          ['blocked', 'Swiss evidence is not Himalayan proof']
+        ],
+        weights: { data: 0.55, gpu: 0.02, local: 0.26 },
+        base: 15,
+        gate: 'Research-only',
+        gateReason: 'European methods improve discipline; local Himalayan proof still requires local evidence.',
+        source: 'backend/reproduction/swiss_ravafcast/aggregate.py',
+        timing: '9s, shows threshold gate'
+      },
+      {
+        id: 'himalayan',
+        title: 'Himalayan evidence gate',
+        short: 'Himalaya',
+        goal: 'See what must arrive before Himalayan accuracy can be evaluated.',
+        subtitle: 'This is not a model. It is the contract deciding whether local claims can even be reviewed.',
+        databaseTitle: 'Partner CSV package',
+        databaseText: 'station metadata, weather observations, snowpack profiles, D_tidy labels, events, polygons, SAR scenes, reviews, and holdout rows.',
+        modelTitle: 'Evidence contract',
+        modelText: 'Source refs, license scope, D_tidy provenance, station X/Y/Z, freshness, and release attestations are checked.',
+        computeTitle: 'CLI triage',
+        computeText: 'Triage reports blockers, quality score, source traceability, station density, and holdout leakage status.',
+        outputTitle: 'Readiness report',
+        outputText: 'The output can become scientist-review ready, claim-review ready, or explicitly blocked.',
+        gateTitle: 'Claims locked',
+        gateText: 'himalayan_accuracy_claim_allowed=false until local evidence and release gates pass.',
+        hiddenLabel: 'Hidden state: evidence checklist',
+        hiddenCount: '4 gates',
+        activeCells: 2,
+        codePath: 'backend/reproduction/himalayan_accuracy_contract.py',
+        codeBlock: 'REQUIRED_RELEASE_GATES = (...)\\nsource_ref + sha256 + license_scope\\nhimalayan_accuracy_claim_allowed=False',
+        inspectorTitle: 'Why this lane matters',
+        inspectorText: 'The Himalayan gate is the main scientific boundary: data quality, traceability, holdout, and signoff come before claims.',
+        orientationText: 'Inputs: partner CSVs and manifest. Internal state: blockers. Output: readiness report, not accuracy.',
+        proofText: 'backend/reproduction/himalayan_accuracy_contract.py; src/pages/ScientistPartnerIntakePage.tsx',
+        statuses: [
+          ['ready', 'v3 evidence contract exists'],
+          ['blocked', 'Real reviewed Himalayan rows are absent'],
+          ['blocked', 'Release attestations are absent']
+        ],
+        weights: { data: 0.34, gpu: 0.01, local: 0.62 },
+        base: 8,
+        gate: 'Claim locked',
+        gateReason: 'Local partner evidence and independent holdout must pass before Himalayan claims.',
+        source: 'backend/reproduction/himalayan_accuracy_contract.py',
+        timing: '12s, ends on claim locks'
+      }
+    ];
+
+    const flowCards = Array.from(document.querySelectorAll('.flow-card'));
+    const stateGrid = document.getElementById('stateGrid');
+    const sceneList = document.getElementById('sceneList');
+    const sceneDots = document.getElementById('sceneDots');
+    const storyGrid = document.getElementById('storyGrid');
+    const fields = {
+      stageTitle: document.getElementById('stageTitle'),
+      stageSubtitle: document.getElementById('stageSubtitle'),
+      sceneName: document.getElementById('sceneName'),
+      sceneGoal: document.getElementById('sceneGoal'),
+      databaseTitle: document.getElementById('databaseTitle'),
+      databaseText: document.getElementById('databaseText'),
+      modelTitle: document.getElementById('modelTitle'),
+      modelText: document.getElementById('modelText'),
+      computeTitle: document.getElementById('computeTitle'),
+      computeText: document.getElementById('computeText'),
+      outputTitle: document.getElementById('outputTitle'),
+      outputText: document.getElementById('outputText'),
+      gateTitle: document.getElementById('gateTitle'),
+      gateText: document.getElementById('gateText'),
+      hiddenStateLabel: document.getElementById('hiddenStateLabel'),
+      hiddenStateCount: document.getElementById('hiddenStateCount'),
+      codePath: document.getElementById('codePath'),
+      codeBlock: document.getElementById('codeBlock'),
+      readinessScore: document.getElementById('readinessScore'),
+      scoreText: document.getElementById('scoreText'),
+      scoreMeter: document.getElementById('scoreMeter'),
+      gateState: document.getElementById('gateState'),
+      gateReason: document.getElementById('gateReason'),
+      gateMeter: document.getElementById('gateMeter'),
+      inspectorTitle: document.getElementById('inspectorTitle'),
+      inspectorText: document.getElementById('inspectorText'),
+      orientationText: document.getElementById('orientationText'),
+      proofText: document.getElementById('proofText'),
+      statusList: document.getElementById('statusList'),
+      scrub: document.getElementById('scrub'),
+      scrubLabel: document.getElementById('scrubLabel'),
+      speed: document.getElementById('speed'),
+      speedLabel: document.getElementById('speedLabel'),
+      packet: document.getElementById('packet'),
+      dataQuality: document.getElementById('dataQuality'),
+      gpuBudget: document.getElementById('gpuBudget'),
+      localEvidence: document.getElementById('localEvidence'),
+      dataQualityValue: document.getElementById('dataQualityValue'),
+      gpuBudgetValue: document.getElementById('gpuBudgetValue'),
+      localEvidenceValue: document.getElementById('localEvidenceValue'),
+      play: document.getElementById('play'),
+      pause: document.getElementById('pause'),
+      pauseEach: document.getElementById('pauseEach')
+    };
+
+    let currentScene = 0;
+    let activeCard = 0;
+    let playing = false;
+    let lastFrame = 0;
+    let sceneElapsed = 0;
+    const sceneDurationMs = [8000, 11000, 10000, 10000, 9000, 12000];
+    const colors = ['#2563eb', '#2563eb', '#7c3aed', '#e11d48', '#0f9f8f', '#b45309'];
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function numericControls() {
+      return {
+        data: Number(fields.dataQuality.value),
+        gpu: Number(fields.gpuBudget.value),
+        local: Number(fields.localEvidence.value)
+      };
+    }
+
+    function computeReadiness(scene) {
+      const values = numericControls();
+      const score = scene.base
+        + values.data * scene.weights.data
+        + values.gpu * scene.weights.gpu
+        + values.local * scene.weights.local;
+      return clamp(Math.round(score), 0, 100);
+    }
+
+    function gateFor(scene, score) {
+      if (scene.id === 'rf') {
+        return [scene.gate, score > 62 ? scene.gateReason : 'Technical lane exists, but weak data/local evidence lowers confidence for review.', 72];
+      }
+      if (scene.id === 'lstm') {
+        return [score > 70 ? 'Candidate review' : 'Candidate blocked', scene.gateReason, score > 70 ? 68 : 38];
+      }
+      if (scene.id === 'sar') {
+        return ['Shadow-only', scene.gateReason, 28];
+      }
+      if (scene.id === 'swiss') {
+        return ['Research-only', scene.gateReason, 35];
+      }
+      if (scene.id === 'himalayan') {
+        return [score > 80 ? 'Review-ready' : 'Claim locked', scene.gateReason, score > 80 ? 58 : 24];
+      }
+      return [scene.gate, scene.gateReason, 42];
+    }
+
+    function renderStaticControls() {
+      scenes.forEach((scene, index) => {
+        const button = document.createElement('button');
+        button.className = 'lane-button';
+        button.type = 'button';
+        button.dataset.scene = String(index);
+        button.innerHTML = `<strong>${index + 1}. ${scene.title}</strong><span>${scene.short} · ${scene.source}</span>`;
+        button.addEventListener('click', () => setScene(index, true));
+        sceneList.appendChild(button);
+
+        const dot = document.createElement('button');
+        dot.className = 'scene-dot';
+        dot.type = 'button';
+        dot.textContent = String(index + 1);
+        dot.setAttribute('aria-label', `Go to scene ${index + 1}: ${scene.title}`);
+        dot.addEventListener('click', () => setScene(index, true));
+        sceneDots.appendChild(dot);
+
+        const story = document.createElement('article');
+        story.className = 'story-card';
+        story.innerHTML = `<strong>${index + 1}. ${scene.title}</strong><small>Learner action: play, scrub, inspect the active flow card, then move causal sliders.</small><small>Timing: ${scene.timing}</small><small>Proof: ${scene.proofText}</small>`;
+        storyGrid.appendChild(story);
+      });
+
+      for (let i = 0; i < 8; i += 1) {
+        const cell = document.createElement('div');
+        cell.className = 'state-cell';
+        stateGrid.appendChild(cell);
+      }
+    }
+
+    function updateFlowCardFocus(progress) {
+      const next = clamp(Math.floor(progress * 5), 0, 4);
+      activeCard = next;
+      flowCards.forEach((card, index) => {
+        card.classList.toggle('active', index === activeCard);
+      });
+      const diagram = document.querySelector('.diagram');
+      if (diagram) {
+        const width = Math.max(0, diagram.clientWidth - 140);
+        fields.packet.style.setProperty('--packet-x', `${Math.round(width * (activeCard / 4))}px`);
+      }
+    }
+
+    function renderScene() {
+      const scene = scenes[currentScene];
+      const score = computeReadiness(scene);
+      const [gateState, gateReason, gateMeter] = gateFor(scene, score);
+
+      fields.stageTitle.textContent = scene.title;
+      fields.stageSubtitle.textContent = scene.subtitle;
+      fields.sceneName.textContent = `Scene ${currentScene + 1}: ${scene.title}`;
+      fields.sceneGoal.textContent = `Goal: ${scene.goal}`;
+      fields.databaseTitle.textContent = scene.databaseTitle;
+      fields.databaseText.textContent = scene.databaseText;
+      fields.modelTitle.textContent = scene.modelTitle;
+      fields.modelText.textContent = scene.modelText;
+      fields.computeTitle.textContent = scene.computeTitle;
+      fields.computeText.textContent = scene.computeText;
+      fields.outputTitle.textContent = scene.outputTitle;
+      fields.outputText.textContent = scene.outputText;
+      fields.gateTitle.textContent = scene.gateTitle;
+      fields.gateText.textContent = scene.gateText;
+      fields.hiddenStateLabel.textContent = scene.hiddenLabel;
+      fields.hiddenStateCount.textContent = scene.hiddenCount;
+      fields.codePath.textContent = scene.codePath;
+      fields.codeBlock.textContent = scene.codeBlock.replace(/\\n/g, '\n');
+      fields.readinessScore.textContent = `${score}%`;
+      fields.scoreText.textContent = `Teaching simulation: data, GPU, and local evidence combine differently for ${scene.short}.`;
+      fields.scoreMeter.style.width = `${score}%`;
+      fields.gateState.textContent = gateState;
+      fields.gateReason.textContent = gateReason;
+      fields.gateMeter.style.width = `${gateMeter}%`;
+      fields.inspectorTitle.textContent = scene.inspectorTitle;
+      fields.inspectorText.textContent = scene.inspectorText;
+      fields.orientationText.textContent = scene.orientationText;
+      fields.proofText.textContent = scene.proofText;
+      fields.scrub.value = String(currentScene);
+      fields.scrubLabel.textContent = `${currentScene + 1} / ${scenes.length}`;
+      fields.packet.style.setProperty('--packet-color', colors[currentScene]);
+      fields.packet.style.borderColor = colors[currentScene];
+      document.documentElement.style.setProperty('--speed', fields.speed.value);
+
+      Array.from(stateGrid.children).forEach((cell, index) => {
+        cell.classList.toggle('on', index < scene.activeCells);
+      });
+      Array.from(sceneList.children).forEach((button, index) => {
+        button.classList.toggle('active', index === currentScene);
+      });
+      Array.from(sceneDots.children).forEach((dot, index) => {
+        dot.classList.toggle('active', index === currentScene);
+      });
+
+      fields.statusList.innerHTML = '';
+      scene.statuses.forEach(([status, text]) => {
+        const item = document.createElement('li');
+        item.className = status;
+        item.textContent = text;
+        fields.statusList.appendChild(item);
+      });
+
+      updateFlowCardFocus(sceneElapsed / sceneDurationMs[currentScene]);
+    }
+
+    function setScene(index, pauseAfter = false) {
+      currentScene = clamp(index, 0, scenes.length - 1);
+      sceneElapsed = 0;
+      if (pauseAfter) {
+        playing = false;
+      }
+      renderScene();
+    }
+
+    function tick(timestamp) {
+      if (!lastFrame) lastFrame = timestamp;
+      const delta = timestamp - lastFrame;
+      lastFrame = timestamp;
+      if (playing) {
+        const speed = Number(fields.speed.value);
+        sceneElapsed += delta * speed;
+        const duration = sceneDurationMs[currentScene];
+        if (sceneElapsed >= duration) {
+          if (currentScene < scenes.length - 1) {
+            currentScene += 1;
+            sceneElapsed = 0;
+            if (fields.pauseEach.checked) playing = false;
+          } else {
+            playing = false;
+            sceneElapsed = duration;
+          }
+          renderScene();
+        } else {
+          updateFlowCardFocus(sceneElapsed / duration);
+        }
+      }
+      requestAnimationFrame(tick);
+    }
+
+    function updateControlLabels() {
+      fields.dataQualityValue.textContent = `${fields.dataQuality.value}%`;
+      fields.gpuBudgetValue.textContent = `${fields.gpuBudget.value}%`;
+      fields.localEvidenceValue.textContent = `${fields.localEvidence.value}%`;
+      fields.speedLabel.textContent = `${Number(fields.speed.value).toFixed(2).replace(/\\.00$/, '.0')}x`;
+      Array.from(document.querySelectorAll('[data-speed]')).forEach((button) => {
+        button.classList.toggle('active', Number(button.dataset.speed) === Number(fields.speed.value));
+      });
+      renderScene();
+    }
+
+    fields.play.addEventListener('click', () => {
+      if (currentScene === scenes.length - 1 && sceneElapsed >= sceneDurationMs[currentScene]) {
+        setScene(0, false);
+      }
+      playing = true;
+    });
+
+    fields.pause.addEventListener('click', () => {
+      playing = false;
+    });
+
+    fields.scrub.addEventListener('input', () => {
+      setScene(Number(fields.scrub.value), true);
+    });
+
+    fields.speed.addEventListener('input', updateControlLabels);
+    fields.dataQuality.addEventListener('input', updateControlLabels);
+    fields.gpuBudget.addEventListener('input', updateControlLabels);
+    fields.localEvidence.addEventListener('input', updateControlLabels);
+
+    document.querySelectorAll('[data-speed]').forEach((button) => {
+      button.addEventListener('click', () => {
+        fields.speed.value = button.dataset.speed;
+        updateControlLabels();
+      });
+    });
+
+    flowCards.forEach((card, index) => {
+      card.addEventListener('click', () => {
+        activeCard = index;
+        sceneElapsed = sceneDurationMs[currentScene] * (index / 4);
+        updateFlowCardFocus(index / 4);
+      });
+    });
+
+    renderStaticControls();
+    renderScene();
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>

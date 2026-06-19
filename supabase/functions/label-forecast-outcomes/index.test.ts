@@ -5,6 +5,11 @@ import {
 
 import { handleLabelForecastOutcomes } from "./index.ts";
 
+// Set mock environment variables for testing
+Deno.env.set("SUPABASE_URL", "https://fzheroisjhxnairglelv.supabase.co");
+Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "dummy-service-role-key");
+Deno.env.set("REQUIRE_JOB_AUTH", "false");
+
 type LabelDeps = NonNullable<Parameters<typeof handleLabelForecastOutcomes>[1]>;
 
 function buildDeps(overrides: Partial<LabelDeps> = {}) {
@@ -24,6 +29,7 @@ function buildDeps(overrides: Partial<LabelDeps> = {}) {
   };
 
   const deps: LabelDeps = {
+    supabase: {},
     async createJob(params) {
       createdJobs.push(params);
       return { id: `job-${createdJobs.length}` };

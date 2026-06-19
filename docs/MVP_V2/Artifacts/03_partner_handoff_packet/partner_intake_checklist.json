@@ -1,0 +1,370 @@
+{
+  "claim_boundary": {
+    "himalayan_accuracy_claim_allowed": false,
+    "production_scoring_allowed": false,
+    "reason": "The intake package is a data-submission checklist. Accuracy and production claims require validated local evidence plus release-gate attestations."
+  },
+  "decision": "partner_intake_checklist_written_pending_partner_submission",
+  "generated_at": "2026-05-23T13:13:35.699020+00:00",
+  "himalayan_accuracy_claim_allowed": false,
+  "intake_steps": [
+    {
+      "check": "Compute SHA-256 for each source package and add it to partner_source_manifest.json.",
+      "name": "Prepare source packages",
+      "step": 1
+    },
+    {
+      "check": "Every source has owner, dataset, license_scope, date_range, review_status=reviewed, reviewer_id, reviewed_at, and evidence_package_ref.",
+      "name": "Complete source manifest",
+      "step": 2
+    },
+    {
+      "check": "Use reviewed rows only; every source_ref must point to a manifest SHA-256 or a local file hash reference.",
+      "name": "Fill evidence CSVs",
+      "step": 3
+    },
+    {
+      "check": "Run the standalone source-manifest validation before full evidence validation.",
+      "name": "Validate source manifest first",
+      "step": 4
+    },
+    {
+      "check": "Run the partner evidence validation and keep blocked outputs if any group is incomplete, stale, undersized, unlicensed, or unreviewed.",
+      "name": "Validate all evidence",
+      "step": 5
+    }
+  ],
+  "package_rules": {
+    "allowed_license_scopes_for_research_validation": [
+      "cc_by_nc_research_only",
+      "commercial_deployment_approved",
+      "internal_research_validation",
+      "partner_restricted_research",
+      "research_validation_only"
+    ],
+    "evidence_max_review_age_days": 365.0,
+    "future_review_skew_days_allowed": 1.0,
+    "review_status_required": "reviewed",
+    "source_manifest_max_review_age_days": 365.0,
+    "source_manifest_required": true,
+    "source_ref_formats": [
+      "sha256:<64-hex-sha256-of-source-package>",
+      "file:<relative-path>#sha256=<64-hex-sha256-of-source-package>"
+    ]
+  },
+  "production_scoring_allowed": false,
+  "required_package_files": [
+    {
+      "path": "partner_source_manifest.json",
+      "purpose": "Maps every partner evidence source_ref SHA-256 value to owner, dataset, license, date range, reviewer, and evidence package.",
+      "required": true,
+      "required_fields": [
+        "source_id",
+        "sha256",
+        "source_owner",
+        "dataset_name",
+        "license_scope",
+        "date_range",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "evidence_package_ref"
+      ],
+      "type": "source_manifest"
+    },
+    {
+      "minimum_distinct_counts": {
+        "station_id": 10
+      },
+      "minimum_numeric_spans": {
+        "elevation_m": 500.0
+      },
+      "minimum_reviewed_rows": 10,
+      "minimum_temporal_span_days": {},
+      "path": "station_metadata.csv",
+      "required_columns": [
+        "station_id",
+        "region_key",
+        "latitude",
+        "longitude",
+        "elevation_m",
+        "active_date_range",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "requirement_key": "station_metadata",
+      "type": "evidence_csv"
+    },
+    {
+      "minimum_distinct_counts": {
+        "observed_at": 10,
+        "station_id": 3
+      },
+      "minimum_numeric_spans": {},
+      "minimum_reviewed_rows": 30,
+      "minimum_temporal_span_days": {
+        "observed_at": 7.0
+      },
+      "path": "weather_station_observations.csv",
+      "required_columns": [
+        "station_id",
+        "observed_at",
+        "air_temp_c",
+        "precipitation_mm",
+        "snowfall_cm",
+        "snow_depth_cm",
+        "wind_speed_ms",
+        "wind_dir_deg",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "requirement_key": "weather_station_observations",
+      "type": "evidence_csv"
+    },
+    {
+      "minimum_distinct_counts": {
+        "observed_at": 5,
+        "station_id": 3
+      },
+      "minimum_numeric_spans": {},
+      "minimum_reviewed_rows": 20,
+      "minimum_temporal_span_days": {
+        "observed_at": 4.0
+      },
+      "path": "snowpack_profile_features.csv",
+      "required_columns": [
+        "station_id",
+        "observed_at",
+        "layer_index",
+        "layer_depth_cm",
+        "grain_type",
+        "hardness_index",
+        "stability_index",
+        "quality_flag",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "requirement_key": "snowpack_profile_features",
+      "type": "evidence_csv"
+    },
+    {
+      "minimum_distinct_counts": {
+        "danger_level_1_to_4": 2,
+        "region_id": 3
+      },
+      "minimum_numeric_spans": {},
+      "minimum_reviewed_rows": 10,
+      "minimum_temporal_span_days": {
+        "valid_from": 7.0
+      },
+      "path": "danger_labels_and_bulletins.csv",
+      "required_columns": [
+        "region_id",
+        "valid_from",
+        "valid_to",
+        "danger_scale_standard",
+        "danger_level_1_to_5",
+        "danger_level_1_to_4",
+        "avalanche_problem",
+        "elevation_band_policy",
+        "forecaster_or_reviewer_id",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "requirement_key": "danger_labels_and_bulletins",
+      "type": "evidence_csv"
+    },
+    {
+      "minimum_distinct_counts": {
+        "region_id": 1
+      },
+      "minimum_numeric_spans": {},
+      "minimum_reviewed_rows": 1,
+      "minimum_temporal_span_days": {},
+      "path": "warning_region_polygons.csv",
+      "required_columns": [
+        "region_id",
+        "polygon_geometry",
+        "crs",
+        "elevation_policy",
+        "valid_date_range",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "requirement_key": "warning_region_polygons",
+      "type": "evidence_csv"
+    },
+    {
+      "minimum_distinct_counts": {
+        "event_id": 10
+      },
+      "minimum_numeric_spans": {
+        "elevation_m": 500.0
+      },
+      "minimum_reviewed_rows": 10,
+      "minimum_temporal_span_days": {
+        "observed_at": 7.0
+      },
+      "path": "historical_avalanche_events.csv",
+      "required_columns": [
+        "event_id",
+        "observed_at",
+        "latitude",
+        "longitude",
+        "elevation_m",
+        "aspect",
+        "avalanche_problem",
+        "observed_outcome",
+        "confidence",
+        "source",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "requirement_key": "historical_avalanche_events",
+      "type": "evidence_csv"
+    },
+    {
+      "minimum_distinct_counts": {
+        "scene_id": 5
+      },
+      "minimum_numeric_spans": {},
+      "minimum_reviewed_rows": 5,
+      "minimum_temporal_span_days": {
+        "acquired_at": 4.0
+      },
+      "path": "remote_sensing_validation_scenes.csv",
+      "required_columns": [
+        "scene_id",
+        "sensor",
+        "acquired_at",
+        "preprocessing_level",
+        "truth_mask_or_event_ref",
+        "holdout_split",
+        "license_scope",
+        "source_ref",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "requirement_key": "remote_sensing_validation_scenes",
+      "type": "evidence_csv"
+    },
+    {
+      "minimum_distinct_counts": {
+        "region_id": 3
+      },
+      "minimum_numeric_spans": {
+        "slope": 10.0
+      },
+      "minimum_reviewed_rows": 3,
+      "minimum_temporal_span_days": {},
+      "path": "terrain_ates_runout_validation.csv",
+      "required_columns": [
+        "region_id",
+        "dem_ref",
+        "slope",
+        "aspect",
+        "terrain_class",
+        "runout_validation_ref",
+        "quality_flag",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "requirement_key": "terrain_ates_runout_validation",
+      "type": "evidence_csv"
+    },
+    {
+      "minimum_distinct_counts": {
+        "case_id": 20,
+        "review_id": 20
+      },
+      "minimum_numeric_spans": {},
+      "minimum_reviewed_rows": 20,
+      "minimum_temporal_span_days": {
+        "reviewed_at": 7.0
+      },
+      "path": "scientist_reviews.csv",
+      "required_columns": [
+        "review_id",
+        "reviewer_id",
+        "reviewed_at",
+        "case_id",
+        "verdict",
+        "label_quality",
+        "model_error_type",
+        "confidence",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_notes"
+      ],
+      "requirement_key": "scientist_reviews",
+      "type": "evidence_csv"
+    },
+    {
+      "minimum_distinct_counts": {
+        "holdout_id": 1
+      },
+      "minimum_numeric_spans": {},
+      "minimum_reviewed_rows": 1,
+      "minimum_temporal_span_days": {},
+      "path": "independent_himalayan_holdout.csv",
+      "required_columns": [
+        "holdout_id",
+        "source_refs",
+        "region_ids",
+        "date_range",
+        "leakage_check",
+        "acceptance_floors",
+        "source_ref",
+        "license_scope",
+        "review_status",
+        "reviewer_id",
+        "reviewed_at",
+        "reviewer_notes"
+      ],
+      "requirement_key": "independent_himalayan_holdout",
+      "type": "evidence_csv"
+    }
+  ],
+  "schema_version": "himalayan_accuracy_partner_intake_checklist_v1",
+  "usage_boundary": "research_validation_only",
+  "validation_outputs": [
+    "partner_source_manifest_validation.json",
+    "partner_source_manifest_validation.md",
+    "partner_evidence_validation.json",
+    "partner_evidence_validation.md",
+    "readiness_contract.json",
+    "readiness_contract.md"
+  ],
+  "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+}

@@ -2,168 +2,127 @@
 
 **Open-source AI avalanche early-warning system inspired by Google Flood Hub.**
 
-**Live:** https://avalanche-compass.lovable.app/
+**Live Deployment:** https://avalanche-compass.netlify.app/
+**Status:** Pre-production Prototype (v2.0)
 
-**Status:** Production Ready (v1.0) | Deploy: 2025-04-14.2
-
-Avalanche Insight Hub delivers 24-hour-ahead, region-aware avalanche risk forecasts using real weather + terrain ensemble inference. The self-improving Groundsource loop (field reports → Gemini enrichment → daily pg_cron) continuously enhances the dataset. Works globally, including data-sparse regions like the Himalayas and Andes.
+Avalanche Insight Hub delivers 24-hour-ahead, region-aware avalanche risk forecasts using real weather + terrain ensemble inference. The system runs an asynchronous precomputation pipeline (weather/terrain model runs on Modal GPU/GitHub Actions, storing results in Supabase) and serves forecasts instantly to the browser. The self-improving Groundsource loop (field reports → realtime Events layer → Daily Gemini/Modal enrichment) continuously updates the training datasets.
 
 **Safety First:** Permanent disclaimer on every screen. Use only as an additional tool alongside official bulletins and local knowledge.
 
-## Key Features
+---
 
-- **24h Region-Aware Forecasts** — 1–5 EAWS scale + problem type for 8 mountain ranges
-- **Real Open-Meteo Weather** — Live snowfall, wind, temperature for *all* regions (not just US)
-- **SHAP Explainability** — Feature importance for every grid cell
-- **Self-Improving Groundsource Loop** — Field reports → realtime Events layer → daily Gemini enrichment
-- **Full-State Share Links** — Share exact region/hour/cell/grid with rescuers/guides
-- **Export CSV/JSON** — Download forecast + events for offline analysis
-- **Mobile-Responsive** — Full functionality on phones and tablets
+## Architecture
 
-**Tech Stack:** React + TypeScript + Supabase (PostGIS, Edge Functions, realtime, pg_cron) + Open-Meteo + Gemini
+```mermaid
+graph TD
+    Cron[pg_cron / GitHub Actions] -->|Trigger| JobFn[trigger-job Edge Function]
+    JobFn -->|Modal Dispatch| Modal[Modal.com GPU Worker]
+    Modal -->|Precompute Forecasts| DB[(Supabase Database)]
+    Client[React Browser Frontend] -->|Read Forecasts| ForecastFn[run-forecast Edge Function]
+    ForecastFn -->|Lookup| DB
+    
+    Report[User Field Report] -->|Submit| EnrichFn[field-report-enrichment]
+    EnrichFn -->|Ingest| IngestFn[ingest-event]
+    IngestFn -->|Append to Ground Truth| DB
+```
 
-## Quick Start (Lovable Cloud)
+1. **Frontend**: React (Vite, TypeScript, TailwindCSS + shadcn/ui) + Leaflet & Three.js for interactive mapping.
+2. **Edge API**: Supabase Edge Functions in Deno (`run-forecast` for precomputed grid retrieval, `trigger-job` for dispatching background tasks, `field-report-enrichment` and `ingest-event` for Groundsource submissions).
+3. **ML Backend**: PyTorch, scikit-learn, and SHAP. Model training and inference runs on Modal.com GPU worker nodes.
+4. **Database & Scheduling**: PostgreSQL with PostGIS extension. Background jobs are scheduled via PostgreSQL's `pg_cron` extension, using parameter settings inside Vault for secure token retrieval.
 
-The app is already deployed at [avalanche-compass.lovable.app](https://avalanche-compass.lovable.app/).
+---
 
-To activate daily enrichment (self-improving loop):
-1. Go to your Supabase dashboard → SQL Editor
-2. Run the migration: `supabase/migrations/20260411193000_schedule_daily_enrichment.sql`
-3. Verify: `SELECT * FROM cron.job;`
+## Directory Layout
 
-## Live Verification Order
+- `src/` - React frontend code
+  - `src/pages/Index.tsx` - Main dashboard orchestrator (modularized, `< 250` lines)
+  - `src/hooks/useForecastState.ts` - Central forecast state/loader custom hook
+  - `src/lib/` - Domain utilities (risk math, PWA worker logic, API clients)
+  - `src/components/` - Presentational UI controls (sidebar, top-bar, maps, legends)
+- `supabase/` - Database and API layer
+  - `supabase/migrations/` - PostgreSQL schema migration files
+  - `supabase/functions/` - Deno Edge Functions
+  - `supabase/archive/` - Archived ad-hoc database maintenance SQL scripts
+- `backend/` - Python ML training, inference, and evaluation codes
+- `scripts/` - Shell and Python operational scripts (moved from repository root)
+- `docs/` - System architecture, design specifications, and delivery evidence packs
 
-When validating the hosted project, run checks in this order:
-1. `supabase/verify_schema.sql`
-2. `select conname from pg_constraint where conname = 'field_reports_location_valid_range';`
-3. `select jobid, schedule, jobname, active from cron.job where jobname = 'daily-enrichment-job';`
-4. Deploy or confirm Edge Functions:
-   - `run-forecast`
-   - `trigger-job`
-   - `field-report-enrichment`
-5. Re-run UI smoke tests on `http://localhost:8080/` or the live app URL
+---
 
-## Prerequisites (Local Development)
+## Local Development Quick Start
+
+### Prerequisites
 
 - Node.js 20+
 - Supabase CLI
-- Docker running locally if you want the full local Supabase stack
+- Docker (required to run local Supabase replicas)
 
-## Local Development
+### Steps
 
-### Option 1: Full local Supabase replica
-
-Use this when you want the closest match to production and the ability to work offline.
-
-1. Copy the example env file:
-
-   ```bash
-   cp .env.local.example .env.local
-   ```
-
-2. Install dependencies:
-
+1. **Clone & Install Dependencies**:
    ```bash
    npm install
    ```
 
-3. Start Supabase locally:
+2. **Configure Environment Variables**:
+   Copy the example environment template:
+   ```bash
+   cp .env.example .env
+   ```
+   Provide valid values for `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and other required variables.
 
+3. **Start Local Supabase Replica**:
    ```bash
    supabase start
    ```
 
-4. If you need to serve Edge Functions locally, run:
-
+4. **Serve Edge Functions Locally**:
    ```bash
-   supabase functions serve --env-file .env.local
+   supabase functions serve --env-file .env
    ```
 
-5. Start the Vite dev server:
-
+5. **Start Frontend Dev Server**:
    ```bash
    npm run dev
    ```
+   Open `http://localhost:8080` in your web browser.
 
-### Option 2: Cloud-linked development
+---
 
-Use this if you want to edit in Windsurf immediately and point the app at the hosted Supabase project.
+## Testing & Quality Gates
 
-1. Copy the example env file:
+The repository enforces strict testing pipelines locally and in CI:
 
-   ```bash
-   cp .env.local.example .env.local
+- **Frontend Tests**: Powered by Vitest. Run all unit/component specs:
+  ```bash
+  npm run test
+  ```
+- **Coverage Reporting**: Generates code coverage metrics for domain logic (`src/lib`):
+  ```bash
+  npm run test:coverage
+  ```
+- **Type Check**: Verifies strict TypeScript compliance:
+  ```bash
+  npx tsc --noEmit
+  ```
+- **Edge Function Tests**: Run Deno test cases:
+  ```bash
+  deno test --allow-env supabase/functions/trigger-job/index.test.ts
+  ```
+
+---
+
+## QA and Verification Order
+
+When validating a local deployment, proceed in this order:
+1. Verify database schema: `supabase/migrations/` push completes cleanly.
+2. Verify parameterised cron schedules are active:
+   ```sql
+   SELECT jobid, schedule, jobname, active FROM cron.job;
    ```
-
-2. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` to the hosted project values.
-
-3. Install dependencies:
-
+3. Test edge-function JWT authentication boundaries:
    ```bash
-   npm install
+   bash scripts/smoke-test.sh
    ```
-
-4. Start the dev server:
-
-   ```bash
-   npm run dev
-   ```
-
-## Supabase Layout
-
-- `supabase/config.toml` - local Supabase configuration
-- `supabase/migrations/` - schema and policy migrations
-- `supabase/functions/` - Edge Functions
-
-## Notes
-
-- The browser client now fails fast with a clear error if the required `VITE_SUPABASE_*` env vars are missing.
-- Field report submissions now validate coordinates before writing GeoJSON/WKT-compatible geometry values.
-
-## QA Checklist
-
-Use this after starting the app with `npm run dev`.
-
-### Supabase / Data
-
-- Open `supabase/verify_schema.sql` in the Supabase SQL Editor and confirm:
-  - `postgis` and `pgcrypto` are installed
-  - the expected enums exist
-  - the seven public tables exist
-  - RLS is enabled on all public tables
-  - the expected policies are present
-  - `system_config` and `model_status` each have at least one row
-
-- Trigger a forecast from the UI and confirm:
-  - the run button enters a loading state
-  - a row appears in `compute_jobs`
-  - a row appears in `forecasts`
-  - the map updates to show hourly data if the Edge Function succeeds
-
-- Open the Admin tab and confirm:
-  - recent jobs load
-  - the model status badge shows a version and F1 score
-  - the Gemini usage card renders
-
-- Open the Report dialog and confirm:
-  - latitude and longitude auto-fill when geolocation is allowed
-  - invalid coordinates are rejected before submit
-  - a successful submit creates a row in `field_reports`
-
-### UI / Runtime
-
-- Confirm the page loads without a blank screen.
-- Confirm the sidebar can collapse and reopen.
-- Confirm the region selector changes the map bounds.
-- Confirm the time slider changes the active hourly view.
-- Confirm the realtime-driven admin job list refreshes without console errors.
-- Confirm `npm run dev` on your machine keeps the app reachable at `http://localhost:8080/`.
-
-### What Good Looks Like
-
-- No red console errors on initial load.
-- Forecast actions work whether the data source is real weather or simulation fallback.
-- Supabase queries respect RLS:
-  - public tables are readable
-  - `field_reports` is restricted to the logged-in user
-  - service-role-only actions stay behind Edge Functions
+4. Verify the web app loads cleanly without console warnings and displays mock/precomputed grids correctly.

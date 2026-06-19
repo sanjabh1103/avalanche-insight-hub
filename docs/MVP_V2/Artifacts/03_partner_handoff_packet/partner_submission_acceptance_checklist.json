@@ -1,0 +1,122 @@
+{
+  "accepted_item_count": 0,
+  "blocking_item_count": 6,
+  "blocking_items": [
+    "package_file_completeness",
+    "source_governance",
+    "evidence_row_sufficiency",
+    "coverage_quality",
+    "review_license_source_controls",
+    "release_gate_readiness"
+  ],
+  "claim_boundary": {
+    "himalayan_accuracy_claim_allowed": false,
+    "production_scoring_allowed": false,
+    "reason": "The checklist gates partner evidence acceptance only. It does not authorize model claims or production scoring."
+  },
+  "claim_review_ready": false,
+  "decision": "blocked_acceptance_checklist_partner_fixes_required",
+  "generated_at": "2026-05-23T13:13:35.699020+00:00",
+  "himalayan_accuracy_claim_allowed": false,
+  "items": [
+    {
+      "acceptance_criterion": "partner_source_manifest.json and all ten evidence CSV files are present.",
+      "accepted": false,
+      "blocks_claim_review": true,
+      "blocks_scientist_review": true,
+      "key": "package_file_completeness",
+      "label": "Required package files",
+      "max_score": 15.0,
+      "partner_fix": "Supply partner_source_manifest.json and all ten evidence CSV files.",
+      "score": 0.0,
+      "status": "partner_action_required"
+    },
+    {
+      "acceptance_criterion": "Every source hash has reviewed owner, dataset, license scope, date range, reviewer, and evidence package metadata.",
+      "accepted": false,
+      "blocks_claim_review": true,
+      "blocks_scientist_review": true,
+      "key": "source_governance",
+      "label": "Source manifest governance",
+      "max_score": 20.0,
+      "partner_fix": "Map every source_ref SHA-256 to owner, dataset, license, date range, reviewer, and evidence package.",
+      "score": 0.0,
+      "status": "partner_action_required"
+    },
+    {
+      "acceptance_criterion": "Every evidence CSV meets its minimum reviewed-row floor.",
+      "accepted": false,
+      "blocks_claim_review": true,
+      "blocks_scientist_review": true,
+      "key": "evidence_row_sufficiency",
+      "label": "Evidence row sufficiency",
+      "max_score": 20.0,
+      "partner_fix": "Fill every evidence CSV with enough reviewed rows to meet the row floor.",
+      "score": 0.0,
+      "status": "partner_action_required"
+    },
+    {
+      "acceptance_criterion": "Required distinct, temporal, elevation, and slope coverage floors pass for every evidence group.",
+      "accepted": false,
+      "blocks_claim_review": true,
+      "blocks_scientist_review": true,
+      "key": "coverage_quality",
+      "label": "Spatial, temporal, numeric coverage",
+      "max_score": 20.0,
+      "partner_fix": "Broaden station, region, scene, case, time, elevation, or slope coverage where required.",
+      "score": 0.0,
+      "status": "partner_action_required"
+    },
+    {
+      "acceptance_criterion": "Every row is fresh, reviewed, license-supported, SHA-256 referenced, and mapped to the source manifest.",
+      "accepted": false,
+      "blocks_claim_review": true,
+      "blocks_scientist_review": true,
+      "key": "review_license_source_controls",
+      "label": "Review freshness, license, and source controls",
+      "max_score": 15.0,
+      "partner_fix": "Ensure every row is reviewed, fresh, license-supported, and linked to the source manifest.",
+      "score": 0.0,
+      "status": "partner_action_required"
+    },
+    {
+      "acceptance_criterion": "Independent holdout, scientist review, license clearance, and promotion attestations pass after evidence acceptance.",
+      "accepted": false,
+      "blocks_claim_review": true,
+      "blocks_scientist_review": false,
+      "key": "release_gate_readiness",
+      "label": "Release-gate attestations",
+      "max_score": 10.0,
+      "partner_fix": "Supply accepted holdout, scientist-review, license-clearance, and promotion attestations after evidence passes.",
+      "score": 0.0,
+      "status": "partner_action_required"
+    }
+  ],
+  "partner_next_actions": [
+    "Supply partner_source_manifest.json and all ten evidence CSV files.",
+    "Map every source_ref SHA-256 to owner, dataset, license, date range, reviewer, and evidence package.",
+    "Fill every evidence CSV with enough reviewed rows to meet the row floor.",
+    "Broaden station, region, scene, case, time, elevation, or slope coverage where required.",
+    "Ensure every row is reviewed, fresh, license-supported, and linked to the source manifest.",
+    "Supply accepted holdout, scientist-review, license-clearance, and promotion attestations after evidence passes."
+  ],
+  "production_scoring_allowed": false,
+  "quality_score_summary": {
+    "decision": "blocked_quality_checks_not_run",
+    "max_score": 100.0,
+    "readiness_band": "not_run",
+    "score": 0.0
+  },
+  "schema_version": "himalayan_accuracy_partner_submission_acceptance_checklist_v1",
+  "scientist_review_blocker_count": 5,
+  "scientist_review_blockers": [
+    "package_file_completeness",
+    "source_governance",
+    "evidence_row_sufficiency",
+    "coverage_quality",
+    "review_license_source_controls"
+  ],
+  "scientist_review_ready": false,
+  "usage_boundary": "research_validation_only",
+  "validation_policy_version": "himalayan_partner_evidence_policy_v2_coverage_references_vocab_freshness_sourcehash_govrefs_sourcemanifest"
+}

@@ -10,7 +10,12 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 const queryClient = new QueryClient();
 const ForecastPage = lazy(() => import("./pages/Index.tsx"));
 const AdminPage = lazy(() => import("./pages/AdminPage.tsx"));
+const ScientistPage = lazy(() => import("./pages/ScientistPage.tsx"));
+const ScientistDailyVerificationPage = lazy(() => import("./pages/ScientistDailyVerificationPage.tsx"));
+const ScientistPartnerIntakePage = lazy(() => import("./pages/ScientistPartnerIntakePage.tsx"));
 const NotFoundPage = lazy(() => import("./pages/NotFound.tsx"));
+
+const partnerIntakeEnabled = import.meta.env.VITE_FEATURE_PARTNER_INTAKE === "true";
 
 function RouteLoadingShell({ label }: { label: string }) {
   return (
@@ -49,6 +54,32 @@ const App = () => (
                 </Suspense>
               )}
             />
+            <Route
+              path="/scientist"
+              element={(
+                <Suspense fallback={<RouteLoadingShell label="Loading scientist workspace" />}>
+                  <ScientistPage />
+                </Suspense>
+              )}
+            />
+            <Route
+              path="/scientist/daily-verification"
+              element={(
+                <Suspense fallback={<RouteLoadingShell label="Loading daily verification" />}>
+                  <ScientistDailyVerificationPage />
+                </Suspense>
+              )}
+            />
+            {partnerIntakeEnabled ? (
+              <Route
+                path="/scientist/partner-intake"
+                element={(
+                  <Suspense fallback={<RouteLoadingShell label="Loading partner intake" />}>
+                    <ScientistPartnerIntakePage />
+                  </Suspense>
+                )}
+              />
+            ) : null}
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route
               path="*"

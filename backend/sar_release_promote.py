@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from backend.common.sar_acceptance_policy import assert_sar_acceptance_for_promotion
 from backend.common.config import load_settings
 from backend.common.supabase_io import has_supabase_credentials, rest_get
 from backend.sar_unet_worker import SAR_UNET_SEGMENTATION_THRESHOLD, flip_to_training_eligible, run_segmentation
@@ -20,11 +21,16 @@ def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding='utf-8'))
 
 
-def _assert_positive_evaluation(report: dict[str, Any]) -> None:
+def _assert_positive_evaluation(
+    report: dict[str, Any],
+    *,
+    acceptance_report: dict[str, Any] | None,
+) -> None:
     if str(report.get('status')) != 'ok':
         raise ValueError('evaluation report must have status=ok before promotion')
     if not bool(report.get('beats_baseline')):
         raise ValueError('evaluation report must have beats_baseline=true before promotion')
+    assert_sar_acceptance_for_promotion(acceptance_report)
 
 
 def _query_recent_shadow_event_ids(days_back: int, *, hazard_type: str = 'avalanche') -> list[str]:
@@ -46,6 +52,7 @@ def _query_recent_shadow_event_ids(days_back: int, *, hazard_type: str = 'avalan
 def promote_from_report(
     report: dict[str, Any],
     *,
+    acceptance_report: dict[str, Any] | None = None,
     scenes_manifest: dict[str, Any] | None = None,
     model_path: Path | None = None,
     artifact_root: Path,
@@ -56,7 +63,7 @@ def promote_from_report(
     recent_shadow_event_ids: list[str] | None = None,
     recent_days_back: int | None = None,
 ) -> dict[str, Any]:
-    _assert_positive_evaluation(report)
+    _assert_positive_evaluation(report, acceptance_report=acceptance_report)
 
     if scenes_manifest and isinstance(scenes_manifest.get('scenes'), list) and scenes_manifest['scenes']:
         if model_path is None or not str(model_path):
@@ -93,6 +100,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     settings = load_settings()
     parser = argparse.ArgumentParser(description='Promote SAR release results after a successful held-out evaluation')
     parser.add_argument('--evaluation-report', type=Path, required=True, help='Path to sar_evaluation_report.json')
+    parser.add_argument('--acceptance-report', type=Path, required=True, help='SnowSlide research-grade acceptance report JSON')
     parser.add_argument('--scenes-manifest', type=Path, help='Optional scenes manifest to rerun sar-segment in promoted mode')
     model_path_raw = os.environ.get('SAR_UNET_MODEL_PATH')
     parser.add_argument('--model-path', type=Path, default=Path(model_path_raw) if model_path_raw else None)
@@ -115,10 +123,12 @@ def _load_event_ids(path: Path | None) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     report = _load_json(args.evaluation_report)
+    acceptance_report = _load_json(args.acceptance_report)
     scenes_manifest = _load_json(args.scenes_manifest) if args.scenes_manifest else None
     event_ids = _load_event_ids(args.event_ids_file)
     result = promote_from_report(
         report,
+        acceptance_report=acceptance_report,
         scenes_manifest=scenes_manifest,
         model_path=args.model_path if args.scenes_manifest else None,
         artifact_root=args.artifact_root,

@@ -19,6 +19,7 @@ import json
 import os
 import sys
 import traceback
+import argparse
 from datetime import datetime, timedelta, timezone
 from typing import Iterable
 
@@ -51,7 +52,12 @@ def _sar_training_bucket(*, coverage_state: str, scene_count: int) -> tuple[str,
 
 
 def _has_credentials() -> bool:
-    return bool(GEE_SERVICE_ACCOUNT_JSON and GEE_SERVICE_ACCOUNT_EMAIL)
+    """True when EITHER the GitHub-Actions-style JSON env var OR a local key
+    file is available. Enables local GEE runs without the GitHub secret format."""
+    has_json = bool(GEE_SERVICE_ACCOUNT_JSON and GEE_SERVICE_ACCOUNT_EMAIL)
+    key_file = os.getenv('GEE_KEY_FILE', 'config/earth-engine-key.json')
+    has_file = bool(key_file and os.path.exists(key_file))
+    return has_json or has_file
 
 
 def _write_service_account_key() -> str:
@@ -64,11 +70,37 @@ def _write_service_account_key() -> str:
 def _initialize_ee():
     """Imports Earth Engine lazily so absence of the SDK does not kill the
     extraction step when credentials are missing.
+
+    Supports two auth modes:
+    1. GitHub Actions mode: ``GEE_SERVICE_ACCOUNT_JSON`` (full JSON string) +
+       ``GEE_SERVICE_ACCOUNT_EMAIL`` env vars.
+    2. Local mode: ``GEE_KEY_FILE`` path (defaults to
+       ``config/earth-engine-key.json``). The service account email is read
+       from the key file's ``client_email`` field.
     """
     import ee  # type: ignore
-    key_path = _write_service_account_key()
-    credentials = ee.ServiceAccountCredentials(GEE_SERVICE_ACCOUNT_EMAIL, key_path)
-    ee.Initialize(credentials)
+    import json as _json
+
+    if GEE_SERVICE_ACCOUNT_JSON and GEE_SERVICE_ACCOUNT_EMAIL:
+        # GitHub Actions / CI mode — JSON string in env var
+        key_path = _write_service_account_key()
+        email = GEE_SERVICE_ACCOUNT_EMAIL
+    else:
+        # Local mode — read key file from disk
+        key_file = os.getenv('GEE_KEY_FILE', 'config/earth-engine-key.json')
+        key_path = os.path.abspath(key_file)
+        with open(key_path, 'r', encoding='utf-8') as fh:
+            key_data = _json.load(fh)
+        email = key_data.get('client_email') or GEE_SERVICE_ACCOUNT_EMAIL
+        if not email:
+            raise RuntimeError(
+                'Cannot determine GEE service account email. '
+                'Set GEE_SERVICE_ACCOUNT_EMAIL or ensure client_email is present in GEE_KEY_FILE.'
+            )
+
+    print(f'[gee] initialising with SA={email!r} key={key_path!r}')
+    credentials = ee.ServiceAccountCredentials(email, key_path)
+    ee.Initialize(credentials, project='avalanche-hub')
     return ee
 
 
@@ -303,7 +335,35 @@ def _insert_events(events: Iterable[dict]) -> int:
     return len(inserted_rows)
 
 
+def _selected_regions(requested_keys: list[str]):
+    regions = load_regions()
+    if not requested_keys:
+        return regions
+    wanted = {key.strip() for key in requested_keys if key.strip()}
+    unknown = sorted(wanted - {region.key for region in regions})
+    if unknown:
+        raise ValueError(f'Unknown GEE region key(s): {", ".join(unknown)}')
+    return [region for region in regions if region.key in wanted]
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description='Extract Sentinel-1 wet-snow candidates from Google Earth Engine.')
+    parser.add_argument(
+        '--region-key',
+        action='append',
+        default=[],
+        help='Limit extraction to a region key. May be repeated. Defaults to GEE_REGION_KEYS or all regions.',
+    )
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Run Earth Engine extraction and print counts without inserting avalanche_events rows.',
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = _parse_args()
     if not _has_credentials():
         print('[gee_extractor] GEE credentials absent; skipping extraction (this is safe).')
         return 0
@@ -317,10 +377,16 @@ def main() -> int:
 
     total = 0
     per_region_counts: list[dict] = []
-    for region in load_regions():
+    env_region_keys = [
+        key.strip()
+        for key in os.getenv('GEE_REGION_KEYS', '').split(',')
+        if key.strip()
+    ]
+    dry_run = args.dry_run or os.getenv('GEE_DRY_RUN', '').strip().lower() in {'1', 'true', 'yes'}
+    for region in _selected_regions(args.region_key or env_region_keys):
         try:
             events = _process_region(ee, region)
-            inserted = _insert_events(events)
+            inserted = 0 if dry_run else _insert_events(events)
             first_features = next((event.get('features') for event in events if isinstance(event.get('features'), dict)), {})
             ascending_count = int(first_features.get('ascending_scene_count', 0) or 0)
             descending_count = int(first_features.get('descending_scene_count', 0) or 0)
@@ -343,6 +409,7 @@ def main() -> int:
 
     summary = {
         'total_inserted': total,
+        'dry_run': dry_run,
         'regions': per_region_counts,
         'lookback_days': GEE_LOOKBACK_DAYS,
         'vv_threshold_db': GEE_VV_THRESHOLD_DB,

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlparse
 
 import numpy as np
@@ -31,7 +31,7 @@ from backend.common.sar_release_refs import load_reference_bundle, parse_storage
 from backend.common.sar_artifacts import persist_sar_artifacts
 from backend.common.storage_io import storage_download_bytes, storage_upload_bytes
 from backend.common.supabase_io import has_supabase_credentials, rest_insert, rest_upsert
-from backend.sar_unet_training import train_sar_unet
+from backend.sar_unet_training import _postprocess_binary_mask, train_sar_unet
 
 try:  # pragma: no cover - optional dependency
     import torch
@@ -59,6 +59,8 @@ SAR_UNET_MODEL_VERSION = os.environ.get('SAR_UNET_MODEL_VERSION', 'sar_unet_resn
 SAR_UNET_SEGMENTATION_THRESHOLD = float(os.environ.get('SAR_UNET_SEGMENTATION_THRESHOLD', '0.5'))
 SAR_UNET_PROMOTED = os.environ.get('SAR_UNET_PROMOTED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
 SAR_UNET_SHADOW_REASON = 'sar_unet_shadow_mode'
+DEFAULT_PREDICTION_MASK_DTYPE = 'uint8'
+PREDICTION_MASK_DTYPES = {'uint8', 'uint16', 'float32'}
 DEFAULT_LSTM_EPOCHS = int(os.environ.get('MTS_LSTM_EPOCHS', '50'))
 DEFAULT_LSTM_MIN_EPOCHS = int(os.environ.get('MTS_LSTM_MIN_EPOCHS_BEFORE_EARLY_STOPPING', '10'))
 DEFAULT_LSTM_PATIENCE = int(os.environ.get('MTS_LSTM_EARLY_STOPPING_PATIENCE', '7'))
@@ -97,6 +99,7 @@ class LoadedUnetModel:
     model: Any
     checkpoint_key_mismatch: dict[str, Any]
     model_family: str
+    normalization: dict[str, np.ndarray] | None = None
 
 
 def _utc_now_iso() -> str:
@@ -388,6 +391,51 @@ def _extract_state_dict(payload: Any) -> dict[str, Any]:
     raise RuntimeError('checkpoint payload must be a dict or contain a nested state_dict')
 
 
+def _checkpoint_normalization(payload: Any) -> dict[str, np.ndarray] | None:
+    if not isinstance(payload, dict):
+        return None
+    metadata = payload.get('metadata')
+    if not isinstance(metadata, dict):
+        return None
+    normalization = metadata.get('normalization')
+    if not isinstance(normalization, dict):
+        return None
+    mean = normalization.get('img_mean')
+    std = normalization.get('img_std')
+    if mean is None or std is None:
+        return None
+    mean_array = np.asarray(mean, dtype=np.float32)
+    std_array = np.maximum(np.asarray(std, dtype=np.float32), np.float32(1e-6))
+    if mean_array.shape != (2,) or std_array.shape != (2,):
+        raise ValueError(
+            'SAR checkpoint normalization must contain img_mean/img_std arrays with exactly two channels',
+        )
+    return {'img_mean': mean_array, 'img_std': std_array}
+
+
+def _apply_loaded_normalization(
+    pre_stack: np.ndarray,
+    post_stack: np.ndarray,
+    normalization: dict[str, np.ndarray] | None,
+) -> tuple[np.ndarray, np.ndarray]:
+    if normalization is None:
+        return pre_stack, post_stack
+    mean = np.asarray(normalization['img_mean'], dtype=np.float32)
+    std = np.maximum(np.asarray(normalization['img_std'], dtype=np.float32), np.float32(1e-6))
+    if pre_stack.ndim == 4:
+        shape = (1, mean.shape[0], 1, 1)
+    elif pre_stack.ndim == 3:
+        shape = (mean.shape[0], 1, 1)
+    else:
+        raise ValueError(f'expected SAR pre_stack with 3 or 4 dimensions, received {pre_stack.shape}')
+    mean = mean.reshape(shape)
+    std = std.reshape(shape)
+    return (
+        (np.asarray(pre_stack, dtype=np.float32) - mean) / std,
+        (np.asarray(post_stack, dtype=np.float32) - mean) / std,
+    )
+
+
 def _build_resnet34_unet_model() -> Any:
     if smp is None:
         raise RuntimeError('segmentation_models_pytorch is required for SAR model family resnet34_unet')
@@ -482,7 +530,9 @@ def build_unet_model(
         model = _build_swinunet_tiny_diff_model(image_size=image_size)
     else:
         model = _build_resnet34_unet_model()
-    state_dict = _extract_state_dict(torch.load(model_path, map_location=device))
+    payload = torch.load(model_path, map_location=device)
+    state_dict = _extract_state_dict(payload)
+    normalization = _checkpoint_normalization(payload)
     load_result = model.load_state_dict(state_dict, strict=False)
     checkpoint_key_mismatch = _checkpoint_key_mismatch_summary(load_result)
     mismatch_reason = _obvious_checkpoint_family_mismatch(
@@ -511,6 +561,7 @@ def build_unet_model(
         model=model,
         checkpoint_key_mismatch=checkpoint_key_mismatch,
         model_family=resolved_family,
+        normalization=normalization,
     )
 
 
@@ -606,6 +657,7 @@ def _predict_manifest_probability_mask(
             loaded_batch = list(executor.map(_load_manifest_patch_stack, batch))
         pre_batch = np.stack([stack[:2] for _, _, stack in loaded_batch], axis=0)
         post_batch = np.stack([stack[2:] for _, _, stack in loaded_batch], axis=0)
+        pre_batch, post_batch = _apply_loaded_normalization(pre_batch, post_batch, loaded_model.normalization)
         probability_batch = predict_bitemporal_probability_mask_batch(
             loaded_model.model,
             pre_batch,
@@ -633,6 +685,7 @@ def predict_scene_probability_mask(loaded_model: LoadedUnetModel, scene: dict[st
         return _predict_manifest_probability_mask(loaded_model, manifest_ref=manifest_ref, device=device)
     if loaded_model.model_family == 'swinunet_tiny_diff':
         pre_stack, post_stack = load_bitemporal_scene_inputs(scene)
+        pre_stack, post_stack = _apply_loaded_normalization(pre_stack, post_stack, loaded_model.normalization)
         return predict_bitemporal_probability_mask(loaded_model.model, pre_stack, post_stack, device=device)
     stack = load_scene_stack(scene)
     return predict_probability_mask(loaded_model.model, stack, device=device)
@@ -731,20 +784,45 @@ def mask_centroid(
     }
 
 
-def encode_mask_geotiff(probability_mask: np.ndarray, *, bbox: tuple[float, float, float, float]) -> bytes:
+def normalize_prediction_mask_dtype(value: str | None = None) -> str:
+    resolved = str(value or DEFAULT_PREDICTION_MASK_DTYPE).strip().lower()
+    if resolved not in PREDICTION_MASK_DTYPES:
+        raise ValueError(
+            f'unsupported prediction_mask_dtype "{resolved}"; '
+            f'expected one of: {", ".join(sorted(PREDICTION_MASK_DTYPES))}',
+        )
+    return resolved
+
+
+def _probability_band_for_dtype(probability_mask: np.ndarray, dtype: str) -> np.ndarray:
+    clipped = np.clip(np.asarray(probability_mask, dtype=np.float32), 0.0, 1.0)
+    if dtype == 'float32':
+        return clipped.astype(np.float32)
+    if dtype == 'uint16':
+        return (clipped * 65535.0).astype(np.uint16)
+    return (clipped * 255.0).astype(np.uint8)
+
+
+def encode_mask_geotiff(
+    probability_mask: np.ndarray,
+    *,
+    bbox: tuple[float, float, float, float],
+    prediction_mask_dtype: str = DEFAULT_PREDICTION_MASK_DTYPE,
+) -> bytes:
     if MemoryFile is None or from_bounds is None:
         raise RuntimeError('rasterio is required to encode GeoTIFF mask artifacts')
+    resolved_dtype = normalize_prediction_mask_dtype(prediction_mask_dtype)
     height, width = probability_mask.shape
     west, south, east, north = bbox
     transform = from_bounds(west, south, east, north, width, height)
-    band = np.clip(probability_mask * 255.0, 0, 255).astype(np.uint8)
+    band = _probability_band_for_dtype(probability_mask, resolved_dtype)
     with MemoryFile() as memory_file:
         with memory_file.open(
             driver='GTiff',
             width=width,
             height=height,
             count=1,
-            dtype='uint8',
+            dtype=resolved_dtype,
             crs='EPSG:4326',
             transform=transform,
             compress='deflate',
@@ -918,8 +996,24 @@ def _load_mask_array_from_bytes(payload: bytes, *, suffix: str) -> np.ndarray:
             raise RuntimeError('rasterio is required to read GeoTIFF evaluation masks')
         with MemoryFile(payload) as memory_file:
             with memory_file.open() as dataset:
-                band = np.asarray(dataset.read(1), dtype=np.float32)
-                if band.size and float(np.nanmax(band)) > 1.0:
+                raw_band = np.asarray(dataset.read(1))
+                band = np.asarray(raw_band, dtype=np.float32)
+                declared_dtype = None
+                dtypes = getattr(dataset, 'dtypes', None)
+                if isinstance(dtypes, (list, tuple)) and dtypes:
+                    declared_dtype = str(dtypes[0]).lower()
+                if np.issubdtype(raw_band.dtype, np.integer):
+                    observed_max = float(np.nanmax(band)) if band.size else 0.0
+                    if observed_max > 1.0:
+                        info = np.iinfo(raw_band.dtype)
+                        band = band / float(info.max)
+                elif declared_dtype in {'uint8', 'byte'}:
+                    band = band / 255.0
+                elif declared_dtype == 'uint16':
+                    band = band / 65535.0
+                elif band.size and float(np.nanmax(band)) > 1.0:
+                    # Legacy tests and a few hand-authored fixtures emulate TIFF
+                    # bytes with float arrays carrying 0..255 byte values.
                     band = band / 255.0
                 return band
     raise ValueError(
@@ -1063,6 +1157,14 @@ def evaluate_scene_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
             'beats_baseline': False,
             'baseline_f1_floor_used': None,
         }
+    prediction_threshold = float(
+        manifest.get('prediction_threshold')
+        or manifest.get('threshold')
+        or SAR_UNET_SEGMENTATION_THRESHOLD
+    )
+    truth_threshold = float(manifest.get('truth_threshold') or 0.5)
+    postprocess_min_component_area_px = int(manifest.get('postprocess_min_component_area_px') or 0)
+    postprocess_opening_size_px = int(manifest.get('postprocess_opening_size_px') or 0)
     predictions: list[np.ndarray] = []
     truths: list[np.ndarray] = []
     baselines: list[np.ndarray] = []
@@ -1076,10 +1178,17 @@ def evaluate_scene_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
             continue
         if scene.get('prediction_mask') is None or scene.get('truth_mask') is None:
             continue
-        predictions.append(_load_mask_array(scene['prediction_mask']) >= SAR_UNET_SEGMENTATION_THRESHOLD)
-        truths.append(_load_mask_array(scene['truth_mask']) >= SAR_UNET_SEGMENTATION_THRESHOLD)
+        prediction = _load_mask_array(scene['prediction_mask']) >= prediction_threshold
+        if postprocess_min_component_area_px > 0 or postprocess_opening_size_px > 0:
+            prediction = _postprocess_binary_mask(
+                prediction,
+                min_component_area_px=postprocess_min_component_area_px,
+                opening_size_px=postprocess_opening_size_px,
+            )
+        predictions.append(prediction)
+        truths.append(_load_mask_array(scene['truth_mask']) >= truth_threshold)
         if scene.get('baseline_mask') is not None:
-            baselines.append(_load_mask_array(scene['baseline_mask']) >= SAR_UNET_SEGMENTATION_THRESHOLD)
+            baselines.append(_load_mask_array(scene['baseline_mask']) >= truth_threshold)
 
     if not predictions or len(predictions) != len(truths):
         return {
@@ -1118,6 +1227,10 @@ def evaluate_scene_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
             'baseline_f1_floor_used': None,
         }
     metrics['status'] = 'ok'
+    metrics['prediction_threshold'] = prediction_threshold
+    metrics['truth_threshold'] = truth_threshold
+    metrics['postprocess_min_component_area_px'] = postprocess_min_component_area_px
+    metrics['postprocess_opening_size_px'] = postprocess_opening_size_px
     metrics['baseline_f1_floor_used'] = baseline_f1_floor_used
     metrics['baseline_margin'] = baseline_margin
     if derived_baseline_metrics is not None:
@@ -1139,8 +1252,10 @@ def run_segmentation(
     promoted: bool = SAR_UNET_PROMOTED,
     model_version: str = SAR_UNET_MODEL_VERSION,
     model_family: str = SAR_UNET_MODEL_FAMILY,
+    prediction_mask_dtype: str = DEFAULT_PREDICTION_MASK_DTYPE,
 ) -> dict[str, Any]:
     artifact_dir = create_artifact_dir(artifact_root)
+    resolved_prediction_mask_dtype = normalize_prediction_mask_dtype(prediction_mask_dtype)
     if not scenes:
         manifest = {'status': 'skipped_no_scenes', 'detections': [], 'persisted_events': 0}
         dump_json(artifact_dir / 'sar_segment_manifest.json', manifest)
@@ -1180,7 +1295,11 @@ def run_segmentation(
         mask_asset_ref = None
         desired_prediction_ref = scene.get('prediction_mask')
         if has_supabase_credentials() and (persist_events or (isinstance(desired_prediction_ref, str) and desired_prediction_ref.strip())):
-            geotiff_bytes = encode_mask_geotiff(probability_mask, bbox=bbox)
+            geotiff_bytes = encode_mask_geotiff(
+                probability_mask,
+                bbox=bbox,
+                prediction_mask_dtype=resolved_prediction_mask_dtype,
+            )
             if isinstance(desired_prediction_ref, str) and desired_prediction_ref.strip():
                 upload_bucket, mask_object_path = parse_storage_ref(desired_prediction_ref.strip())
             else:
@@ -1230,6 +1349,7 @@ def run_segmentation(
         'shadow_mode': not promoted,
         'model_family': loaded_model.model_family,
         'model_version': model_version,
+        'prediction_mask_dtype': resolved_prediction_mask_dtype,
         'scene_count': len(scenes),
         'detections_count': len(detections),
         'persisted_events': persistence_summary['persisted_events'],
@@ -1744,12 +1864,14 @@ def run_train_sar_unet(
     *,
     artifact_root: Path,
     device: str = 'cpu',
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     artifact_root.mkdir(parents=True, exist_ok=True)
     return train_sar_unet(
         request,
         artifact_root=artifact_root,
         device=device,
+        progress_callback=progress_callback,
     )
 
 
@@ -1792,6 +1914,9 @@ def run_worker_request(
     artifact_root.mkdir(parents=True, exist_ok=True)
     prediction_model_family = str(manifest.get('model_family') or SAR_UNET_MODEL_FAMILY)
     prediction_model_version = str(manifest.get('prediction_model_version') or SAR_UNET_MODEL_VERSION)
+    prediction_mask_dtype = normalize_prediction_mask_dtype(
+        manifest.get('prediction_mask_dtype') or manifest.get('mask_dtype'),
+    )
 
     if mode == 'evaluate-release':
         evaluation_manifest = manifest
@@ -1808,6 +1933,16 @@ def run_worker_request(
                     authoritative_only=_flag_from_payload(manifest.get('authoritative_only'), True),
                 ),
             )
+            if manifest.get('threshold') is not None:
+                evaluation_manifest['threshold'] = manifest.get('threshold')
+            if manifest.get('prediction_threshold') is not None:
+                evaluation_manifest['prediction_threshold'] = manifest.get('prediction_threshold')
+            if manifest.get('truth_threshold') is not None:
+                evaluation_manifest['truth_threshold'] = manifest.get('truth_threshold')
+            if manifest.get('postprocess_min_component_area_px') is not None:
+                evaluation_manifest['postprocess_min_component_area_px'] = manifest.get('postprocess_min_component_area_px')
+            if manifest.get('postprocess_opening_size_px') is not None:
+                evaluation_manifest['postprocess_opening_size_px'] = manifest.get('postprocess_opening_size_px')
         artifact_dir = create_artifact_dir(artifact_root)
         report = evaluate_scene_manifest(evaluation_manifest)
         report.update({
@@ -1873,6 +2008,7 @@ def run_worker_request(
         promoted=not _flag_from_payload(manifest.get('shadow_mode'), not SAR_UNET_PROMOTED),
         model_family=prediction_model_family,
         model_version=prediction_model_version,
+        prediction_mask_dtype=prediction_mask_dtype,
     )
 
 

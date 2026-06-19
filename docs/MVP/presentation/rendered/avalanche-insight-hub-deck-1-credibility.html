@@ -111,6 +111,20 @@ body.deck-terms {
     linear-gradient(180deg, #f8f6f0 0%, #efece4 100%);
 }
 
+body.deck-ml-understanding {
+  --proof-live: #1c7c74;
+  --proof-internal: #1f3340;
+  --proof-future: #9f6b19;
+  --accent-main: #1c7c74;
+  --accent-soft: rgba(28, 124, 116, 0.13);
+  --accent-alt: #9f6b19;
+  --accent-alt-soft: rgba(159, 107, 25, 0.14);
+  background:
+    radial-gradient(circle at top left, rgba(28, 124, 116, 0.10), transparent 30%),
+    radial-gradient(circle at top right, rgba(159, 107, 25, 0.08), transparent 25%),
+    linear-gradient(180deg, #f4f8f7 0%, #eef1ed 100%);
+}
+
 body::before {
   content: '';
   position: fixed;
@@ -406,6 +420,11 @@ body::before {
   min-height: 53vh;
 }
 
+.frame--compact {
+  height: 34vh;
+  min-height: 0;
+}
+
 .frame--public img {
   object-position: center top;
 }
@@ -424,6 +443,58 @@ body::before {
 
 .frame--admin img {
   object-position: center top;
+}
+
+.frame--dashboard {
+  background: #101010;
+}
+
+.frame--dashboard img {
+  object-fit: contain;
+  object-position: center center;
+}
+
+.evidence-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 0.48rem;
+}
+
+.evidence-shot {
+  margin: 0;
+  min-height: clamp(3.7rem, 8vh, 5.4rem);
+  border: 1px solid var(--line-soft);
+  border-radius: 0.95rem;
+  overflow: hidden;
+  position: relative;
+  background: #101010;
+  box-shadow: var(--shadow-soft);
+}
+
+.evidence-shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  display: block;
+}
+
+.evidence-shot figcaption {
+  position: absolute;
+  left: 0.45rem;
+  bottom: 0.45rem;
+  max-width: calc(100% - 0.9rem);
+  padding: 0.28rem 0.48rem;
+  border-radius: 999px;
+  background: rgba(9, 11, 16, 0.76);
+  color: #f6f4ef;
+  font-size: var(--small-size);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .frame-label {
@@ -882,6 +953,7 @@ a {
   .timeline,
   .flow,
   .matrix-table,
+  .evidence-strip,
   .row-list {
     gap: 0.48rem;
   }
@@ -893,6 +965,8 @@ a {
 
   .frame--wide { min-height: 34vh; }
   .frame--tall { min-height: 44vh; }
+  .frame--compact { height: 28vh; }
+  .evidence-shot { min-height: 3.8rem; }
 }
 
 @media (max-height: 620px) {
@@ -951,6 +1025,8 @@ a {
 
   .frame--wide { min-height: 30vh; }
   .frame--tall { min-height: 38vh; }
+  .frame--compact { height: 14vh; }
+  .evidence-shot { min-height: 3.6rem; }
 }
 
 @media (max-width: 640px) {
@@ -1022,6 +1098,9 @@ a {
 
   .frame--wide { min-height: 18vh; }
   .frame--tall { min-height: 22vh; }
+  .frame--compact { height: 16vh; }
+  .evidence-strip { display: none; }
+  .evidence-shot figcaption { display: none; }
 }
 
 @media (max-width: 640px) and (max-height: 760px) {
@@ -1032,8 +1111,14 @@ a {
   }
 
   .frame--wide,
-  .frame--tall {
-    min-height: 16vh;
+  .frame--tall,
+  .frame--compact {
+    height: 16vh;
+    min-height: 0;
+  }
+
+  .evidence-shot {
+    min-height: 3.4rem;
   }
 }
 
@@ -1077,6 +1162,11 @@ a {
     display: none !important;
   }
 
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
   .slide {
     width: 13.333in;
     height: 7.5in;
@@ -1100,7 +1190,7 @@ a {
             <div class="kicker">Deck 1 of 5</div>
             <div class="eyebrow">Credibility arc • scientist-first contract</div>
             <h1 class="slide-title">Avalanche Insight Hub</h1>
-            <p class="slide-subtitle">A governed decision-support platform for avalanche forecasting, review, and scientific collaboration.</p>
+            <p class="slide-subtitle">MVP V2: a governed decision-support platform for avalanche forecasting, partner evidence intake, review, and scientific collaboration.</p>
           </div>
           <div class="proof-row"><span class="proof-chip internal">Technical evidence</span><span class="proof-chip future">Research agenda</span></div>
         </div>
@@ -1110,21 +1200,21 @@ a {
         <div class="lead-panel">
           <div class="section-label">Meeting objective</div>
           <ul class="bullet-list">
-            <li>Show the live platform, the administration view, and the operating model.</li>
-            <li>Distinguish current capabilities from candidate methods, research precedent, and the next research program.</li>
-            <li>Close on whether a scientist-led validation program should begin next.</li>
+            <li>Show the live platform, the administration view, and the MVP V2 evidence-governance model.</li>
+            <li>Distinguish hosted product proof from Swiss RAvaFcast research, Himalayan v3 partner intake, SAR shadow evidence, and future promotion gates.</li>
+            <li>Close on whether the SASE/DGRE partner handoff and scientist-led validation program should begin next.</li>
           </ul>
         </div>
         <div class="card-grid">
           <article class="card">
             <div class="section-label">What this is</div>
             <h3>Governed decision support</h3>
-            <p>Batch-first forecast publication, explicit uncertainty, and auditable model-status surfaces.</p>
+            <p>Batch-first forecast publication, explicit uncertainty, auditable model-status surfaces, and partner evidence intake.</p>
           </article>
           <article class="card">
             <div class="section-label">What this is not</div>
             <h3>Autonomy-first launch</h3>
-            <p>No active MTS-LSTM claim, no promoted SAR claim, no authority-grade warning claim.</p>
+            <p>No active MTS-LSTM claim, no promoted SAR claim, no Himalayan accuracy claim, no authority-grade warning claim.</p>
           </article>
         </div>
       </div>
@@ -1143,11 +1233,11 @@ a {
           <article class="phase-card">
             <div class="phase-meta">Discussion lane</div>
             <h3 class="phase-title">Research agenda</h3>
-            <p>Critical-layer validation, SAR qualification, and candidate-model advancement remain part of the next research program.</p>
+            <p>Critical-layer validation, SAR qualification, Himalayan holdout evidence, and candidate-model advancement remain part of the next research program.</p>
           </article>
         </div>
         <div class="quote-band">
-          <p>Use the deck to establish context first, then focus the discussion on the next scientific frontier.</p>
+          <p>Use the deck to establish context first, then focus the discussion on the partner handoff and next scientific frontier.</p>
           <small>Keep the three discussion lanes visible throughout</small>
         </div>
       </div>
@@ -1616,8 +1706,8 @@ a {
           <div class="kicker-stack">
             <div class="kicker">Deck 1 of 5</div>
             <div class="eyebrow">Current ML truth</div>
-            <h1 class="slide-title">RF Baseline, Explanation Fallback, And Modal.com Compute Split</h1>
-            <p class="slide-subtitle">The live platform is anchored on the Random Forest baseline. The current active publication uses heuristic explanation fallback; TreeSHAP refresh remains a technical hardening gate.</p>
+            <h1 class="slide-title">RF Baseline, RAvaFcast Research, And Modal.com Split</h1>
+            <p class="slide-subtitle">The live platform is anchored on the Random Forest baseline. Swiss RAvaFcast work is research-only, and the current active publication uses heuristic explanation fallback.</p>
           </div>
           <div class="proof-row"><span class="proof-chip internal">Technical evidence</span><span class="proof-chip future">Research agenda</span></div>
         </div>
@@ -1628,33 +1718,19 @@ a {
           <h3 class="matrix-title">What is active now</h3>
           <div class="matrix-table">
             <div class="matrix-row">
-              <div><strong>Public scorer</strong><p><code>surrogate_rf_v1</code> is the active public-facing scorer on the live route.</p></div>
-              <div><strong>Explanation layer</strong><p>The current active run reports <code>heuristic_fallback</code>; TreeSHAP remains implemented evidence, not a stronger live-run claim for this artifact.</p></div>
+              <div><strong>Public scorer</strong><p><code>surrogate_rf_v1</code> is active; the current run reports <code>heuristic_fallback</code>, not active TreeSHAP proof.</p></div>
+              <div><strong>Candidate lanes</strong><p><code>mts_lstm_v1</code>, SAR, and Modal-backed training/segmentation remain gated and off the public scoring path.</p></div>
             </div>
             <div class="matrix-row">
-              <div><strong>Candidate scorer</strong><p><code>mts_lstm_v1</code> remains shadow-gated and blocked behind explicit release evidence.</p></div>
-              <div><strong>Remote sensing</strong><p>SAR flows exist as candidate evidence paths, not as current public forecast support.</p></div>
+              <div><strong>Swiss research lane</strong><p>RAvaFcast is an initial research signal; GPxyz remains blocked until station coordinates exist.</p></div>
+              <div><strong>Himalayan evidence lane</strong><p>The v3 partner contract validates package structure, provenance, and claim locks, not Himalayan accuracy.</p></div>
             </div>
           </div>
         </div>
       </div>
       <div class="stack reveal delay-2">
-        <div class="card-grid">
-          <article class="card">
-            <div class="section-label">GPU-backed today</div>
-            <h3>SAR segmentation and model training</h3>
-            <p><code>train_mts_lstm_remote</code>, <code>train_sar_unet_remote</code>, and <code>sar_segment_remote</code> use GPU-backed Modal workers.</p>
-          </article>
-          <article class="card">
-            <div class="section-label">CPU-sized today</div>
-            <h3>MTS-LSTM remote inference</h3>
-            <p><code>infer_mts_lstm_remote</code> is Modal-backed today but still CPU or memory sized, not GPU-backed production scoring.</p>
-          </article>
-          <article class="card">
-            <div class="section-label">Current description</div>
-            <h3>Off-path compute for candidate workflows</h3>
-            <p>That is the most accurate current description of Modal.com in the platform story.</p>
-          </article>
+        <div class="warning-band">
+          <p><strong>Recommended framing:</strong> Modal.com supports bounded candidate compute; partner intake and synthetic checks do not authorize GPU, production scoring, or public claim changes.</p>
         </div>
       </div>
 
@@ -1723,7 +1799,7 @@ a {
             <div class="kicker">Deck 1 of 5</div>
             <div class="eyebrow">Release-gate posture</div>
             <h1 class="slide-title">Benchmark, Stability, And Release Gates</h1>
-            <p class="slide-subtitle">This slide is about discipline, not theater. The current evidence should be read as governance metadata and bounded observability, not as broad robustness closure.</p>
+            <p class="slide-subtitle">This slide is about discipline, not theater. Current evidence should be read as governance metadata, partner-readiness infrastructure, and bounded observability, not broad robustness closure.</p>
           </div>
           <div class="proof-row"><span class="proof-chip internal">Technical evidence</span></div>
         </div>
@@ -1744,7 +1820,7 @@ a {
           <article class="stat">
             <div class="stat-label">Promotion rule</div>
             <div class="stat-number">Blocked until earned</div>
-            <p>Candidate models stay gated until release artifacts and scientist review justify stronger claims.</p>
+            <p>Candidate models and Himalayan claims stay gated until local evidence, holdout metrics, release artifacts, and scientist review justify stronger claims.</p>
           </article>
         </div>
       </div>
@@ -1757,13 +1833,13 @@ a {
               <div><strong>Threshold drift</strong><p><code>0.157726</code> is visible and should remain visible in the scientist discussion.</p></div>
             </div>
             <div class="matrix-row">
-              <div><strong>Source of truth</strong><p>Current admin surfaces, benchmark pack v0, validation protocol v0, and the stability summary artifact.</p></div>
+              <div><strong>Source of truth</strong><p>Current admin surfaces, benchmark pack v0, validation protocol v0, v3 partner evidence contract, and the stability summary artifact.</p></div>
               <div><strong>Current reading</strong><p>“We have explicit benchmark and stability traces, and they are conservative enough to keep stronger claims blocked.”</p></div>
             </div>
           </div>
         </div>
         <div class="warning-band">
-          <p><strong>Avoid saying:</strong> “the shadow path is stable and production-ready.” The artifact supports only cautious governance language.</p>
+          <p><strong>Avoid saying:</strong> “the shadow path is stable and ready for production.” The artifact supports only cautious governance language.</p>
         </div>
       </div>
 
@@ -1832,7 +1908,7 @@ a {
             <div class="kicker">Deck 1 of 5</div>
             <div class="eyebrow">Boundary slide</div>
             <h1 class="slide-title">What Is Not Unique, And Must Not Be Overclaimed</h1>
-            <p class="slide-subtitle">Trust increases when we draw the line before the scientist has to do it for us.</p>
+            <p class="slide-subtitle">Trust increases when we draw the line before the scientist or partner agency has to do it for us.</p>
           </div>
           <div class="proof-row"><span class="proof-chip internal">Technical evidence</span></div>
         </div>
@@ -1844,11 +1920,11 @@ a {
           <div class="matrix-table">
             <div class="matrix-row">
               <div><strong>Algorithm novelty</strong><p>ANNs, SHAP, SAR segmentation, LSTM-style modeling, and GPU workers are not unique by themselves.</p></div>
-              <div><strong>Operational status</strong><p>No active public MTS-LSTM claim, no promoted SAR claim, and no authority-grade warning status.</p></div>
+              <div><strong>Operational status</strong><p>No active public MTS-LSTM claim, no promoted SAR claim, no Himalayan accuracy claim, and no authority-grade warning status.</p></div>
             </div>
             <div class="matrix-row">
               <div><strong>Snow science closure</strong><p>No solved weak-layer or critical-layer validation story.</p></div>
-              <div><strong>Autonomy closure</strong><p>No field-certified autonomous truth-generation claim.</p></div>
+              <div><strong>Autonomy closure</strong><p>No field-certified autonomous truth-generation claim and no <code>D_tidy</code>-equivalent Himalayan truth yet.</p></div>
             </div>
           </div>
         </div>
@@ -1860,6 +1936,7 @@ a {
             <li>“Explainable baseline plus governed candidate pathways.”</li>
             <li>“Modal.com supports candidate compute, not the current public platform surface.”</li>
             <li>“SAR is promising but still qualification-bound.”</li>
+            <li>“The SASE/DGRE packet is a partner-evidence handoff, not prediction success.”</li>
             <li>“The current value is disciplined integration under sparse-data constraints.”</li>
           </ul>
         </div>
@@ -1885,7 +1962,7 @@ a {
             <div class="kicker">Deck 1 of 5</div>
             <div class="eyebrow">Conditional close</div>
             <h1 class="slide-title">Current Gaps, Blocked Claims, And The Real Question</h1>
-            <p class="slide-subtitle">The right close is not certainty. It is whether the next scientist-led validation step should begin now.</p>
+            <p class="slide-subtitle">The right close is not certainty. It is whether the SASE/DGRE handoff and next scientist-owned validation step are worth doing now.</p>
           </div>
           <div class="proof-row"><span class="proof-chip internal">Technical evidence</span><span class="proof-chip future">Research agenda</span></div>
         </div>
@@ -1905,8 +1982,8 @@ a {
           </article>
           <article class="decision-card">
             <div class="section-label">Blocked claim</div>
-            <h3>No critical-layer closure</h3>
-            <p>Weak-layer review and snowpack validation are explicitly next-phase work.</p>
+            <h3>No Himalayan or weak-layer closure</h3>
+            <p>V3 intake validates structure/provenance only; weak-layer and snowpack validation remain next-phase work.</p>
           </article>
         </div>
       </div>
@@ -1916,7 +1993,7 @@ a {
           <ul class="bullet-list">
             <li>The platform already provides a serious decision-support shell and disciplined governance posture.</li>
             <li>The missing science is visible rather than hidden, which makes the next research step concrete.</li>
-            <li><strong>Meeting question:</strong> should the scientist team help shape the benchmark, validation, and advancement program from here?</li>
+            <li><strong>Meeting question:</strong> should the scientist team and SASE/DGRE partner contacts help own the benchmark, validation, and promotion frontier from here?</li>
           </ul>
         </div>
       </div>

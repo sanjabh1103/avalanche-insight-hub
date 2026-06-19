@@ -111,6 +111,20 @@ body.deck-terms {
     linear-gradient(180deg, #f8f6f0 0%, #efece4 100%);
 }
 
+body.deck-ml-understanding {
+  --proof-live: #1c7c74;
+  --proof-internal: #1f3340;
+  --proof-future: #9f6b19;
+  --accent-main: #1c7c74;
+  --accent-soft: rgba(28, 124, 116, 0.13);
+  --accent-alt: #9f6b19;
+  --accent-alt-soft: rgba(159, 107, 25, 0.14);
+  background:
+    radial-gradient(circle at top left, rgba(28, 124, 116, 0.10), transparent 30%),
+    radial-gradient(circle at top right, rgba(159, 107, 25, 0.08), transparent 25%),
+    linear-gradient(180deg, #f4f8f7 0%, #eef1ed 100%);
+}
+
 body::before {
   content: '';
   position: fixed;
@@ -406,6 +420,11 @@ body::before {
   min-height: 53vh;
 }
 
+.frame--compact {
+  height: 34vh;
+  min-height: 0;
+}
+
 .frame--public img {
   object-position: center top;
 }
@@ -424,6 +443,58 @@ body::before {
 
 .frame--admin img {
   object-position: center top;
+}
+
+.frame--dashboard {
+  background: #101010;
+}
+
+.frame--dashboard img {
+  object-fit: contain;
+  object-position: center center;
+}
+
+.evidence-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 0.48rem;
+}
+
+.evidence-shot {
+  margin: 0;
+  min-height: clamp(3.7rem, 8vh, 5.4rem);
+  border: 1px solid var(--line-soft);
+  border-radius: 0.95rem;
+  overflow: hidden;
+  position: relative;
+  background: #101010;
+  box-shadow: var(--shadow-soft);
+}
+
+.evidence-shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  display: block;
+}
+
+.evidence-shot figcaption {
+  position: absolute;
+  left: 0.45rem;
+  bottom: 0.45rem;
+  max-width: calc(100% - 0.9rem);
+  padding: 0.28rem 0.48rem;
+  border-radius: 999px;
+  background: rgba(9, 11, 16, 0.76);
+  color: #f6f4ef;
+  font-size: var(--small-size);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .frame-label {
@@ -882,6 +953,7 @@ a {
   .timeline,
   .flow,
   .matrix-table,
+  .evidence-strip,
   .row-list {
     gap: 0.48rem;
   }
@@ -893,6 +965,8 @@ a {
 
   .frame--wide { min-height: 34vh; }
   .frame--tall { min-height: 44vh; }
+  .frame--compact { height: 28vh; }
+  .evidence-shot { min-height: 3.8rem; }
 }
 
 @media (max-height: 620px) {
@@ -951,6 +1025,8 @@ a {
 
   .frame--wide { min-height: 30vh; }
   .frame--tall { min-height: 38vh; }
+  .frame--compact { height: 14vh; }
+  .evidence-shot { min-height: 3.6rem; }
 }
 
 @media (max-width: 640px) {
@@ -1022,6 +1098,9 @@ a {
 
   .frame--wide { min-height: 18vh; }
   .frame--tall { min-height: 22vh; }
+  .frame--compact { height: 16vh; }
+  .evidence-strip { display: none; }
+  .evidence-shot figcaption { display: none; }
 }
 
 @media (max-width: 640px) and (max-height: 760px) {
@@ -1032,8 +1111,14 @@ a {
   }
 
   .frame--wide,
-  .frame--tall {
-    min-height: 16vh;
+  .frame--tall,
+  .frame--compact {
+    height: 16vh;
+    min-height: 0;
+  }
+
+  .evidence-shot {
+    min-height: 3.4rem;
   }
 }
 
@@ -1077,6 +1162,11 @@ a {
     display: none !important;
   }
 
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
   .slide {
     width: 13.333in;
     height: 7.5in;
@@ -1099,8 +1189,8 @@ a {
           <div class="kicker-stack">
             <div class="kicker">Deck 3 of 5</div>
             <div class="eyebrow">Collaboration arc</div>
-            <h1 class="slide-title">Why Scientist Co-Development Is Necessary Now</h1>
-            <p class="slide-subtitle">The platform is ready for a serious scientific discussion. It is not yet a finished validation story.</p>
+            <h1 class="slide-title">Why Scientist And Partner Co-Development Is Necessary Now</h1>
+            <p class="slide-subtitle">MVP V2 proves enough to justify SASE/DGRE partner handoff and scientist review. It does not prove enough to skip local Himalayan validation.</p>
           </div>
           <div class="proof-row"><span class="proof-chip internal">Technical evidence</span><span class="proof-chip future">Research agenda</span></div>
         </div>
@@ -1111,8 +1201,9 @@ a {
           <div class="section-label">Transition after Deck 1</div>
           <ul class="bullet-list">
             <li>The current platform already includes a public route, administration observability, an explainable baseline, and governance surfaces.</li>
-            <li>The science gap is also real: weak layers, regional transfer, qualification, and promotion evidence are unfinished.</li>
-            <li>That gap is exactly where the scientist team becomes central rather than decorative.</li>
+            <li>The V2 infrastructure is real: Swiss RAvaFcast research, Himalayan v3 evidence templates, and one-command package triage.</li>
+            <li>The science gap is also real: weak layers, regional transfer, quality-controlled labels, station coverage, and promotion evidence are unfinished.</li>
+            <li>That gap is exactly where SASE/DGRE partners and the scientist team become central rather than decorative.</li>
           </ul>
         </div>
       </div>
@@ -1121,16 +1212,16 @@ a {
           <article class="stat">
             <div class="stat-label">Ready now</div>
             <div class="stat-number">Decision-support platform</div>
-            <p>Public-facing platform shell and operational evidence surfaces already exist.</p>
+            <p>Public-facing product shell, operator evidence surfaces, and partner-intake templates already exist.</p>
           </article>
           <article class="stat">
             <div class="stat-label">Not ready now</div>
             <div class="stat-number">Scientific closure</div>
-            <p>The next phase is about benchmark and validation ownership, not about declaring victory.</p>
+            <p>The next phase is about SASE/DGRE evidence handoff, benchmark ownership, and validation ownership, not declaring victory.</p>
           </article>
         </div>
         <div class="quote-band">
-          <p>The strongest collaboration pitch is: “help us decide what should count as real evidence here.”</p>
+          <p>The strongest collaboration pitch is: “help us decide what should count as real Himalayan evidence here.”</p>
           <small>Scientist-first framing</small>
         </div>
       </div>
@@ -1295,8 +1386,8 @@ a {
           <div class="kicker-stack">
             <div class="kicker">Deck 3 of 5</div>
             <div class="eyebrow">Immediate work surface</div>
-            <h1 class="slide-title">Benchmark Pack v0</h1>
-            <p class="slide-subtitle">The first reviewable package already exists. It is deliberately small and explicitly not field-validation closure.</p>
+            <h1 class="slide-title">Himalayan v3 Partner Handoff Packet</h1>
+            <p class="slide-subtitle">The immediate packet is machine-readable intake infrastructure. It is deliberately not a Himalayan accuracy result.</p>
           </div>
           <div class="proof-row"><span class="proof-chip internal">Technical evidence</span></div>
         </div>
@@ -1304,22 +1395,22 @@ a {
 
       <div class="stack reveal delay-1">
         <div class="matrix">
-          <h3 class="matrix-title">What v0 already includes</h3>
+          <h3 class="matrix-title">What partners receive (20+ artifacts, summarized here; full list in the handout)</h3>
           <div class="matrix-table">
             <div class="matrix-row">
-              <div><strong>Case inventory</strong><p>Public route evidence, administration observability, inference manifest, stability summary, evaluation contracts, and governance contracts.</p></div>
-              <div><strong>Region slices</strong><p><code>cascades_wa</code>, <code>colorado_rockies</code>, <code>french_alps</code>, <code>himalayas_nepal</code>, <code>japanese_alps</code>, <code>swiss_alps</code>.</p></div>
+              <div><strong>Start here</strong><p>README, field dictionary, checksum guide, package index, and source-manifest template.</p></div>
+              <div><strong>Evidence to fill</strong><p>Ten blank v3 CSVs for stations, weather, snowpack, labels, polygons, events, sensing, terrain, reviews, and holdout.</p></div>
             </div>
             <div class="matrix-row">
-              <div><strong>Failure slices</strong><p>Reduced confidence, source support gaps, candidate-gate failure, stability drift, narrow evidence mix, evaluation sparsity.</p></div>
-              <div><strong>Critical-layer questions</strong><p>Explicit prompts for weak-layer review, slice choice, and minimally credible benchmark deltas.</p></div>
+              <div><strong>Validation and triage</strong><p>Preflight, evidence validation, source checks, quality score, acceptance checklist, manifest diff, summary, and ledger.</p></div>
+              <div><strong>Holdout and claim locks</strong><p>Pre-registered holdout protocol, leakage audit, metric report, release attestation, and explicit claim gates.</p></div>
             </div>
           </div>
         </div>
       </div>
       <div class="stack reveal delay-2">
         <div class="warning-band">
-          <p><strong>v0 boundary:</strong> this pack makes the discussion disciplined. It does not pretend the review is complete, fresh, or field-validated yet.</p>
+          <p><strong>Boundary:</strong> blank templates and instructions only. Synthetic fixtures are validator smoke-tests, never partner evidence. See <code>Scientist_Handout_OnePager.md</code> for the complete inventory.</p>
         </div>
       </div>
 
@@ -1338,8 +1429,8 @@ a {
           <div class="kicker-stack">
             <div class="kicker">Deck 3 of 5</div>
             <div class="eyebrow">Review loop</div>
-            <h1 class="slide-title">Validation Protocol v0</h1>
-            <p class="slide-subtitle">The minimum scientist-in-the-loop protocol is already structured: event labels, critical layers, benchmark acceptance, and promotion review.</p>
+            <h1 class="slide-title">Validation Protocol v0 And V3 Triage Loop</h1>
+            <p class="slide-subtitle">The minimum scientist-in-the-loop protocol is now tied to partner package triage: source governance, evidence validation, leakage checks, and promotion review.</p>
           </div>
           <div class="proof-row"><span class="proof-chip internal">Technical evidence</span></div>
         </div>
@@ -1348,32 +1439,32 @@ a {
       <div class="timeline reveal delay-1">
         <div class="timeline-step">
           <strong>01</strong>
-          <p>Review label confidence, training weights, and field-report linkage.</p>
+          <p>Validate source manifest coverage and reject rows with missing or stale <code>source_ref</code> evidence.</p>
         </div>
         <div class="timeline-step">
           <strong>02</strong>
-          <p>Define weak-layer and critical-layer review expectations.</p>
+          <p>Review <code>D_tidy</code>-equivalent label provenance, nowcast/observer refs, regime, and timing fields.</p>
         </div>
         <div class="timeline-step">
           <strong>03</strong>
-          <p>Accept or reject benchmark artifacts and runtime traces.</p>
+          <p>Check station X/Y/Z coverage, GPxyz readiness, snowpack provenance, event truth, and remote-sensing scope.</p>
         </div>
         <div class="timeline-step">
           <strong>04</strong>
-          <p>Check candidate-model gates and downgrade language if a gate fails.</p>
+          <p>Run holdout leakage and metric reports only after package evidence is complete and independent.</p>
         </div>
         <div class="timeline-step">
           <strong>05</strong>
-          <p>Carry sign-off checkpoints back into deck, docs, and release phrasing.</p>
+          <p>Carry scientist decisions back into release-gate attestations, deck language, docs, and claim state.</p>
         </div>
       </div>
       <div class="stack reveal delay-2">
         <div class="lead-panel">
           <div class="section-label">Why this matters now</div>
           <ul class="bullet-list">
-            <li>The protocol gives the scientist team a real review surface from day one.</li>
-            <li>It turns “validation” into explicit checkpoints instead of vague reassurance.</li>
-            <li>It keeps blocked claims blocked until someone can point to the supporting artifact.</li>
+            <li>The protocol gives the scientist team and partner reviewers a real review surface from day one.</li>
+            <li>It turns “validation” into explicit package, source, label, station, holdout, and release-gate checkpoints.</li>
+            <li>It keeps blocked claims blocked until someone can point to the proving artifact and reviewed local evidence.</li>
           </ul>
         </div>
       </div>
@@ -1540,27 +1631,33 @@ a {
 
       <div class="timeline reveal delay-1">
         <div class="timeline-step">
-          <strong>Week 0-2</strong>
-          <p>Lock benchmark scope, region slices, and critical-layer questions.</p>
+          <strong>Weeks 1-3 · Activate</strong>
+          <p>Partner handoff session (W1), source-manifest discipline + SHA-256 walkthrough (W2), station metadata + GPxyz readiness gate (W3). Acceptance: ≥1 priority region exits <code>blocked_station_coordinates_required</code>.</p>
         </div>
         <div class="timeline-step">
-          <strong>Week 3-6</strong>
-          <p>Run governed evidence and evaluation slices against the agreed case pack.</p>
+          <strong>Weeks 4-6 · Evidence</strong>
+          <p><code>D_tidy</code> label provenance + weak-layer slice definitions (W4), full validator/leakage triage + 100-point score (W5), Stage-1 RF4 feasibility spike + SAR read-only review (W6). Acceptance: ≥1 region scores ≥50/100; SAR not promoted.</p>
         </div>
         <div class="timeline-step">
-          <strong>Week 7-10</strong>
-          <p>Review failures, drift, weak-layer misses, and candidate-model gate posture together.</p>
+          <strong>Weeks 7-9 · Audit + protocol lock</strong>
+          <p>Refined-discretization audit (W7), weak-layer evidence pack round 1 (W8), <strong>pre-registered</strong> local holdout protocol with scientist co-signature (W9). Acceptance: protocol SHA-256 captured, immutable thereafter.</p>
         </div>
         <div class="timeline-step">
-          <strong>Week 11-12</strong>
-          <p>Decide whether to extend, constrain, or terminate the next qualification loop.</p>
+          <strong>Weeks 10-12 · Review + attestation</strong>
+          <p>Weak-layer round 2 + spike iteration (W10), failure-mode review + pre-decision memo (W11), <strong>release-gate attestation or claim_review_blocked ledger entry</strong> (W12). No silent failures.</p>
         </div>
         <div class="timeline-step">
-          <strong>Exit</strong>
-          <p>Produce a scientist-owned go, no-go, or narrow-pilot recommendation.</p>
+          <strong>Week 13 · Decision</strong>
+          <p>60-min session producing one of: <code>Phase_2_Scoping.md</code>, <code>Narrow_Pilot_Charter.md</code>, or <code>Pilot_Termination_Memo.md</code>. Scientist Lead can extend, narrow, block, or terminate at any prior weekly gate.</p>
         </div>
       </div>
-      <div class="warning-band reveal delay-2">
+      <div class="stack reveal delay-2">
+        <div class="lead-panel">
+          <div class="section-label">Per-week handout</div>
+          <p>The week-by-week plan with deliverables, owners, acceptance gates, risk triggers, and contingencies (Swiss-only sandbox, synthetic-pseudo-stations, re-submission cycle, scientist-led narrow pilot) lives in <code>MVP_V2_13_Week_Pilot_Plan.md</code>. Companion artifacts: <code>MVP_V2_Action_List.md</code> and <code>MVP_V2_Weekly_Progress_Template.md</code>.</p>
+        </div>
+      </div>
+      <div class="warning-band reveal delay-3">
         <p>Success is not “the model looked good.” Success is a benchmark result the scientist team is willing to stand behind narrowly and carefully.</p>
       </div>
 
@@ -1580,32 +1677,32 @@ a {
             <div class="kicker">Deck 3 of 5</div>
             <div class="eyebrow">Requirements</div>
             <h1 class="slide-title">Data And Field Requirements</h1>
-            <p class="slide-subtitle">The next phase needs concrete contributions: case definitions, field context, weak-layer interpretation, and evidence-quality review.</p>
+            <p class="slide-subtitle">The next phase needs concrete contributions: reviewed source packages, case definitions, field context, weak-layer interpretation, and evidence-quality review.</p>
           </div>
           <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
         </div>
         <div class="content-shell split-2">
 
       <div class="card-grid reveal delay-1">
-        <article class="card">
-          <div class="section-label">Scientist input</div>
-          <h3>Weak-layer and critical-layer cases</h3>
-          <p>Choose the slices that matter before any promotion rhetoric returns.</p>
-        </article>
-        <article class="card">
-          <div class="section-label">Field context</div>
-          <h3>Local terrain interpretation</h3>
-          <p>Benchmark cases need ground-informed review, not purely remote or statistical interpretation.</p>
-        </article>
-        <article class="card">
-          <div class="section-label">Event curation</div>
-          <h3>Label arbitration support</h3>
-          <p>Ambiguous, duplicated, or thinly sourced avalanche events need shared review.</p>
-        </article>
+          <article class="card">
+            <div class="section-label">Scientist input</div>
+            <h3>D_tidy-quality danger labels</h3>
+            <p>Separate raw bulletins from reviewed nowcast, observer, event, or reanalysis-backed truth.</p>
+          </article>
+          <article class="card">
+            <div class="section-label">Field context</div>
+            <h3>Station and terrain metadata</h3>
+            <p>GPxyz needs latitude, longitude, elevation, density diagnostics, and region coverage before spatial claims.</p>
+          </article>
+          <article class="card">
+            <div class="section-label">Event curation</div>
+            <h3>Label arbitration and event truth</h3>
+            <p>Ambiguous, duplicated, or thinly sourced avalanche events need shared review and source-manifest backing.</p>
+          </article>
         <article class="card">
           <div class="section-label">Honest caveat</div>
           <h3>Offline report replay is not the same as field reliability</h3>
-          <p>The queue-and-replay mechanism exists, but the deck should not treat it as validated mountain-device robustness.</p>
+            <p>The queue-and-replay mechanism and v3 intake validators exist, but neither proves field-device robustness or Himalayan accuracy.</p>
         </article>
       </div>
 
@@ -1624,7 +1721,7 @@ a {
           <div class="kicker-stack">
             <div class="kicker">Deck 3 of 5</div>
             <div class="eyebrow">Execution realism</div>
-            <h1 class="slide-title">Engineering And Platform Workstreams Are Already Structured</h1>
+            <h1 class="slide-title">Engineering And Partner Workstreams Are Already Structured</h1>
             <p class="slide-subtitle">The path forward is not abstract. The current program already breaks the next work into concrete, bounded streams.</p>
           </div>
           <div class="proof-row"><span class="proof-chip internal">Technical evidence</span></div>
@@ -1637,11 +1734,11 @@ a {
           <h3>Claim-state hardening</h3>
           <p>Every major statement is now mapped to a clear evidence lane and blocked-claim rule.</p>
         </article>
-        <article class="card">
-          <div class="section-label">Workstream</div>
-          <h3>Evidence-surface verification</h3>
-          <p>Every meaningful claim is tied to a route, artifact, test, or admin surface.</p>
-        </article>
+          <article class="card">
+            <div class="section-label">Workstream</div>
+            <h3>Partner-package triage</h3>
+            <p><code>run_himalayan_partner_package_triage</code> produces preflight, source, evidence, holdout, ledger, dashboard, manifest, and traceability outputs.</p>
+          </article>
         <article class="card">
           <div class="section-label">Workstream</div>
           <h3>Governed autonomy reframing</h3>
@@ -1650,7 +1747,7 @@ a {
         <article class="card">
           <div class="section-label">Workstream</div>
           <h3>Benchmark and protocol packaging</h3>
-          <p>Benchmark pack v0 and validation protocol v0 are ready as discussion starters.</p>
+            <p>Benchmark pack v0, validation protocol v0, and the v3 handoff packet are ready as discussion starters.</p>
         </article>
       </div>
       <div class="warning-band reveal delay-2">
@@ -1771,7 +1868,7 @@ a {
             <div class="kicker">Deck 3 of 5</div>
             <div class="eyebrow">Specific ask</div>
             <h1 class="slide-title">Concrete Ask, Decision Options, And Next Steps</h1>
-            <p class="slide-subtitle">End the meeting with a choice, not with generic enthusiasm.</p>
+            <p class="slide-subtitle">End the meeting with a choice, not with generic enthusiasm or prediction-success language.</p>
           </div>
           <div class="proof-row"><span class="proof-chip future">Research agenda</span></div>
         </div>
@@ -1780,17 +1877,17 @@ a {
       <div class="decision-grid reveal delay-1">
         <article class="decision-card">
           <div class="section-label">Option 1</div>
-          <h3>Benchmark-design workshop</h3>
+          <h3>SASE/DGRE handoff session</h3>
           <ul>
-            <li>Define cases, slices, and validation questions.</li>
-            <li>Low commitment, high clarity.</li>
+            <li>Walk through README, field dictionary, checksum guide, source manifest, and blank v3 CSVs.</li>
+            <li>Low commitment, high clarity before data formatting begins.</li>
           </ul>
         </article>
         <article class="decision-card">
           <div class="section-label">Option 2</div>
-          <h3>90-day pilot</h3>
+          <h3>90-day evidence pilot</h3>
           <ul>
-            <li>Shared benchmark pack, review cadence, and go or no-go gates.</li>
+            <li>Partner package submission, triage, scientist review, and go or no-go gates.</li>
             <li>Turns curiosity into inspectable pilot evidence.</li>
           </ul>
         </article>
@@ -1804,7 +1901,7 @@ a {
         </article>
       </div>
       <div class="quote-band reveal delay-2">
-        <p>The ideal immediate ask is a scientist-led benchmark-design session with selected regional cases and explicit validation criteria.</p>
+        <p>The ideal immediate ask is a partner handoff session followed by a scientist-led benchmark-design session with selected regional cases and explicit validation criteria.</p>
         <small>Close on a concrete next step, not on AI transformation language</small>
       </div>
 
