@@ -136,6 +136,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: avalanche-ml-pipeline
@@ -206,6 +207,37 @@ jobs:
           path: backend/artifacts
         continue-on-error: true
 
+      - name: Restore vetted recovery model artifact
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -d backend/artifacts ] && find backend/artifacts -name model.joblib -print -quit | grep -q .; then
+            echo "Existing model.joblib found; skipping recovery artifact restore."
+            exit 0
+          fi
+          restore_dir="backend/artifacts/20260427T095428Z"
+          mkdir -p "${restore_dir}"
+          restored=false
+          for artifact_file in model.joblib training_metrics.json feature_schema.json; do
+            object_url="${SUPABASE_URL%/}/storage/v1/object/model-artifacts/recovery/20260427T095428Z/${artifact_file}"
+            if curl --fail --silent --show-error --location \
+              -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+              "${object_url}" \
+              --output "${restore_dir}/${artifact_file}"; then
+              restored=true
+              echo "Restored ${artifact_file} from private model-artifacts bucket."
+            else
+              rm -f "${restore_dir}/${artifact_file}"
+              echo "::warning::Could not restore ${artifact_file} from private model-artifacts bucket."
+            fi
+          done
+          if [ "${restored}" = "true" ] && [ -f "${restore_dir}/model.joblib" ]; then
+            echo "Vetted recovery model artifact restored."
+          fi
+
       - name: Train model if inference artifact is unavailable
         env:
           ARTIFACT_ROOT: backend/artifacts
@@ -225,6 +257,10 @@ jobs:
           mkdir -p backend/artifacts
           echo "No model.joblib restored for inference; training a fresh real-data model."
           python -m backend.train_model
+          if ! find backend/artifacts -name model.joblib -print -quit | grep -q .; then
+            echo "::error::No model.joblib available after restore and real-data training."
+            exit 1
+          fi
 
       - name: Run daily inference
         env:
