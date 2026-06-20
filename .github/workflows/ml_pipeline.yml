@@ -2,10 +2,10 @@ name: Avalanche Async ML Pipeline
 
 on:
   schedule:
-    - cron: '0 4 * * 1'
-    - cron: '0 3 * * 1'  # weekly SAR extraction (only runs when GEE secrets present)
-    - cron: '0 5 * * *'  # daily Gemini-assisted news ingest (only runs when NEWSDATA+GEMINI secrets present)
-    - cron: '0 6 * * *'  # daily same-day forecast publication proof
+    - cron: '7 4 * * 1'  # weekly training
+    - cron: '3 3 * * 1'  # weekly SAR extraction (only runs when GEE secrets present)
+    - cron: '12 5 * * *'  # daily Gemini-assisted news ingest (only runs when NEWSDATA+GEMINI secrets present)
+    - cron: '17 6 * * *'  # daily same-day forecast publication proof
   workflow_dispatch:
     inputs:
       mode:
