@@ -7,26 +7,85 @@ import {
   toNumber,
 } from "../utils.ts";
 
-const VALID_EVENT_TYPES = ["slab", "loose", "wet", "glide", "cornice", "unknown"];
+export const VALID_EVENT_TYPES = ["slab", "loose", "wet", "glide", "cornice", "unknown"];
 
-function isValidLatitude(value: unknown): boolean {
+export function isValidLatitude(value: unknown): boolean {
   return typeof value === "number" && Number.isFinite(value) && value >= -90 && value <= 90;
 }
 
-function isValidLongitude(value: unknown): boolean {
+export function isValidLongitude(value: unknown): boolean {
   return typeof value === "number" && Number.isFinite(value) && value >= -180 && value <= 180;
 }
 
-function isValidSeverity(value: unknown): boolean {
+export function isValidSeverity(value: unknown): boolean {
   return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 5;
 }
 
-function isValidEventType(value: unknown): boolean {
+export function isValidEventType(value: unknown): boolean {
   return typeof value === "string" && VALID_EVENT_TYPES.includes(value);
 }
 
-function sanitizeArticleText(text: unknown): string {
+export function sanitizeArticleText(text: unknown): string {
   return String(text ?? "").replace(/[\r\n]+/g, " ").trim();
+}
+
+export function isValidGeminiEvent(event: Record<string, unknown>): boolean {
+  return (
+    event.is_avalanche_event === true &&
+    isValidLatitude(event.latitude) &&
+    isValidLongitude(event.longitude) &&
+    isValidSeverity(event.severity) &&
+    isValidEventType(event.type)
+  );
+}
+
+export function buildIngestPayload(
+  event: Record<string, unknown>,
+  article: Record<string, unknown>,
+  hazardType: string,
+  locationName: string,
+): Record<string, unknown> {
+  const confidence = Number(
+    Math.max(
+      0.45,
+      Math.min(0.95, toNumber(event.confidence, 0.7)),
+    ).toFixed(3),
+  );
+
+  return {
+    lat: toNumber(event.latitude),
+    lng: toNumber(event.longitude),
+    hazard_type: hazardType,
+    source: "gemini_news",
+    fusion_source: "newsdata_gemini",
+    source_model: "gemini-2.0-flash",
+    description: event.description || article.title || "News-sourced avalanche event",
+    severity: Math.min(
+      5,
+      Math.max(1, Math.round(toNumber(event.severity, 3))),
+    ),
+    event_type: VALID_EVENT_TYPES.includes(event.type as string)
+      ? (event.type as string)
+      : "reported",
+    confidence,
+    label_confidence: confidence,
+    geometry_type: "point",
+    location_name: locationName || article.title || "Unknown location",
+    training_eligible: false,
+    label_role: "display_only",
+    training_eligible_reason: "machine_extracted_news_unreviewed",
+    metadata: {
+      news_article_id: article.article_id || article.link || null,
+      news_link: article.link || null,
+      news_title: article.title || null,
+      news_source: article.source_id || null,
+      news_pub_date: article.pubDate || null,
+      event_date_iso: article.pubDate || null,
+      extractor: "gemini-2.0-flash",
+      machine_candidate_reason: "gemini_extracted_news_unreviewed",
+      corroboration_sources: ["gemini_news"],
+    },
+  };
 }
 
 export async function handleDailyEnrichment({
@@ -135,76 +194,34 @@ export async function handleDailyEnrichment({
               throw new Error("Gemini response was not valid JSON");
             }
 
-            if (!event || event.is_avalanche_event !== true) {
+            if (!event || !isValidGeminiEvent(event)) {
+              if (event && event.is_avalanche_event === true) {
+                console.warn(
+                  "Gemini event failed semantic validation:",
+                  JSON.stringify(event),
+                );
+                ingestFailures += 1;
+              }
               continue;
             }
 
-            if (
-              !isValidLatitude(event.latitude) ||
-              !isValidLongitude(event.longitude) ||
-              !isValidSeverity(event.severity) ||
-              !isValidEventType(event.type)
-            ) {
-              console.warn(
-                "Gemini event failed semantic validation:",
-                JSON.stringify(event),
-              );
-              ingestFailures += 1;
-              continue;
-            }
-
-            const lat = toNumber(event.latitude);
-            const lng = toNumber(event.longitude);
-
-            let locName = event.location_name || "";
+            let locName = String(event.location_name ?? "");
             if (!locName) {
-              locName = await reverseGeocode(lat, lng);
+              locName = await reverseGeocode(
+                toNumber(event.latitude),
+                toNumber(event.longitude),
+              );
             }
-            const confidence = Number(
-              Math.max(
-                0.45,
-                Math.min(0.95, toNumber(event.confidence, 0.7)),
-              ).toFixed(3),
+
+            const payload = buildIngestPayload(
+              event,
+              article,
+              hazardType,
+              locName,
             );
             await invokeEdgeFunction(
               "ingest-event",
-              {
-                lat,
-                lng,
-                hazard_type: hazardType,
-                source: "gemini_news",
-                fusion_source: "newsdata_gemini",
-                source_model: "gemini-2.0-flash",
-                description: event.description || article.title ||
-                  "News-sourced avalanche event",
-                severity: Math.min(
-                  5,
-                  Math.max(1, Math.round(toNumber(event.severity, 3))),
-                ),
-                event_type: VALID_EVENT_TYPES.includes(event.type as string)
-                  ? (event.type as string)
-                  : "reported",
-                confidence,
-                label_confidence: confidence,
-                geometry_type: "point",
-                location_name: locName || article.title ||
-                  "Unknown location",
-                training_eligible: false,
-                label_role: "display_only",
-                training_eligible_reason: "machine_extracted_news_unreviewed",
-                metadata: {
-                  news_article_id: article.article_id || article.link ||
-                    null,
-                  news_link: article.link || null,
-                  news_title: article.title || null,
-                  news_source: article.source_id || null,
-                  news_pub_date: article.pubDate || null,
-                  event_date_iso: article.pubDate || null,
-                  extractor: "gemini-2.0-flash",
-                  machine_candidate_reason: "gemini_extracted_news_unreviewed",
-                  corroboration_sources: ["gemini_news"],
-                },
-              },
+              payload,
               callerAuthorization,
               callerApiKey,
             );

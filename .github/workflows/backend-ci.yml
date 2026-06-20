@@ -81,3 +81,26 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
           NUMBA_DISABLE_COVERAGE: '1'
         run: python -m unittest discover -s backend/tests -p 'test_*.py'
+
+  deno-edge-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@5e01b03354a09c3f2b8ee6f3eab4c1633f96e347 # v2.0.2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check changed edge functions
+        run: |
+          deno check supabase/functions/trigger-job/handlers/daily_enrichment.ts
+          deno check supabase/functions/ingest-event/index.ts
+
+      - name: Run Deno edge-function tests
+        run: |
+          deno test --allow-env supabase/functions/trigger-job/index.test.ts
+          deno test --allow-env supabase/functions/trigger-job/handlers/daily_enrichment.test.ts
