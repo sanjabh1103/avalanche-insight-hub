@@ -33,6 +33,14 @@ export default function ExportForecast({
       return false;
     }
 
+    const csvEscape = (value: string | number): string => {
+      const str = String(value);
+      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
     // CSV Header — guard against cells with missing shapValues (e.g. simulated grid)
     const firstShapKeys = Object.keys(grid.cells[0]?.shapValues ?? {});
     const headers = ['row', 'col', 'lat', 'lng', 'riskScore', 'probability', 'confidenceLower', 'confidenceUpper', 'uncertaintySpan', 'uncertaintyClass', 'hazard', 'exposure', 'vulnerability', 'problemType', ...firstShapKeys];
@@ -56,7 +64,7 @@ export default function ExportForecast({
       ...firstShapKeys.map(k => (cell.shapValues?.[k] ?? 0).toFixed(3))
     ]);
 
-    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const csv = [headers.map(csvEscape).join(','), ...rows.map(r => r.map(csvEscape).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
 
