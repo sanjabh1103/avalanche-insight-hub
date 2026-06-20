@@ -69,7 +69,7 @@ export default function SnowpackProxyCard({ selectedCell }: Props) {
                 <span className="font-mono text-lg text-foreground">
                   {typeof shear === 'number' ? shear.toFixed(2) : '—'}
                 </span>
-                <span className="text-[10px] text-muted-foreground">0–10 index</span>
+                <span className="text-[10px] text-muted-foreground">normalized index</span>
               </div>
             </div>
             <div className="space-y-1">
