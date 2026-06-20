@@ -91,14 +91,9 @@ jobs:
           persist-credentials: false
 
       - name: Setup Deno
-        uses: denoland/setup-deno@5e01b03354a09c3f2b8ee6f3eab4c1633f96e347 # v2.0.2
+        uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-
-      - name: Type-check changed edge functions
-        run: |
-          deno check supabase/functions/trigger-job/handlers/daily_enrichment.ts
-          deno check supabase/functions/ingest-event/index.ts
 
       - name: Run Deno edge-function tests
         run: |

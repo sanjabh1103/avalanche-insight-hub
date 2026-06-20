@@ -29,7 +29,12 @@ def main() -> int:
     text = workflow_path.read_text(encoding="utf-8")
     workflow = load_workflow(workflow_path)
 
-    cron_triggers = set(workflow.get("on", {}).get("schedule", []))
+    # YAML 1.1 parses bare 'on' as boolean True, so check both keys.
+    on_key = "on" if "on" in workflow else (True if True in workflow else None)
+    if on_key is None:
+        print("No 'on' key found in workflow")
+        return 1
+    cron_triggers = workflow.get(on_key, {}).get("schedule", [])
     cron_strings = {entry["cron"] for entry in cron_triggers if isinstance(entry, dict)}
 
     conditions = extract_schedule_conditions(text)
