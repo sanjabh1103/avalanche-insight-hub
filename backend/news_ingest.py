@@ -225,8 +225,9 @@ def extract_event_with_gemini(title: str, content: str) -> Optional[dict[str, An
     try:
         payload = _request_json_with_backoff(
             'POST',
-            f'{GEMINI_ENDPOINT}?key={GEMINI_KEY}',
+            GEMINI_ENDPOINT,
             payload=body,
+            headers={'x-goog-api-key': GEMINI_KEY},
             timeout=30,
         )
     except Exception as exc:
@@ -293,6 +294,9 @@ def post_ingest_event(article: dict[str, Any], record: dict[str, Any], region: R
         'geometry_type': 'point',
         'location_name': record.get('location_name') or region.name,
         'fusion_source': 'newsdata_gemini',
+        'training_eligible': False,
+        'label_role': 'display_only',
+        'training_eligible_reason': 'machine_extracted_news_unreviewed',
         'metadata': {
             'news_article_id': article.get('article_id'),
             'news_link': article.get('link'),
@@ -302,7 +306,8 @@ def post_ingest_event(article: dict[str, Any], record: dict[str, Any], region: R
             'event_date_iso': record.get('event_date_iso'),
             'extractor': GEMINI_MODEL,
             'region_key': region.key,
-            'corroboration_sources': ['gemini_news', 'newsdata'],
+            'machine_candidate_reason': 'gemini_extracted_news_unreviewed',
+            'corroboration_sources': ['gemini_news'],
         },
     }
     headers = {

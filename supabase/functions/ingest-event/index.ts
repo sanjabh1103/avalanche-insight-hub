@@ -30,6 +30,9 @@ type EventPayload = {
   mask_asset_ref?: string | null;
   location_name?: string;
   fusion_source?: string;
+  training_eligible?: boolean;
+  label_role?: string;
+  training_eligible_reason?: string;
   metadata?: Record<string, unknown>;
 };
 
@@ -603,6 +606,16 @@ export async function handleIngestEvent(req: Request) {
     let trainingEligible = classification.trainingEligible;
     let trainingEligibleReason = classification.reason;
 
+    // Caller-provided hard quarantine overrides local classification (e.g. unreviewed
+    // Gemini or GEE candidates). This is a safety guard: display-only until a human
+    // promotion path is completed.
+    if (payload.training_eligible === false) {
+      trainingEligible = false;
+      trainingEligibleReason = payload.training_eligible_reason
+        ? `${payload.training_eligible_reason}`
+        : trainingEligibleReason ?? 'caller_quarantined';
+    }
+
     // Milestone 3.5: news-sourced events require at least 2 corroboration sources or manual promotion
     if (source === 'gemini_news' || source === 'newsdata_gemini') {
       const corroborationSources = metadata.corroboration_sources;
@@ -614,6 +627,10 @@ export async function handleIngestEvent(req: Request) {
           : 'uncorroborated_news';
       }
     }
+
+    // Machine-extracted events default to display-only labels until reviewed.
+    const labelRole = payload.label_role ??
+      ((source === 'gemini_news' || source === 'newsdata_gemini') && !trainingEligible ? 'display_only' : null);
 
     const { data: event, error: eventErr } = await supabase
       .from('avalanche_events')
@@ -643,6 +660,7 @@ export async function handleIngestEvent(req: Request) {
         topo_resolution_m: topo.topoResolutionM,
         training_eligible: trainingEligible,
         training_eligible_reason: trainingEligibleReason,
+        label_role: labelRole,
         verification_status: descriptionSanitized ? 'needs_review' : null,
         topo_profile: {
           ...topo.topoProfile,

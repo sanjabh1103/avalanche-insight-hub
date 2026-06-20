@@ -116,6 +116,14 @@ class NewsIngestTests(unittest.TestCase):
         self.assertEqual(payload['source_model'], news_ingest.GEMINI_MODEL)
         self.assertEqual(payload['geometry_type'], 'point')
         self.assertEqual(payload['event_type'], 'unknown')
+        self.assertFalse(payload['training_eligible'])
+        self.assertEqual(payload['label_role'], 'display_only')
+        self.assertEqual(payload['training_eligible_reason'], 'machine_extracted_news_unreviewed')
+        self.assertEqual(payload['metadata']['corroboration_sources'], ['gemini_news'])
+        self.assertEqual(
+            payload['metadata']['machine_candidate_reason'],
+            'gemini_extracted_news_unreviewed',
+        )
 
 
 if __name__ == '__main__':
