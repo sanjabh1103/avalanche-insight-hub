@@ -64,3 +64,7 @@ supabase/.temp/
 # Local migration/recovery outputs
 scripts/migration_backup/
 scripts/migration_errors.log
+
+# Local credential files — NEVER commit
+scientist_credentials.txt
+test_output.txt
