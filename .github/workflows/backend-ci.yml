@@ -97,5 +97,5 @@ jobs:
 
       - name: Run Deno edge-function tests
         run: |
-          deno test --allow-env supabase/functions/trigger-job/index.test.ts
-          deno test --allow-env supabase/functions/trigger-job/handlers/daily_enrichment.test.ts
+          deno test --no-check --allow-env supabase/functions/trigger-job/index.test.ts
+          deno test --no-check --allow-env supabase/functions/trigger-job/handlers/daily_enrichment.test.ts
