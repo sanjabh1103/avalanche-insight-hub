@@ -179,7 +179,7 @@ export default function ExpertModePanel({
               </DialogHeader>
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  You will receive push notifications when avalanche risk rises to High (4) or Extreme (5) in this region. You can unsubscribe at any time.
+                  You will receive push notifications when avalanche risk rises to High (4) or Very High (5) in this region. You can unsubscribe at any time.
                 </p>
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setAlertsDialogOpen(false)} disabled={subscribingAlerts}>

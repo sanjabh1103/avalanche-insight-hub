@@ -18,7 +18,7 @@ export const RISK_LABELS: Record<number, string> = {
   2: 'Moderate',
   3: 'Considerable',
   4: 'High',
-  5: 'Extreme',
+  5: 'Very High',
 };
 
 export const PROBLEM_TYPES = [

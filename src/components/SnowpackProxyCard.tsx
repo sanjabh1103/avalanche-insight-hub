@@ -60,7 +60,7 @@ export default function SnowpackProxyCard({ selectedCell }: Props) {
           <>
             <div className="space-y-1">
               <div className="flex items-center justify-between text-[11px] uppercase tracking-wider text-muted-foreground">
-                <span>Estimated Shear Strength</span>
+                <span>Shear Strength Proxy Index</span>
                 {typeof shear === 'number' && (
                   <span className={`font-mono ${shearStrengthClass(shear).tone}`}>{shearStrengthClass(shear).label}</span>
                 )}
@@ -69,7 +69,7 @@ export default function SnowpackProxyCard({ selectedCell }: Props) {
                 <span className="font-mono text-lg text-foreground">
                   {typeof shear === 'number' ? shear.toFixed(2) : '—'}
                 </span>
-                <span className="text-[10px] text-muted-foreground">kPa</span>
+                <span className="text-[10px] text-muted-foreground">0–10 index</span>
               </div>
             </div>
             <div className="space-y-1">
