@@ -68,3 +68,6 @@ scripts/migration_errors.log
 # Local credential files — NEVER commit
 scientist_credentials.txt
 test_output.txt
+
+# Vitest coverage output (can shadow Python package imports if left in repo root)
+coverage/
