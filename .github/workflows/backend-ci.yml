@@ -56,6 +56,9 @@ jobs:
           print('workflow yaml ok')
           PY
 
+      - name: Validate ML pipeline schedule/job condition contract
+        run: python scripts/verify_schedule_contract.py
+
       - name: Modal app import smoke
         env:
           PYTHONPATH: ${{ github.workspace }}

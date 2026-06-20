@@ -144,7 +144,7 @@ concurrency:
 
 jobs:
   train:
-    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'train') || (github.event_name == 'schedule' && github.event.schedule == '0 4 * * 1')
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'train') || (github.event_name == 'schedule' && github.event.schedule == '7 4 * * 1')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository (with LFS DEMs)
@@ -183,7 +183,7 @@ jobs:
           path: backend/artifacts
 
   infer:
-    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'infer') || (github.event_name == 'schedule' && github.event.schedule == '0 6 * * *')
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'infer') || (github.event_name == 'schedule' && github.event.schedule == '17 6 * * *')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository (with LFS DEMs)
@@ -367,7 +367,7 @@ jobs:
     # mandatory SRTM layover/shadow mask BEFORE VV/VH thresholding.
     # Runs only when GEE service-account secrets are configured; otherwise
     # the Python script exits 0 cleanly so the job never fails.
-    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'gee') || (github.event_name == 'schedule' && github.event.schedule == '0 3 * * 1')
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'gee') || (github.event_name == 'schedule' && github.event.schedule == '3 3 * * 1')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -400,7 +400,7 @@ jobs:
     # qualifying events through the ingest-event edge function (so they go
     # through the standard topo-snap + deposit-zone pipeline). Skips cleanly
     # (exit 0) when NEWSDATA_API_KEY or GEMINI_API_KEY secrets are absent.
-    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'news') || (github.event_name == 'schedule' && github.event.schedule == '0 5 * * *')
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'news') || (github.event_name == 'schedule' && github.event.schedule == '12 5 * * *')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

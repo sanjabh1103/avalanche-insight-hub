@@ -162,7 +162,7 @@ export default function CellEvidenceDrawer({
                 Weak-layer proxy
               </div>
               <div>
-                Shear {formatNumber(selectedCell.snowpackProxy?.estimated_shear_strength)} kPa · settlement {formatNumber(selectedCell.snowpackProxy?.snow_settlement_index)}
+                Shear strength proxy {formatNumber(selectedCell.snowpackProxy?.estimated_shear_strength)} index · settlement {formatNumber(selectedCell.snowpackProxy?.snow_settlement_index)}
               </div>
               <div className="mt-1">
                 This is a proxy signal for review, not completed weak-layer validation.

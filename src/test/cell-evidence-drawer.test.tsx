@@ -81,5 +81,9 @@ describe('CellEvidenceDrawer', () => {
     expect(screen.getByText(/Linked reality evidence/i)).toBeTruthy();
     expect(await screen.findByText(/Forecast outcomes 1 · field reports 1/i)).toBeTruthy();
     expect(screen.getByRole('button', { name: /queue for scientist review/i })).toBeTruthy();
+
+    // Regression: snowpack proxy must never claim physical units such as kPa.
+    expect(screen.getByText(/Shear strength proxy 2.40 index/i)).toBeTruthy();
+    expect(screen.queryByText(/kPa/i)).toBeNull();
   });
 });
