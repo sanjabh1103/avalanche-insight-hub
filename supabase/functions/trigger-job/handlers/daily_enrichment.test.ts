@@ -149,7 +149,7 @@ Deno.test("buildIngestPayload quarantines machine-extracted events", () => {
   );
 });
 
-Deno.test("buildIngestPayload maps unknown type to reported", () => {
+Deno.test("buildIngestPayload maps unknown type to unknown", () => {
   const payload = buildIngestPayload(
     {
       is_avalanche_event: true,
@@ -157,6 +157,22 @@ Deno.test("buildIngestPayload maps unknown type to reported", () => {
       longitude: -121.0,
       severity: 3,
       type: "unknown",
+    },
+    { title: "Avalanche" },
+    "avalanche",
+    "",
+  );
+  assertEquals(payload.event_type, "unknown");
+});
+
+Deno.test("buildIngestPayload falls back to unknown for invalid type", () => {
+  const payload = buildIngestPayload(
+    {
+      is_avalanche_event: true,
+      latitude: 46.0,
+      longitude: -121.0,
+      severity: 3,
+      type: null,
     },
     { title: "Avalanche" },
     "avalanche",
@@ -179,4 +195,52 @@ Deno.test("buildIngestPayload clamps severity to [1, 5]", () => {
     "",
   );
   assertEquals(payload.severity, 5);
+});
+
+Deno.test("buildIngestPayload clamps confidence to [0.45, 0.95]", () => {
+  const lowPayload = buildIngestPayload(
+    {
+      is_avalanche_event: true,
+      latitude: 46.0,
+      longitude: -121.0,
+      severity: 3,
+      type: "slab",
+      confidence: 0.1,
+    },
+    { title: "Avalanche" },
+    "avalanche",
+    "",
+  );
+  assertEquals(lowPayload.confidence, 0.45);
+
+  const highPayload = buildIngestPayload(
+    {
+      is_avalanche_event: true,
+      latitude: 46.0,
+      longitude: -121.0,
+      severity: 3,
+      type: "slab",
+      confidence: 0.99,
+    },
+    { title: "Avalanche" },
+    "avalanche",
+    "",
+  );
+  assertEquals(highPayload.confidence, 0.95);
+});
+
+Deno.test("buildIngestPayload defaults confidence to 0.7 when missing", () => {
+  const payload = buildIngestPayload(
+    {
+      is_avalanche_event: true,
+      latitude: 46.0,
+      longitude: -121.0,
+      severity: 3,
+      type: "slab",
+    },
+    { title: "Avalanche" },
+    "avalanche",
+    "",
+  );
+  assertEquals(payload.confidence, 0.7);
 });

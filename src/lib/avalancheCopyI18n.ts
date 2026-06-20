@@ -20,7 +20,7 @@ const COPY: Record<AvalancheLocale, Record<AvalancheCopyKey, string>> = {
     'danger.moderate': 'Moderate',
     'danger.considerable': 'Considerable',
     'danger.high': 'High',
-    'danger.very_high': 'Very high',
+    'danger.very_high': 'Very High',
     'problem.new_snow': 'New snow',
     'problem.wind_slab': 'Wind slab',
     'problem.persistent_weak_layers': 'Persistent weak layers',
