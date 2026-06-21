@@ -693,6 +693,19 @@ test('cell URL param pre-selects grid cell on load with forecast', async ({ page
   expect(pageErrors).toEqual([]);
 });
 
+test('cell URL param with lat,lon format pre-selects nearest grid cell', async ({ page }) => {
+  const pageErrors = collectPageErrors(page);
+  await installForecastAppMocks(page, { explainabilityMode: 'tree' });
+
+  // Use lat,lon format — findCellByParam should fall back to nearest-cell matching
+  await page.goto(`/?forecast=${FORECAST_RUN_ID}&cell=39.62,-106.41`, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('top-control-zone')).toBeVisible({ timeout: 15000 });
+
+  // The risk dashboard should be visible with the selected cell's data
+  await expect(page.getByText(/Danger Level/i)).toBeVisible({ timeout: 15000 });
+  expect(pageErrors).toEqual([]);
+});
+
 test('hour and cell URL params work together on load', async ({ page }) => {
   const pageErrors = collectPageErrors(page);
   await installForecastAppMocks(page, { explainabilityMode: 'tree' });

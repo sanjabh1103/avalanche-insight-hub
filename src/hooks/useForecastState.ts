@@ -282,6 +282,25 @@ function buildPublicMaskSmokeFixture(): {
   };
 }
 
+function findCellByParam(param: string, grid: GridCell[] | null | undefined): GridCell | null {
+  if (!grid || grid.length === 0) return null;
+  const parts = param.split(',').map(Number);
+  if (parts.length < 2 || parts.some(n => isNaN(n))) return null;
+  const [a, b] = parts;
+  // Try row,col first (integer indices)
+  if (Number.isInteger(a) && Number.isInteger(b)) {
+    const cell = grid.find(c => c.row === a && c.col === b);
+    if (cell && !isCellUnavailable(cell)) return cell;
+  }
+  // Fallback: lat,lon (float coordinates — find nearest cell by distance)
+  const nearest = grid.reduce((best, cell) => {
+    const dist = Math.abs(cell.lat - a) + Math.abs(cell.lng - b);
+    return dist < best.dist ? { cell, dist } : best;
+  }, { cell: null as GridCell | null, dist: Infinity });
+  if (nearest.cell && !isCellUnavailable(nearest.cell)) return nearest.cell;
+  return null;
+}
+
 export function useForecastState() {
   const isMobile = useIsMobile();
   const location = useLocation();
@@ -646,14 +665,11 @@ export function useForecastState() {
       setTimeOffset(safeHourIdx);
       const cellParam = params.get('cell');
       if (cellParam) {
-        const [rowIndex, colIndex] = cellParam.split(',').map(Number);
         const gridAtHour = fixture.grids[safeHourIdx];
-        if (gridAtHour) {
-          const cell = gridAtHour.find((candidate) => candidate.row === rowIndex && candidate.col === colIndex);
-          if (cell && !isCellUnavailable(cell)) {
-            setSelectedCell(cell);
-            if (!isMobile) setSidebarOpen(true);
-          }
+        const cell = findCellByParam(cellParam, gridAtHour);
+        if (cell) {
+          setSelectedCell(cell);
+          if (!isMobile) setSidebarOpen(true);
         }
       }
       toast.success('Loaded public-mask smoke fixture');
@@ -723,14 +739,10 @@ export function useForecastState() {
           setTimeOffset(safeHourIdx);
           const cellParam = params.get('cell');
           if (cellParam) {
-            const [rowIndex, colIndex] = cellParam.split(',').map(Number);
-            const gridAtHour = grids[safeHourIdx];
-            if (gridAtHour) {
-              const cell = gridAtHour.find(c => c.row === rowIndex && c.col === colIndex);
-              if (cell && !isCellUnavailable(cell)) {
-                setSelectedCell(cell);
-                if (!isMobile) setSidebarOpen(true);
-              }
+            const cell = findCellByParam(cellParam, grids[safeHourIdx]);
+            if (cell) {
+              setSelectedCell(cell);
+              if (!isMobile) setSidebarOpen(true);
             }
           }
           toast.success(
@@ -747,14 +759,10 @@ export function useForecastState() {
           setTimeOffset(safeHourIdx);
           const cellParam = params.get('cell');
           if (cellParam) {
-            const [row, col] = cellParam.split(',').map(Number);
-            const gridAtHour = grids[safeHourIdx];
-            if (gridAtHour) {
-              const cell = gridAtHour.find(c => c.row === row && c.col === col);
-              if (cell && !isCellUnavailable(cell)) {
-                setSelectedCell(cell);
-                if (!isMobile) setSidebarOpen(true);
-              }
+            const cell = findCellByParam(cellParam, grids[safeHourIdx]);
+            if (cell) {
+              setSelectedCell(cell);
+              if (!isMobile) setSidebarOpen(true);
             }
           }
           toast.success('Restored shared legacy forecast grid view');
@@ -796,14 +804,10 @@ export function useForecastState() {
           setTimeOffset(safeHourIdx);
           const cellParam = params.get('cell');
           if (cellParam) {
-            const [rowIndex, colIndex] = cellParam.split(',').map(Number);
-            const gridAtHour = grids[safeHourIdx];
-            if (gridAtHour) {
-              const cell = gridAtHour.find(c => c.row === rowIndex && c.col === colIndex);
-              if (cell && !isCellUnavailable(cell)) {
-                setSelectedCell(cell);
-                if (!isMobile) setSidebarOpen(true);
-              }
+            const cell = findCellByParam(cellParam, grids[safeHourIdx]);
+            if (cell) {
+              setSelectedCell(cell);
+              if (!isMobile) setSidebarOpen(true);
             }
           }
           toast.success('Restored shared published forecast view');
@@ -877,16 +881,12 @@ export function useForecastState() {
           }
           const cellParam = params.get('cell');
           if (cellParam) {
-            const [rowIndex, colIndex] = cellParam.split(',').map(Number);
             const hourValue = hourParam ? parseInt(hourParam, 10) : 0;
             const safeHour = Math.max(0, Math.min(hourValue, (latest.grids?.length ?? 1) - 1));
-            const gridAtHour = latest.grids?.[safeHour];
-            if (gridAtHour) {
-              const cell = gridAtHour.find(c => c.row === rowIndex && c.col === colIndex);
-              if (cell && !isCellUnavailable(cell)) {
-                setSelectedCell(cell);
-                if (!isMobile) setSidebarOpen(true);
-              }
+            const cell = findCellByParam(cellParam, latest.grids?.[safeHour]);
+            if (cell) {
+              setSelectedCell(cell);
+              if (!isMobile) setSidebarOpen(true);
             }
           }
         } else if (alive) {

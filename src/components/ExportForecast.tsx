@@ -136,13 +136,14 @@ export default function ExportForecast({
   };
 
   const disabledReason = 'Export requires a loaded published forecast artifact';
+  const disabledBtnClass = !canExport ? 'opacity-40 cursor-not-allowed pointer-events-none' : '';
 
   return (
     <div className={cn('flex flex-col gap-1', className)}>
       <div className="flex items-center gap-2">
         <Button
           variant="outline"
-          className={cn('h-10 text-xs font-semibold gap-2 glass-panel border-0 rounded-2xl px-3 sm:px-4', buttonClassName)}
+          className={cn('h-10 text-xs font-semibold gap-2 glass-panel border-0 rounded-2xl px-3 sm:px-4', buttonClassName, disabledBtnClass)}
           disabled={!canExport}
           title={!canExport ? disabledReason : 'Download forecast grid as CSV'}
           aria-label={!canExport ? disabledReason : 'Export forecast CSV'}
@@ -153,7 +154,7 @@ export default function ExportForecast({
         </Button>
         <Button
           variant="outline"
-          className={cn('h-10 text-xs font-semibold gap-2 glass-panel border-0 rounded-2xl px-3 sm:px-4', buttonClassName)}
+          className={cn('h-10 text-xs font-semibold gap-2 glass-panel border-0 rounded-2xl px-3 sm:px-4', buttonClassName, disabledBtnClass)}
           disabled={!canExport}
           title={!canExport ? disabledReason : 'Download forecast grid and events as JSON'}
           aria-label={!canExport ? disabledReason : 'Export forecast JSON'}
