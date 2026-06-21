@@ -9,6 +9,7 @@ import DataLatencyBanner from '@/components/DataLatencyBanner';
 import DisclaimerBanner from '@/components/DisclaimerBanner';
 import RiskLegend from '@/components/RiskLegend';
 import TimeSlider from '@/components/TimeSlider';
+import { GRID_SIZE } from '@/lib/constants';
 import {
   forecastGridRowToRunoutPolygons,
   forecastGridRowToSarGeometries,
@@ -44,7 +45,7 @@ export default function Index() {
           {state.forecastAvailability === 'ready' ? 'Current Published Forecast' : `${state.forecastAvailability} Published Forecast`}
         </span>
         <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-          {state.activeForecastRow?.forecast_date ?? 'date unavailable'} • {state.hourlyGrids.length}h
+          {state.activeForecastRow?.forecast_date ?? 'date unavailable'} • {state.hourlyGrids.length}h • Grid: {GRID_SIZE}×{GRID_SIZE}
         </span>
       </div>
       <div className="text-xs text-foreground">
