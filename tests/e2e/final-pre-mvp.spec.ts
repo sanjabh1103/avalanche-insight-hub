@@ -262,6 +262,15 @@ async function installForecastAppMocks(
   });
 
   await page.route('**/functions/v1/run-forecast', async (route) => {
+    const body = route.request().postData() ?? '';
+    if (body.includes('Himalayas')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: false, status: 'unavailable', source: 'forecast_runs', message: 'No published forecast artifact is available for Himalayas (Nepal) in the current hosted dataset.' }),
+      });
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -568,6 +577,34 @@ test('daypart chips and timeline stay synchronized under stress', async ({ page 
   expect(pageErrors).toEqual([]);
 });
 
+test('later-hour grid loads from storage on daypart click and renders non-empty cells', async ({ page }) => {
+  const pageErrors = collectPageErrors(page);
+  const requestLog: string[] = [];
+  await installForecastAppMocks(page, { explainabilityMode: 'tree', requestLog });
+
+  await gotoSharedForecast(page, { url: `/?forecast=${FORECAST_RUN_ID}`, waitForDataBadge: false });
+  await expect(page.getByTestId('daypart-chip-morning')).toBeVisible({ timeout: 15000 });
+
+  // Initially only hour-0 should be loaded
+  expect(requestLog.some((url) => url.includes('/storage/v1/object/') && url.includes(HOUR_REFS[0]))).toBeTruthy();
+  expect(requestLog.some((url) => url.includes('/storage/v1/object/') && url.includes(HOUR_REFS[6]))).toBeFalsy();
+
+  // Click morning daypart (hour 6) - should trigger lazy load
+  await page.getByTestId('daypart-chip-morning').click();
+  await expect(page.getByText('+6h')).toBeVisible();
+
+  // Wait for the hour-6 storage request to fire
+  await expect.poll(
+    () => requestLog.some((url) => url.includes('/storage/v1/object/') && url.includes(HOUR_REFS[6])),
+    { timeout: 15000, message: 'hour-6 storage request should fire after daypart click' },
+  ).toBeTruthy();
+
+  // Verify the badge shows 2/24h loaded (hour 0 + hour 6)
+  await expect(page.getByTestId('forecast-data-badge')).toContainText('2/24h', { timeout: 15000 });
+
+  expect(pageErrors).toEqual([]);
+});
+
 test('expert-only lazy surfaces load on demand without breaking the forecast view', async ({ page }) => {
   const pageErrors = collectPageErrors(page);
   const requestLog: string[] = [];
@@ -631,3 +668,59 @@ test('responsive control layout stays within viewport on phone, tablet, compact 
 
   expect(pageErrors).toEqual([]);
 }, 60_000);
+
+test('hour URL param sets initial slider position on load with forecast', async ({ page }) => {
+  const pageErrors = collectPageErrors(page);
+  await installForecastAppMocks(page, { explainabilityMode: 'tree' });
+
+  await page.goto(`/?forecast=${FORECAST_RUN_ID}&hour=6`, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('top-control-zone')).toBeVisible({ timeout: 15000 });
+
+  // The slider should reflect hour 6, not 0
+  await expect(page.getByText('+6h')).toBeVisible({ timeout: 15000 });
+  expect(pageErrors).toEqual([]);
+});
+
+test('cell URL param pre-selects grid cell on load with forecast', async ({ page }) => {
+  const pageErrors = collectPageErrors(page);
+  await installForecastAppMocks(page, { explainabilityMode: 'tree' });
+
+  await page.goto(`/?forecast=${FORECAST_RUN_ID}&cell=0,0`, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('top-control-zone')).toBeVisible({ timeout: 15000 });
+
+  // The risk dashboard should be visible with the selected cell's data
+  await expect(page.getByText(/Danger Level/i)).toBeVisible({ timeout: 15000 });
+  expect(pageErrors).toEqual([]);
+});
+
+test('hour and cell URL params work together on load', async ({ page }) => {
+  const pageErrors = collectPageErrors(page);
+  await installForecastAppMocks(page, { explainabilityMode: 'tree' });
+
+  await page.goto(`/?forecast=${FORECAST_RUN_ID}&hour=6&cell=0,0`, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('top-control-zone')).toBeVisible({ timeout: 15000 });
+
+  await expect(page.getByText('+6h')).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText(/Danger Level/i)).toBeVisible({ timeout: 15000 });
+  expect(pageErrors).toEqual([]);
+});
+
+test('selecting Himalayas region shows honest unavailable state, not a fake grid', async ({ page }) => {
+  const pageErrors = collectPageErrors(page);
+  await installForecastAppMocks(page, { explainabilityMode: 'tree' });
+
+  await gotoSharedForecast(page, { waitForDataBadge: false });
+  await expect(page.getByTestId('top-control-zone')).toBeVisible({ timeout: 15000 });
+
+  // Select Himalayas (Nepal) from the region dropdown
+  await page.getByRole('combobox').click();
+  await page.getByRole('option', { name: 'Himalayas (Nepal)' }).click();
+
+  // The app should show an honest unavailable message, not a blank or fake grid
+  await expect(page.getByText(/No published forecast artifact is available for Himalayas/i)).toBeVisible({ timeout: 15000 });
+
+  // The forecast data badge should NOT show PRECOMPUTED BATCH for Himalayas
+  const badge = page.getByTestId('forecast-data-badge');
+  await expect(badge).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+});

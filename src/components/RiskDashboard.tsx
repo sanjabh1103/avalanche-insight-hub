@@ -12,6 +12,15 @@ import {
 } from '@/lib/gridUtils';
 import { buildRiskExplanation, selectRiskDrivers } from '@/lib/riskNarratives';
 
+function stripUnit(value: string): string {
+  return String(value).replace(/\s*(cm|mm|km\/h|m\/s|°C|C|in|ft|mph)\s*$/i, '').trim();
+}
+
+function formatWeatherValue(value: string | undefined, unit: string): string {
+  if (!value || value === 'N/A' || value === '') return `—`;
+  return `${stripUnit(value)} ${unit}`;
+}
+
 interface WeatherSummary {
   snowfall_24h: string;
   wind_speed: string;
@@ -285,23 +294,23 @@ export default function RiskDashboard({
             <div className="grid grid-cols-2 gap-2 text-[10px]">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Snowfall 24h</span>
-                <span className="font-mono text-foreground">{weatherSummary.snowfall_24h} cm</span>
+                <span className="font-mono text-foreground">{formatWeatherValue(weatherSummary.snowfall_24h, 'cm')}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Wind Speed</span>
-                <span className="font-mono text-foreground">{weatherSummary.wind_speed} km/h</span>
+                <span className="font-mono text-foreground">{formatWeatherValue(weatherSummary.wind_speed, 'km/h')}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Temperature</span>
-                <span className="font-mono text-foreground">{weatherSummary.temperature}°C</span>
+                <span className="font-mono text-foreground">{formatWeatherValue(weatherSummary.temperature, '°C')}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Precipitation</span>
-                <span className="font-mono text-foreground">{weatherSummary.precipitation} mm</span>
+                <span className="font-mono text-foreground">{formatWeatherValue(weatherSummary.precipitation, 'mm')}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Snow Depth</span>
-                <span className="font-mono text-foreground">{weatherSummary.snow_depth && weatherSummary.snow_depth !== 'N/A' ? `${weatherSummary.snow_depth} cm` : '0 cm'}</span>
+                <span className="font-mono text-foreground">{formatWeatherValue(weatherSummary.snow_depth, 'cm')}</span>
               </div>
             </div>
           </CardContent>

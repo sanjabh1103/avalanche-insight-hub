@@ -26,6 +26,9 @@ interface ForecastActionControlsProps {
   hourlyGrids: Array<GridCell[] | null> | null;
   forecastAvailability: 'ready' | 'partial' | 'stale' | 'unavailable';
   forecastSource: 'precomputed' | null;
+  loadedHoursCount: number;
+  totalHoursHorizon: number;
+  gridSize: number | null | undefined;
 }
 
 export default function ForecastActionControls({
@@ -47,6 +50,9 @@ export default function ForecastActionControls({
   hourlyGrids,
   forecastAvailability,
   forecastSource,
+  loadedHoursCount,
+  totalHoursHorizon,
+  gridSize,
 }: ForecastActionControlsProps) {
   const forecastSourceBadge = hourlyGrids ? (
     <span
@@ -59,7 +65,7 @@ export default function ForecastActionControls({
             : 'glass-panel text-rose-300'
       }`}
     >
-      ● {forecastSource === 'precomputed' ? `PRECOMPUTED BATCH • ${forecastAvailability.toUpperCase()}` : 'FORECAST DATA'} ({hourlyGrids.length}h)
+      ● {forecastSource === 'precomputed' ? `PRECOMPUTED BATCH • ${forecastAvailability.toUpperCase()}` : 'FORECAST DATA'} • {gridSize ?? 20}×{gridSize ?? 20} • {loadedHoursCount}/{totalHoursHorizon}h
     </span>
   ) : null;
 

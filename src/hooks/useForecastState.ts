@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -285,6 +285,7 @@ function buildPublicMaskSmokeFixture(): {
 export function useForecastState() {
   const isMobile = useIsMobile();
   const location = useLocation();
+  const navigate = useNavigate();
   const [region, setRegion] = useState<Region>(REGIONS[0]);
   const [timeOffset, setTimeOffset] = useState(0);
   const [selectedCell, setSelectedCell] = useState<GridCell | null>(null);
@@ -295,6 +296,7 @@ export function useForecastState() {
   const [hourlyGrids, setHourlyGrids] = useState<Array<GridCell[] | null> | null>(null);
   const [activeForecastRow, setActiveForecastRow] = useState<ForecastGridRowRecord | null>(null);
   const [artifactHourRefs, setArtifactHourRefs] = useState<ForecastArtifactHour[] | null>(null);
+  const [hourLoadStatus, setHourLoadStatus] = useState<Record<number, 'loaded' | 'loading' | 'failed'>>({});
   const [forecastSource, setForecastSource] = useState<ForecastSource>(null);
   const [forecastAvailability, setForecastAvailability] = useState<ForecastAvailability>('unavailable');
   const [forecastNotice, setForecastNotice] = useState<string | null>(null);
@@ -374,6 +376,9 @@ export function useForecastState() {
     setForecastNotice(noticeParts.length > 0 ? noticeParts.join(' ') : null);
     setForecastBulletin(options?.bulletin ?? null);
     setHourlyGrids(grids);
+    const initialHourStatus: Record<number, 'loaded' | 'loading' | 'failed'> = {};
+    grids.forEach((g, i) => { if (g) initialHourStatus[i] = 'loaded'; });
+    setHourLoadStatus(initialHourStatus);
     const summary = row.weather_summary;
     if (summary && typeof summary === 'object' && !Array.isArray(summary)) {
       const maybeSummary = summary as Record<string, unknown>;
@@ -403,6 +408,7 @@ export function useForecastState() {
     setWeatherSummary(null);
     setArtifactHourRefs(null);
     setForecastBulletin(null);
+    setHourLoadStatus({});
   }, []);
 
   const callRunForecast = useCallback(async (regionName: string): Promise<RunForecastResponse> => {
@@ -827,6 +833,8 @@ export function useForecastState() {
   }, []);
 
   const handleRegionChange = useCallback((r: Region) => {
+    // Clear URL params so the region change effect doesn't skip due to stale forecast= param
+    if (location.search) navigate(location.pathname, { replace: true });
     setRegion(r);
     setSelectedCell(null);
     setHourlyGrids(null);
@@ -839,11 +847,15 @@ export function useForecastState() {
     setTimeOffset(0);
     setWeatherSummary(null);
     setArtifactHourRefs(null);
-  }, []);
+    setHourLoadStatus({});
+  }, [location.pathname, location.search, navigate]);
 
   // Fetch forecast logic on region change
   useEffect(() => {
     if (fixtureKey) return;
+    // Skip if forecast= URL param is present — the URL restore effect handles that path
+    const params = new URLSearchParams(location.search);
+    if (params.get('forecast')) return;
     let alive = true;
     (async () => {
       try {
@@ -855,6 +867,28 @@ export function useForecastState() {
             notice: latest.notice,
             bulletin: latest.bulletin,
           });
+          // Apply hour and cell URL params after forecast load
+          const hourParam = params.get('hour');
+          if (hourParam) {
+            const h = parseInt(hourParam, 10);
+            if (!isNaN(h) && h >= 0 && h < (latest.grids?.length ?? 1)) {
+              setTimeOffset(h);
+            }
+          }
+          const cellParam = params.get('cell');
+          if (cellParam) {
+            const [rowIndex, colIndex] = cellParam.split(',').map(Number);
+            const hourValue = hourParam ? parseInt(hourParam, 10) : 0;
+            const safeHour = Math.max(0, Math.min(hourValue, (latest.grids?.length ?? 1) - 1));
+            const gridAtHour = latest.grids?.[safeHour];
+            if (gridAtHour) {
+              const cell = gridAtHour.find(c => c.row === rowIndex && c.col === colIndex);
+              if (cell && !isCellUnavailable(cell)) {
+                setSelectedCell(cell);
+                if (!isMobile) setSidebarOpen(true);
+              }
+            }
+          }
         } else if (alive) {
           setUnavailableForecast(`No published forecast artifact is available for ${region.name} in the current hosted dataset.`);
         }
@@ -865,7 +899,49 @@ export function useForecastState() {
       }
     })();
     return () => { alive = false; };
-  }, [fixtureKey, region.name, hydrateForecastGridRow, loadLatestForecastProduct, setUnavailableForecast]);
+  }, [fixtureKey, region.name, hydrateForecastGridRow, loadLatestForecastProduct, setUnavailableForecast, location.search, isMobile]);
+
+  // Lazy-load artifact hour when timeOffset changes to an unloaded hour
+  useEffect(() => {
+    if (!artifactHourRefs || !hourlyGrids) return;
+    if (timeOffset === 0) return;
+    if (hourlyGrids[timeOffset] !== null && hourlyGrids[timeOffset] !== undefined) return;
+    if (hourLoadStatus[timeOffset] === 'loading' || hourLoadStatus[timeOffset] === 'failed') return;
+
+    const hourRef = artifactHourRefs[timeOffset];
+    if (!hourRef) return;
+
+    setHourLoadStatus(prev => ({ ...prev, [timeOffset]: 'loading' }));
+
+    const bbox = (activeForecastRow?.bbox as [number, number, number, number] | undefined) ?? region.bbox;
+    const gridSize = activeForecastRow?.grid_size ?? 20;
+
+    loadForecastHourPayload(hourRef.storageRef)
+      .then((payload) => {
+        const normalizedCells = normalizeGridCells(payload.cells, {
+          bbox,
+          gridSize,
+          warnContext: `forecast-artifact:${activeForecastRow?.id}:hour-${timeOffset}`,
+        });
+        setHourlyGrids(prev => {
+          if (!prev) return prev;
+          const next = [...prev];
+          next[timeOffset] = normalizedCells;
+          return next;
+        });
+        setHourLoadStatus(prev => ({ ...prev, [timeOffset]: 'loaded' }));
+      })
+      .catch(() => {
+        setHourLoadStatus(prev => ({ ...prev, [timeOffset]: 'failed' }));
+      });
+  }, [timeOffset, artifactHourRefs, hourlyGrids, hourLoadStatus, activeForecastRow?.bbox, activeForecastRow?.id, activeForecastRow?.grid_size, region.bbox]);
+
+  const loadedHoursCount = useMemo(() => {
+    if (!hourlyGrids) return 0;
+    return hourlyGrids.filter(g => g !== null).length;
+  }, [hourlyGrids]);
+
+  const totalHoursHorizon = hourlyGrids?.length ?? 0;
 
   const runForecast = useCallback(async () => {
     if (fixtureKey) {
@@ -942,6 +1018,9 @@ export function useForecastState() {
     playingTimeline,
     setPlayingTimeline,
     maxHour,
+    loadedHoursCount,
+    totalHoursHorizon,
+    hourLoadStatus,
     activeModelMetadata,
     activeForecastRunId,
     compatibilityForecastGridId,

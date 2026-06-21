@@ -105,4 +105,59 @@ describe('ShareForecast', () => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1);
     });
   });
+
+  it('includes masked cell coordinates in the URL for roundtrip restore', async () => {
+    const maskedCell = {
+      ...mockCell,
+      row: 0,
+      col: 0,
+      disabled: true,
+      availabilityReason: 'terrain_masked',
+    };
+    render(
+      <ShareForecast
+        region={mockRegion}
+        hour={0}
+        selectedCell={maskedCell}
+        forecastId="run-masked-test"
+      />,
+    );
+    fireEvent.click(screen.getByText('SHARE'));
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1);
+    });
+
+    const copiedUrl = (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(copiedUrl).toContain('cell=0%2C0');
+    expect(copiedUrl).toContain('forecast=run-masked-test');
+  });
+
+  it('roundtrip URL preserves all state: normal cell, expert, 3D, and forecast ID', async () => {
+    render(
+      <ShareForecast
+        region={mockRegion}
+        hour={12}
+        selectedCell={mockCell}
+        expertMode={true}
+        show3D={true}
+        forecastId="run-roundtrip-full"
+      />,
+    );
+    fireEvent.click(screen.getByText('SHARE'));
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1);
+    });
+
+    const copiedUrl = (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    const params = new URLSearchParams(copiedUrl.split('?')[1]);
+    expect(params.get('region')).toBe('Colorado Rockies');
+    expect(params.get('hour')).toBe('12');
+    expect(params.get('cell')).toBe('5,10');
+    expect(params.get('expert')).toBe('1');
+    expect(params.get('3d')).toBe('1');
+    expect(params.get('forecast')).toBe('run-roundtrip-full');
+    expect(params.get('bbox')).toBeTruthy();
+  });
 });

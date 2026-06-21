@@ -36,7 +36,7 @@ describe('RiskDashboard weather summary', () => {
     expect(screen.getByText('Weather Summary')).toBeTruthy();
     expect(screen.getByText('12 cm')).toBeTruthy();
     expect(screen.getByText('45 km/h')).toBeTruthy();
-    expect(screen.getByText('-8°C')).toBeTruthy();
+    expect(screen.getByText('-8 °C')).toBeTruthy();
     expect(screen.getByText('3 mm')).toBeTruthy();
     expect(screen.getByText('120 cm')).toBeTruthy();
   });
@@ -48,13 +48,52 @@ describe('RiskDashboard weather summary', () => {
     expect(screen.queryByText('Weather Summary')).toBeNull();
   });
 
-  it('renders snow depth as 0 cm when value is N/A', () => {
+  it('renders snow depth as — when value is N/A', () => {
     render(
       <RiskDashboard
         cell={buildCell()}
         weatherSummary={{ ...weatherSummary, snow_depth: 'N/A' }}
       />,
     );
-    expect(screen.getByText('0 cm')).toBeTruthy();
+    expect(screen.getByText('—')).toBeTruthy();
+  });
+
+  it('prevents duplicate units when weather values already contain units', () => {
+    render(
+      <RiskDashboard
+        cell={buildCell()}
+        weatherSummary={{
+          snowfall_24h: '12 cm',
+          wind_speed: '45 km/h',
+          temperature: '-8°C',
+          precipitation: '3 mm',
+          snow_depth: '120 cm',
+        }}
+      />,
+    );
+    expect(screen.getByText('12 cm')).toBeTruthy();
+    expect(screen.getByText('45 km/h')).toBeTruthy();
+    expect(screen.getByText('-8 °C')).toBeTruthy();
+    expect(screen.getByText('3 mm')).toBeTruthy();
+    expect(screen.getByText('120 cm')).toBeTruthy();
+    expect(screen.queryByText('12 cm cm')).toBeNull();
+    expect(screen.queryByText('45 km/h km/h')).toBeNull();
+    expect(screen.queryByText('-8°C°C')).toBeNull();
+    expect(screen.queryByText('3 mm mm')).toBeNull();
+    expect(screen.queryByText('120 cm cm')).toBeNull();
+  });
+
+  it('prevents duplicate C suffix on temperature', () => {
+    render(
+      <RiskDashboard
+        cell={buildCell()}
+        weatherSummary={{
+          ...weatherSummary,
+          temperature: '-8 C',
+        }}
+      />,
+    );
+    expect(screen.getByText('-8 °C')).toBeTruthy();
+    expect(screen.queryByText('-8 C°C')).toBeNull();
   });
 });

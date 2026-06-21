@@ -1,8 +1,22 @@
 # Prototype Website - Top 15 Current Features And Future Plan
 
-Status: 2026-05-26
+Status: 2026-06-21 (claim wording locked)
 Purpose: short scientist-facing attachment for first discussion
 Boundary: this is a prototype / decision-support summary, not an operational avalanche warning claim
+
+## Locked Claim Wording (Do Not Alter In Demo)
+
+The following phrases are the only approved wording for public-facing claims about the prototype. Any deviation requires scientist review.
+
+- **What it is:** "Hosted decision-support prototype rendering published Colorado technical artifacts."
+- **What it is NOT:** "Not an official warning service. Not Himalayan operational accuracy proof."
+- **Forecast data:** "Precomputed batch artifacts loaded from storage on demand."
+- **Grid metadata:** "20x20 grid with N/h hours loaded out of a H-hour horizon."
+- **Explainability:** "TreeSHAP contributions when the surrogate artifact is present; heuristic fallback shown honestly otherwise."
+- **Uncertainty:** "Confidence state and uncertainty class are surfaced from the artifact; they are review signals, not guarantees."
+- **Share links:** "Shared links preserve review context (region, hour, cell, expert mode, 3D); they do not imply scientific acceptance."
+- **Weather summary:** "Weather values are from Open-Meteo with units displayed once; proxy snowpack context is not weak-layer validation."
+- **Bulletin:** "EAWS-style experimental bulletin for discussion; not an official avalanche warning."
 
 ## How To Frame This Attachment
 

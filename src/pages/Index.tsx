@@ -45,7 +45,7 @@ export default function Index() {
           {state.forecastAvailability === 'ready' ? 'Current Published Forecast' : `${state.forecastAvailability} Published Forecast`}
         </span>
         <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-          {state.activeForecastRow?.forecast_date ?? 'date unavailable'} • {state.hourlyGrids.length}h • Grid: {GRID_SIZE}×{GRID_SIZE}
+          {state.activeForecastRow?.forecast_date ?? 'date unavailable'} • {state.totalHoursHorizon}h • Grid: {state.activeForecastRow?.grid_size ?? GRID_SIZE}×{state.activeForecastRow?.grid_size ?? GRID_SIZE} • {state.loadedHoursCount}/{state.totalHoursHorizon}h loaded
         </span>
       </div>
       <div className="text-xs text-foreground">
@@ -126,6 +126,9 @@ export default function Index() {
                 hourlyGrids={state.hourlyGrids}
                 forecastAvailability={state.forecastAvailability}
                 forecastSource={state.forecastSource}
+                loadedHoursCount={state.loadedHoursCount}
+                totalHoursHorizon={state.totalHoursHorizon}
+                gridSize={state.activeForecastRow?.grid_size}
               />
             }
             forecastSourceBadge={
@@ -137,7 +140,7 @@ export default function Index() {
                       ? 'glass-panel text-amber-300'
                       : 'glass-panel text-rose-300'
                 }`}>
-                  ● {state.forecastSource === 'precomputed' ? `PRECOMPUTED BATCH • ${state.forecastAvailability.toUpperCase()}` : 'FORECAST DATA'} ({state.hourlyGrids.length}h)
+                  ● {state.forecastSource === 'precomputed' ? `PRECOMPUTED BATCH • ${state.forecastAvailability.toUpperCase()}` : 'FORECAST DATA'} • {state.activeForecastRow?.grid_size ?? GRID_SIZE}×{state.activeForecastRow?.grid_size ?? GRID_SIZE} • {state.loadedHoursCount}/{state.totalHoursHorizon}h
                 </span>
               ) : null
             }
@@ -207,6 +210,9 @@ export default function Index() {
                 hourlyGrids={state.hourlyGrids}
                 forecastAvailability={state.forecastAvailability}
                 forecastSource={state.forecastSource}
+                loadedHoursCount={state.loadedHoursCount}
+                totalHoursHorizon={state.totalHoursHorizon}
+                gridSize={state.activeForecastRow?.grid_size}
               />
               <RiskLegend compact className="pointer-events-auto" />
               <TimeSlider className="pointer-events-auto" value={state.timeOffset} onChange={state.setTimeOffset} max={state.maxHour} playing={state.playingTimeline} onPlayToggle={state.setPlayingTimeline} />
