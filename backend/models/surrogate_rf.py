@@ -383,6 +383,74 @@ def compute_tree_shap_batch(
     return packets
 
 
+_SHAP_FEATURE_LABELS: dict[str, str] = {
+    'elevation': 'elevation',
+    'snowfall_24h': '24-hour snowfall',
+    'snowfall_72h': '72-hour cumulative snowfall',
+    'wind_loading': 'wind loading',
+    'temp_gradient': 'temperature gradient',
+    'snow_depth': 'snow depth',
+    'precipitation_24h': '24-hour precipitation',
+    'snowpack': 'snowpack depth',
+    'slope': 'slope angle',
+    'aspect_loading': 'aspect-aligned loading',
+    'freezing_level_proxy': 'freezing level height',
+    'settlement_rate': 'snow settlement rate',
+    'shear_strength': 'snowpack shear strength',
+    'rain_on_snow_signal': 'rain-on-snow signal',
+    'wet_activation_signal': 'wet-snow activation signal',
+    'snow_loading_persistence': 'snow loading persistence',
+    'temp_persistence': 'sub-zero temperature persistence',
+    'snowfall_rate_change': 'snowfall rate change',
+}
+
+
+def _label_feature(feature: str) -> str:
+    return _SHAP_FEATURE_LABELS.get(feature, feature.replace('_', ' '))
+
+
+def build_shap_narrative(
+    top_features: list[dict[str, float | str | int]],
+    *,
+    danger_label: int | None = None,
+) -> str:
+    """Generate a human-readable SHAP explanation narrative.
+
+    Args:
+        top_features: Ranked list from compute_tree_shap with feature, shap_value,
+            feature_value, and rank keys.
+        danger_label: Optional predicted danger level (1-4).
+
+    Returns:
+        A concise narrative string suitable for display in UI or reports.
+    """
+    if not top_features:
+        return 'No SHAP feature attributions available.'
+
+    parts: list[str] = []
+    if danger_label is not None:
+        label_names = {1: 'Low', 2: 'Moderate', 3: 'Considerable', 4: 'High'}
+        parts.append(f"Predicted danger level: {label_names.get(danger_label, str(danger_label))}.")
+
+    drivers: list[str] = []
+    suppressors: list[str] = []
+    for item in top_features[:3]:
+        feature = str(item['feature'])
+        shap_val = float(item['shap_value'])
+        label = _label_feature(feature)
+        direction = 'increases' if shap_val > 0 else 'reduces'
+        if shap_val > 0:
+            drivers.append(f"{label} ({direction} risk)")
+        else:
+            suppressors.append(f"{label} ({direction} risk)")
+
+    if drivers:
+        parts.append(f"Primary risk drivers: {', '.join(drivers)}.")
+    if suppressors:
+        parts.append(f"Risk suppressors: {', '.join(suppressors)}.")
+    return ' '.join(parts)
+
+
 def fit_surrogate_bundle(
     *,
     frame: pd.DataFrame,

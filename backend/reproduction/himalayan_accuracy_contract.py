@@ -8770,3 +8770,135 @@ def markdown_contract(payload: dict[str, Any]) -> str:
         )
     lines.append('')
     return '\n'.join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Event Ratio Validation (NHESS 2025 methodology)
+# ---------------------------------------------------------------------------
+
+EVENT_RATIO_SCHEMA_VERSION = 'event_ratio_validation_v1'
+
+
+@dataclass(frozen=True)
+class EventRatioBin:
+    bin_label: str
+    predicted_probability_range: tuple[float, float]
+    n_predictions: int
+    n_events: int
+    event_ratio: float
+    mean_predicted_probability: float
+
+
+def compute_event_ratio_bins(
+    predicted_probabilities: list[float],
+    actual_events: list[int],
+    *,
+    n_bins: int = 10,
+) -> list[EventRatioBin]:
+    """Compute event ratios per probability bin (NHESS 2025 methodology).
+
+    Event ratio = observed events / total predictions in each bin.
+    Compares event ratio to mean predicted probability for discriminatory
+    skill assessment. Used by Perez-Guillen et al. (2025) to validate
+    RF4 calibration and discriminatory power.
+    """
+    if len(predicted_probabilities) != len(actual_events):
+        raise ValueError(
+            f'Length mismatch: {len(predicted_probabilities)} predictions vs '
+            f'{len(actual_events)} labels'
+        )
+    if not predicted_probabilities:
+        return []
+    bins: list[EventRatioBin] = []
+    bin_width = 1.0 / n_bins
+    for i in range(n_bins):
+        lower = i * bin_width
+        upper = (i + 1) * bin_width
+        if i == n_bins - 1:
+            mask = [
+                lower <= p <= upper
+                for p in predicted_probabilities
+            ]
+        else:
+            mask = [
+                lower <= p < upper
+                for p in predicted_probabilities
+            ]
+        n_pred = sum(mask)
+        if n_pred == 0:
+            bins.append(EventRatioBin(
+                bin_label=f'{lower:.1f}-{upper:.1f}',
+                predicted_probability_range=(lower, upper),
+                n_predictions=0,
+                n_events=0,
+                event_ratio=0.0,
+                mean_predicted_probability=0.0,
+            ))
+            continue
+        events_in_bin = sum(actual_events[j] for j, m in enumerate(mask) if m)
+        probs_in_bin = [predicted_probabilities[j] for j, m in enumerate(mask) if m]
+        bins.append(EventRatioBin(
+            bin_label=f'{lower:.1f}-{upper:.1f}',
+            predicted_probability_range=(lower, upper),
+            n_predictions=n_pred,
+            n_events=events_in_bin,
+            event_ratio=events_in_bin / n_pred,
+            mean_predicted_probability=sum(probs_in_bin) / n_pred,
+        ))
+    return bins
+
+
+def _check_monotonic_increase(bins: list[EventRatioBin]) -> bool:
+    """Check if event ratios increase monotonically with predicted probability."""
+    ratios = [b.event_ratio for b in bins if b.n_predictions > 0]
+    if len(ratios) < 2:
+        return False
+    return all(ratios[i] <= ratios[i + 1] for i in range(len(ratios) - 1))
+
+
+def event_ratio_to_dict(bins: list[EventRatioBin]) -> dict[str, Any]:
+    return {
+        'schema_version': EVENT_RATIO_SCHEMA_VERSION,
+        'methodology': 'Perez-Guillen et al. (2025), NHESS — event ratio per probability bin',
+        'n_bins': len(bins),
+        'bins': [asdict(b) for b in bins],
+        'discriminatory_skill_summary': {
+            'bins_with_predictions': sum(1 for b in bins if b.n_predictions > 0),
+            'bins_with_events': sum(1 for b in bins if b.n_events > 0),
+            'max_event_ratio': max((b.event_ratio for b in bins), default=0.0),
+            'monotonic_increase': _check_monotonic_increase(bins),
+        },
+    }
+
+
+def markdown_event_ratio_report(payload: dict[str, Any]) -> str:
+    lines = [
+        '# Event Ratio Validation Report',
+        '',
+        f'**Methodology**: {payload.get("methodology", "NHESS 2025")}',
+        f'**Bins**: {payload.get("n_bins", 0)}',
+        '',
+        '| Bin | Prob Range | N Predictions | N Events | Event Ratio | Mean Pred Prob |',
+        '|---|---|---:|---:|---:|---:|',
+    ]
+    for b in payload.get('bins', []):
+        lines.append(
+            f'| {b["bin_label"]} | {b["predicted_probability_range"][0]:.1f}-{b["predicted_probability_range"][1]:.1f} '
+            f'| {b["n_predictions"]} | {b["n_events"]} | {b["event_ratio"]:.3f} | {b["mean_predicted_probability"]:.3f} |'
+        )
+    summary = payload.get('discriminatory_skill_summary', {})
+    lines.extend([
+        '',
+        '## Discriminatory Skill Summary',
+        '',
+        f'- Bins with predictions: {summary.get("bins_with_predictions", 0)}',
+        f'- Bins with events: {summary.get("bins_with_events", 0)}',
+        f'- Max event ratio: {summary.get("max_event_ratio", 0.0):.3f}',
+        f'- Monotonic increase: {"Yes" if summary.get("monotonic_increase") else "No"}',
+        '',
+        '**Interpretation**: A monotonically increasing event ratio across bins indicates',
+        'good discriminatory skill — the model assigns higher probabilities to bins that',
+        'indeed have more avalanche events. This is the validation methodology recommended',
+        'by Perez-Guillen et al. (2025) in NHESS for operational avalanche forecasting.',
+    ])
+    return '\n'.join(lines)

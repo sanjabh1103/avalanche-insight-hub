@@ -109,6 +109,9 @@ from backend.reproduction.himalayan_accuracy_contract import (
     write_partner_evidence_templates,
     write_himalayan_local_holdout_prediction_template_csv,
     write_contract,
+    compute_event_ratio_bins,
+    event_ratio_to_dict,
+    markdown_event_ratio_report,
 )
 
 
@@ -3802,6 +3805,54 @@ class HimalayanAccuracyContractTests(unittest.TestCase):
         self.assertEqual(danger_report['status'], 'partner_required')
         self.assertEqual(danger_report['reference_check_status'], 'blocked_reference_unavailable')
         self.assertEqual(danger_report['reference_violations'][0]['target_requirement'], 'warning_region_polygons')
+
+
+class EventRatioTests(unittest.TestCase):
+    def test_compute_event_ratio_bins_basic(self) -> None:
+        probs = [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95]
+        events = [0, 0, 0, 1, 0, 1, 1, 1, 1, 1]
+        bins = compute_event_ratio_bins(probs, events, n_bins=10)
+        self.assertEqual(len(bins), 10)
+        self.assertEqual(bins[0].n_predictions, 1)
+        self.assertEqual(bins[0].n_events, 0)
+        self.assertAlmostEqual(bins[0].event_ratio, 0.0)
+        self.assertEqual(bins[9].n_predictions, 1)
+        self.assertEqual(bins[9].n_events, 1)
+        self.assertAlmostEqual(bins[9].event_ratio, 1.0)
+
+    def test_event_ratio_monotonic_increase(self) -> None:
+        probs = [0.05, 0.05, 0.15, 0.15, 0.25, 0.25, 0.35, 0.35, 0.45, 0.45,
+                 0.55, 0.55, 0.65, 0.65, 0.75, 0.75, 0.85, 0.85, 0.95, 0.95]
+        events = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                  1, 0, 1, 0, 1, 1, 1, 1, 1, 1]
+        bins = compute_event_ratio_bins(probs, events, n_bins=10)
+        payload = event_ratio_to_dict(bins)
+        self.assertTrue(payload['discriminatory_skill_summary']['monotonic_increase'])
+
+    def test_event_ratio_empty_input(self) -> None:
+        bins = compute_event_ratio_bins([], [], n_bins=10)
+        self.assertEqual(len(bins), 0)
+        payload = event_ratio_to_dict(bins)
+        self.assertEqual(payload['n_bins'], 0)
+
+    def test_event_ratio_length_mismatch_raises(self) -> None:
+        with self.assertRaisesRegex(ValueError, 'Length mismatch'):
+            compute_event_ratio_bins([0.1, 0.2], [0], n_bins=10)
+
+    def test_event_ratio_to_dict_schema(self) -> None:
+        bins = compute_event_ratio_bins([0.1, 0.9], [0, 1], n_bins=10)
+        payload = event_ratio_to_dict(bins)
+        self.assertEqual(payload['schema_version'], 'event_ratio_validation_v1')
+        self.assertIn('bins', payload)
+        self.assertIn('discriminatory_skill_summary', payload)
+
+    def test_markdown_event_ratio_report(self) -> None:
+        bins = compute_event_ratio_bins([0.1, 0.9], [0, 1], n_bins=10)
+        payload = event_ratio_to_dict(bins)
+        md = markdown_event_ratio_report(payload)
+        self.assertIn('# Event Ratio Validation Report', md)
+        self.assertIn('| Bin | Prob Range', md)
+        self.assertIn('Discriminatory Skill Summary', md)
 
 
 if __name__ == '__main__':

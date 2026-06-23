@@ -43,6 +43,7 @@ from backend.common.real_features import (
     TerrainUnavailableError,
     build_real_feature_row,
     extract_cell_terrain,
+    fetch_ensemble_weather_profile,
     fetch_forecast_weather_profile,
     fetch_historical_weather_window,
     select_hourly_weather_sample,
@@ -788,6 +789,11 @@ def _prepare_region_context(
     context_started_at = perf_counter()
     region_grid = build_region_grid(region, grid_size=grid_size)
     weather_profile = fetch_forecast_weather_profile(region.center, forecast_date.to_pydatetime(), 72)
+    ensemble_profile: dict[str, object] | None = None
+    try:
+        ensemble_profile = fetch_ensemble_weather_profile(region.center, forecast_date.to_pydatetime(), 72)
+    except Exception as exc:
+        print(f'[daily_inference] ensemble profile skipped: {exc}', file=sys.stderr)
     history_profile = fetch_historical_weather_window(
         lat=float(region.center[0]),
         lng=float(region.center[1]),
@@ -920,6 +926,8 @@ def _prepare_region_context(
         'explainability_context': explainability_context,
         'weather_profile': weather_profile,
         'forecast_samples': weather_profile.get('samples') if isinstance(weather_profile, dict) else [],
+        'ensemble_profile': ensemble_profile,
+        'ensemble_samples': ensemble_profile.get('samples') if ensemble_profile and isinstance(ensemble_profile, dict) else [],
         'history_samples': history_profile.get('samples') if isinstance(history_profile, dict) else [],
         'prepared_cells': prepared_cells,
         'timezone_name': str(getattr(region, 'timezone_name', 'UTC') or 'UTC'),
@@ -1287,7 +1295,7 @@ def build_hourly_grids(
     proof_options: ProofModeOptions | None = None,
     snowpack_proxy_mode: str = 'cell',
     stage_metrics: dict[str, Any] | None = None,
-):
+) -> tuple[list[list[dict[str, object]]], dict[str, object] | None]:
     region_context = _prepare_region_context(
         region,
         bundle,
@@ -1346,7 +1354,7 @@ def build_hourly_grids(
                     file=sys.stderr,
                     flush=True,
                 )
-    return hourly_grids
+    return hourly_grids, region_context.get('ensemble_profile')
 
 
 def upsert_forecast_grid(
@@ -1365,6 +1373,7 @@ def upsert_forecast_grid(
     evidence_summary: dict[str, object] | None = None,
     proof_options: ProofModeOptions | None = None,
     stage_metrics: dict[str, Any] | None = None,
+    ensemble_profile: dict[str, object] | None = None,
 ):
     proof_options = proof_options or ProofModeOptions()
     execution_linkage = _execution_linkage(artifact_dir=artifact_dir)
@@ -1557,6 +1566,7 @@ def upsert_forecast_grid(
         'sar_event_geometries': sar_evidence.get('sar_event_geometries', []),
         'source_composition': {
             'weather_source': 'open_meteo_forecast_downscaled_v1',
+            'ensemble_weather_source': 'open_meteo_ensemble_probabilistic_v1' if ensemble_profile else None,
             'sar_mask_asset_count': len(sar_evidence.get('mask_asset_refs', [])),
             'sar_event_geometry_count': len(sar_evidence.get('sar_event_geometries', [])),
             'snowpack_source': 'snowpack_proxy_v1',
@@ -1614,6 +1624,8 @@ def upsert_forecast_grid(
             'unavailable_terrain_cell_count': len(unavailable_terrain_cells),
             'unavailable_weather_cell_count': len(unavailable_weather_cells),
             'source': 'open_meteo_forecast_downscaled_v1',
+            'ensemble_available': bool(ensemble_profile),
+            'ensemble_source': ensemble_profile.get('source') if ensemble_profile else None,
         },
         'ready_cell_count': ready_cell_count,
         'stale_cell_count': len(stale_cells),
@@ -2077,7 +2089,7 @@ def main(argv: list[str] | None = None) -> int:
             'compute_started_at': datetime.now(timezone.utc).isoformat(),
         }
         hourly_grid_started_at = perf_counter()
-        hourly_grids = build_hourly_grids(
+        hourly_grids, ensemble_profile = build_hourly_grids(
             region,
             bundle,
             grid_size=args.grid_size,
@@ -2106,6 +2118,7 @@ def main(argv: list[str] | None = None) -> int:
             evidence_summary=evidence_summary,
             proof_options=proof_options,
             stage_metrics=region_stage_metrics,
+            ensemble_profile=ensemble_profile,
         )
         region_stage_metrics['forecast_run_id'] = (payload.get('model_metadata') or {}).get('forecast_run_id')
         region_stage_metrics['status'] = payload.get('status')

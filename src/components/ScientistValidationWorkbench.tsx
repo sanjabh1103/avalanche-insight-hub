@@ -143,6 +143,35 @@ export default function ScientistValidationWorkbench({ gateStatuses = [] }: Prop
     acceptedLimitations: cases.filter((item) => item.status === 'accepted_limitation').length,
   }), [cases]);
 
+  const drdoPairedComparison = useMemo(() => {
+    const reviewedCases = cases.filter((c) => c.status === 'reviewed' || c.status === 'accepted_limitation');
+    const disagreements = cases.filter((c) => (c.disagreement_count ?? 0) > 0);
+    const modelOverconfident = reviewedCases.filter((c) => {
+      const cellRisk = c.cell_snapshot?.riskScore ?? 0;
+      const scientistVerdict = reviewsByCase.get(c.id)?.[0]?.verdict;
+      return cellRisk >= 4 && scientistVerdict === 'rejected';
+    });
+    const modelUnderconfident = reviewedCases.filter((c) => {
+      const cellRisk = c.cell_snapshot?.riskScore ?? 0;
+      const scientistVerdict = reviewsByCase.get(c.id)?.[0]?.verdict;
+      return cellRisk <= 2 && scientistVerdict === 'accepted';
+    });
+    const twoReviewerPending = cases.filter((c) => c.requires_two_reviewers && c.status === 'pending');
+    const twoReviewerComplete = cases.filter((c) => c.requires_two_reviewers && (reviewsByCase.get(c.id)?.length ?? 0) >= 2);
+    const agreementRate = reviewedCases.length > 0
+      ? ((reviewedCases.length - disagreements.filter((c) => reviewedCases.includes(c)).length) / reviewedCases.length * 100).toFixed(0)
+      : '—';
+    return {
+      totalReviewed: reviewedCases.length,
+      disagreements: disagreements.length,
+      modelOverconfident: modelOverconfident.length,
+      modelUnderconfident: modelUnderconfident.length,
+      twoReviewerPending: twoReviewerPending.length,
+      twoReviewerComplete: twoReviewerComplete.length,
+      agreementRate,
+    };
+  }, [cases, reviewsByCase]);
+
   const resetReviewForm = () => {
     setNotes('');
     setFailureMode('');
@@ -277,6 +306,44 @@ export default function ScientistValidationWorkbench({ gateStatuses = [] }: Prop
         <div className="rounded-lg border border-border/60 bg-black/10 px-2 py-1 text-[10px] text-muted-foreground">
           Governed actions: <span className="font-mono text-foreground">{actions.length}</span> · open{' '}
           <span className="font-mono text-foreground">{actions.filter((action) => action.status === 'open' || action.status === 'in_progress').length}</span>
+        </div>
+
+        <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-2">
+          <div className="mb-1 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-sky-300">
+            <BrainCircuit className="h-3 w-3" />
+            DRDO Paired Comparison
+          </div>
+          <div className="grid grid-cols-3 gap-1.5 text-[10px]">
+            <div className="rounded-md border border-border/40 bg-black/10 px-2 py-1">
+              <div className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground">Reviewed</div>
+              <div className="font-mono text-sm text-foreground">{drdoPairedComparison.totalReviewed}</div>
+            </div>
+            <div className="rounded-md border border-border/40 bg-black/10 px-2 py-1">
+              <div className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground">Agreement</div>
+              <div className="font-mono text-sm text-foreground">{drdoPairedComparison.agreementRate}%</div>
+            </div>
+            <div className="rounded-md border border-border/40 bg-black/10 px-2 py-1">
+              <div className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground">Disagreements</div>
+              <div className="font-mono text-sm text-amber-300">{drdoPairedComparison.disagreements}</div>
+            </div>
+            <div className="rounded-md border border-border/40 bg-black/10 px-2 py-1">
+              <div className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground">Model Over</div>
+              <div className="font-mono text-sm text-red-300">{drdoPairedComparison.modelOverconfident}</div>
+            </div>
+            <div className="rounded-md border border-border/40 bg-black/10 px-2 py-1">
+              <div className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground">Model Under</div>
+              <div className="font-mono text-sm text-sky-300">{drdoPairedComparison.modelUnderconfident}</div>
+            </div>
+            <div className="rounded-md border border-border/40 bg-black/10 px-2 py-1">
+              <div className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground">2-Reviewer Done</div>
+              <div className="font-mono text-sm text-emerald-300">{drdoPairedComparison.twoReviewerComplete}</div>
+            </div>
+          </div>
+          {drdoPairedComparison.twoReviewerPending > 0 && (
+            <div className="mt-1 text-[10px] text-amber-300">
+              {drdoPairedComparison.twoReviewerPending} priority 5 case(s) awaiting second reviewer
+            </div>
+          )}
         </div>
 
         <div className="rounded-lg border border-border/60 bg-black/10 p-2">

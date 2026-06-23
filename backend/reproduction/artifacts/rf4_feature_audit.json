@@ -1,0 +1,476 @@
+{
+  "decision": "initial_reproduction_signal_pending_parity_audit",
+  "model_status_mutation_allowed": false,
+  "production_scoring_allowed": false,
+  "schema_version": "swiss_rf4_feature_parity_audit_v1",
+  "usage_boundary": "research_only",
+  "variants": [
+    {
+      "accuracy_delta_vs_published_upper": 0.11370078740157474,
+      "calibration": {
+        "calibrated_brier_score": 0.1599587013328993,
+        "calibrated_ece": 0.04036696449985728,
+        "method": "isotonic",
+        "preferred_probability_source_for_gpxyz": "calibrated",
+        "uncalibrated_brier_score": 0.17839218689324518,
+        "uncalibrated_ece": 0.12120794230159164
+      },
+      "feature_set": {
+        "dropped_banned_columns": [
+          "Unnamed: 0",
+          "dangerLevel",
+          "sector_id",
+          "warnreg"
+        ],
+        "feature_count": 74,
+        "missing_whitelist_columns": [],
+        "name": "auto_numeric_current",
+        "selected_columns": [
+          "elevation_th",
+          "elevation_station",
+          "Qs",
+          "Ql",
+          "Qg_mean",
+          "TSG",
+          "Qg0",
+          "Qr",
+          "OLWR",
+          "ILWR",
+          "LWR_net",
+          "OSWR",
+          "ISWR",
+          "Qw",
+          "pAlbedo",
+          "mAlbedo_mean",
+          "ISWR_h",
+          "ISWR_diff",
+          "ISWR_dir",
+          "TA",
+          "TSS_mod",
+          "TSS_meas",
+          "T_bottom",
+          "RH",
+          "VW",
+          "VW_drift",
+          "DW",
+          "MS_Snow",
+          "HS_mod",
+          "HS_meas",
+          "hoar_size",
+          "wind_trans24",
+          "wind_trans24_7d",
+          "wind_trans24_3d",
+          "HN24",
+          "HN72_24",
+          "HN24_7d",
+          "SWE",
+          "MS_water",
+          "MS_Wind",
+          "MS_Rain",
+          "MS_SN_Runoff",
+          "MS_Soil_Runoff_mean",
+          "MS_Sublimation",
+          "MS_Evap",
+          "TS0",
+          "TS1",
+          "TS2",
+          "TS3_mean",
+          "TS4_mean",
+          "Sclass2",
+          "zSd_mean",
+          "Sd",
+          "zSn",
+          "Sn",
+          "zSs",
+          "Ss",
+          "zS4",
+          "S4",
+          "zS5",
+          "S5",
+          "pwl_100",
+          "pwl_100_15",
+          "base_pwl",
+          "ssi_pwl",
+          "sk38_pwl",
+          "sn38_pwl",
+          "ccl_pwl",
+          "ssi_pwl_100",
+          "sk38_pwl_100",
+          "sn38_pwl_100",
+          "ccl_pwl_100",
+          "Pen_depth",
+          "min_ccl_pen"
+        ]
+      },
+      "metrics": {
+        "accuracy": 0.8937007874015748,
+        "class_support": {
+          "1": 1068,
+          "2": 562,
+          "3": 617,
+          "4": 39
+        },
+        "confusion_matrix": [
+          [
+            1063,
+            5,
+            0,
+            0
+          ],
+          [
+            12,
+            458,
+            92,
+            0
+          ],
+          [
+            2,
+            76,
+            507,
+            32
+          ],
+          [
+            0,
+            2,
+            22,
+            15
+          ]
+        ],
+        "confusion_matrix_labels": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "macro_f1": 0.7473761951577563,
+        "per_class_f1": {
+          "1": 0.9911421911421912,
+          "2": 0.8304623753399819,
+          "3": 0.8190630048465266,
+          "4": 0.3488372093023256
+        }
+      },
+      "published_rf2_accuracy_range": {
+        "lower": 0.72,
+        "upper": 0.78
+      },
+      "split": {
+        "calibration_rows": 2935,
+        "strategy": "winter_season_grouped_with_chronological_fallback",
+        "test_rows": 2286,
+        "train_rows": 24075
+      }
+    },
+    {
+      "accuracy_delta_vs_published_upper": 0.03408573928258962,
+      "calibration": {
+        "calibrated_brier_score": 0.2747421895901699,
+        "calibrated_ece": 0.03385270740282625,
+        "method": "isotonic",
+        "preferred_probability_source_for_gpxyz": "calibrated",
+        "uncalibrated_brier_score": 0.2893953907036648,
+        "uncalibrated_ece": 0.1139849699685116
+      },
+      "feature_set": {
+        "dropped_banned_columns": [
+          "Unnamed: 0",
+          "dangerLevel",
+          "sector_id",
+          "warnreg"
+        ],
+        "feature_count": 73,
+        "missing_whitelist_columns": [],
+        "name": "paper_candidate_whitelist",
+        "selected_columns": [
+          "elevation_station",
+          "Qs",
+          "Ql",
+          "Qg_mean",
+          "TSG",
+          "Qg0",
+          "Qr",
+          "OLWR",
+          "ILWR",
+          "LWR_net",
+          "OSWR",
+          "ISWR",
+          "Qw",
+          "pAlbedo",
+          "mAlbedo_mean",
+          "ISWR_h",
+          "ISWR_diff",
+          "ISWR_dir",
+          "TA",
+          "TSS_mod",
+          "TSS_meas",
+          "T_bottom",
+          "RH",
+          "VW",
+          "VW_drift",
+          "DW",
+          "MS_Snow",
+          "HS_mod",
+          "HS_meas",
+          "hoar_size",
+          "wind_trans24",
+          "wind_trans24_7d",
+          "wind_trans24_3d",
+          "HN24",
+          "HN72_24",
+          "HN24_7d",
+          "SWE",
+          "MS_water",
+          "MS_Wind",
+          "MS_Rain",
+          "MS_SN_Runoff",
+          "MS_Soil_Runoff_mean",
+          "MS_Sublimation",
+          "MS_Evap",
+          "TS0",
+          "TS1",
+          "TS2",
+          "TS3_mean",
+          "TS4_mean",
+          "Sclass2",
+          "zSd_mean",
+          "Sd",
+          "zSn",
+          "Sn",
+          "zSs",
+          "Ss",
+          "zS4",
+          "S4",
+          "zS5",
+          "S5",
+          "pwl_100",
+          "pwl_100_15",
+          "base_pwl",
+          "ssi_pwl",
+          "sk38_pwl",
+          "sn38_pwl",
+          "ccl_pwl",
+          "ssi_pwl_100",
+          "sk38_pwl_100",
+          "sn38_pwl_100",
+          "ccl_pwl_100",
+          "Pen_depth",
+          "min_ccl_pen"
+        ]
+      },
+      "metrics": {
+        "accuracy": 0.8140857392825896,
+        "class_support": {
+          "1": 1068,
+          "2": 562,
+          "3": 617,
+          "4": 39
+        },
+        "confusion_matrix": [
+          [
+            945,
+            120,
+            3,
+            0
+          ],
+          [
+            75,
+            382,
+            105,
+            0
+          ],
+          [
+            2,
+            70,
+            522,
+            23
+          ],
+          [
+            0,
+            3,
+            24,
+            12
+          ]
+        ],
+        "confusion_matrix_labels": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "macro_f1": 0.6804936820027008,
+        "per_class_f1": {
+          "1": 0.9043062200956937,
+          "2": 0.671943711521548,
+          "3": 0.8214004720692368,
+          "4": 0.32432432432432434
+        }
+      },
+      "published_rf2_accuracy_range": {
+        "lower": 0.72,
+        "upper": 0.78
+      },
+      "split": {
+        "calibration_rows": 2935,
+        "strategy": "winter_season_grouped_with_chronological_fallback",
+        "test_rows": 2286,
+        "train_rows": 24075
+      }
+    },
+    {
+      "accuracy_delta_vs_published_upper": 0.11370078740157474,
+      "calibration": {
+        "calibrated_brier_score": 0.15995870133289933,
+        "calibrated_ece": 0.040366964499857265,
+        "method": "isotonic",
+        "preferred_probability_source_for_gpxyz": "calibrated",
+        "uncalibrated_brier_score": 0.17839218689324515,
+        "uncalibrated_ece": 0.12120794230159167
+      },
+      "feature_set": {
+        "dropped_banned_columns": [
+          "Unnamed: 0",
+          "dangerLevel",
+          "sector_id",
+          "warnreg"
+        ],
+        "feature_count": 74,
+        "missing_whitelist_columns": [],
+        "name": "leakage_guarded",
+        "selected_columns": [
+          "elevation_th",
+          "elevation_station",
+          "Qs",
+          "Ql",
+          "Qg_mean",
+          "TSG",
+          "Qg0",
+          "Qr",
+          "OLWR",
+          "ILWR",
+          "LWR_net",
+          "OSWR",
+          "ISWR",
+          "Qw",
+          "pAlbedo",
+          "mAlbedo_mean",
+          "ISWR_h",
+          "ISWR_diff",
+          "ISWR_dir",
+          "TA",
+          "TSS_mod",
+          "TSS_meas",
+          "T_bottom",
+          "RH",
+          "VW",
+          "VW_drift",
+          "DW",
+          "MS_Snow",
+          "HS_mod",
+          "HS_meas",
+          "hoar_size",
+          "wind_trans24",
+          "wind_trans24_7d",
+          "wind_trans24_3d",
+          "HN24",
+          "HN72_24",
+          "HN24_7d",
+          "SWE",
+          "MS_water",
+          "MS_Wind",
+          "MS_Rain",
+          "MS_SN_Runoff",
+          "MS_Soil_Runoff_mean",
+          "MS_Sublimation",
+          "MS_Evap",
+          "TS0",
+          "TS1",
+          "TS2",
+          "TS3_mean",
+          "TS4_mean",
+          "Sclass2",
+          "zSd_mean",
+          "Sd",
+          "zSn",
+          "Sn",
+          "zSs",
+          "Ss",
+          "zS4",
+          "S4",
+          "zS5",
+          "S5",
+          "pwl_100",
+          "pwl_100_15",
+          "base_pwl",
+          "ssi_pwl",
+          "sk38_pwl",
+          "sn38_pwl",
+          "ccl_pwl",
+          "ssi_pwl_100",
+          "sk38_pwl_100",
+          "sn38_pwl_100",
+          "ccl_pwl_100",
+          "Pen_depth",
+          "min_ccl_pen"
+        ]
+      },
+      "metrics": {
+        "accuracy": 0.8937007874015748,
+        "class_support": {
+          "1": 1068,
+          "2": 562,
+          "3": 617,
+          "4": 39
+        },
+        "confusion_matrix": [
+          [
+            1063,
+            5,
+            0,
+            0
+          ],
+          [
+            12,
+            458,
+            92,
+            0
+          ],
+          [
+            2,
+            76,
+            507,
+            32
+          ],
+          [
+            0,
+            2,
+            22,
+            15
+          ]
+        ],
+        "confusion_matrix_labels": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "macro_f1": 0.7473761951577563,
+        "per_class_f1": {
+          "1": 0.9911421911421912,
+          "2": 0.8304623753399819,
+          "3": 0.8190630048465266,
+          "4": 0.3488372093023256
+        }
+      },
+      "published_rf2_accuracy_range": {
+        "lower": 0.72,
+        "upper": 0.78
+      },
+      "split": {
+        "calibration_rows": 2935,
+        "strategy": "winter_season_grouped_with_chronological_fallback",
+        "test_rows": 2286,
+        "train_rows": 24075
+      }
+    }
+  ]
+}

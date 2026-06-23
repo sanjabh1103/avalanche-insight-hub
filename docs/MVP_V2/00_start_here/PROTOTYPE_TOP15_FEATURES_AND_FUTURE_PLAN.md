@@ -49,7 +49,7 @@ The future plan is to move from a Colorado live technical proof and research-onl
 | Phase | Practical next step | Output expected |
 |---|---|---|
 | 1 | First scientist discussion | Confirm whether the prototype direction is worth exploring and which pilot region, if any, is suitable. |
-| 2 | Partner evidence intake | Collect reviewed station, weather, snowpack, label, event, terrain, and holdout evidence using the partner templates. |
+| 2 | Autonomous pipeline activation | Activate news + SAR + weather pipeline for selected Himalayan region. Optional: scientist-reviewed local data can augment the autonomous pipeline if available. |
 | 3 | Himalayan research validation | Run local validation only after evidence passes source, license, quality, and leakage checks. |
 | 4 | Scientist co-working review | Use the scientist workspace and daily verification lane to classify errors, label quality, and model disagreement. |
 | 5 | Release decision | Continue, narrow, pause, or stop based on measured local evidence and named scientist signoff. |

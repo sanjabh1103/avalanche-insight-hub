@@ -29,7 +29,7 @@ https://avalanche-insight-hub.netlify.app
 **What to show:** Bulletin badge shows danger level, avalanche problem, critical elevation/aspect, and peak window. Note the "experimental" framing.
 
 ### 5. Interactive Map and Time Slider (Feature #5)
-**Link:** `https://avalanche-insight-hub.netlite.app/?forecast=shared-forecast-run-1&hour=6`
+**Link:** `https://avalanche-insight-hub.netlify.app/?forecast=shared-forecast-run-1&hour=6`
 **What to show:** Click daypart chips (morning/afternoon/evening) or drag the time slider to see grid state changes across forecast hours.
 
 ### 6. Cell-Level Risk Inspection (Feature #6)
@@ -72,6 +72,40 @@ https://avalanche-insight-hub.netlify.app
 **Link:** `https://avalanche-insight-hub.netlify.app/scientist`
 **What to show:** Role-gated review workspace with paired scientist-vs-model comparison, verdicts, notes, and exportable evidence.
 
+## Himalayan Demo Links
+
+The Himalayan (Nepal) region is fully operational with a published 72-hour forecast artifact.
+
+**Active run ID:** `e6cac8c5-1cc8-4054-b99f-bf2e63dfc90a`
+**Forecast date:** 2026-06-21
+**Status:** ready / published
+**Grid:** 20×20 (400 cells, all ready)
+**Danger level:** 3 (Considerable) — wet snow problem
+
+### Himalayan Region Links
+
+**Default view:**
+`https://avalanche-insight-hub.netlify.app/?region=Himalayas%20(Nepal)`
+
+**With forecast artifact loaded:**
+`https://avalanche-insight-hub.netlify.app/?region=Himalayas%20(Nepal)&forecast=e6cac8c5-1cc8-4054-b99f-bf2e63dfc90a`
+
+**12-hour forecast:**
+`https://avalanche-insight-hub.netlify.app/?region=Himalayas%20(Nepal)&forecast=e6cac8c5-1cc8-4054-b99f-bf2e63dfc90a&hour=12`
+
+**36-hour forecast with cell selected:**
+`https://avalanche-insight-hub.netlify.app/?region=Himalayas%20(Nepal)&forecast=e6cac8c5-1cc8-4054-b99f-bf2e63dfc90a&hour=36&cell=28.0,86.25`
+
+**Expert mode with 3D voxel view:**
+`https://avalanche-insight-hub.netlify.app/?region=Himalayas%20(Nepal)&forecast=e6cac8c5-1cc8-4054-b99f-bf2e63dfc90a&expert=1&3d=1`
+
+### Himalayan Claim Boundaries
+
+- `himalayan_accuracy_claim_allowed` is set to `false` — no validated accuracy claims are made for this region
+- SAR coverage badge shows "UNAVAILABLE" — shadow-gated globally (`sar_shadow_only: true`)
+- Snowpack proxy uses `seasonal_cumulative_v1` (regional mode) — not a physics-based snowpack model
+- The forecast demonstrates pipeline capability and decision-support visualization, not operational forecasting for Nepal
+
 ## Demo Flow Recommendation
 
 1. Start with link #1 (public workspace) to establish context
@@ -79,8 +113,9 @@ https://avalanche-insight-hub.netlify.app
 3. Use link #6 (cell inspection) to dive into risk decomposition
 4. Use link #10 (explainability) to show TreeSHAP/fallback distinction
 5. Use link #3 (grid/horizon) to show lazy-loading and honest metadata
-6. Use link #12 (shareable link) to demonstrate state preservation
-7. End with link #14/#15 (admin/scientist) for workflow discussion
+6. Switch to Himalayan region to show multi-region capability and wet snow problem
+7. Use link #12 (shareable link) to demonstrate state preservation
+8. End with link #14/#15 (admin/scientist) for workflow discussion
 
 ## Claim Boundaries
 

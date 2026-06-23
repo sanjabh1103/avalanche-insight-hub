@@ -60,6 +60,17 @@ export interface GridCell {
   problemSlug?: string;
   problemConfidence?: number;
   problemEvidence?: string[];
+  ensembleAvailable?: boolean;
+  ensembleSource?: string | null;
+  ensembleTempP10?: number;
+  ensembleTempP50?: number;
+  ensembleTempP90?: number;
+  ensembleSnowfallP10?: number;
+  ensembleSnowfallP50?: number;
+  ensembleSnowfallP90?: number;
+  ensemblePrecipP10?: number;
+  ensemblePrecipP50?: number;
+  ensemblePrecipP90?: number;
   problemClassifierProfile?: string;
   dryWetDomain?: 'dry' | 'wet' | 'mixed' | 'unknown';
   featureValues?: Record<string, number>;

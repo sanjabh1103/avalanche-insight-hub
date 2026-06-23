@@ -80,7 +80,7 @@ When showing the refreshed public route, say:
 
 Then immediately add:
 
-> This is not a Himalayan accuracy claim and not an official warning service. The Himalayan pilot needs partner-reviewed station, snowpack, label, event, terrain, warning-region, and holdout evidence before any stronger claim.
+> This is not a Himalayan accuracy claim and not an official warning service. The autonomous pipeline can activate without any historical data. Stronger claims would require scientist validation of autonomous pipeline output — not an upfront data handover.
 
 ## If The Batch Becomes Stale Again
 

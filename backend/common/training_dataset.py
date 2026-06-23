@@ -147,7 +147,7 @@ def fetch_training_events(hazard_type: str = 'avalanche') -> list[dict[str, Any]
     rows = rest_get(
         'avalanche_events_decayed',
         params={
-            'select': 'id,location,timestamp,severity,source,fusion_source,training_eligible,training_eligible_reason,label_role,verification_status,elevation_m,topo_profile,features,confidence,label_confidence,training_weight,source_model,source_scene_ids,geometry_type,mask_asset_ref,confidence_decayed,governance_version,governed_at',
+            'select': 'id,location,timestamp,severity,source,fusion_source,training_eligible,training_eligible_reason,label_role,verification_status,elevation_m,topo_profile,features,confidence,label_confidence,training_weight,source_model,source_scene_ids,geometry_type,mask_asset_ref,confidence_decayed,governance_version,governed_at,label_source,review_basis,nowcast_ref,observer_ref,regime,timing',
             'hazard_type': f'eq.{hazard_type}',
             'training_eligible': 'eq.true',
             'order': 'timestamp.asc',
@@ -331,6 +331,12 @@ def build_real_training_frame(
             'confidence_decayed': governance.confidence_decayed,
             'governance_version': str(row.get('governance_version') or GOVERNANCE_VERSION),
             'governed_at': str(row.get('governed_at') or datetime.now(timezone.utc).isoformat()),
+            'label_source': str(row.get('label_source') or row.get('source') or 'unknown'),
+            'review_basis': str(row.get('review_basis') or 'unverified'),
+            'nowcast_ref': row.get('nowcast_ref'),
+            'observer_ref': row.get('observer_ref'),
+            'regime': row.get('regime'),
+            'timing': row.get('timing'),
             'elevation_m_raw': float(terrain['elevation_m']),
             'slope_angle_deg_raw': float(terrain['slope_angle_deg']),
             'aspect_deg_raw': float(terrain['aspect_deg']),
@@ -390,6 +396,12 @@ def build_real_training_frame(
                 'confidence_decayed': 0.0,
                 'governance_version': GOVERNANCE_VERSION,
                 'governed_at': datetime.now(timezone.utc).isoformat(),
+                'label_source': 'synthetic_negative',
+                'review_basis': 'terrain_sampling',
+                'nowcast_ref': None,
+                'observer_ref': None,
+                'regime': None,
+                'timing': None,
                 'elevation_m_raw': float(negative['terrain']['elevation_m']),
                 'slope_angle_deg_raw': float(negative['terrain']['slope_angle_deg']),
                 'aspect_deg_raw': float(negative['terrain']['aspect_deg']),
@@ -421,6 +433,12 @@ def build_real_training_frame(
             'confidence_decayed',
             'governance_version',
             'governed_at',
+            'label_source',
+            'review_basis',
+            'nowcast_ref',
+            'observer_ref',
+            'regime',
+            'timing',
             'elevation_m_raw',
             'slope_angle_deg_raw',
             'aspect_deg_raw',
@@ -512,6 +530,12 @@ def load_training_frame(
     synthetic['confidence_decayed'] = synthetic['label_confidence']
     synthetic['governance_version'] = GOVERNANCE_VERSION
     synthetic['governed_at'] = datetime.now(timezone.utc).isoformat()
+    synthetic['label_source'] = 'synthetic_bootstrap'
+    synthetic['review_basis'] = 'synthetic'
+    synthetic['nowcast_ref'] = None
+    synthetic['observer_ref'] = None
+    synthetic['regime'] = None
+    synthetic['timing'] = None
     synthetic['elevation_m_raw'] = synthetic['elevation'] * 5000.0
     synthetic['slope_angle_deg_raw'] = synthetic['slope'] * 60.0
     synthetic['aspect_deg_raw'] = 180.0

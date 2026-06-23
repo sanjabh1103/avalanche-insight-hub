@@ -317,6 +317,68 @@ export default function RiskDashboard({
         </Card>
       )}
 
+      {/* Ensemble Probabilistic Weather (p10/p50/p90) */}
+      {cell.ensembleAvailable && (
+        <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+          <CardHeader className="p-3 pb-1">
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-xs text-sky-400 uppercase tracking-[0.24em]">
+                Ensemble Forecast
+              </CardTitle>
+              <Badge className="bg-sky-500/15 text-sky-400 border-0 text-[8px] px-1.5 py-0 rounded-full">
+                ● PROBABILISTIC
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-3 pt-1 space-y-2">
+            <div className="text-[9px] text-muted-foreground font-mono">
+              source: {cell.ensembleSource ?? 'open_meteo_ensemble_probabilistic_v1'}
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-[10px]">
+              <div className="text-center">
+                <div className="text-muted-foreground uppercase tracking-wider mb-1">Temperature</div>
+                <div className="font-mono text-foreground">
+                  {cell.ensembleTempP10 != null ? `${cell.ensembleTempP10.toFixed(1)}°` : '—'}
+                </div>
+                <div className="font-mono text-sky-300">
+                  {cell.ensembleTempP50 != null ? `${cell.ensembleTempP50.toFixed(1)}°` : '—'}
+                </div>
+                <div className="font-mono text-foreground">
+                  {cell.ensembleTempP90 != null ? `${cell.ensembleTempP90.toFixed(1)}°` : '—'}
+                </div>
+                <div className="text-[8px] text-muted-foreground mt-0.5">p10 / p50 / p90</div>
+              </div>
+              <div className="text-center">
+                <div className="text-muted-foreground uppercase tracking-wider mb-1">Snowfall</div>
+                <div className="font-mono text-foreground">
+                  {cell.ensembleSnowfallP10 != null ? `${cell.ensembleSnowfallP10.toFixed(1)}` : '—'}
+                </div>
+                <div className="font-mono text-sky-300">
+                  {cell.ensembleSnowfallP50 != null ? `${cell.ensembleSnowfallP50.toFixed(1)}` : '—'}
+                </div>
+                <div className="font-mono text-foreground">
+                  {cell.ensembleSnowfallP90 != null ? `${cell.ensembleSnowfallP90.toFixed(1)}` : '—'}
+                </div>
+                <div className="text-[8px] text-muted-foreground mt-0.5">p10 / p50 / p90 cm</div>
+              </div>
+              <div className="text-center">
+                <div className="text-muted-foreground uppercase tracking-wider mb-1">Precip</div>
+                <div className="font-mono text-foreground">
+                  {cell.ensemblePrecipP10 != null ? `${cell.ensemblePrecipP10.toFixed(1)}` : '—'}
+                </div>
+                <div className="font-mono text-sky-300">
+                  {cell.ensemblePrecipP50 != null ? `${cell.ensemblePrecipP50.toFixed(1)}` : '—'}
+                </div>
+                <div className="font-mono text-foreground">
+                  {cell.ensemblePrecipP90 != null ? `${cell.ensemblePrecipP90.toFixed(1)}` : '—'}
+                </div>
+                <div className="text-[8px] text-muted-foreground mt-0.5">p10 / p50 / p90 mm</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
         <CardHeader className="p-3 pb-1">
           <div className="flex items-center justify-between">

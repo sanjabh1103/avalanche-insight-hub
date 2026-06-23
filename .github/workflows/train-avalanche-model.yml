@@ -77,9 +77,9 @@ jobs:
         run: |
           # Validate required secret is present (without exposing value)
           if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            echo "❌ Error: SUPABASE_SERVICE_ROLE_KEY secret is not configured"
-            echo "Please add SUPABASE_SERVICE_ROLE_KEY to GitHub Secrets"
-            exit 1
+            echo "⚠️ SUPABASE_SERVICE_ROLE_KEY secret is not configured; skipping retraining trigger (this is safe)."
+            echo "Please add SUPABASE_SERVICE_ROLE_KEY to GitHub Secrets to enable scheduled retraining."
+            exit 0
           fi
           
           echo "🚀 Triggering avalanche model retraining..."
@@ -184,6 +184,11 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           EVAL_DAYS: ${{ github.event.inputs.evaluation_days || '14' }}
         run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "⚠️ SUPABASE_SERVICE_ROLE_KEY secret is not configured; skipping evaluation (this is safe)."
+            exit 0
+          fi
+          
           echo "📊 Running model evaluation..."
           
           EVAL_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \

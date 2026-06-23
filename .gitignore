@@ -71,3 +71,18 @@ test_output.txt
 
 # Vitest coverage output (can shadow Python package imports if left in repo root)
 coverage/
+
+# Local ad-hoc test scripts (not part of the test suite)
+test_all_features*.mjs
+build_feature_tracker.py
+
+# Local binary spreadsheets (tracked externally)
+docs/MVP_V2/*.xlsx
+docs/MVP_V2/07_demo_assets/*.xlsx
+
+# Local test result artifacts
+docs/MVP_V2/07_demo_assets/test-results*.json
+docs/MVP_V2/07_demo_assets/test-screenshots/
+
+# Local personal notes
+docs/MVP/mails.md

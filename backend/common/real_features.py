@@ -16,6 +16,7 @@ from backend.common.snowpack_proxy import SnowpackProxy, compute_cell_snowpack_p
 
 
 OPEN_METEO_FORECAST = 'https://api.open-meteo.com/v1/forecast'
+OPEN_METEO_ENSEMBLE = 'https://ensemble-api.open-meteo.com/v1/ensemble'
 OPEN_METEO_HISTORICAL_FORECAST = 'https://historical-forecast-api.open-meteo.com/v1/forecast'
 OPEN_METEO_ARCHIVE = 'https://archive-api.open-meteo.com/v1/archive'
 OPEN_METEO_TIMEOUT = 20.0
@@ -184,6 +185,59 @@ def fetch_forecast_weather_profile(region_center: tuple[float, float], forecast_
         'latitude': region_center[0],
         'longitude': region_center[1],
         'samples': _hourly_payload_to_samples(payload),
+    }
+
+
+def fetch_ensemble_weather_profile(
+    region_center: tuple[float, float],
+    forecast_start: datetime,
+    horizon_hours: int,
+) -> dict[str, Any]:
+    """Fetch probabilistic weather from Open-Meteo Ensemble API.
+
+    Returns p10/p50/p90 percentiles for temperature, precipitation, snowfall,
+    and wind speed — enabling probabilistic avalanche risk assessment.
+    """
+    start = _to_utc(forecast_start)
+    end = start + timedelta(hours=max(1, horizon_hours - 1))
+    ensemble_vars = (
+        'temperature_2m',
+        'precipitation',
+        'snowfall',
+        'snow_depth',
+        'windspeed_10m',
+    )
+    payload = _fetch_open_meteo(
+        OPEN_METEO_ENSEMBLE,
+        params={
+            'latitude': f'{region_center[0]:.4f}',
+            'longitude': f'{region_center[1]:.4f}',
+            'hourly': ','.join(ensemble_vars),
+            'timezone': 'UTC',
+            'forecast_days': max(1, math.ceil(((end - start).total_seconds() / 3600.0) / 24.0)),
+            'models': 'icon_seamless',
+        },
+    )
+    hourly = payload.get('hourly', {})
+    samples: list[dict[str, Any]] = []
+    times = hourly.get('time', [])
+    n_times = len(times)
+    for idx in range(n_times):
+        row: dict[str, Any] = {'time': times[idx]}
+        for var in ensemble_vars:
+            values = hourly.get(var, [])
+            if idx < len(values) and values[idx] is not None:
+                arr = np.asarray(values[idx], dtype=float)
+                if arr.size > 0:
+                    row[f'{var}_p10'] = float(np.percentile(arr, 10))
+                    row[f'{var}_p50'] = float(np.percentile(arr, 50))
+                    row[f'{var}_p90'] = float(np.percentile(arr, 90))
+        samples.append(row)
+    return {
+        'source': 'open_meteo_ensemble_probabilistic_v1',
+        'latitude': region_center[0],
+        'longitude': region_center[1],
+        'samples': samples,
     }
 
 
@@ -488,6 +542,71 @@ def extract_cell_terrain(
     }
 
 
+def _compute_temporal_persistence_features(
+    history_samples: list[dict[str, float]] | None,
+    current_snowfall_24h: float,
+    current_temp_c: float,
+    current_adjusted_snowfall: float,
+) -> dict[str, float]:
+    """Compute 24h/72h temporal persistence features from history samples.
+
+    Following Viallon-Galinier et al. (2023), these features capture the
+    time derivatives of mechanical indices and persistence of avalanche-prone
+    conditions. When history_samples is None or empty, defaults to 0.0.
+    """
+    if not history_samples:
+        return {
+            'snowfall_72h': 0.0,
+            'snow_loading_persistence': 0.0,
+            'temp_persistence': 0.0,
+            'snowfall_rate_change': 0.0,
+        }
+
+    recent_24 = history_samples[-24:] if len(history_samples) >= 24 else history_samples
+    recent_72 = history_samples[-72:] if len(history_samples) >= 72 else history_samples
+
+    snowfall_72h = sum(
+        max(0.0, _safe_float(s.get('snowfall_24h')) or _safe_float(s.get('snowfall')) or 0.0)
+        for s in recent_72
+    )
+
+    snowfalls_24 = [
+        max(0.0, _safe_float(s.get('snowfall_24h')) or _safe_float(s.get('snowfall')) or 0.0)
+        for s in recent_24
+    ]
+    if snowfalls_24:
+        snow_loading_persistence = _clamp(
+            sum(1 for v in snowfalls_24 if v > 1.0) / len(snowfalls_24),
+            0.0, 1.0,
+        )
+    else:
+        snow_loading_persistence = 0.0
+
+    temps_24 = [
+        _safe_float(s.get('temperature_2m')) or 0.0
+        for s in recent_24
+    ]
+    if temps_24:
+        below_zero_count = sum(1 for t in temps_24 if t < 0.0)
+        temp_persistence = _clamp(below_zero_count / len(temps_24), 0.0, 1.0)
+    else:
+        temp_persistence = 0.0
+
+    if len(snowfalls_24) >= 2:
+        recent_avg = sum(snowfalls_24[-3:]) / min(3, len(snowfalls_24))
+        prior_avg = sum(snowfalls_24[:-3]) / max(1, len(snowfalls_24) - 3)
+        snowfall_rate_change = _clamp((recent_avg - prior_avg) / 20.0, -1.0, 1.0)
+    else:
+        snowfall_rate_change = 0.0
+
+    return {
+        'snowfall_72h': _normalize(snowfall_72h, 120.0),
+        'snow_loading_persistence': snow_loading_persistence,
+        'temp_persistence': temp_persistence,
+        'snowfall_rate_change': snowfall_rate_change,
+    }
+
+
 def build_real_feature_row(
     *,
     weather_sample: dict[str, float],
@@ -496,6 +615,7 @@ def build_real_feature_row(
     lat: float,
     lng: float,
     snowpack_proxy_override: SnowpackProxy | None = None,
+    history_samples: list[dict[str, float]] | None = None,
 ) -> dict[str, Any]:
     terrain_elevation = float(terrain['elevation_m'])
     lapse = compute_dynamic_lapse_profile(weather_sample, terrain_elevation_m=terrain_elevation)
@@ -595,6 +715,7 @@ def build_real_feature_row(
         'rain_on_snow_signal': rain_on_snow_signal,
         'wet_activation_signal': wet_activation_signal,
         'elevation_precip_bias': elevation_precip_bias_norm,
+        **_compute_temporal_persistence_features(history_samples, snowfall_24h_cm, downscaled_temp_c, adjusted_snowfall_24h_cm),
     }
 
     raw_inputs = {

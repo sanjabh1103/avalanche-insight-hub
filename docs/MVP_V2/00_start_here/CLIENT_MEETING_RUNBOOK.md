@@ -12,7 +12,7 @@ Use the web app as a scientist co-working and validation system, not as an indep
 |---|---|---|
 | Feature ratings | Scientist ratings for the top 20 features, on a 1-5 scale | `../01_scientist_client_pack/top20.md` |
 | Scientific objections | Cases where terminology, evidence, or model behavior is wrong or incomplete | Meeting outcomes template |
-| Data commitments | Which pilot region, season, bulletin archive, station data, field reports, and snowpack data can be shared | Director letter and outreach kit |
+| Pilot region selection | Which 1-2 Himalayan regions for autonomous pipeline activation | Meeting outcomes template |
 | Validation actions | Claim downgrade, data remediation, label remediation, benchmark slice, model-gap candidate, or evidence request | Web app action ledger |
 | Next meeting scope | Which 3-5 candidate cases and which UI workflows will be checked next | Completion tracker |
 
@@ -37,7 +37,8 @@ Use the web app as a scientist co-working and validation system, not as an indep
 | 40-55 min | Scientist workbench | `/scientist` validation queue and structured review | Are the structured fields sufficient for a real review? | Field additions or terminology corrections |
 | 55-65 min | Daily paired verification | `/scientist/daily-verification` | Does the model-vs-scientist comparison capture the right daily judgment? | Required daily fields |
 | 65-75 min | European shadow and Modal compute | Post-MVP deck files and Modal note | Is the European/SAR evidence useful as shadow validation, and is the Himalaya boundary clear? | Accepted / boundary wording changes |
-| 75-85 min | Data and partnership ask | Director letter draft, outreach kit, adapter contract | Which data package can be shared first? | Pilot region, winter season, owner |
+| 75-80 min | Commercial and co-working model | `Commercials.md` summary and `ROLE_DEMARCATION_CHARTER.md` | Is the engagement structure and role demarcation acceptable? | Pricing feedback, role adjustments |
+| 80-85 min | Autonomous pipeline ask + DRDO ideas | Autonomous pipeline sprint plan, pilot region selection, NATSAT complement framing | Which pilot region for autonomous pipeline activation, who is the scientist POC, and what ideas does DRDO have for augmentation? | Pilot region, scientist POC, DRDO augmentation ideas |
 | 85-90 min | Closeout | Completion tracker and meeting outcomes template | What is blocked before the next technical step? | Action owner and due date |
 
 ## Demo Routes
@@ -58,6 +59,20 @@ Use the web app as a scientist co-working and validation system, not as an indep
 | Modal GPU drives the public forecast | Modal supports off-path candidate training, SAR validation, and release evaluation |
 | Synthetic data proves the workflow | Synthetic data only demonstrates mechanics and is excluded from training and production claims |
 | The model is ready for autonomous retraining | Scientist review creates governed candidates and actions; no automatic promotion |
+| We compete with NATSAT | We complement NATSAT — our software intelligence layer generates predictions; NATSAT delivers alerts to soldiers via satellite |
+| Our news extraction is unproven | We follow Google's Groundsource methodology, which explicitly identifies avalanches as a target hazard for LLM-based news extraction |
+| We are replacing HIM-STRAT | We extend HIM-STRAT (Joshi, Singh & Satyawali, 2020) — our autonomous pipeline feeds continuous data to DGRE's own neural network snowpack models |
+| GPxyz is working | GPxyz is blocked — Swiss station coordinates are missing; we have station-row baseline only |
+
+## Meeting Handouts (Bring Printed Copies)
+
+| Handout | Purpose | Location |
+|---|---|---|
+| One-page brief for Dr. Amreek | Concise summary with RF4 metrics, complement framing, and asks | `MEETING_HANDOUTS_JUNE24.md` Section 1 |
+| Complement matrix for Dr. Praven | What we provide vs. what they provide vs. mutual benefit | `MEETING_HANDOUTS_JUNE24.md` Section 2 |
+| Comparison table: us vs. SOTA | Shows domain awareness across 7 systems | `MEETING_HANDOUTS_JUNE24.md` Section 3 |
+| Honest limitations list | Builds trust — what we can't do yet | `MEETING_HANDOUTS_JUNE24.md` Section 4 |
+| Data sources table | Shows resourcefulness and ISRO collaboration potential | `MEETING_HANDOUTS_JUNE24.md` Section 5 |
 
 ## Required Closeout Artifacts
 

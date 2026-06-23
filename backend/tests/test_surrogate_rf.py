@@ -12,6 +12,7 @@ from backend.models.surrogate_rf import (
     SURROGATE_CLASS_WEIGHT,
     TreeShapUnavailableError,
     build_tree_shap_explainer,
+    build_shap_narrative,
     collect_tree_probabilities,
     compute_tree_shap,
     compute_tree_shap_batch,
@@ -199,6 +200,45 @@ class SurrogateRfBundleTests(unittest.TestCase):
         ])
         np.testing.assert_allclose(probabilities, expected)
         self.assertFalse(any('feature names' in str(w.message) for w in caught))
+
+
+class ShapNarrativeTests(unittest.TestCase):
+    def test_empty_features_returns_default(self) -> None:
+        result = build_shap_narrative([])
+        self.assertEqual(result, 'No SHAP feature attributions available.')
+
+    def test_narrative_with_drivers_only(self) -> None:
+        features = [
+            {'feature': 'elevation', 'shap_value': 0.15, 'feature_value': 0.8, 'rank': 1},
+            {'feature': 'snowfall_24h', 'shap_value': 0.10, 'feature_value': 0.6, 'rank': 2},
+            {'feature': 'wind_loading', 'shap_value': 0.05, 'feature_value': 0.7, 'rank': 3},
+        ]
+        result = build_shap_narrative(features, danger_label=3)
+        self.assertIn('Considerable', result)
+        self.assertIn('elevation', result)
+        self.assertIn('24-hour snowfall', result)
+        self.assertIn('increases risk', result)
+        self.assertNotIn('reduces risk', result)
+
+    def test_narrative_with_suppressors(self) -> None:
+        features = [
+            {'feature': 'elevation', 'shap_value': 0.15, 'feature_value': 0.8, 'rank': 1},
+            {'feature': 'settlement_rate', 'shap_value': -0.08, 'feature_value': 0.5, 'rank': 2},
+            {'feature': 'shear_strength', 'shap_value': -0.05, 'feature_value': 0.6, 'rank': 3},
+        ]
+        result = build_shap_narrative(features, danger_label=2)
+        self.assertIn('Moderate', result)
+        self.assertIn('Risk suppressors', result)
+        self.assertIn('snow settlement rate', result)
+        self.assertIn('reduces risk', result)
+
+    def test_narrative_without_danger_label(self) -> None:
+        features = [
+            {'feature': 'snowfall_24h', 'shap_value': 0.12, 'feature_value': 0.6, 'rank': 1},
+        ]
+        result = build_shap_narrative(features)
+        self.assertNotIn('Predicted danger level', result)
+        self.assertIn('24-hour snowfall', result)
 
 
 if __name__ == '__main__':

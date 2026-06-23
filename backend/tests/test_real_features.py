@@ -19,6 +19,7 @@ from backend.common.real_features import (
     build_real_feature_row,
     compute_dynamic_lapse_profile,
     extract_cell_terrain,
+    fetch_ensemble_weather_profile,
     fetch_historical_weather_window,
 )
 from backend.common.snowpack_proxy import SnowpackProxy
@@ -85,6 +86,55 @@ class OpenMeteoTests(unittest.TestCase):
         self.assertEqual(get_mock.call_count, 4)
         self.assertEqual(get_mock.call_args_list[-1].args[0], real_features.OPEN_METEO_ARCHIVE)
         self.assertEqual(sleep_mock.call_count, 2)
+
+
+class EnsembleApiTests(unittest.TestCase):
+    def test_fetch_ensemble_returns_percentiles(self) -> None:
+        ensemble_payload = FakeResponse(
+            200,
+            {
+                'hourly': {
+                    'time': ['2026-06-24T00:00', '2026-06-24T01:00'],
+                    'temperature_2m': [[-5.0, -3.0, -1.0], [-4.0, -2.0, 0.0]],
+                    'precipitation': [[0.0, 0.5, 2.0], [0.0, 0.2, 1.0]],
+                    'snowfall': [[0.0, 0.3, 1.0], [0.0, 0.1, 0.5]],
+                    'snow_depth': [[10.0, 12.0, 15.0], [10.0, 12.0, 14.0]],
+                    'windspeed_10m': [[5.0, 10.0, 20.0], [4.0, 8.0, 16.0]],
+                },
+            },
+        )
+
+        with patch.object(real_features.requests, 'get', return_value=ensemble_payload):
+            profile = fetch_ensemble_weather_profile(
+                region_center=(27.0, 88.0),
+                forecast_start=datetime(2026, 6, 24, tzinfo=timezone.utc),
+                horizon_hours=2,
+            )
+
+        self.assertEqual(profile['source'], 'open_meteo_ensemble_probabilistic_v1')
+        self.assertEqual(len(profile['samples']), 2)
+        sample0 = profile['samples'][0]
+        self.assertIn('temperature_2m_p10', sample0)
+        self.assertIn('temperature_2m_p50', sample0)
+        self.assertIn('temperature_2m_p90', sample0)
+        self.assertAlmostEqual(sample0['temperature_2m_p10'], -4.6, places=1)
+        self.assertAlmostEqual(sample0['temperature_2m_p50'], -3.0, places=1)
+        self.assertAlmostEqual(sample0['temperature_2m_p90'], -1.4, places=1)
+
+    def test_fetch_ensemble_uses_ensemble_endpoint(self) -> None:
+        ensemble_payload = FakeResponse(
+            200,
+            {'hourly': {'time': [], 'temperature_2m': []}},
+        )
+
+        with patch.object(real_features.requests, 'get', return_value=ensemble_payload) as get_mock:
+            fetch_ensemble_weather_profile(
+                region_center=(27.0, 88.0),
+                forecast_start=datetime(2026, 6, 24, tzinfo=timezone.utc),
+                horizon_hours=1,
+            )
+
+        self.assertEqual(get_mock.call_args.args[0], real_features.OPEN_METEO_ENSEMBLE)
 
 
 class DynamicLapseProfileTests(unittest.TestCase):
@@ -355,6 +405,77 @@ class ExtractCellTerrainTests(unittest.TestCase):
 
             with self.assertRaises(TerrainUnavailableError):
                 extract_cell_terrain(str(dem_path), lat=46.998785, lng=-121.998785, max_search_distance_m=50.0)
+
+
+class TemporalPersistenceTests(unittest.TestCase):
+    def test_no_history_returns_zeros(self) -> None:
+        from backend.common.real_features import _compute_temporal_persistence_features
+        result = _compute_temporal_persistence_features(None, 5.0, -3.0, 6.0)
+        self.assertEqual(result['snowfall_72h'], 0.0)
+        self.assertEqual(result['snow_loading_persistence'], 0.0)
+        self.assertEqual(result['temp_persistence'], 0.0)
+        self.assertEqual(result['snowfall_rate_change'], 0.0)
+
+    def test_empty_history_returns_zeros(self) -> None:
+        from backend.common.real_features import _compute_temporal_persistence_features
+        result = _compute_temporal_persistence_features([], 5.0, -3.0, 6.0)
+        self.assertEqual(result['snowfall_72h'], 0.0)
+
+    def test_snow_loading_persistence_with_continuous_snowfall(self) -> None:
+        from backend.common.real_features import _compute_temporal_persistence_features
+        history = [{'snowfall_24h': 2.0, 'temperature_2m': -5.0} for _ in range(24)]
+        result = _compute_temporal_persistence_features(history, 2.0, -5.0, 2.5)
+        self.assertAlmostEqual(result['snow_loading_persistence'], 1.0)
+        self.assertAlmostEqual(result['temp_persistence'], 1.0)
+        self.assertGreater(result['snowfall_72h'], 0.0)
+
+    def test_temp_persistence_with_warm_temps(self) -> None:
+        from backend.common.real_features import _compute_temporal_persistence_features
+        history = [{'snowfall_24h': 0.0, 'temperature_2m': 5.0} for _ in range(24)]
+        result = _compute_temporal_persistence_features(history, 0.0, 5.0, 0.0)
+        self.assertAlmostEqual(result['temp_persistence'], 0.0)
+        self.assertAlmostEqual(result['snow_loading_persistence'], 0.0)
+
+    def test_snowfall_rate_change_increasing(self) -> None:
+        from backend.common.real_features import _compute_temporal_persistence_features
+        history = [{'snowfall_24h': float(i), 'temperature_2m': -3.0} for i in range(24)]
+        result = _compute_temporal_persistence_features(history, 23.0, -3.0, 23.0)
+        self.assertGreater(result['snowfall_rate_change'], 0.0)
+
+    def test_build_real_feature_row_includes_persistence(self) -> None:
+        terrain = {
+            'elevation_m': 2000.0,
+            'slope_angle_deg': 30.0,
+            'aspect_deg': 180.0,
+            'terrain_roughness': 20.0,
+            'curvature_proxy': 5.0,
+            'northness': 0.5,
+            'eastness': 0.3,
+        }
+        weather = {
+            'temperature_2m': -5.0,
+            'windspeed_10m': 15.0,
+            'winddirection_10m': 270.0,
+            'snowfall_24h': 10.0,
+            'precipitation_24h': 12.0,
+            'snow_depth': 0.4,
+            'freezing_level_height': 1500.0,
+        }
+        history = [{'snowfall_24h': 5.0, 'temperature_2m': -3.0} for _ in range(24)]
+        result = build_real_feature_row(
+            weather_sample=weather,
+            terrain=terrain,
+            timestamp=datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc),
+            lat=27.0,
+            lng=88.0,
+            history_samples=history,
+        )
+        feature_row = result['feature_row']
+        self.assertIn('snowfall_72h', feature_row)
+        self.assertIn('snow_loading_persistence', feature_row)
+        self.assertIn('temp_persistence', feature_row)
+        self.assertIn('snowfall_rate_change', feature_row)
+        self.assertGreater(feature_row['snowfall_72h'], 0.0)
 
 
 if __name__ == '__main__':

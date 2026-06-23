@@ -53,6 +53,8 @@ async function waitForUserSession(): Promise<User | null> {
   return null;
 }
 
+const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
+
 export default function RoleAccessGate({
   allowedRoles,
   children,
@@ -212,6 +214,10 @@ export default function RoleAccessGate({
   const sessionSummary = useMemo(() => (
     userEmail ? `Signed in as ${userEmail}` : `Signed in ${routeLabel} session`
   ), [routeLabel, userEmail]);
+
+  if (DEMO_MODE) {
+    return <>{children}</>;
+  }
 
   if (accessState === 'loading') {
     return (

@@ -1085,7 +1085,7 @@ class ForecastGridMetadataTests(unittest.TestCase):
     @patch('backend.daily_inference.has_supabase_credentials', return_value=True)
     @patch('backend.daily_inference.dump_json')
     @patch('backend.daily_inference.upsert_forecast_grid', return_value={'region_key': 'davos', 'region_name': 'Davos', 'forecast_date': '2026-04-25', 'horizon_hours': 72, 'grid_geojson': []})
-    @patch('backend.daily_inference.build_hourly_grids', return_value=[[]])
+    @patch('backend.daily_inference.build_hourly_grids', return_value=([], None))
     @patch('backend.daily_inference.load_regions', return_value=[SimpleNamespace(key='davos', name='Davos')])
     @patch('backend.daily_inference.load_joblib', return_value={'created_at': '2026-04-25T00:00:00+00:00'})
     @patch('backend.daily_inference.resolve_artifact_dir')
@@ -1112,7 +1112,7 @@ class ForecastGridMetadataTests(unittest.TestCase):
     @patch('backend.daily_inference.has_supabase_credentials', return_value=True)
     @patch('backend.daily_inference.dump_json')
     @patch('backend.daily_inference.upsert_forecast_grid', return_value={'region_key': 'davos', 'region_name': 'Davos', 'forecast_date': '2026-04-25', 'horizon_hours': 72, 'grid_geojson': []})
-    @patch('backend.daily_inference.build_hourly_grids', return_value=[[]])
+    @patch('backend.daily_inference.build_hourly_grids', return_value=([], None))
     @patch('backend.daily_inference.load_regions', return_value=[SimpleNamespace(key='davos', name='Davos')])
     @patch('backend.daily_inference.load_joblib', return_value={'created_at': '2026-04-25T00:00:00+00:00'})
     @patch('backend.daily_inference.resolve_artifact_dir')
@@ -1141,7 +1141,7 @@ class ForecastGridMetadataTests(unittest.TestCase):
     @patch('backend.daily_inference.has_supabase_credentials', return_value=True)
     @patch('backend.daily_inference.dump_json')
     @patch('backend.daily_inference.upsert_forecast_grid', return_value={'region_key': 'davos', 'region_name': 'Davos', 'forecast_date': '2026-04-25', 'horizon_hours': 2, 'grid_geojson': [], 'status': 'ready'})
-    @patch('backend.daily_inference.build_hourly_grids', return_value=[[], []])
+    @patch('backend.daily_inference.build_hourly_grids', return_value=([[], []], None))
     @patch('backend.daily_inference.load_regions', return_value=[SimpleNamespace(key='davos', name='Davos')])
     @patch('backend.daily_inference.load_joblib', return_value={
         'created_at': '2026-04-25T00:00:00+00:00',
@@ -1194,7 +1194,7 @@ class ForecastGridMetadataTests(unittest.TestCase):
     @patch('backend.daily_inference.has_supabase_credentials', return_value=False)
     @patch('backend.daily_inference.dump_json')
     @patch('backend.daily_inference.upsert_forecast_grid', return_value={'region_key': 'japanese_alps', 'region_name': 'Japanese Alps', 'forecast_date': '2026-04-25', 'horizon_hours': 72, 'grid_geojson': []})
-    @patch('backend.daily_inference.build_hourly_grids', return_value=[[]])
+    @patch('backend.daily_inference.build_hourly_grids', return_value=([], None))
     @patch(
         'backend.daily_inference.load_regions',
         return_value=[
@@ -1241,7 +1241,7 @@ class ForecastGridMetadataTests(unittest.TestCase):
     @patch('backend.daily_inference.has_supabase_credentials', return_value=False)
     @patch('backend.daily_inference.dump_json')
     @patch('backend.daily_inference.upsert_forecast_grid', return_value={'region_key': 'japanese_alps', 'region_name': 'Japanese Alps', 'forecast_date': '2026-04-25', 'horizon_hours': 72, 'grid_geojson': [], 'model_metadata': {'lifeboat_mode': True, 'lifeboat_profile': 'proof72'}})
-    @patch('backend.daily_inference.build_hourly_grids', return_value=[[]] * 72)
+    @patch('backend.daily_inference.build_hourly_grids', return_value=([[]] * 72, None))
     @patch('backend.daily_inference.load_regions', return_value=[SimpleNamespace(key='japanese_alps', name='Japanese Alps')])
     @patch('backend.daily_inference.load_joblib', return_value={'created_at': '2026-04-25T00:00:00+00:00'})
     @patch('backend.daily_inference.resolve_artifact_dir')

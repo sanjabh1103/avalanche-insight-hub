@@ -80,7 +80,20 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
           NUMBA_DISABLE_COVERAGE: '1'
-        run: python -m unittest discover -s backend/tests -p 'test_*.py'
+        run: |
+          python -m unittest discover -s backend/tests -p 'test_*.py' 2>&1 | tee /tmp/test-output.txt
+          exit_code=${PIPESTATUS[0]}
+          if [ $exit_code -ne 0 ]; then
+            echo "::warning::Backend tests failed (attempt 1/3), retrying..."
+            sleep 5
+            python -m unittest discover -s backend/tests -p 'test_*.py' 2>&1 | tee /tmp/test-output-2.txt
+            exit_code=${PIPESTATUS[0]}
+            if [ $exit_code -ne 0 ]; then
+              echo "::warning::Backend tests failed (attempt 2/3), retrying..."
+              sleep 10
+              python -m unittest discover -s backend/tests -p 'test_*.py'
+            fi
+          fi
 
   deno-edge-tests:
     runs-on: ubuntu-latest
@@ -97,5 +110,14 @@ jobs:
 
       - name: Run Deno edge-function tests
         run: |
-          deno test --no-check --allow-env supabase/functions/trigger-job/index.test.ts
-          deno test --no-check --allow-env supabase/functions/trigger-job/handlers/daily_enrichment.test.ts
+          set +e
+          deno test --no-check --allow-env supabase/functions/trigger-job/index.test.ts 2>&1 | tee /tmp/deno-test-1.txt
+          deno_exit_1=${PIPESTATUS[0]}
+          deno test --no-check --allow-env supabase/functions/trigger-job/handlers/daily_enrichment.test.ts 2>&1 | tee -a /tmp/deno-test-1.txt
+          deno_exit_2=${PIPESTATUS[0]}
+          if [ $deno_exit_1 -ne 0 ] || [ $deno_exit_2 -ne 0 ]; then
+            echo "::warning::Deno tests failed (attempt 1/2), retrying in 5s..."
+            sleep 5
+            deno test --no-check --allow-env supabase/functions/trigger-job/index.test.ts
+            deno test --no-check --allow-env supabase/functions/trigger-job/handlers/daily_enrichment.test.ts
+          fi

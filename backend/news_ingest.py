@@ -50,12 +50,12 @@ NEWS_REQUEST_BACKOFF_SECONDS = float(os.getenv('NEWS_REQUEST_BACKOFF_SECONDS', '
 NEWS_QUERY_TERMS = tuple(
     term.strip() for term in os.getenv(
         'NEWS_QUERY_TERMS',
-        'avalanche,avalanche snow,avalanches,avalanche neige,avalancha,lawine',
+        'avalanche,avalanche snow,avalanches,avalanche neige,avalancha,lawine,Himalayan avalanche,Kashmir avalanche,Ladakh avalanche,Himachal avalanche,Uttarakhand avalanche,Sikkim avalanche,Nepal avalanche',
     ).split(',')
     if term.strip()
 )
 NEWS_LANGUAGES = tuple(
-    lang.strip() for lang in os.getenv('NEWS_LANGUAGES', 'en,fr,es,de').split(',')
+    lang.strip() for lang in os.getenv('NEWS_LANGUAGES', 'en,fr,es,de,hi').split(',')
     if lang.strip()
 )
 
@@ -204,9 +204,14 @@ EXTRACTION_PROMPT = (
     "4=multiple casualties, 5=major disaster. "
     "confidence reflects your certainty about extraction accuracy (not the "
     "event itself). "
-    "You may receive articles in English, French, Spanish, German, or other "
+    "You may receive articles in English, French, Spanish, German, Hindi, or other "
     "languages; extract from the original text directly and do not require "
-    "English."
+    "English. "
+    "Pay special attention to events in the Himalayan region (India, Nepal, "
+    "Pakistan, Afghanistan, Bhutan). If the article mentions a Himalayan state "
+    "or region (Kashmir, Ladakh, Himachal Pradesh, Uttarakhand, Sikkim, "
+    "Arunachal Pradesh, Nepal, Bhutan), include the state/region name in "
+    "location_name."
 )
 
 

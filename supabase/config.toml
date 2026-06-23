@@ -7,7 +7,7 @@ verify_jwt = false
 verify_jwt = true
 
 [functions.field-report-enrichment]
-verify_jwt = false
+verify_jwt = true
 
 [functions.ingest-event]
 verify_jwt = false

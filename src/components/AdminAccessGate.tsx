@@ -51,14 +51,19 @@ async function waitForUserSession(): Promise<User | null> {
   return null;
 }
 
+const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
+const DEMO_PASSWORD = 'test123';
+
 export default function AdminAccessGate({ children }: { children: ReactNode }) {
   const [accessState, setAccessState] = useState<AdminAccessState>('loading');
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [email, setEmail] = useState(import.meta.env.DEV ? 'admin@insight-hub.local' : '');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [accessCheckTimedOut, setAccessCheckTimedOut] = useState(false);
+  const [demoUnlocked, setDemoUnlocked] = useState(false);
+  const [demoPasswordInput, setDemoPasswordInput] = useState('');
   const syncRequestRef = useRef(0);
   const timeoutRef = useRef<number | null>(null);
 
@@ -206,6 +211,57 @@ export default function AdminAccessGate({ children }: { children: ReactNode }) {
     }
     return `Signed in as ${userEmail}`;
   }, [userEmail]);
+
+  if (DEMO_MODE) {
+    if (demoUnlocked) {
+      return <>{children}</>;
+    }
+    return (
+      <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm uppercase tracking-[0.18em] text-foreground">
+            <LockKeyhole className="h-4 w-4 text-emerald-400" />
+            Admin Demo Access
+          </CardTitle>
+          <CardDescription>
+            Enter the demo password to access the admin workspace.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 pt-2">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (demoPasswordInput === DEMO_PASSWORD) {
+                setDemoUnlocked(true);
+              } else {
+                setSubmitError('Incorrect demo password.');
+              }
+            }}
+            className="space-y-3"
+          >
+            <div className="space-y-1">
+              <Label htmlFor="demo-admin-password">Demo password</Label>
+              <Input
+                id="demo-admin-password"
+                type="password"
+                value={demoPasswordInput}
+                onChange={(event) => {
+                  setDemoPasswordInput(event.target.value);
+                  setSubmitError(null);
+                }}
+                placeholder="Enter demo password"
+                autoFocus
+              />
+            </div>
+            {submitError ? (
+              <p className="text-xs text-red-400">{submitError}</p>
+            ) : null}
+            <Button type="submit" className="w-full">Unlock Admin</Button>
+          </form>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (accessState === 'loading') {
     return (

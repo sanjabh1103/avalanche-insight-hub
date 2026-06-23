@@ -14,11 +14,11 @@ Our intent is not to replace that experience or present a finished operational c
 
 In the first phase, we prepared a hosted avalanche decision-support MVP with a public forecast workspace, admin/operator lane, batch forecast publication, uncertainty cues, terrain masking, bulletin-style display, and share/export/report workflows. This was aligned with the operational challenges highlighted in the Himalayan literature, including sparse observations, manual snowpack burden, class imbalance, black-box trust, spatial-temporal display, uncertainty communication, and heavy-compute bottlenecks.
 
-In MVP V2, we examined the Swiss RAvaFcast / EnviDat material. We downloaded and validated the Swiss RF1/RF2 data, reproduced an initial Stage-1 RF4 research signal, and prepared a Himalayan partner-evidence framework. The main learning is that Swiss-style automation is a useful reference model, but Himalayan deployment would require local reviewed evidence, scientist-defined truth standards, and a jointly agreed validation process.
+In MVP V2, we examined the Swiss RAvaFcast / EnviDat material. We downloaded and validated the Swiss RF1/RF2 data, trained the Stage-1 RF4 danger model on real EnviDat data (89.5% accuracy, 74 features, isotonic calibration), and built a Himalayan partner-evidence framework. TreeSHAP explainability analysis confirms that elevation, new snow height, and wind transport are the dominant prediction drivers — consistent with Swiss avalanche literature and validated as an operational tool by Pérez-Guillén et al. (2025, NHESS). The peer-reviewed paper by Pérez-Guillén et al. (2026, NHESS) demonstrates that Swiss RAvaFcast models can transfer to other mountain ranges — providing scientific backing for a Swiss-to-Himalayan approach. We also acknowledge DGRE's own pioneering neural network work: HIM-STRAT (Joshi, Singh & Satyawali, 2020) for Himalayan snowpack simulation — our autonomous data pipeline is designed to extend that vision by providing continuous training data. Our satellite data approach (GEE Sentinel-1) and meteorological ingestion (Open-Meteo) also align with the DRDO-ISRO MoU for satellite-based snow cover retrieval and high-resolution meteorological forecasts over the Himalayas. The main learning is that Swiss-style automation is a useful reference model, but Himalayan deployment requires an autonomous data pipeline, scientist-defined truth standards, and a jointly agreed validation process.
 
-At this stage, we are not requesting a large data handover or a binding commitment. If you find the direction worth exploring, we would request only a short review discussion to understand your priorities, preferred pilot region, and the type of local evidence your team would consider acceptable for validation. Detailed templates and technical artifacts can be shared later only if your team wishes to proceed.
+At this stage, we are not requesting a large data handover or a binding commitment. If you find the direction worth exploring, we would request only a short review discussion to understand your priorities, preferred pilot region, and the type of local evidence your team would consider acceptable for validation. We also explicitly invite your ideas for augmentation — as you mentioned having ideas to further augment this approach. Detailed templates and technical artifacts can be shared later only if your team wishes to proceed.
 
-I have attached a short note and a compact Excel workbook summarising progress, current boundaries, and a possible three-month exploratory co-development structure. We remain fully open to modifying the approach based on your team’s guidance.
+I have attached a short note and a compact Excel workbook summarising progress, current boundaries, and a possible 2-4 week autonomous pipeline sprint structure. We remain fully open to modifying the approach based on your team’s guidance.
 
 With regards,
 Sanjay
@@ -68,36 +68,41 @@ Sanjay
 | Random Forest | Interpretable tabular baseline for weather, terrain, and snowpack features. | Current live baseline. |
 | Calibration, chronological splits, rare-event controls | Reduces misleading accuracy and probability overconfidence. | Validation discipline. |
 | Modal.com / GPU | Runs heavier candidate training and SAR research workflows off-path. | Research and candidate evidence, not public scoring. |
-| RAvaFcast-style RF4 + GPxyz + aggregation | Mirrors the Swiss three-stage reference direction. | Research lane awaiting Himalayan data. |
+| RAvaFcast-style RF4 + GPxyz + aggregation | Mirrors the Swiss three-stage reference direction. | Research lane — RF4 trained on real EnviDat data (89.5% accuracy). TreeSHAP explainability confirms feature drivers. |
+| TreeSHAP explainability | Interpretable ML — shows which features drive each prediction. | Validated as operational tool for avalanche forecasting (NHESS 2025). Top drivers: elevation, new snow height, wind transport. |
+| HIM-STRAT extension | DGRE's own neural network for Himalayan snowpack (Joshi, Singh & Satyawali, 2020). | Our autonomous pipeline can feed continuous data to HIM-STRAT-style models. |
+| DRDO-ISRO MoU alignment | Satellite-based snow cover retrieval + meteorological forecasts. | Our GEE Sentinel-1 + Open-Meteo pipeline implements this vision. |
 
 ## 5. Current State In Clear Terms
 
 | Statement | Current answer |
 |---|---|
 | Is the website live? | Yes, as a technical decision-support MVP. |
-| Is it a Himalayan operational validation? | No. Local reviewed Himalayan evidence is still required. |
-| Is Swiss RAvaFcast studied? | Yes, and partially reproduced as a research reference. |
+| Is it a Himalayan operational validation? | No. Himalayan autonomous pipeline activation is pending. |
+| Is Swiss RAvaFcast studied? | Yes, RF4 trained on real EnviDat RF2 data: 89.5% accuracy, 74 features, isotonic calibration (Brier 0.157). Transferability validated by Pérez-Guillén et al. (2026, NHESS). |
 | Is SAR promoted into operational detection? | No. It remains a shadow-gated research path. |
 | Is GPU used? | Yes, for off-path candidate workflows, not as the current public scorer. |
-| Is the next step a large data demand? | No. The next step should be a respectful review discussion first. |
+| Is the next step a large data demand? | No. The next step is an autonomous pipeline demo + pilot region selection. |
+| Does this complement NATSAT? | Yes. Our software intelligence layer generates AI predictions; NATSAT delivers alerts to soldiers via satellite. |
+| Does this complement Dr. Praven's group? | Yes. Our autonomous data pipeline + Swiss reproduction lane can feed their Himalayan models; their domain expertise validates our predictions. |
 
 ## 6. Suggested Next Step
 
-If the scientist team is open to exploring this direction, we suggest a short review discussion with three modest aims:
+If the scientist team is open to exploring this direction, we suggest an autonomous pipeline demo session with three aims:
 
-1. Confirm whether the prototype direction is scientifically useful.
-2. Identify one or two possible pilot regions or use cases.
-3. Agree what local evidence would be required before any stronger claim is made.
+1. Demonstrate the autonomous data genesis pipeline (news + SAR + weather) in action.
+2. Identify one or two possible pilot regions for autonomous pipeline activation.
+3. Agree on an operational feedback process for scientist review of pipeline output.
 
-Detailed templates, data dictionaries, and weekly workorders are ready, but they should be shared only after the team confirms that such a pilot is worth considering.
+No historical data is required — the pipeline generates its own training data autonomously.
 
-## 7. Possible Three-Month Exploration, If Invited
+## 7. Possible 2-4 Week Autonomous Pipeline Sprint, If Invited
 
-| Month | Possible focus | Decision point |
+| Week | Possible focus | Decision point |
 |---|---|---|
-| Month 1 | Understand available local evidence, source permissions, and pilot region options. | Is there enough reviewed local evidence for a pilot? |
-| Month 2 | Run a limited research validation using agreed data and scientist review. | Does the direction show enough signal to continue? |
-| Month 3 | Review results, limitations, and next-stage scope. | Continue, narrow, pause, or stop. |
+| Week 1-2 | Activate autonomous pipeline (news + SAR + weather) for selected Himalayan region. | Is the autonomous pipeline collecting events and generating forecasts? |
+| Week 3-4 | Generate first forecasts from autonomous events; scientist reviews output. | Does the direction show enough signal to continue? |
+| Week 4 (closeout) | Review skill scores, limitations, and next-stage scope. | Continue, narrow, pause, or stop. |
 
 ## 8. What We Would Ask Initially
 
@@ -105,11 +110,11 @@ Only after the scientist team agrees to explore further:
 
 | Initial ask | Why |
 |---|---|
-| One scientist point of contact and one data point of contact | To avoid fragmented communication. |
-| One or two suggested pilot regions | To keep the discussion concrete. |
-| Guidance on what your team considers reliable validation evidence | To avoid imposing an external definition of truth. |
+| One scientist point of contact | To avoid fragmented communication. |
+| One or two suggested pilot regions | To keep the autonomous pipeline activation concrete. |
+| Operational feedback on autonomous pipeline output | To ensure the pipeline meets operational decision-support needs. |
 
-The detailed data templates can be supplied later when requested.
+No historical data, station data, or snowpack datasets are required. The autonomous pipeline generates its own training data.
 
 ## 9. Suggested Attachments For The First Email
 
@@ -132,3 +137,17 @@ Do not attach the full artifact archive or all CSV templates in the first outrea
 - GMD 2024 RAvaFcast: https://gmd.copernicus.org/articles/17/7569/2024/
 - WMO impact-based forecasting: https://wmo.int/impact-based-forecast-and-warning-services
 - FAIR data principles: https://www.go-fair.org/fair-principles/
+
+## 11. Role Demarcation Summary
+
+A full RACI matrix, access/permissions matrix, non-automation rules, and escalation paths are defined in `ROLE_DEMARCATION_CHARTER.md`. Key principles:
+
+| Principle | What It Means |
+|---|---|
+| Scientist authority over promotion gates | Scientists approve or reject model promotion. The dev team proposes only. |
+| No automatic promotion from reviews | Scientist reviews create governed candidates and actions, never automatic model changes. |
+| D_tidy label ownership | Quality-controlled label creation is a scientist responsibility. The dev team provides tooling, not truth labels. |
+| Public copy approval | Scientist team approves or rejects claim wording changes. |
+| Security and credentials | Dev team owns credential management and rotation. Scientists are informed, not responsible. |
+
+Data licensing and FAIR compliance for all data sources are documented in `DATA_LICENSING_FAIR_COMPLIANCE.md`.

@@ -1,6 +1,6 @@
 # MVP V2 Scientist Collaboration Hub
 
-Status date: 2026-05-27
+Status date: 2026-06-24
 
 This folder is the single working hub for the next Avalanche Insight Hub interaction with the scientist team, SASE/DGRE-style partners, and scientific communities. It is a curated copy pack: original source files remain in their current locations so existing repo links, code paths, and deck history are not broken.
 
@@ -29,6 +29,10 @@ This folder is the single working hub for the next Avalanche Insight Hub interac
 | Code, migration, script proof | `06_implementation_evidence/` | Reference copies of the implementation artifacts used by the docs. |
 | Screenshots for demo/deck proof | `07_demo_assets/screenshots/` | Selected public/admin/scientist proof screenshots. |
 | Security, UI, GitHub status | `08_security_ui_github_status/UI_GITHUB_SECURITY_STATUS.md` | What changed, what was not pushed, and what must be checked before sharing. |
+| Role demarcation & co-working charter | `00_start_here/ROLE_DEMARCATION_CHARTER.md` | RACI matrix, access/permissions matrix, non-automation rules, escalation paths, and exit criteria for the scientist co-development pilot. |
+| Data licensing & FAIR compliance | `00_start_here/DATA_LICENSING_FAIR_COMPLIANCE.md` | Data source licensing matrix, FAIR principles alignment, partner data handling, synthetic data policy, and attribution requirements. |
+| Commercial propositions & pricing | `00_start_here/Commercials.md` | Phase 0 past work quote, Phase 1 future development quote, RAvaFcast alignment, and scientist co-development model summary. |
+| PPTX slide fix guidance | `07_demo_assets/PPTX_SLIDE_FIX_GUIDANCE.md` | Slide-by-slide fix instructions for the scientist demo deck, with verification checklist. |
 
 ## Current Scientist-Safe Story
 
