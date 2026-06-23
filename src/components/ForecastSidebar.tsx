@@ -1,6 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mountain, X, BarChart3, Settings } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Mountain, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import ModelStatusBadge from '@/components/ModelStatusBadge';
 import RiskDashboard from '@/components/RiskDashboard';
@@ -26,7 +25,7 @@ interface ForecastSidebarProps {
 export default function ForecastSidebar({
   sidebarOpen,
   setSidebarOpen,
-  isCompactViewport,
+  isCompactViewport: _isCompactViewport,
   selectedCell,
   weatherSummary,
   hasForecastData,
@@ -73,25 +72,6 @@ export default function ForecastSidebar({
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col">
-            <div className="mx-4 mt-4 grid grid-cols-2 gap-2 rounded-2xl border border-border/70 bg-secondary/60 p-1">
-              <Button
-                type="button"
-                className="h-11 justify-center gap-1.5 rounded-xl bg-emerald-500 text-[11px] font-semibold uppercase tracking-[0.18em] text-black hover:bg-emerald-400"
-              >
-                <BarChart3 className="h-3.5 w-3.5" />
-                Dashboard
-              </Button>
-              <Button
-                asChild
-                variant="ghost"
-                className="h-11 justify-center gap-1.5 rounded-xl text-[11px] uppercase tracking-[0.18em] text-muted-foreground hover:bg-white/5 hover:text-foreground"
-              >
-                <Link to="/admin" onClick={() => { if (isCompactViewport) setSidebarOpen(false); }}>
-                  <Settings className="h-3.5 w-3.5" />
-                  Admin
-                </Link>
-              </Button>
-            </div>
             <div className="mt-0 flex-1 overflow-y-auto px-2 pb-3">
               <RiskDashboard
                 cell={selectedCell}

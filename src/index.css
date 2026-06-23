@@ -53,6 +53,10 @@
     --risk-4: 25 95% 53%;
     --risk-5: 0 72% 51%;
 
+    /* Info accent (steel-blue for scientific/informational elements) */
+    --info: 210 50% 55%;
+    --info-foreground: 0 0% 100%;
+
     /* Glass Light */
     --glass-bg: 0 0% 100% / 0.75;
     --glass-border: 214 20% 80% / 0.5;
@@ -97,6 +101,10 @@
     --sidebar-accent-foreground: 210 20% 92%;
     --sidebar-border: 230 20% 16%;
     --sidebar-ring: 156 74% 45%;
+
+    /* Info accent (steel-blue for scientific/informational elements) */
+    --info: 210 50% 55%;
+    --info-foreground: 0 0% 100%;
 
     /* Premium dynamic glass */
     --glass-bg: 230 26% 10% / 0.65;
