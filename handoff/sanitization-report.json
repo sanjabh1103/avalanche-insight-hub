@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "sanitization_report_v1",
+  "scannedAt": "2026-08-04T07:19:27.531392+00:00",
+  "directoriesScanned": [
+    "/Users/sanjayb/avalanche-insight-hub-public-knowledge-site/dist",
+    "/Users/sanjayb/avalanche-insight-hub-public-knowledge-site/public"
+  ],
+  "filesScanned": 23,
+  "findingsCount": 0,
+  "findings": [],
+  "outputHashes": {
+    "forecast-map.json": "1d53f0b3029fa5c7f39919ef99a72a5ba00d5c720698b668fb0ef06db931d314",
+    "code-graph-manifest.json": "75b0751410c4ae6fce8c1baa23be20f6e033e2f5b9d302f7bf1d1fc8d76bdd83",
+    "source-ledger.json": "c91b81bf6747e998f3431dfd7d9c07ea278e96a175c35f9b3630dcc37f54c00a",
+    "forecast-map-manifest.json": "75813686c5aca40714c9cdb74b5b521fd68239afe26d1d3f27471041cc620a67",
+    "code-graph.json": "df77d44e305e0877c4024e343b93da2c29ac7bf2dea9402e3ae1d0588caf3224",
+    "explanations.json": "2c51c71c81e1cb097f88b8c43759efd24e0374f3f728d56557060ec8e160ec69"
+  },
+  "publicReleaseStatus": "pass",
+  "forbiddenStringsChecked": [
+    "/Users/",
+    "/home/",
+    "/root/",
+    "C:\\",
+    ".env",
+    "BEGIN PRIVATE KEY",
+    "password",
+    "secret",
+    "token",
+    "api_key",
+    "apikey",
+    "sk-",
+    "ghp_",
+    "github_pat_",
+    "AIza",
+    "xai-",
+    "sbp_",
+    "eyJ",
+    "supabase.co",
+    "localhost",
+    "127.0.0.1",
+    "/api/knowledge-graph",
+    "/api/code"
+  ],
+  "piiPatternsChecked": [
+    "email",
+    "phone"
+  ],
+  "infrastructurePatternsChecked": [
+    "supabase.co",
+    "localhost",
+    "127.0.0.1",
+    "/api/knowledge-graph",
+    "/api/code"
+  ],
+  "externalResourcePatternsChecked": [
+    "external_script",
+    "external_font",
+    "analytics",
+    "external_url"
+  ]
+}

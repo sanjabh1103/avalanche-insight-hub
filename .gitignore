@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment
+.env
+.env.local
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage/
+
+# Temporary
+*.tmp
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Python generated files
+__pycache__/
+*.py[cod]

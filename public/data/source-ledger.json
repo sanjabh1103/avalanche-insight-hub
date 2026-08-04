@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "source_ledger_v1",
+  "entries": [
+    {
+      "asset": "code-graph",
+      "type": "core",
+      "source": "Avalanche Insight Hub codebase structural analysis",
+      "sourceCommit": "f582d1822b3994a6d10832e66e085ab58c8304f4",
+      "license": "MIT",
+      "spdx": "MIT",
+      "attribution": "Knowledge graph generated from the Avalanche Insight Hub codebase.",
+      "contentHash": "5c1c5e28bf6a9502a5fab9fa4e9d0fedf33d569c1de0ac3bab2b9448aee24cef",
+      "version": "phase2-structural-v2",
+      "status": "approved",
+      "blocker": null
+    },
+    {
+      "asset": "forecast-map",
+      "type": "core",
+      "source": null,
+      "sourceCommit": null,
+      "license": null,
+      "spdx": null,
+      "attribution": null,
+      "contentHash": null,
+      "version": null,
+      "status": "blocked",
+      "blocker": "No rights-cleared static snapshot exists"
+    },
+    {
+      "asset": "react",
+      "type": "dependency",
+      "source": "https://github.com/facebook/react",
+      "license": "MIT",
+      "spdx": "MIT",
+      "version": "18.3.1",
+      "status": "approved"
+    },
+    {
+      "asset": "react-dom",
+      "type": "dependency",
+      "source": "https://github.com/facebook/react",
+      "license": "MIT",
+      "spdx": "MIT",
+      "version": "18.3.1",
+      "status": "approved"
+    },
+    {
+      "asset": "react-router-dom",
+      "type": "dependency",
+      "source": "https://github.com/remix-run/react-router",
+      "license": "MIT",
+      "spdx": "MIT",
+      "version": "6.30.4",
+      "status": "approved"
+    },
+    {
+      "asset": "vite",
+      "type": "dependency",
+      "source": "https://github.com/vitejs/vite",
+      "license": "MIT",
+      "spdx": "MIT",
+      "version": "5.4.21",
+      "status": "approved"
+    },
+    {
+      "asset": "typescript",
+      "type": "dependency",
+      "source": "https://github.com/microsoft/TypeScript",
+      "license": "Apache-2.0",
+      "spdx": "Apache-2.0",
+      "version": "5.6.2",
+      "status": "approved"
+    },
+    {
+      "asset": "vitest",
+      "type": "dependency",
+      "source": "https://github.com/vitest-dev/vitest",
+      "license": "MIT",
+      "spdx": "MIT",
+      "version": "3.2.6",
+      "status": "approved"
+    }
+  ]
+}

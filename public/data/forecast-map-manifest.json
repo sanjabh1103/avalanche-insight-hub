@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "public_forecast_map_manifest_v1",
+  "status": "blocked",
+  "mapSha256": null,
+  "blockedReason": "No approved static map snapshot exists.",
+  "requiredFields": {
+    "source": "string — name of data source",
+    "license": "string — license under which data is released",
+    "spdx": "string|null — SPDX identifier if available",
+    "attribution": "string — attribution text to display",
+    "contentHash": "sha256 — hash of source file",
+    "validFrom": "ISO-8601 — validity start time",
+    "validTo": "ISO-8601 — validity end time",
+    "uncertainty": "string — uncertainty or limitation statement",
+    "publicUseApproved": "boolean — whether public use has been approved"
+  },
+  "searchResults": {
+    "locationsSearched": ["backend/data/", "artifacts/", "docs/MVP4/", "docs/MVP3/"],
+    "candidatesFound": [
+      {
+        "path": "backend/data/swiss_envidat/data_rf1_forecast.csv",
+        "rejected": true,
+        "rejectionReason": "Contains private station codes (e.g. KES2, SIM2, DTR2). Research dataset from Envidat — not rights-cleared for public redistribution. 185MB CSV with station-level forecast data."
+      },
+      {
+        "path": "backend/data/swiss_envidat/data_rf2_tidy.csv",
+        "rejected": true,
+        "rejectionReason": "Same dataset family as data_rf1_forecast.csv. Contains private station identifiers."
+      }
+    ],
+    "approvedSnapshotsFound": 0
+  }
+}
