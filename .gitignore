@@ -28,3 +28,6 @@ coverage/
 # Python generated files
 __pycache__/
 *.py[cod]
+
+# Local Netlify folder
+.netlify
