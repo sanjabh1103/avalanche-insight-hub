@@ -1,0 +1,38 @@
+{
+  "schema_version": "snowpack_approved_forcing_manifest_v1",
+  "id": "pir-panjal-open-meteo-gfs-seamless-2023-10-01-2024-02-24-v1",
+  "kind": "forcing",
+  "source": "Open-Meteo Historical Forecast API:gfs_seamless",
+  "licence": "CC BY 4.0; Open-Meteo attribution required; internal-use web app; no public raw-data redistribution",
+  "units": "Hourly UTC; temperature degrees C; relative humidity percent; wind metres per second; radiation W per square metre; precipitation millimetres",
+  "region": "pir_panjal_nw_himalaya",
+  "elevation_band": "middle",
+  "valid_from": "2023-10-01T00:00:00Z",
+  "valid_to": "2024-02-24T00:00:00Z",
+  "approval_valid_from": "2026-08-12T00:00:00Z",
+  "approval_valid_to": "2026-12-31T23:59:59Z",
+  "approval_state": "approved",
+  "payload_path": "snowpack_poc/forcing-payload.json",
+  "payload_sha256": "278df90637d2e5c73bf213151cc196ca7adc4c45edb1058c7c118de0263262b8",
+  "source_semantics": "gfs_seamless is a stitched historical forecast archive; this is a retrospective replay, not a single issued forecast and not an operational forecast",
+  "requested_coordinate": {
+    "latitude": 34.021875,
+    "longitude": 74.347536111
+  },
+  "provider_resolved_coordinate": {
+    "latitude": 34.03189,
+    "longitude": 74.296875,
+    "elevation_m": 3727.0
+  },
+  "cadence": "PT1H",
+  "warmup_start": "2023-09-29T00:00:00Z",
+  "target_grid_m": 3000.0,
+  "source_native_resolution_m": 13000.0,
+  "effective_information_scale_m": 25000.0,
+  "no_3km_skill_claim": true,
+  "required_variable_policy": "Standard SNOWPACK forcing fields are mapped explicitly to source or derived adapter fields",
+  "direct_snowfall_policy": "Unavailable/null in this source snapshot; preserve null and never substitute zero",
+  "snow_depth_policy": "Source QA only; do not assimilate as SNOWPACK HS",
+  "missingness_policy": "Core input gaps fail closed before native execution; material repair is not silently delegated to defaults",
+  "meteoio_policy": "Explicit upstream input QA with PSUM resampling accumulated over 3600 seconds"
+}

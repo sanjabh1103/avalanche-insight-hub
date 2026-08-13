@@ -1,0 +1,14 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  VITE_FEATURE_TECHNICAL_ARTIFACT = "true"
+  # VITE_DEMO_MODE intentionally NOT set in production.
+# Demo mode is gated behind import.meta.env.DEV and only works in local dev.
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

@@ -1,0 +1,112 @@
+{
+  "schema_version": "snowpack_ravafcast_mapping_v1",
+  "status": "candidate_engineering_mapping_not_scientific_approval",
+  "references": {
+    "authoritative_final": {
+      "citation": "Maissen, A., Techel, F., and Volpi, M.: A three-stage model pipeline predicting regional avalanche danger in Switzerland (RAvaFcast v1.0.0): a decision-support tool for operational avalanche forecasting, Geosci. Model Dev., 17, 7569-7593, 2024.",
+      "doi": "10.5194/gmd-17-7569-2024",
+      "url": "https://gmd.copernicus.org/articles/17/7569/2024/"
+    },
+    "customer_linked_preprint": {
+      "citation": "Maissen, A., Techel, F., and Volpi, M.: A three-stage model pipeline predicting regional avalanche danger in Switzerland (RAvaFcast v1.0.0), EGUsphere preprint egusphere-2023-2948, manuscript version 3, 2024.",
+      "url": "https://egusphere.copernicus.org/preprints/2024/egusphere-2023-2948/egusphere-2023-2948-manuscript-version3.pdf",
+      "relationship": "customer-linked preprint; use the revised GMD paper as the primary citation"
+    }
+  },
+  "scope": {
+    "ravafcast_role": "scientific downstream pipeline and feature-design reference that uses SNOWPACK outputs",
+    "authoritative_input_contract": "SNOWPACK requirements and the pinned MeteoIO configuration",
+    "paper_does_not_define": [
+      "the complete machine-readable SNOWPACK/MeteoIO forcing field list",
+      "provider-specific units and source-variable names",
+      "the customer-approved precipitation-phase algorithm or thresholds"
+    ],
+    "customer_phrase_interpretation": "as per RAvaFcast is recorded as a model-reference constraint; this file makes the implemented engineering mapping explicit without claiming that the paper approved it"
+  },
+  "mapping": [
+    {
+      "source": "temperature_2m",
+      "target": "TA",
+      "units": "degrees C to K",
+      "treatment": "source value plus deterministic elevation adjustment",
+      "status": "candidate"
+    },
+    {
+      "source": "relative_humidity_2m",
+      "target": "RH",
+      "units": "percent to fraction",
+      "treatment": "unit conversion; no undocumented fill",
+      "status": "candidate"
+    },
+    {
+      "source": "wind_speed_10m, wind_direction_10m",
+      "target": "VW, DW",
+      "units": "m/s and degrees",
+      "treatment": "explicit unit conversion and candidate vector-preserving exposure adjustment",
+      "status": "candidate"
+    },
+    {
+      "source": "shortwave_radiation",
+      "target": "ISWR",
+      "units": "W/m2",
+      "treatment": "source value; terrain correction is disabled for this candidate",
+      "status": "candidate"
+    },
+    {
+      "source": "longwave_radiation",
+      "target": "ILWR",
+      "units": "W/m2",
+      "treatment": "direct only when explicitly supplied as true incoming longwave",
+      "status": "optional direct source"
+    },
+    {
+      "source": "temperature_2m, relative_humidity_2m, cloud_cover",
+      "target": "ILWR",
+      "units": "W/m2",
+      "treatment": "named Crawford-Duchon-style engineering estimate when direct longwave is absent",
+      "status": "candidate derivation; not RAvaFcast-defined"
+    },
+    {
+      "source": "terrestrial_radiation",
+      "target": "none",
+      "units": "W/m2",
+      "treatment": "retain as source_terrestrial_radiation provenance only; never map to ILWR",
+      "status": "source metadata only"
+    },
+    {
+      "source": "precipitation",
+      "target": "PSUM",
+      "units": "mm per source hour",
+      "treatment": "MeteoIO re-accumulation over the explicit 3600-second period",
+      "status": "candidate"
+    },
+    {
+      "source": "temperature_2m after elevation adjustment",
+      "target": "PSUM_PH",
+      "units": "liquid fraction 0 to 1",
+      "treatment": "linear phase fraction between the configured snow and rain thresholds",
+      "status": "candidate engineering rule; not defined by the paper"
+    },
+    {
+      "source": "snowfall",
+      "target": "none",
+      "units": "provider units",
+      "treatment": "preserve as optional provenance; null remains null and no zero substitute is allowed",
+      "status": "unavailable in the current source snapshot"
+    },
+    {
+      "source": "snow_depth",
+      "target": "HS",
+      "units": "m",
+      "treatment": "source QA only; no assimilation into SNOWPACK HS for this candidate",
+      "status": "not used as native input"
+    },
+    {
+      "source": "air temperature proxy",
+      "target": "TSG, TSS",
+      "units": "K",
+      "treatment": "explicit derived proxies; MEAS_TSS remains false",
+      "status": "candidate derivation; not paper-defined"
+    }
+  ]
+}

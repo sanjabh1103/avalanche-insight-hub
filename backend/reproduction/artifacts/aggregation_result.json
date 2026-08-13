@@ -1,0 +1,3778 @@
+{
+  "band_rows": [
+    {
+      "date": "2019-11-30",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.9994520547945203,
+      "predicted_danger": 3,
+      "station_count": 8,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-01",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.961037254856299,
+      "predicted_danger": 3,
+      "station_count": 1,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-02",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.4355077105926892,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-02",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.0485497494914457,
+      "predicted_danger": 2,
+      "station_count": 1,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-02",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.85152419317129,
+      "predicted_danger": 3,
+      "station_count": 13,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-03",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.006147900930968,
+      "predicted_danger": 2,
+      "station_count": 2,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-04",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.362412918321411,
+      "predicted_danger": 2,
+      "station_count": 5,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-05",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.0318495025260055,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-06",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.021202488957396,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-06",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.05022903345771,
+      "predicted_danger": 2,
+      "station_count": 3,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-06",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.503274436797132,
+      "predicted_danger": 3,
+      "station_count": 13,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-07",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0040322580645162,
+      "predicted_danger": 1,
+      "station_count": 2,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-07",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.1953060446164447,
+      "predicted_danger": 2,
+      "station_count": 14,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-09",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 3.010191510807481,
+      "predicted_danger": 3,
+      "station_count": 1,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-09",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 3.2423827559300626,
+      "predicted_danger": 3,
+      "station_count": 1,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-09",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.5678022712090844,
+      "predicted_danger": 4,
+      "station_count": 8,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-10",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 2.671880312818769,
+      "predicted_danger": 3,
+      "station_count": 1,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-10",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.961037254856299,
+      "predicted_danger": 3,
+      "station_count": 3,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-10",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.0034467048313296,
+      "predicted_danger": 3,
+      "station_count": 3,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-11",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.3005593634286616,
+      "predicted_danger": 2,
+      "station_count": 2,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-12",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 3.0332742665879104,
+      "predicted_danger": 3,
+      "station_count": 2,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-12",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.622350674373796,
+      "predicted_danger": 4,
+      "station_count": 10,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-13",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 3.134566862910008,
+      "predicted_danger": 3,
+      "station_count": 1,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-13",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 3.4632587859424926,
+      "predicted_danger": 3,
+      "station_count": 5,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-13",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.4824399260628467,
+      "predicted_danger": 3,
+      "station_count": 8,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-14",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 3.2464182385292406,
+      "predicted_danger": 3,
+      "station_count": 3,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-14",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.2464182385292406,
+      "predicted_danger": 3,
+      "station_count": 12,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-15",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.860834134440253,
+      "predicted_danger": 3,
+      "station_count": 2,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-15",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.9406499388884892,
+      "predicted_danger": 3,
+      "station_count": 12,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-16",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.316411581729847,
+      "predicted_danger": 2,
+      "station_count": 2,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-17",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.581341346810545,
+      "predicted_danger": 3,
+      "station_count": 5,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-18",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.1857861446797346,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-18",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.3239462209302326,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-18",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.2854823701767932,
+      "predicted_danger": 2,
+      "station_count": 6,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-19",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.876977321024688,
+      "predicted_danger": 3,
+      "station_count": 9,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-20",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 3.5971953578336553,
+      "predicted_danger": 4,
+      "station_count": 3,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-20",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.37005712381541,
+      "predicted_danger": 3,
+      "station_count": 19,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-21",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.959489238246151,
+      "predicted_danger": 3,
+      "station_count": 1,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-21",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.5971953578336553,
+      "predicted_danger": 4,
+      "station_count": 15,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-22",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 3.6878612716763004,
+      "predicted_danger": 4,
+      "station_count": 6,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-22",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.7029986498377863,
+      "predicted_danger": 4,
+      "station_count": 13,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-23",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 3.664804469273743,
+      "predicted_danger": 4,
+      "station_count": 6,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-23",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.773109243697479,
+      "predicted_danger": 4,
+      "station_count": 14,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-24",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 3.815217391304348,
+      "predicted_danger": 4,
+      "station_count": 10,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-24",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.519898496007922,
+      "predicted_danger": 4,
+      "station_count": 28,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-25",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.9837525687381317,
+      "predicted_danger": 3,
+      "station_count": 10,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-26",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 3.010191510807481,
+      "predicted_danger": 3,
+      "station_count": 1,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-26",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 3.3201600545533636,
+      "predicted_danger": 3,
+      "station_count": 1,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-26",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.7321428571428577,
+      "predicted_danger": 4,
+      "station_count": 13,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-27",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.647881484429787,
+      "predicted_danger": 3,
+      "station_count": 1,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-27",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.0805004079412566,
+      "predicted_danger": 3,
+      "station_count": 21,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-28",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.3005593634286616,
+      "predicted_danger": 2,
+      "station_count": 1,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-28",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.7429906603327034,
+      "predicted_danger": 3,
+      "station_count": 8,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-29",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.440101028592047,
+      "predicted_danger": 2,
+      "station_count": 4,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-29",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.4274958099307837,
+      "predicted_danger": 2,
+      "station_count": 13,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-30",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.3575637350188163,
+      "predicted_danger": 2,
+      "station_count": 2,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-30",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.559315166734194,
+      "predicted_danger": 3,
+      "station_count": 17,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-31",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.063163577469858,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-31",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.3005593634286616,
+      "predicted_danger": 2,
+      "station_count": 5,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2019-12-31",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.298746004425867,
+      "predicted_danger": 2,
+      "station_count": 27,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-01",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.0694643704429514,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-01",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.0062621861565972,
+      "predicted_danger": 2,
+      "station_count": 2,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-01",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.298746004425867,
+      "predicted_danger": 2,
+      "station_count": 11,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-02",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.0040657235979973,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-02",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.1401232648638144,
+      "predicted_danger": 2,
+      "station_count": 3,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-02",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.1401232648638144,
+      "predicted_danger": 2,
+      "station_count": 11,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-03",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.038396845300838,
+      "predicted_danger": 2,
+      "station_count": 3,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-03",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.082521341726309,
+      "predicted_danger": 2,
+      "station_count": 10,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-04",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.063163577469858,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-04",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.223066684338697,
+      "predicted_danger": 2,
+      "station_count": 5,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-04",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.40250648822447,
+      "predicted_danger": 2,
+      "station_count": 22,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-05",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.0621256204004792,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-05",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0181110612183806,
+      "predicted_danger": 1,
+      "station_count": 2,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-05",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.98820273330708,
+      "predicted_danger": 2,
+      "station_count": 6,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-06",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0181110612183806,
+      "predicted_danger": 1,
+      "station_count": 4,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-06",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.9685534591194969,
+      "predicted_danger": 2,
+      "station_count": 8,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-07",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.130153968459125,
+      "predicted_danger": 1,
+      "station_count": 4,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-07",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.2771586034272782,
+      "predicted_danger": 1,
+      "station_count": 10,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-07",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.0812703834277828,
+      "predicted_danger": 1,
+      "station_count": 22,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-08",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.021202488957396,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-08",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.1340989982203915,
+      "predicted_danger": 1,
+      "station_count": 10,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-08",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.0672730848817533,
+      "predicted_danger": 1,
+      "station_count": 22,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-09",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.0181110612183806,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-09",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.057465385598948,
+      "predicted_danger": 1,
+      "station_count": 6,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-09",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.0812703834277828,
+      "predicted_danger": 1,
+      "station_count": 24,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-10",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.0181110612183806,
+      "predicted_danger": 1,
+      "station_count": 2,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-10",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0672730848817533,
+      "predicted_danger": 1,
+      "station_count": 11,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-10",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.066120491354266,
+      "predicted_danger": 1,
+      "station_count": 10,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-11",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.0040657235979973,
+      "predicted_danger": 1,
+      "station_count": 2,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-11",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0603938651997982,
+      "predicted_danger": 1,
+      "station_count": 10,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-11",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.066120491354266,
+      "predicted_danger": 1,
+      "station_count": 16,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-12",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.0181110612183806,
+      "predicted_danger": 1,
+      "station_count": 4,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-12",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0621256204004792,
+      "predicted_danger": 1,
+      "station_count": 6,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-12",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.986069322482929,
+      "predicted_danger": 2,
+      "station_count": 21,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-13",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.0181110612183806,
+      "predicted_danger": 1,
+      "station_count": 3,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-13",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.066120491354266,
+      "predicted_danger": 1,
+      "station_count": 10,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-13",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.0603938651997982,
+      "predicted_danger": 1,
+      "station_count": 29,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-14",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.0040322580645162,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-14",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0603938651997982,
+      "predicted_danger": 1,
+      "station_count": 6,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-14",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.0672730848817533,
+      "predicted_danger": 1,
+      "station_count": 20,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-15",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.0040322580645162,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-15",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.074818689648579,
+      "predicted_danger": 1,
+      "station_count": 6,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-15",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.0288026660318972,
+      "predicted_danger": 1,
+      "station_count": 29,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-16",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.0040657235979973,
+      "predicted_danger": 1,
+      "station_count": 2,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-16",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0181110612183806,
+      "predicted_danger": 1,
+      "station_count": 2,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-16",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.9477181134952621,
+      "predicted_danger": 2,
+      "station_count": 7,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-17",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 2.473232446340699,
+      "predicted_danger": 3,
+      "station_count": 1,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-17",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.6421965761706927,
+      "predicted_danger": 3,
+      "station_count": 3,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-17",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.5456714518630457,
+      "predicted_danger": 2,
+      "station_count": 6,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-18",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.8469562899512026,
+      "predicted_danger": 3,
+      "station_count": 5,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-18",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.663495903667455,
+      "predicted_danger": 3,
+      "station_count": 9,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-19",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.860834134440253,
+      "predicted_danger": 3,
+      "station_count": 4,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-19",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.3996270634906125,
+      "predicted_danger": 2,
+      "station_count": 14,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-20",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.6421965761706927,
+      "predicted_danger": 3,
+      "station_count": 5,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-20",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.393446712855181,
+      "predicted_danger": 2,
+      "station_count": 10,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-21",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.2882247459616414,
+      "predicted_danger": 2,
+      "station_count": 7,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-21",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.2839091560174767,
+      "predicted_danger": 2,
+      "station_count": 9,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-22",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.066120491354266,
+      "predicted_danger": 1,
+      "station_count": 4,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-22",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.044611621116869,
+      "predicted_danger": 2,
+      "station_count": 21,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-23",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.907296037911397,
+      "predicted_danger": 2,
+      "station_count": 3,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-23",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.98820273330708,
+      "predicted_danger": 2,
+      "station_count": 18,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-24",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.0181110612183806,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-24",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0040322580645162,
+      "predicted_danger": 1,
+      "station_count": 2,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-24",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.980242732147897,
+      "predicted_danger": 2,
+      "station_count": 18,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-25",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 1.0181110612183806,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-25",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.6381019367939194,
+      "predicted_danger": 2,
+      "station_count": 6,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-25",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.979775848993006,
+      "predicted_danger": 2,
+      "station_count": 21,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-26",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.0485497494914457,
+      "predicted_danger": 2,
+      "station_count": 18,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-27",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 3.097275071684911,
+      "predicted_danger": 3,
+      "station_count": 1,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-27",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.2467634366418205,
+      "predicted_danger": 3,
+      "station_count": 15,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-28",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 3.1390374331550803,
+      "predicted_danger": 3,
+      "station_count": 1,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-28",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 3.4632587859424926,
+      "predicted_danger": 3,
+      "station_count": 3,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-28",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.622350674373796,
+      "predicted_danger": 4,
+      "station_count": 18,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-29",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 3.0092633017167083,
+      "predicted_danger": 3,
+      "station_count": 1,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-29",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 3.682349373702503,
+      "predicted_danger": 4,
+      "station_count": 8,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-29",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.592161370462383,
+      "predicted_danger": 4,
+      "station_count": 22,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-30",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 3.134566862910008,
+      "predicted_danger": 3,
+      "station_count": 1,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-30",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.37005712381541,
+      "predicted_danger": 3,
+      "station_count": 21,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-31",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.605388832876031,
+      "predicted_danger": 3,
+      "station_count": 4,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-01-31",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.0905434293429344,
+      "predicted_danger": 3,
+      "station_count": 8,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-01",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.8319748446548303,
+      "predicted_danger": 3,
+      "station_count": 9,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-02",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.815217391304348,
+      "predicted_danger": 4,
+      "station_count": 7,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-03",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.458335481874903,
+      "predicted_danger": 3,
+      "station_count": 10,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-04",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 3.024965050911651,
+      "predicted_danger": 3,
+      "station_count": 3,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-04",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.664804469273743,
+      "predicted_danger": 4,
+      "station_count": 16,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-05",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.820994772957234,
+      "predicted_danger": 3,
+      "station_count": 3,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-05",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.515261958997722,
+      "predicted_danger": 4,
+      "station_count": 24,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-06",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 2.2611688556581018,
+      "predicted_danger": 2,
+      "station_count": 1,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-06",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.7065698848840323,
+      "predicted_danger": 3,
+      "station_count": 7,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-06",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.934790752434978,
+      "predicted_danger": 3,
+      "station_count": 5,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-07",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.106255124625998,
+      "predicted_danger": 2,
+      "station_count": 2,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-07",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.569296306917372,
+      "predicted_danger": 3,
+      "station_count": 10,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-08",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.1818826449211133,
+      "predicted_danger": 2,
+      "station_count": 2,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-08",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.1942878168411983,
+      "predicted_danger": 2,
+      "station_count": 12,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-09",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.8620587284518306,
+      "predicted_danger": 3,
+      "station_count": 4,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-10",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.9552388239613725,
+      "predicted_danger": 3,
+      "station_count": 3,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-10",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.458335481874903,
+      "predicted_danger": 3,
+      "station_count": 12,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-11",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 3.353136802485208,
+      "predicted_danger": 3,
+      "station_count": 3,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-11",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.3883703271599095,
+      "predicted_danger": 3,
+      "station_count": 11,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-12",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.9654734993385046,
+      "predicted_danger": 3,
+      "station_count": 10,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-13",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.5228516946546105,
+      "predicted_danger": 4,
+      "station_count": 21,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-14",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.644452150483273,
+      "predicted_danger": 3,
+      "station_count": 2,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-14",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.9489582439351074,
+      "predicted_danger": 3,
+      "station_count": 5,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-15",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.1401232648638144,
+      "predicted_danger": 2,
+      "station_count": 1,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-15",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.672320602734408,
+      "predicted_danger": 3,
+      "station_count": 26,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-16",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.0273630718598157,
+      "predicted_danger": 2,
+      "station_count": 2,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-16",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.5064263506765725,
+      "predicted_danger": 3,
+      "station_count": 12,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-17",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.3895378545337955,
+      "predicted_danger": 2,
+      "station_count": 5,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-17",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.820994772957234,
+      "predicted_danger": 3,
+      "station_count": 14,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-18",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.4919284194719054,
+      "predicted_danger": 2,
+      "station_count": 3,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-18",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.9552388239613725,
+      "predicted_danger": 3,
+      "station_count": 9,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-19",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.547984967979122,
+      "predicted_danger": 3,
+      "station_count": 4,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-19",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.0092633017167083,
+      "predicted_danger": 3,
+      "station_count": 18,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-20",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.235923451858385,
+      "predicted_danger": 2,
+      "station_count": 1,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-20",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.7429906603327034,
+      "predicted_danger": 3,
+      "station_count": 21,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-21",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.391576847201921,
+      "predicted_danger": 2,
+      "station_count": 1,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-21",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.3005593634286616,
+      "predicted_danger": 2,
+      "station_count": 10,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-22",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.1447216705352359,
+      "predicted_danger": 1,
+      "station_count": 2,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-22",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.1942878168411983,
+      "predicted_danger": 2,
+      "station_count": 4,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-23",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.063163577469858,
+      "predicted_danger": 1,
+      "station_count": 3,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-23",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.0874598348006423,
+      "predicted_danger": 2,
+      "station_count": 13,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-24",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.063163577469858,
+      "predicted_danger": 1,
+      "station_count": 4,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-24",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.1312753600127297,
+      "predicted_danger": 1,
+      "station_count": 11,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-25",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.7015430987641347,
+      "predicted_danger": 3,
+      "station_count": 3,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-25",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.2245963793406482,
+      "predicted_danger": 3,
+      "station_count": 9,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-26",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 3.2425905598243694,
+      "predicted_danger": 3,
+      "station_count": 6,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-26",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.444444444444444,
+      "predicted_danger": 3,
+      "station_count": 18,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-27",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 3.0489540651283153,
+      "predicted_danger": 3,
+      "station_count": 3,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-27",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.622350674373796,
+      "predicted_danger": 4,
+      "station_count": 21,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-28",
+      "elevation_band_m": 1600,
+      "expected_danger_max": 2.860834134440253,
+      "predicted_danger": 3,
+      "station_count": 1,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-28",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.83631091087981,
+      "predicted_danger": 3,
+      "station_count": 2,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-28",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.9399430805102176,
+      "predicted_danger": 3,
+      "station_count": 5,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-29",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.4612744655321452,
+      "predicted_danger": 2,
+      "station_count": 1,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-02-29",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.458335481874903,
+      "predicted_danger": 3,
+      "station_count": 11,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-01",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.7015430987641347,
+      "predicted_danger": 3,
+      "station_count": 4,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-01",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.733766233766234,
+      "predicted_danger": 4,
+      "station_count": 9,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-02",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 3.084308474611593,
+      "predicted_danger": 3,
+      "station_count": 3,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-02",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.5971953578336553,
+      "predicted_danger": 4,
+      "station_count": 21,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-03",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 3.3460657238531084,
+      "predicted_danger": 3,
+      "station_count": 5,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-03",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.359432953630496,
+      "predicted_danger": 3,
+      "station_count": 12,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-04",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.9320494721069816,
+      "predicted_danger": 3,
+      "station_count": 3,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-04",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.5678022712090844,
+      "predicted_danger": 4,
+      "station_count": 14,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-05",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.932908163044016,
+      "predicted_danger": 3,
+      "station_count": 1,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-05",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.6878612716763004,
+      "predicted_danger": 4,
+      "station_count": 11,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-06",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.9776334465998535,
+      "predicted_danger": 3,
+      "station_count": 4,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-06",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.4697656096119753,
+      "predicted_danger": 3,
+      "station_count": 9,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-07",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.3895378545337955,
+      "predicted_danger": 2,
+      "station_count": 4,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-07",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.3185634729700038,
+      "predicted_danger": 3,
+      "station_count": 20,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-08",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.9320494721069816,
+      "predicted_danger": 3,
+      "station_count": 3,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-08",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.860834134440253,
+      "predicted_danger": 3,
+      "station_count": 8,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-09",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 2.9552388239613725,
+      "predicted_danger": 3,
+      "station_count": 2,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-09",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.2631464331309337,
+      "predicted_danger": 3,
+      "station_count": 21,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-10",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 3.3639938141616215,
+      "predicted_danger": 3,
+      "station_count": 17,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-11",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.3642248006439255,
+      "predicted_danger": 2,
+      "station_count": 4,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-12",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.40250648822447,
+      "predicted_danger": 2,
+      "station_count": 10,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-13",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0181110612183806,
+      "predicted_danger": 1,
+      "station_count": 2,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-13",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.85152419317129,
+      "predicted_danger": 3,
+      "station_count": 4,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-14",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.644452150483273,
+      "predicted_danger": 3,
+      "station_count": 12,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-15",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.1274097052958123,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-15",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.0039177737642366,
+      "predicted_danger": 2,
+      "station_count": 3,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-16",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.9685534591194969,
+      "predicted_danger": 2,
+      "station_count": 7,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-17",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0,
+      "predicted_danger": 1,
+      "station_count": 4,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-17",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.2343383242542936,
+      "predicted_danger": 1,
+      "station_count": 6,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-18",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0181110612183806,
+      "predicted_danger": 1,
+      "station_count": 12,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-18",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.9502681715553205,
+      "predicted_danger": 2,
+      "station_count": 14,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-19",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.057465385598948,
+      "predicted_danger": 1,
+      "station_count": 6,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-19",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.9378640124533582,
+      "predicted_danger": 2,
+      "station_count": 19,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-20",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.021202488957396,
+      "predicted_danger": 1,
+      "station_count": 7,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-20",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.9477181134952621,
+      "predicted_danger": 2,
+      "station_count": 11,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-21",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.057465385598948,
+      "predicted_danger": 1,
+      "station_count": 5,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-21",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.9477181134952621,
+      "predicted_danger": 2,
+      "station_count": 6,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-22",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0040322580645162,
+      "predicted_danger": 1,
+      "station_count": 3,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-22",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.2865674997921315,
+      "predicted_danger": 1,
+      "station_count": 8,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-23",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.057465385598948,
+      "predicted_danger": 1,
+      "station_count": 5,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-23",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.426845530503788,
+      "predicted_danger": 1,
+      "station_count": 8,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-24",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.1419824590435215,
+      "predicted_danger": 1,
+      "station_count": 4,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-24",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.016630240306245,
+      "predicted_danger": 2,
+      "station_count": 12,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-25",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0603938651997982,
+      "predicted_danger": 1,
+      "station_count": 3,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-25",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.033094351789838,
+      "predicted_danger": 2,
+      "station_count": 9,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-26",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0181110612183806,
+      "predicted_danger": 1,
+      "station_count": 5,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-26",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.9346677366198268,
+      "predicted_danger": 2,
+      "station_count": 5,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-27",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0,
+      "predicted_danger": 1,
+      "station_count": 7,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-27",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.0040322580645162,
+      "predicted_danger": 1,
+      "station_count": 4,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-28",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-28",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.7112810707456978,
+      "predicted_danger": 2,
+      "station_count": 5,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-29",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.2677027977342668,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-29",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.9049723217391834,
+      "predicted_danger": 2,
+      "station_count": 6,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-30",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-30",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.266810738924445,
+      "predicted_danger": 2,
+      "station_count": 7,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-03-31",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.2452507621341626,
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-01",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0181110612183806,
+      "predicted_danger": 1,
+      "station_count": 5,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-01",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 2.0667463688856103,
+      "predicted_danger": 2,
+      "station_count": 13,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-02",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.980242732147897,
+      "predicted_danger": 2,
+      "station_count": 14,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-03",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0181110612183806,
+      "predicted_danger": 1,
+      "station_count": 9,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-03",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.693089430894309,
+      "predicted_danger": 2,
+      "station_count": 16,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-04",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0,
+      "predicted_danger": 1,
+      "station_count": 4,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-04",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.4841819584266014,
+      "predicted_danger": 1,
+      "station_count": 18,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-05",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0,
+      "predicted_danger": 1,
+      "station_count": 2,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-05",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.1756922923469117,
+      "predicted_danger": 1,
+      "station_count": 14,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-06",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.057465385598948,
+      "predicted_danger": 1,
+      "station_count": 6,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-06",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.0603938651997982,
+      "predicted_danger": 1,
+      "station_count": 15,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-07",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0181110612183806,
+      "predicted_danger": 1,
+      "station_count": 9,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-07",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.063163577469858,
+      "predicted_danger": 1,
+      "station_count": 16,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-08",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0,
+      "predicted_danger": 1,
+      "station_count": 7,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-08",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.0584303330644231,
+      "predicted_danger": 1,
+      "station_count": 16,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-09",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0,
+      "predicted_danger": 1,
+      "station_count": 5,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-09",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.057465385598948,
+      "predicted_danger": 1,
+      "station_count": 20,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-10",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0,
+      "predicted_danger": 1,
+      "station_count": 2,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-10",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.0614069609109942,
+      "predicted_danger": 1,
+      "station_count": 13,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-11",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.057465385598948,
+      "predicted_danger": 1,
+      "station_count": 10,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-11",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.0181110612183806,
+      "predicted_danger": 1,
+      "station_count": 17,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-12",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0288026660318972,
+      "predicted_danger": 1,
+      "station_count": 8,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-12",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.0181110612183806,
+      "predicted_danger": 1,
+      "station_count": 14,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-13",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0,
+      "predicted_danger": 1,
+      "station_count": 2,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-13",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.057465385598948,
+      "predicted_danger": 1,
+      "station_count": 4,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-14",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0031413612565445,
+      "predicted_danger": 1,
+      "station_count": 3,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-14",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.057465385598948,
+      "predicted_danger": 1,
+      "station_count": 15,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-15",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.0614069609109942,
+      "predicted_danger": 1,
+      "station_count": 9,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-16",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.057465385598948,
+      "predicted_danger": 1,
+      "station_count": 6,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-16",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.0181110612183806,
+      "predicted_danger": 1,
+      "station_count": 16,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-17",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0288026660318972,
+      "predicted_danger": 1,
+      "station_count": 10,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-17",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.0040322580645162,
+      "predicted_danger": 1,
+      "station_count": 18,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-22",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0,
+      "predicted_danger": 1,
+      "station_count": 2,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-22",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.057465385598948,
+      "predicted_danger": 1,
+      "station_count": 10,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-23",
+      "elevation_band_m": 2000,
+      "expected_danger_max": 1.0318495025260055,
+      "predicted_danger": 1,
+      "station_count": 9,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "date": "2020-04-23",
+      "elevation_band_m": 2400,
+      "expected_danger_max": 1.057465385598948,
+      "predicted_danger": 1,
+      "station_count": 23,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    }
+  ],
+  "bands_m": [
+    1200,
+    1600,
+    2000,
+    2400
+  ],
+  "bandwidth_m": 400,
+  "claim_boundary": "station_row_baseline_until_gpxyz_grid_and_warning_region_polygons_are_available",
+  "discretization": {
+    "leakage_guard": "refined_thresholds_must_be_computed_from_training_or_oob_data_only",
+    "method": "legacy_predicted_class_max",
+    "reference_thresholds": [
+      0.5,
+      1.61,
+      2.42,
+      3.44
+    ],
+    "thresholds": null
+  },
+  "input_rows": 2286,
+  "metrics": {
+    "accuracy": 0.8014184397163121,
+    "confusion_matrix": [
+      [
+        31,
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        39,
+        11,
+        0
+      ],
+      [
+        0,
+        3,
+        34,
+        10
+      ],
+      [
+        0,
+        0,
+        3,
+        9
+      ]
+    ],
+    "confusion_matrix_labels": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "macro_f1": 0.7798178241302179,
+    "per_class_f1": {
+      "1": 0.9841269841269841,
+      "2": 0.8387096774193549,
+      "3": 0.7157894736842105,
+      "4": 0.5806451612903226
+    }
+  },
+  "model_status_mutation_allowed": false,
+  "production_scoring_allowed": false,
+  "region_day_rows": [
+    {
+      "band_count": 1,
+      "date": "2019-11-30",
+      "predicted_danger": 3,
+      "station_count": 8,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2019-12-01",
+      "predicted_danger": 3,
+      "station_count": 1,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2019-12-02",
+      "predicted_danger": 3,
+      "station_count": 15,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2019-12-03",
+      "predicted_danger": 2,
+      "station_count": 2,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2019-12-04",
+      "predicted_danger": 2,
+      "station_count": 5,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2019-12-05",
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2019-12-06",
+      "predicted_danger": 3,
+      "station_count": 17,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2019-12-07",
+      "predicted_danger": 2,
+      "station_count": 16,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2019-12-09",
+      "predicted_danger": 4,
+      "station_count": 10,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2019-12-10",
+      "predicted_danger": 3,
+      "station_count": 7,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2019-12-11",
+      "predicted_danger": 2,
+      "station_count": 2,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2019-12-12",
+      "predicted_danger": 4,
+      "station_count": 12,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2019-12-13",
+      "predicted_danger": 3,
+      "station_count": 14,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2019-12-14",
+      "predicted_danger": 3,
+      "station_count": 15,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2019-12-15",
+      "predicted_danger": 3,
+      "station_count": 14,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2019-12-16",
+      "predicted_danger": 2,
+      "station_count": 2,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2019-12-17",
+      "predicted_danger": 3,
+      "station_count": 5,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2019-12-18",
+      "predicted_danger": 2,
+      "station_count": 8,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2019-12-19",
+      "predicted_danger": 3,
+      "station_count": 9,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2019-12-20",
+      "predicted_danger": 4,
+      "station_count": 22,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2019-12-21",
+      "predicted_danger": 4,
+      "station_count": 16,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2019-12-22",
+      "predicted_danger": 4,
+      "station_count": 19,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2019-12-23",
+      "predicted_danger": 4,
+      "station_count": 20,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2019-12-24",
+      "predicted_danger": 4,
+      "station_count": 38,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2019-12-25",
+      "predicted_danger": 3,
+      "station_count": 10,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2019-12-26",
+      "predicted_danger": 4,
+      "station_count": 15,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2019-12-27",
+      "predicted_danger": 3,
+      "station_count": 22,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2019-12-28",
+      "predicted_danger": 3,
+      "station_count": 9,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2019-12-29",
+      "predicted_danger": 2,
+      "station_count": 17,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2019-12-30",
+      "predicted_danger": 3,
+      "station_count": 19,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2019-12-31",
+      "predicted_danger": 2,
+      "station_count": 33,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-01",
+      "predicted_danger": 2,
+      "station_count": 14,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-02",
+      "predicted_danger": 2,
+      "station_count": 15,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-01-03",
+      "predicted_danger": 2,
+      "station_count": 13,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-04",
+      "predicted_danger": 2,
+      "station_count": 28,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-05",
+      "predicted_danger": 2,
+      "station_count": 9,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-01-06",
+      "predicted_danger": 2,
+      "station_count": 12,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-07",
+      "predicted_danger": 1,
+      "station_count": 36,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-08",
+      "predicted_danger": 1,
+      "station_count": 33,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-09",
+      "predicted_danger": 1,
+      "station_count": 31,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-10",
+      "predicted_danger": 1,
+      "station_count": 23,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-11",
+      "predicted_danger": 1,
+      "station_count": 28,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-12",
+      "predicted_danger": 2,
+      "station_count": 31,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-13",
+      "predicted_danger": 1,
+      "station_count": 42,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-14",
+      "predicted_danger": 1,
+      "station_count": 27,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-15",
+      "predicted_danger": 1,
+      "station_count": 36,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-16",
+      "predicted_danger": 2,
+      "station_count": 11,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-17",
+      "predicted_danger": 3,
+      "station_count": 10,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-01-18",
+      "predicted_danger": 3,
+      "station_count": 14,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-01-19",
+      "predicted_danger": 3,
+      "station_count": 18,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-01-20",
+      "predicted_danger": 3,
+      "station_count": 15,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-01-21",
+      "predicted_danger": 2,
+      "station_count": 16,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-01-22",
+      "predicted_danger": 2,
+      "station_count": 25,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-01-23",
+      "predicted_danger": 2,
+      "station_count": 21,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-24",
+      "predicted_danger": 2,
+      "station_count": 21,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-25",
+      "predicted_danger": 2,
+      "station_count": 28,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2020-01-26",
+      "predicted_danger": 2,
+      "station_count": 18,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-01-27",
+      "predicted_danger": 3,
+      "station_count": 16,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-28",
+      "predicted_danger": 4,
+      "station_count": 22,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-01-29",
+      "predicted_danger": 4,
+      "station_count": 31,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-01-30",
+      "predicted_danger": 3,
+      "station_count": 22,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-01-31",
+      "predicted_danger": 3,
+      "station_count": 12,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2020-02-01",
+      "predicted_danger": 3,
+      "station_count": 9,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2020-02-02",
+      "predicted_danger": 4,
+      "station_count": 7,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2020-02-03",
+      "predicted_danger": 3,
+      "station_count": 10,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-04",
+      "predicted_danger": 4,
+      "station_count": 19,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-05",
+      "predicted_danger": 4,
+      "station_count": 27,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-02-06",
+      "predicted_danger": 3,
+      "station_count": 13,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-07",
+      "predicted_danger": 3,
+      "station_count": 12,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-08",
+      "predicted_danger": 2,
+      "station_count": 14,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2020-02-09",
+      "predicted_danger": 3,
+      "station_count": 4,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-10",
+      "predicted_danger": 3,
+      "station_count": 15,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-11",
+      "predicted_danger": 3,
+      "station_count": 14,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2020-02-12",
+      "predicted_danger": 3,
+      "station_count": 10,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2020-02-13",
+      "predicted_danger": 4,
+      "station_count": 21,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-14",
+      "predicted_danger": 3,
+      "station_count": 7,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-15",
+      "predicted_danger": 3,
+      "station_count": 27,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-16",
+      "predicted_danger": 3,
+      "station_count": 14,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-17",
+      "predicted_danger": 3,
+      "station_count": 19,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-18",
+      "predicted_danger": 3,
+      "station_count": 12,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-19",
+      "predicted_danger": 3,
+      "station_count": 22,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-20",
+      "predicted_danger": 3,
+      "station_count": 22,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-21",
+      "predicted_danger": 2,
+      "station_count": 11,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-22",
+      "predicted_danger": 2,
+      "station_count": 6,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-23",
+      "predicted_danger": 2,
+      "station_count": 16,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-24",
+      "predicted_danger": 1,
+      "station_count": 15,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-25",
+      "predicted_danger": 3,
+      "station_count": 12,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-26",
+      "predicted_danger": 3,
+      "station_count": 24,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-27",
+      "predicted_danger": 4,
+      "station_count": 24,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 3,
+      "date": "2020-02-28",
+      "predicted_danger": 3,
+      "station_count": 8,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-02-29",
+      "predicted_danger": 3,
+      "station_count": 12,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-01",
+      "predicted_danger": 4,
+      "station_count": 13,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-02",
+      "predicted_danger": 4,
+      "station_count": 24,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-03",
+      "predicted_danger": 3,
+      "station_count": 17,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-04",
+      "predicted_danger": 4,
+      "station_count": 17,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-05",
+      "predicted_danger": 4,
+      "station_count": 12,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-06",
+      "predicted_danger": 3,
+      "station_count": 13,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-07",
+      "predicted_danger": 3,
+      "station_count": 24,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-08",
+      "predicted_danger": 3,
+      "station_count": 11,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-09",
+      "predicted_danger": 3,
+      "station_count": 23,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2020-03-10",
+      "predicted_danger": 3,
+      "station_count": 17,
+      "true_danger": 4,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2020-03-11",
+      "predicted_danger": 2,
+      "station_count": 4,
+      "true_danger": 3,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2020-03-12",
+      "predicted_danger": 2,
+      "station_count": 10,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-13",
+      "predicted_danger": 3,
+      "station_count": 6,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2020-03-14",
+      "predicted_danger": 3,
+      "station_count": 12,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-15",
+      "predicted_danger": 2,
+      "station_count": 4,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2020-03-16",
+      "predicted_danger": 2,
+      "station_count": 7,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-17",
+      "predicted_danger": 1,
+      "station_count": 10,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-18",
+      "predicted_danger": 2,
+      "station_count": 26,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-19",
+      "predicted_danger": 2,
+      "station_count": 25,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-20",
+      "predicted_danger": 2,
+      "station_count": 18,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-21",
+      "predicted_danger": 2,
+      "station_count": 11,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-22",
+      "predicted_danger": 1,
+      "station_count": 11,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-23",
+      "predicted_danger": 1,
+      "station_count": 13,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-24",
+      "predicted_danger": 2,
+      "station_count": 16,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-25",
+      "predicted_danger": 2,
+      "station_count": 12,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-26",
+      "predicted_danger": 2,
+      "station_count": 10,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-27",
+      "predicted_danger": 1,
+      "station_count": 11,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-28",
+      "predicted_danger": 2,
+      "station_count": 6,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-29",
+      "predicted_danger": 2,
+      "station_count": 7,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-03-30",
+      "predicted_danger": 2,
+      "station_count": 8,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2020-03-31",
+      "predicted_danger": 1,
+      "station_count": 1,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-04-01",
+      "predicted_danger": 2,
+      "station_count": 18,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2020-04-02",
+      "predicted_danger": 2,
+      "station_count": 14,
+      "true_danger": 2,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-04-03",
+      "predicted_danger": 2,
+      "station_count": 25,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-04-04",
+      "predicted_danger": 1,
+      "station_count": 22,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-04-05",
+      "predicted_danger": 1,
+      "station_count": 16,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-04-06",
+      "predicted_danger": 1,
+      "station_count": 21,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-04-07",
+      "predicted_danger": 1,
+      "station_count": 25,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-04-08",
+      "predicted_danger": 1,
+      "station_count": 23,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-04-09",
+      "predicted_danger": 1,
+      "station_count": 25,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-04-10",
+      "predicted_danger": 1,
+      "station_count": 15,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-04-11",
+      "predicted_danger": 1,
+      "station_count": 27,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-04-12",
+      "predicted_danger": 1,
+      "station_count": 22,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-04-13",
+      "predicted_danger": 1,
+      "station_count": 6,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-04-14",
+      "predicted_danger": 1,
+      "station_count": 18,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 1,
+      "date": "2020-04-15",
+      "predicted_danger": 1,
+      "station_count": 9,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-04-16",
+      "predicted_danger": 1,
+      "station_count": 22,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-04-17",
+      "predicted_danger": 1,
+      "station_count": 28,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-04-22",
+      "predicted_danger": 1,
+      "station_count": 12,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    },
+    {
+      "band_count": 2,
+      "date": "2020-04-23",
+      "predicted_danger": 1,
+      "station_count": 32,
+      "true_danger": 1,
+      "warning_region": "21.0"
+    }
+  ],
+  "schema_version": "swiss_elev_simple_aggregation_result_v1",
+  "skipped_rows": 0,
+  "source_rf4_model_key": "rf4_danger_v0",
+  "source_rf4_schema_version": "swiss_rf4_reproduction_result_v1",
+  "stage": "stage3_elev_simple_warning_region_aggregation",
+  "usage_boundary": "research_only"
+}

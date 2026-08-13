@@ -1,0 +1,314 @@
+name: Public Release Validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout release
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+          lfs: false
+
+      - name: Validate scrubbed release contract
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import hashlib
+          import re
+          import subprocess
+          from pathlib import Path
+
+          from scripts.audit_public_cron_schedule import build_audit_report
+
+          manifest_path = Path("public-release-manifest.json")
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          assert manifest.get("schema_version") == "avalanche.public-release-manifest.v1"
+          source_commit = manifest.get("source_commit", "")
+          assert re.fullmatch(r"[0-9a-f]{40}", source_commit), "manifest source commit is not a full SHA"
+          assert manifest.get("target_repository") == "sanjabh1103/avalanche-insight-hub"
+          assert manifest.get("target_branch") == "main"
+          assert manifest.get("transform_version"), "manifest transform version is missing"
+
+          tracked_paths = subprocess.check_output(
+              ["git", "ls-files"], text=True
+          ).splitlines()
+          workflow_paths = [
+              path for path in tracked_paths
+              if path.startswith(".github/workflows/") and path.endswith((".yml", ".yaml"))
+          ]
+          migration_paths = [
+              path for path in tracked_paths
+              if path.startswith("supabase/migrations/") and path.endswith(".sql")
+          ]
+          assert manifest["workflow_count"] == len(workflow_paths), "workflow count drift"
+          assert manifest["migration_count"] == len(migration_paths), "migration count drift"
+
+          def tree_hash(paths):
+              digest_lines = []
+              for path in sorted(paths):
+                  digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+                  digest_lines.append(f"{digest}  {path}\n")
+              return hashlib.sha256("".join(digest_lines).encode("utf-8")).hexdigest()
+
+          assert re.fullmatch(r"[0-9a-f]{64}", manifest.get("migration_tree_sha256", ""))
+          assert re.fullmatch(r"[0-9a-f]{64}", manifest.get("workflow_tree_sha256", ""))
+          assert manifest["migration_tree_sha256"] == tree_hash(migration_paths), "migration tree hash drift"
+          assert manifest["workflow_tree_sha256"] == tree_hash(workflow_paths), "workflow tree hash drift"
+          for removed_path in manifest.get("removed_paths", []):
+              assert not Path(removed_path).exists(), f"declared private path remains: {removed_path}"
+
+          forbidden_tokens = ("D" + "RDO", "D" + "GRE", "IIT" + " Mandi", "cyjq" + "vqwpdgluivjoxcfl")
+          forbidden = re.compile("|".join(forbidden_tokens), re.IGNORECASE)
+          for path in tracked_paths:
+              try:
+                  content = Path(path).read_text(encoding="utf-8")
+              except (UnicodeDecodeError, OSError):
+                  continue
+              assert not forbidden.search(content), f"private reference found in {path}"
+
+          legacy_path = Path(".github/workflows/train-avalanche-model.yml")
+          assert legacy_path.is_file(), "legacy workflow is missing from the release tree"
+          legacy = legacy_path.read_text(encoding="utf-8")
+          legacy_guard = legacy.index("Block ungoverned legacy retraining")
+          legacy_trigger = legacy.index("Trigger Avalanche Model Retraining")
+          assert legacy_guard < legacy_trigger, "legacy retraining guard must precede its trigger"
+          legacy_guard_section = legacy[legacy_guard:legacy_trigger]
+          assert "reviewed MVP4 snapshot/preflight input" in legacy_guard_section
+          assert "Use ml_pipeline.yml or public_ml_pilot.yml" in legacy_guard_section
+          assert "exit 1" in legacy_guard_section, "legacy retraining path must fail closed"
+
+          manual_path = Path(".github/workflows/ml_pipeline_manual.yml")
+          assert manual_path.is_file(), "manual ML workflow is missing from the release tree"
+          manual = manual_path.read_text(encoding="utf-8")
+          manual_backfill = manual.split("  backfill:", 1)[1].split("  sar_backfill:", 1)[0]
+          assert "github.event.inputs.mode == 'backfill'" in manual_backfill
+          assert "vars.MVP4_TRAINING_ENABLED == 'true'" in manual_backfill, (
+              "manual backfill must require explicit MVP4 enablement"
+          )
+          manual_gate = manual_backfill.index("Fail-closed pre-remote MVP4 gate")
+          manual_train = manual_backfill.index("python -m backend.train_model")
+          manual_install = manual_backfill.index("Install Python dependencies")
+          assert manual_gate < manual_train, "manual backfill must run the pre-remote gate before training"
+          assert manual_gate < manual_install, "manual backfill must gate before dependency installation"
+          for required_value in (
+              "PRE_REMOTE_SCOPE_MANIFEST",
+              "PRE_REMOTE_APPROVAL_MANIFEST",
+              "SOURCE_REQUEST_MANIFEST",
+              "SOURCE_REQUEST_PAYLOAD",
+              "SOURCE_REQUEST_EVENTS_JSONL",
+              "--scope-manifest",
+              "--approval-manifest",
+          ):
+              assert required_value in manual_backfill[manual_gate:manual_train], (
+                  f"manual backfill gate contract missing: {required_value}"
+              )
+          for workflow_variable in (
+              "MVP4_PRE_REMOTE_SCOPE_MANIFEST",
+              "MVP4_PRE_REMOTE_APPROVAL_MANIFEST",
+              "MVP4_SOURCE_REQUEST_MANIFEST",
+              "MVP4_SOURCE_REQUEST_PAYLOAD",
+              "MVP4_SOURCE_REQUEST_EVENTS",
+          ):
+              assert workflow_variable in manual, (
+                  f"manual backfill variable contract missing: {workflow_variable}"
+              )
+
+          pilot_path = Path(".github/workflows/public_ml_pilot.yml")
+          assert pilot_path.is_file(), "public pilot workflow is missing from the release tree"
+          pilot = pilot_path.read_text(encoding="utf-8")
+          pilot_job = pilot.split("  himalayas-nepal-training:", 1)[1].split("    steps:", 1)[0]
+          assert "vars.MVP4_TRAINING_ENABLED == 'true'" in pilot_job, (
+              "public pilot must require explicit MVP4 enablement"
+          )
+          for required_input in (
+              "source_request_manifest:",
+              "source_request_payload:",
+              "source_request_events:",
+              "pre_remote_scope_manifest:",
+              "pre_remote_approval_manifest:",
+          ):
+              assert required_input in pilot, f"public pilot input missing: {required_input}"
+          for required_flag in (
+              "--source-request-manifest",
+              "--source-request-payload",
+              "--source-request-events-jsonl",
+              "--scope-manifest",
+              "--approval-manifest",
+          ):
+              assert required_flag in pilot, f"public pilot source-owner gate missing: {required_flag}"
+          assert "def resolve_repo_file" in pilot
+          assert "relative_to(repo_root)" in pilot
+          pilot_gate = pilot.index("Fail-closed pre-remote MVP4 gate")
+          pilot_train = pilot.index("python -m backend.train_model")
+          pilot_install = pilot.index("Install pinned backend dependencies")
+          assert pilot_gate < pilot_train, "public pilot must run the pre-remote gate before training"
+          assert pilot_gate < pilot_install, "public pilot must gate before dependency installation"
+          assert "PRE_REMOTE_SCOPE_MANIFEST: ${{ github.event.inputs.pre_remote_scope_manifest }}" in pilot
+          assert "PRE_REMOTE_APPROVAL_MANIFEST: ${{ github.event.inputs.pre_remote_approval_manifest }}" in pilot
+
+          source_schema_path = Path("schemas/source_manifest.schema.json")
+          source_template_path = Path("schemas/source_manifest_request.template.json")
+          source_validator_path = Path("backend/scripts/validate_mvp4_source_manifest.py")
+          pre_remote_gate_path = Path("scripts/verify_mvp4_pre_remote_gate.py")
+          pre_remote_approval_draft_path = Path("scripts/prepare_mvp4_pre_remote_approval.py")
+          pre_remote_approval_template_path = Path("schemas/mvp4_pre_remote_approval.template.json")
+          shadow_scope_validator_path = Path("scripts/verify_mvp4_shadow_scope_approval.py")
+          shadow_scope_template_path = Path("schemas/mvp4_shadow_scope_approval.template.json")
+          assert source_schema_path.is_file(), "source manifest schema is missing from the release tree"
+          assert source_template_path.is_file(), "source manifest template is missing from the release tree"
+          assert source_validator_path.is_file(), "source manifest validator is missing from the release tree"
+          assert pre_remote_gate_path.is_file(), "MVP4 pre-remote gate is missing from the release tree"
+          assert pre_remote_approval_draft_path.is_file(), "MVP4 approval draft generator is missing from the release tree"
+          assert pre_remote_approval_template_path.is_file(), "MVP4 pre-remote approval template is missing from the release tree"
+          assert shadow_scope_validator_path.is_file(), "MVP4 shadow-scope validator is missing from the release tree"
+          assert shadow_scope_template_path.is_file(), "MVP4 shadow-scope template is missing from the release tree"
+          source_schema = json.loads(source_schema_path.read_text(encoding="utf-8"))
+          source_template = json.loads(source_template_path.read_text(encoding="utf-8"))
+          source_core_guard = source_schema["allOf"][0]["then"]
+          assert "event_rows_sha256" in source_core_guard["required"]
+          assert source_template.get("event_rows_sha256") is None
+          source_validator = source_validator_path.read_text(encoding="utf-8")
+          assert "VALIDATOR_VERSION = 'mvp4_source_manifest_intake_v2'" in source_validator
+          assert "event_rows_sha256 does not match the canonical events JSONL" in source_validator
+          pre_remote_gate = pre_remote_gate_path.read_text(encoding="utf-8")
+          assert 'GATE_VERSION = "mvp4_pre_remote_gate_v1"' in pre_remote_gate
+          assert 'blocked_pre_remote_gate' in pre_remote_gate
+          assert 'scope_manifest_sha256' in pre_remote_gate
+          assert 'must resolve under the repository root' in pre_remote_gate
+          assert 'non-empty name or approval_ref' in pre_remote_gate
+          approval_draft = pre_remote_approval_draft_path.read_text(encoding="utf-8")
+          assert 'APPROVAL_SCHEMA_VERSION = "mvp4_pre_remote_approval_v1"' in approval_draft
+          assert '"decision": "PENDING"' in approval_draft
+          assert "refusing to overwrite existing approval draft" in approval_draft
+          approval_template = json.loads(pre_remote_approval_template_path.read_text(encoding="utf-8"))
+          assert approval_template["schema_version"] == "mvp4_pre_remote_approval_v1"
+          assert approval_template["decision"] == "PENDING"
+          assert all("approval_ref" in item for item in approval_template["approved_by"])
+          shadow_scope_validator = shadow_scope_validator_path.read_text(encoding="utf-8")
+          assert 'SCHEMA_VERSION = "mvp4_shadow_scope_approval_v1"' in shadow_scope_validator
+          assert 'APPROVED_SHADOW_ONLY' in shadow_scope_validator
+          assert 'required_false = (' in shadow_scope_validator
+          for required_false_field in (
+              '"model_fit_allowed"',
+              '"training_eligible"',
+              '"production_scoring_eligible"',
+              '"remote_pilot_allowed"',
+          ):
+              assert required_false_field in shadow_scope_validator
+          assert 'policy.get(field) is not False' in shadow_scope_validator
+          shadow_scope_template = json.loads(shadow_scope_template_path.read_text(encoding="utf-8"))
+          assert shadow_scope_template["schema_version"] == "mvp4_shadow_scope_approval_v1"
+          assert shadow_scope_template["decision"] == "PENDING"
+          assert shadow_scope_template["policy"]["shadow_only"] is True
+          assert shadow_scope_template["policy"]["model_fit_allowed"] is False
+          assert shadow_scope_template["policy"]["remote_pilot_allowed"] is False
+          assert shadow_scope_template["approval_decisions"]["source_rights_and_api_scope"] == "PENDING"
+          assert "source_rights_and_api_scope" in shadow_scope_validator
+
+          workflow = Path(".github/workflows/ml_pipeline.yml").read_text(encoding="utf-8")
+          train_job = workflow.split("  train:", 1)[1].split("  infer:", 1)[0]
+          assert "vars.MVP4_TRAINING_ENABLED == 'true'" in train_job, (
+              "scheduled/manual surrogate training must require explicit MVP4 training enablement"
+          )
+          train_preflight = train_job.split("Metadata-only training preflight", 1)[1].split(
+              "Install Python dependencies", 1
+          )[0]
+          assert "--snapshot-manifest \"${SNAPSHOT_MANIFEST}\"" in train_preflight
+          assert "--region-keys \"${TRAINING_REGION_KEYS}\"" in train_preflight
+          assert "--strict" in train_preflight
+          train_gate = train_job.index("Fail-closed pre-remote MVP4 gate")
+          train_model = train_job.index("python -m backend.train_model")
+          train_install = train_job.index("Install Python dependencies")
+          assert train_gate < train_model, "scheduled training must run the pre-remote gate before training"
+          assert train_gate < train_install, "scheduled training must gate before dependency installation"
+          for required_value in (
+              "PRE_REMOTE_SCOPE_MANIFEST",
+              "PRE_REMOTE_APPROVAL_MANIFEST",
+              "SOURCE_REQUEST_MANIFEST",
+              "SOURCE_REQUEST_PAYLOAD",
+              "SOURCE_REQUEST_EVENTS_JSONL",
+              "--scope-manifest",
+              "--approval-manifest",
+          ):
+              assert required_value in train_job[train_gate:train_model], (
+                  f"scheduled training gate contract missing: {required_value}"
+              )
+          for workflow_variable in (
+              "MVP4_PRE_REMOTE_SCOPE_MANIFEST",
+              "MVP4_PRE_REMOTE_APPROVAL_MANIFEST",
+              "MVP4_SOURCE_REQUEST_MANIFEST",
+              "MVP4_SOURCE_REQUEST_PAYLOAD",
+              "MVP4_SOURCE_REQUEST_EVENTS",
+          ):
+              assert workflow_variable in workflow, (
+                  f"scheduled training variable contract missing: {workflow_variable}"
+              )
+
+          mts_train_job = workflow.split("  train_mtslstm:", 1)[1].split("  infer_mtslstm:", 1)[0]
+          assert "vars.MVP4_TRAINING_ENABLED == 'true'" in mts_train_job, (
+              "MTS-LSTM shadow training must require explicit MVP4 training enablement"
+          )
+          mts_preflight = mts_train_job.split("Metadata-only training preflight", 1)[1].split(
+              "Dispatch MTS-LSTM training worker", 1
+          )[0]
+          assert "--snapshot-manifest \"${SNAPSHOT_MANIFEST}\"" in mts_preflight
+          assert "--region-keys \"${TRAINING_REGION_KEYS}\"" in mts_preflight
+          assert "--strict" in mts_preflight
+          mts_gate = mts_train_job.index("Fail-closed pre-remote MVP4 gate")
+          mts_dispatch = mts_train_job.index("Dispatch MTS-LSTM training worker")
+          assert mts_gate < mts_dispatch, "MTS-LSTM shadow training must run the pre-remote gate before dispatch"
+          for required_value in (
+              "PRE_REMOTE_SCOPE_MANIFEST",
+              "PRE_REMOTE_APPROVAL_MANIFEST",
+              "SOURCE_REQUEST_MANIFEST",
+              "SOURCE_REQUEST_PAYLOAD",
+              "SOURCE_REQUEST_EVENTS_JSONL",
+              "--scope-manifest",
+              "--approval-manifest",
+          ):
+              assert required_value in mts_train_job[mts_gate:mts_dispatch], (
+                  f"MTS-LSTM shadow gate contract missing: {required_value}"
+              )
+
+          sar_train_job = workflow.split("  train_sar_unet:", 1)[1].split("  train_mtslstm:", 1)[0]
+          assert "vars.MVP4_TRAINING_ENABLED == 'true'" in sar_train_job
+          assert "vars.MVP4_SAR_TRAINING_ENABLED == 'true'" in sar_train_job, (
+              "SAR training must require separate explicit MVP4 enablement"
+          )
+
+          infer_job = workflow.split("  infer:", 1)[1].split("  gee:", 1)[0]
+          assert "vars.MVP4_INFERENCE_ENABLED == 'true'" in infer_job, (
+              "main inference must require explicit MVP4 inference enablement"
+          )
+          infer_mtslstm_job = workflow.split("  infer_mtslstm:", 1)[1].split("  evaluate_release:", 1)[0]
+          assert "vars.MVP4_TRAINING_ENABLED == 'true'" in infer_mtslstm_job
+          assert "vars.MVP4_INFERENCE_ENABLED == 'true'" in infer_mtslstm_job, (
+              "MTS-LSTM inference must require explicit MVP4 inference enablement"
+          )
+          crons = re.findall(r"^\s*- cron:\s*'([^']+)'", workflow, re.MULTILINE)
+          conditions = re.findall(r"github\.event\.schedule\s*==\s*'([^']+)'", workflow)
+          assert len(crons) == len(set(crons)) == 9, "unexpected active cron count"
+          assert sorted(crons) == sorted(conditions), "cron/job condition mismatch"
+          cron_report = build_audit_report(workflow)
+          assert cron_report["contract_ok"], cron_report["errors"]
+          assert cron_report["daily_trigger_count"] == 3
+          assert cron_report["weekly_trigger_count"] == 6
+          assert "orphan-scan:" not in workflow and "orphan_scan" not in workflow
+          assert Path("supabase/config.toml").read_text(encoding="utf-8").startswith(
+              'project_id = "eyyellmffzzujyssaayb"'
+          )
+          assert Path("backend/scripts/nuke_orphaned_s3.py").exists()
+          print(
+              f"release validation OK: {len(migration_paths)} migrations, "
+              f"{len(workflow_paths)} workflows, {len(crons)} cron triggers"
+          )
+          PY

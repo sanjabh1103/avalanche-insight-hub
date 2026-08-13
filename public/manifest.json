@@ -1,0 +1,13 @@
+{
+  "name": "Avalanche Insight Hub",
+  "short_name": "Avalanche Insight",
+  "description": "Governed ML-augmentation and comparative-validation workbench for avalanche forecasting; RF/TreeSHAP reference path with shadow candidates",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1724",
+  "theme_color": "#0ea5e9",
+  "icons": [
+    { "src": "/avalanche-favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/avalanche-insight-hub-preview.png", "sizes": "1440x1000", "type": "image/png" }
+  ]
+}

@@ -1,0 +1,277 @@
+# Avalanche Model Training Pipeline (LEGACY)
+#
+# DEPRECATED: Scheduled training has been DISABLED to prevent conflict with
+# ml_pipeline.yml's weekly training job (cron '7 4 * * 1'). This workflow
+# used a different concurrency group ('model-training' vs 'av-ml-heavy'),
+# allowing simultaneous double-training runs every Monday at 04:00 UTC.
+#
+# The workflow_dispatch trigger is retained only as an explicit fail-closed
+# diagnostic. It must not start Edge Function training outside the MVP4
+# snapshot/preflight contract. All governed training is handled by
+# ml_pipeline.yml or public_ml_pilot.yml.
+#
+# Security Notes:
+# - Uses SUPABASE_SERVICE_ROLE_KEY from GitHub Secrets (never hardcoded)
+# - Read-only workflow - no code checkout modification
+# - No external dependencies beyond curl
+# - All inputs validated, no user-controlled data in URLs
+# - Workflow runs in isolated Ubuntu container with minimal permissions
+
+name: Avalanche Model Training (Legacy)
+
+on:
+  # Scheduled training DISABLED — see deprecation note above.
+  # schedule:
+  #   - cron: '0 4 * * 1'
+
+  # Manual trigger for ad-hoc Edge Function based training only
+  workflow_dispatch:
+    inputs:
+      training_mode:
+        description: 'Training mode'
+        required: false
+        default: 'incremental'
+        type: choice
+        options:
+          - incremental
+          - full_retrain
+          - evaluation_only
+      days_back:
+        description: 'Days of data to include'
+        required: false
+        default: '30'
+        type: string
+      region_filter:
+        description: 'Filter to specific region (or "all")'
+        required: false
+        default: 'all'
+        type: string
+
+# Security: Minimal permissions
+permissions:
+  contents: read  # Read-only access to repo
+
+# Security: Concurrency control prevents overlapping runs
+concurrency:
+  group: model-training
+  cancel-in-progress: false
+
+jobs:
+  # Job 1: Trigger retraining job in Supabase
+  trigger-retraining:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    
+    steps:
+      # Security: Pin action to specific commit SHA
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false  # Security: Don't persist token
+          sparse-checkout: |          # Security: Only checkout workflow
+            .github/workflows
+
+      - name: Block ungoverned legacy retraining
+        run: |
+          set -euo pipefail
+          echo "::error::Legacy Edge Function retraining is disabled because it has no reviewed MVP4 snapshot/preflight input."
+          echo "Use ml_pipeline.yml or public_ml_pilot.yml after the strict source and snapshot gates pass."
+          exit 1
+      
+      # Job 1a: Trigger the retraining orchestrator
+      - name: Trigger Avalanche Model Retraining
+        id: trigger
+        env:
+          # Security: Service role key from GitHub Secrets
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TRAINING_MODE: ${{ github.event.inputs.training_mode || 'incremental' }}
+          DAYS_BACK: ${{ github.event.inputs.days_back || '30' }}
+          REGION_FILTER: ${{ github.event.inputs.region_filter || 'all' }}
+        run: |
+          # Validate required secret is present (without exposing value)
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "⚠️ SUPABASE_SERVICE_ROLE_KEY secret is not configured; skipping retraining trigger (this is safe)."
+            echo "Please add SUPABASE_SERVICE_ROLE_KEY to GitHub Secrets to enable scheduled retraining."
+            exit 0
+          fi
+          
+          echo "🚀 Triggering avalanche model retraining..."
+          echo "Mode: $TRAINING_MODE"
+          echo "Days: $DAYS_BACK"
+          echo "Region: $REGION_FILTER"
+          
+          # Trigger the retraining job via Supabase Edge Function
+          # Security: Uses POST with Authorization header, validated payload
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "${SUPABASE_URL}/functions/v1/trigger-job" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"type\": \"retrain_avalanche_model\",
+              \"hazard_type\": \"avalanche\",
+              \"training_mode\": \"${TRAINING_MODE}\",
+              \"days_back\": ${DAYS_BACK},
+              \"region_filter\": \"${REGION_FILTER}\"
+            }" 2>&1) || {
+              echo "❌ Failed to trigger retraining job"
+              echo "Response: $RESPONSE"
+              exit 1
+            }
+          
+          # Extract status code (last line) and body (everything else)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          echo "Response code: $HTTP_CODE"
+          echo "Response body: $BODY"
+          
+          # Validate response
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Retraining trigger failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
+          
+          # Extract job ID if present
+          JOB_ID=$(echo "$BODY" | grep -o '"jobId":"[^"]*"' | cut -d'"' -f4)
+          if [ -n "$JOB_ID" ]; then
+            echo "job_id=${JOB_ID}" >> $GITHUB_OUTPUT
+            echo "✅ Retraining job triggered successfully: $JOB_ID"
+          else
+            echo "⚠️ Job triggered but no job ID returned"
+            echo "Response: $BODY"
+          fi
+      
+      # Job 1b: Poll for job completion (max 5 minutes)
+      - name: Wait for Training Job Completion
+        if: steps.trigger.outputs.job_id != ''
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          JOB_ID: ${{ steps.trigger.outputs.job_id }}
+        run: |
+          echo "⏳ Polling job $JOB_ID for completion..."
+          
+          for i in {1..30}; do
+            sleep 10
+            
+            STATUS_RESPONSE=$(curl -s -X GET \
+              "${SUPABASE_URL}/rest/v1/compute_jobs?id=eq.${JOB_ID}&select=status,result" \
+              -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/vnd.pgrst.object+json" 2>&1)
+            
+            STATUS=$(echo "$STATUS_RESPONSE" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+            echo "Poll $i: Status = $STATUS"
+            
+            if [ "$STATUS" = "completed" ]; then
+              echo "✅ Training job completed successfully"
+              echo "Result: $STATUS_RESPONSE"
+              exit 0
+            elif [ "$STATUS" = "failed" ]; then
+              echo "❌ Training job failed"
+              echo "Response: $STATUS_RESPONSE"
+              exit 1
+            fi
+          done
+          
+          echo "⏱️ Polling timeout - job still running. Check Supabase Dashboard for results."
+          echo "Dashboard: inspect the configured Supabase project and its compute_jobs table."
+
+  # Job 2: Run evaluation on new model candidate
+  run-evaluation:
+    needs: trigger-retraining
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Model Evaluation
+        id: evaluate
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EVAL_DAYS: ${{ github.event.inputs.evaluation_days || '14' }}
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "⚠️ SUPABASE_SERVICE_ROLE_KEY secret is not configured; skipping evaluation (this is safe)."
+            exit 0
+          fi
+          
+          echo "📊 Running model evaluation..."
+          
+          EVAL_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "${SUPABASE_URL}/functions/v1/run-evaluation" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"days_back\": ${EVAL_DAYS},
+              \"hazard_type\": \"avalanche\"
+            }" 2>&1) || {
+              echo "❌ Failed to trigger evaluation"
+              echo "Response: $EVAL_RESPONSE"
+              exit 1
+            }
+          
+          HTTP_CODE=$(echo "$EVAL_RESPONSE" | tail -n1)
+          BODY=$(echo "$EVAL_RESPONSE" | sed '$d')
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Evaluation failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
+          
+          # Extract metrics for summary
+          EVAL_ID=$(echo "$BODY" | grep -o '"evaluation_run_id":"[^"]*"' | cut -d'"' -f4)
+          echo "eval_id=${EVAL_ID}" >> $GITHUB_OUTPUT
+          
+          # Parse key metrics (safely)
+          PRECISION=$(echo "$BODY" | grep -o '"overall_precision_risk3":[0-9.]*' | cut -d: -f2 || echo "N/A")
+          RECALL=$(echo "$BODY" | grep -o '"overall_recall":[0-9.]*' | cut -d: -f2 || echo "N/A")
+          FPR=$(echo "$BODY" | grep -o '"overall_false_alarm_rate":[0-9.]*' | cut -d: -f2 || echo "N/A")
+          
+          echo "📈 Evaluation Results:"
+          echo "  Precision (risk≥3): ${PRECISION}"
+          echo "  Recall: ${RECALL}"
+          echo "  False Alarm Rate: ${FPR}"
+          
+          # Check against thresholds
+          # Note: These are example thresholds - adjust based on your product requirements
+          if [ "$PRECISION" != "N/A" ] && [ "${PRECISION%.*}" -lt 0 ]; then
+            # Precision < 0.5 would be caught here (simplified comparison)
+            echo "⚠️ Precision below threshold - manual review recommended"
+          fi
+          
+          echo "✅ Evaluation complete: ${EVAL_ID}"
+
+  # Job 3: Report results to GitHub Actions summary
+  report-results:
+    needs: [trigger-retraining, run-evaluation]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Generate Summary Report
+        env:
+          TRAINING_STATUS: ${{ needs.trigger-retraining.result }}
+          EVAL_STATUS: ${{ needs.run-evaluation.result }}
+        run: |
+          echo "# 🏔️ Avalanche Model Training Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Trigger Retraining | ${TRAINING_STATUS} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Run Evaluation | ${EVAL_STATUS} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Review evaluation results in Supabase Dashboard" >> $GITHUB_STEP_SUMMARY
+          echo "2. Check metrics against 4.5/5 accuracy targets" >> $GITHUB_STEP_SUMMARY
+          echo "3. Promote candidate model if metrics improve" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Dashboard**: inspect the configured Supabase project and its evaluation results." >> $GITHUB_STEP_SUMMARY

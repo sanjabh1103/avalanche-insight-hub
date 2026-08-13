@@ -1,0 +1,89 @@
+{
+  "production_scoring_allowed": false,
+  "reports": [
+    {
+      "column_count": 78,
+      "date_column": "datum",
+      "elevation_column": "elevation_station",
+      "latitude_column": null,
+      "longitude_column": null,
+      "meteo_feature_candidates": [
+        "MS_Snow",
+        "wind_trans24",
+        "wind_trans24_7d",
+        "wind_trans24_3d",
+        "HN24",
+        "HN72_24",
+        "HN24_7d",
+        "MS_Wind",
+        "MS_Rain"
+      ],
+      "missing_required_groups": [],
+      "resource_key": "data_rf1_forecast",
+      "row_count": 292837,
+      "snowpack_profile_features": [
+        "pwl_100",
+        "pwl_100_15",
+        "base_pwl",
+        "ssi_pwl",
+        "sk38_pwl",
+        "sn38_pwl",
+        "ccl_pwl",
+        "ssi_pwl_100",
+        "sk38_pwl_100",
+        "sn38_pwl_100",
+        "ccl_pwl_100",
+        "Pen_depth",
+        "min_ccl_pen"
+      ],
+      "station_column": "station_code",
+      "target_column": "dangerLevel",
+      "usage_boundary": "research_only",
+      "valid_for_stage1": true,
+      "valid_for_stage2": false
+    },
+    {
+      "column_count": 81,
+      "date_column": "datum",
+      "elevation_column": "elevation_station",
+      "latitude_column": null,
+      "longitude_column": null,
+      "meteo_feature_candidates": [
+        "MS_Snow",
+        "wind_trans24",
+        "wind_trans24_7d",
+        "wind_trans24_3d",
+        "HN24",
+        "HN72_24",
+        "HN24_7d",
+        "MS_Wind",
+        "MS_Rain"
+      ],
+      "missing_required_groups": [],
+      "resource_key": "data_rf2_tidy",
+      "row_count": 29296,
+      "snowpack_profile_features": [
+        "pwl_100",
+        "pwl_100_15",
+        "base_pwl",
+        "ssi_pwl",
+        "sk38_pwl",
+        "sn38_pwl",
+        "ccl_pwl",
+        "ssi_pwl_100",
+        "sk38_pwl_100",
+        "sn38_pwl_100",
+        "ccl_pwl_100",
+        "Pen_depth",
+        "min_ccl_pen"
+      ],
+      "station_column": "station_code",
+      "target_column": "dangerLevel",
+      "usage_boundary": "research_only",
+      "valid_for_stage1": true,
+      "valid_for_stage2": false
+    }
+  ],
+  "schema_version": "swiss_ravafcast_validation_report_v1",
+  "usage_boundary": "research_only"
+}

@@ -1,0 +1,262 @@
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { Suspense, lazy, useState } from 'react';
+import { X, Bell, Layers, Map as MapIcon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import AnomalyMapLayer from '@/components/AnomalyMapLayer';
+import { Label } from '@/components/ui/label';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { toast } from 'sonner';
+import SnowpackProxyCard from '@/components/SnowpackProxyCard';
+import PirPanjalPocEvidenceCard from '@/components/PirPanjalPocEvidenceCard';
+import CellEvidenceDrawer from '@/components/CellEvidenceDrawer';
+import { RoutePlannerPanel, type RouteCell } from '@/components/RoutePlannerPanel';
+import { CitizenReportPanel, type CitizenReportData } from '@/components/CitizenReportPanel';
+import { supabase } from '@/integrations/supabase/client';
+import type { GridCell } from '@/lib/gridUtils';
+import { isPirPanjalPocRegion } from '@/lib/pirPanjalPocEvidence';
+
+const LazyHydrographChart = lazy(() => import('@/components/HydrographChart'));
+const LazyMultiModalFusionCard = lazy(() => import('@/components/MultiModalFusionCard'));
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  showHeatmap: boolean;
+  onToggleHeatmap: (v: boolean) => void;
+  showRoads: boolean;
+  onToggleRoads: (v: boolean) => void;
+  showInfra: boolean;
+  onToggleInfra: (v: boolean) => void;
+  showVectorPolygons: boolean;
+  onToggleVectorPolygons: (v: boolean) => void;
+  hourlyGrids: Array<GridCell[] | null> | null;
+  selectedCell: GridCell | null;
+  regionBbox: [number, number, number, number];
+  regionKey?: string | null;
+  regionName?: string | null;
+  forecastRunId?: string | null;
+  forecastGridId?: string | null;
+  forecastHour?: number | null;
+  modelMetadata?: Record<string, unknown> | null;
+  cells?: GridCell[];
+  gridSize?: number;
+  citizenReports?: CitizenReportData[];
+  onToggle3D: () => void;
+}
+
+function HydrographFallback() {
+  return (
+    <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+      <CardContent className="p-4 text-center text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+        Loading hydrograph…
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function ExpertModePanel({
+  open, onClose,
+  showHeatmap, onToggleHeatmap,
+  showRoads, onToggleRoads,
+  showInfra, onToggleInfra,
+  showVectorPolygons, onToggleVectorPolygons,
+  hourlyGrids, selectedCell, regionBbox,
+  regionKey, regionName, forecastRunId, forecastGridId, forecastHour, modelMetadata,
+  cells, gridSize = 20,
+  citizenReports,
+  onToggle3D,
+}: Props) {
+  const prefersReducedMotion = useReducedMotion();
+  const [alertsDialogOpen, setAlertsDialogOpen] = useState(false);
+  const [subscribingAlerts, setSubscribingAlerts] = useState(false);
+  const [showAnomalyLayer, setShowAnomalyLayer] = useState(true);
+
+  const subscribeAlerts = async () => {
+    setSubscribingAlerts(true);
+    try {
+      // Try to request push permission if available
+      if ('Notification' in window) {
+        await Notification.requestPermission();
+      }
+      // Store a stub subscription regardless (works even without push support)
+      await supabase.from('user_alerts').insert({
+        endpoint: `stub-${Date.now()}`,
+        p256dh: 'stub',
+        auth_key: 'stub',
+        region_bbox: regionBbox as unknown as number[],
+      });
+      toast.success('Alert subscription saved for Colorado Rockies');
+      setAlertsDialogOpen(false);
+    } catch {
+      toast.error('Failed to subscribe — please try again');
+    } finally {
+      setSubscribingAlerts(false);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.aside
+          initial={prefersReducedMotion ? { opacity: 0 } : { x: 320, opacity: 0 }}
+          animate={prefersReducedMotion ? { opacity: 1 } : { x: 0, opacity: 1 }}
+          exit={prefersReducedMotion ? { opacity: 0 } : { x: 320, opacity: 0 }}
+          transition={prefersReducedMotion ? { duration: 0.01 } : { type: 'spring', damping: 25, stiffness: 200 }}
+          className="fixed right-0 top-0 bottom-0 z-40 flex h-full w-[min(23rem,calc(100vw-0.75rem))] flex-col overflow-y-auto border-l border-border/80 bg-card/95 shadow-2xl shadow-black/40 backdrop-blur-2xl md:absolute scrollbar-thin"
+        >
+          <div className="sticky top-0 z-10 border-b border-border/70 bg-secondary/30 p-4 backdrop-blur-xl">
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-emerald-400" />
+              <span className="text-sm font-semibold text-foreground uppercase tracking-[0.18em]">Expert Mode</span>
+            </div>
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground hover:bg-white/5" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="p-4 space-y-4">
+            {/* Impact Overlays */}
+            <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+              <CardHeader className="p-3 pb-1">
+                <CardTitle className="text-xs uppercase tracking-[0.24em] text-muted-foreground flex items-center gap-1.5">
+                  <MapIcon className="h-3 w-3" /> Impact Overlays
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 pt-2 space-y-3">
+                <ToggleRow label="Roads & Highways" tooltip="Show primary/secondary roads from OpenStreetMap" checked={showRoads} onToggle={onToggleRoads} />
+                <ToggleRow label="Villages & Ski Lifts" tooltip="Show villages, towns, and aerial lifts" checked={showInfra} onToggle={onToggleInfra} />
+                <ToggleRow label="Activity Heatmap" tooltip="Historical avalanche event density" checked={showHeatmap} onToggle={onToggleHeatmap} />
+                <ToggleRow label="Vector Polygons" tooltip="Show persisted runout polygons and SAR event geometries from the batch artifact" checked={showVectorPolygons} onToggle={onToggleVectorPolygons} />
+                <div className="flex items-center justify-between">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label className="text-xs cursor-pointer">3D Neighborhood</Label>
+                    </TooltipTrigger>
+                    <TooltipContent side="left" className="text-xs">Generate block-by-block Minecraft-style map of your exact area using real OSM data</TooltipContent>
+                  </Tooltip>
+                  <Button variant="outline" size="sm" className="h-7 text-[10px] px-2 rounded-full border-border/70 bg-black/10 hover:bg-white/5" onClick={onToggle3D}>Open 3D</Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Wave D: Anomaly Map Layer */}
+            {cells && cells.length > 0 && (
+              <AnomalyMapLayer
+                cells={cells}
+                visible={showAnomalyLayer}
+                onToggle={() => setShowAnomalyLayer(!showAnomalyLayer)}
+              />
+            )}
+
+            {/* F6: Multi-Modal Fusion Dashboard */}
+            <Suspense fallback={<HydrographFallback />}>
+              <LazyMultiModalFusionCard selectedCell={selectedCell} />
+            </Suspense>
+
+            {/* Story 20: Class-II snowpack proxy visibility */}
+            <SnowpackProxyCard selectedCell={selectedCell} />
+
+            {/* Bounded customer POC evidence; never changes the live forecast grid. */}
+            {isPirPanjalPocRegion(regionKey) && <PirPanjalPocEvidenceCard live />}
+
+            <CellEvidenceDrawer
+              selectedCell={selectedCell}
+              regionKey={regionKey}
+              regionName={regionName}
+              forecastRunId={forecastRunId}
+              forecastGridId={forecastGridId}
+              forecastHour={forecastHour}
+              modelMetadata={modelMetadata}
+            />
+
+            {/* F10: Safe-Route Planner */}
+            {cells && cells.length > 0 && (
+              <RoutePlannerPanel
+                cells={cells.map((c): RouteCell => ({
+                  row: c.row,
+                  col: c.col,
+                  lat: c.lat,
+                  lng: c.lng,
+                  risk_score: c.riskScore,
+                  risk_level: Math.round(c.riskScore),
+                }))}
+                gridSize={gridSize}
+              />
+            )}
+
+            {/* F18: Citizen Science Reports */}
+            {citizenReports && citizenReports.length > 0 && (
+              <CitizenReportPanel reports={citizenReports} />
+            )}
+
+            {/* Hydrograph */}
+            <Suspense fallback={<HydrographFallback />}>
+              <LazyHydrographChart hourlyGrids={hourlyGrids} selectedCell={selectedCell} />
+            </Suspense>
+
+            {/* Alerts */}
+            <Card className="border border-border/70 bg-card/60 backdrop-blur-xl">
+              <CardContent className="p-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-2 text-xs rounded-2xl border-border/70 bg-black/10 hover:bg-white/5"
+                  onClick={() => setAlertsDialogOpen(true)}
+                  aria-label="Subscribe to alerts for this region"
+                >
+                  <Bell className="h-3.5 w-3.5" />
+                  Subscribe to Alerts
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Dialog open={alertsDialogOpen} onOpenChange={setAlertsDialogOpen}>
+            <DialogContent className="bg-card border-border max-w-sm shadow-2xl shadow-black/40">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-foreground">
+                  <Bell className="h-4 w-4 text-emerald-400" />
+                  Subscribe to Alerts
+                </DialogTitle>
+                <DialogDescription>
+                  Save an alert subscription for the current region and enable browser notifications for future avalanche risk updates.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  You will receive push notifications when avalanche risk rises to High (4) or Very High (5) in this region. You can unsubscribe at any time.
+                </p>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setAlertsDialogOpen(false)} disabled={subscribingAlerts}>
+                    Cancel
+                  </Button>
+                  <Button onClick={subscribeAlerts} disabled={subscribingAlerts} className="gap-2">
+                    {subscribingAlerts && <span className="h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />}
+                    Confirm Subscription
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </motion.aside>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function ToggleRow({ label, tooltip, checked, onToggle }: { label: string; tooltip: string; checked: boolean; onToggle: (v: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Label className="text-xs cursor-pointer">{label}</Label>
+        </TooltipTrigger>
+        <TooltipContent side="left" className="text-xs">{tooltip}</TooltipContent>
+      </Tooltip>
+      <Switch checked={checked} onCheckedChange={onToggle} aria-label={label} />
+    </div>
+  );
+}

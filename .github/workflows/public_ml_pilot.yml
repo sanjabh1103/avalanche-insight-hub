@@ -1,0 +1,350 @@
+name: Public ML Pilot — Himalayas Nepal
+
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot_manifest:
+        description: Repository-relative path to the approved reviewed snapshot manifest
+        required: true
+        type: string
+      snapshot_events:
+        description: Repository-relative path to the event JSONL referenced by the snapshot manifest
+        required: true
+        type: string
+      snapshot_overlap_report:
+        description: Repository-relative path to the reviewed source-overlap report
+        required: true
+        type: string
+      snapshot_source_key:
+        description: Snapshot source_key; must match the manifest
+        required: true
+        type: string
+      snapshot_role:
+        description: Approved training role recorded with the run
+        required: true
+        type: string
+      snapshot_license_review_id:
+        description: License review identifier for the selected snapshot
+        required: true
+        type: string
+      source_request_manifest:
+        description: Repository-relative path to the completed source-owner manifest
+        required: true
+        type: string
+      source_request_payload:
+        description: Repository-relative path to the immutable source-owner payload
+        required: true
+        type: string
+      source_request_events:
+        description: Repository-relative path to the canonical exact-time source-owner event JSONL
+        required: true
+        type: string
+      pre_remote_scope_manifest:
+        description: Repository-relative path to the approved MVP4 release scope manifest
+        required: true
+        type: string
+      pre_remote_approval_manifest:
+        description: Repository-relative path to the completed MVP4 pre-remote approval attestation
+        required: true
+        type: string
+      shadow_bundle_dir:
+        description: Repository-relative path to the shadow artifact bundle directory (mandatory)
+        required: true
+        type: string
+      shadow_attestation:
+        description: Repository-relative path to the release attestation JSON (mandatory)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  himalayas-nepal-training:
+    # A valid snapshot input is necessary but not sufficient: require the
+    # deliberate release flag before allocating a remote training runner.
+    if: vars.MVP4_TRAINING_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PILOT_ARTIFACT_ROOT: backend/artifacts/pilot-${{ github.run_id }}
+      # No snapshot default is intentional.  The pilot must be dispatched with
+      # an explicitly approved, hash-reviewed source bundle after the data gate.
+      OPEN_SOURCE_LABEL_SNAPSHOT: ${{ github.event.inputs.snapshot_events }}
+      OPEN_SOURCE_LABEL_SOURCE_KEY: ${{ github.event.inputs.snapshot_source_key }}
+      OPEN_SOURCE_LABEL_ROLE: ${{ github.event.inputs.snapshot_role }}
+      OPEN_SOURCE_LABEL_LICENSE_REVIEW_ID: ${{ github.event.inputs.snapshot_license_review_id }}
+      SNAPSHOT_MANIFEST: ${{ github.event.inputs.snapshot_manifest }}
+      SNAPSHOT_OVERLAP_REPORT: ${{ github.event.inputs.snapshot_overlap_report }}
+      SOURCE_REQUEST_MANIFEST: ${{ github.event.inputs.source_request_manifest }}
+      SOURCE_REQUEST_PAYLOAD: ${{ github.event.inputs.source_request_payload }}
+      SOURCE_REQUEST_EVENTS_JSONL: ${{ github.event.inputs.source_request_events }}
+      PRE_REMOTE_SCOPE_MANIFEST: ${{ github.event.inputs.pre_remote_scope_manifest }}
+      PRE_REMOTE_APPROVAL_MANIFEST: ${{ github.event.inputs.pre_remote_approval_manifest }}
+      SHADOW_BUNDLE_DIR: ${{ github.event.inputs.shadow_bundle_dir }}
+      SHADOW_ATTESTATION: ${{ github.event.inputs.shadow_attestation }}
+      TRAINING_REGION_KEYS: himalayas_nepal
+    concurrency:
+      group: av-ml-pilot-himalayas-nepal
+      cancel-in-progress: false
+    steps:
+      - name: Checkout release
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+          lfs: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/locks/core-py312.txt
+
+      - name: Metadata-only training preflight
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python - "${SNAPSHOT_MANIFEST}" "${OPEN_SOURCE_LABEL_SNAPSHOT}" "${SNAPSHOT_OVERLAP_REPORT}" "${SOURCE_REQUEST_MANIFEST}" "${SOURCE_REQUEST_PAYLOAD}" "${SOURCE_REQUEST_EVENTS_JSONL}" "${OPEN_SOURCE_LABEL_SOURCE_KEY}" "${OPEN_SOURCE_LABEL_ROLE}" "${OPEN_SOURCE_LABEL_LICENSE_REVIEW_ID}" "${PRE_REMOTE_SCOPE_MANIFEST}" "${PRE_REMOTE_APPROVAL_MANIFEST}" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          repo_root = Path.cwd().resolve()
+
+          def resolve_repo_file(raw: str, label: str) -> Path:
+              candidate = Path(raw)
+              if candidate.is_absolute():
+                  raise SystemExit(f"{label} must be repository-relative")
+              resolved = (repo_root / candidate).resolve()
+              try:
+                  resolved.relative_to(repo_root)
+              except ValueError as exc:
+                  raise SystemExit(f"{label} escapes the checked-out repository") from exc
+              if not resolved.is_file() or resolved.stat().st_size == 0:
+                  raise SystemExit(f"{label} is missing or empty: {raw}")
+              return resolved
+
+          manifest_path = resolve_repo_file(sys.argv[1], "snapshot manifest")
+          events_path = resolve_repo_file(sys.argv[2], "snapshot events")
+          overlap_path = resolve_repo_file(sys.argv[3], "snapshot overlap report")
+          source_request_manifest_path = resolve_repo_file(sys.argv[4], "source-owner manifest")
+          source_request_payload_path = resolve_repo_file(sys.argv[5], "source-owner payload")
+          source_request_events_path = resolve_repo_file(sys.argv[6], "source-owner events")
+          source_key = sys.argv[7].strip()
+          source_role = sys.argv[8].strip()
+          license_review_id = sys.argv[9].strip()
+          pre_remote_scope_manifest_path = resolve_repo_file(sys.argv[10], "pre-remote scope manifest")
+          pre_remote_approval_manifest_path = resolve_repo_file(sys.argv[11], "pre-remote approval manifest")
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          if not isinstance(manifest, dict):
+              raise SystemExit("snapshot manifest must be a JSON object")
+          declared_events = str(manifest.get("events_path") or "events.jsonl")
+          declared_overlap = str(manifest.get("source_overlap_report") or "source_overlap_report.json")
+          if (manifest_path.parent / declared_events).resolve() != events_path:
+              raise SystemExit("snapshot manifest events_path does not match dispatch input")
+          if (manifest_path.parent / declared_overlap).resolve() != overlap_path:
+              raise SystemExit("snapshot manifest overlap report does not match dispatch input")
+          if str(manifest.get("source_key") or "").strip() != source_key:
+              raise SystemExit("snapshot manifest source_key does not match dispatch input")
+          declared_role = str(manifest.get("source_role") or "").strip()
+          if declared_role and declared_role != source_role:
+              raise SystemExit("snapshot manifest source_role does not match dispatch input")
+          declared_license = str(manifest.get("license_review_id") or "").strip()
+          if declared_license and declared_license != license_review_id:
+              raise SystemExit("snapshot manifest license_review_id does not match dispatch input")
+          if not source_role or not license_review_id:
+              raise SystemExit("snapshot role and license review ID are required")
+          print(
+              f"Validated repository-relative snapshot and source-owner inputs: "
+              f"{manifest_path}, {source_request_manifest_path}, {source_request_payload_path}, "
+              f"{source_request_events_path}, {pre_remote_scope_manifest_path}, "
+              f"{pre_remote_approval_manifest_path}"
+          )
+          PY
+          python -m backend.scripts.audit_training_dataset \
+            --artifact-root "${PILOT_ARTIFACT_ROOT}" \
+            --snapshot-manifest "${SNAPSHOT_MANIFEST}" \
+            --source-request-manifest "${SOURCE_REQUEST_MANIFEST}" \
+            --source-request-payload "${SOURCE_REQUEST_PAYLOAD}" \
+            --source-request-events-jsonl "${SOURCE_REQUEST_EVENTS_JSONL}" \
+            --region-keys "${TRAINING_REGION_KEYS}" \
+            --output "${RUNNER_TEMP}/training-preflight.json" \
+            --strict
+
+      - name: Fail-closed pre-remote MVP4 gate
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${PILOT_ARTIFACT_ROOT}"
+          python scripts/verify_mvp4_pre_remote_gate.py \
+            --scope-manifest "${PRE_REMOTE_SCOPE_MANIFEST}" \
+            --approval-manifest "${PRE_REMOTE_APPROVAL_MANIFEST}" \
+            --snapshot-manifest "${SNAPSHOT_MANIFEST}" \
+            --artifact-root "${PILOT_ARTIFACT_ROOT}" \
+            --source-request-manifest "${SOURCE_REQUEST_MANIFEST}" \
+            --source-request-payload "${SOURCE_REQUEST_PAYLOAD}" \
+            --source-request-events-jsonl "${SOURCE_REQUEST_EVENTS_JSONL}" \
+            --region-keys "${TRAINING_REGION_KEYS}" \
+            --shadow-bundle-dir "${SHADOW_BUNDLE_DIR}" \
+            --attestation "${SHADOW_ATTESTATION}"
+
+      - name: Install pinned backend dependencies
+        run: python -m pip install --upgrade pip && pip install --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Train one-region pilot
+        id: train
+        env:
+          ARTIFACT_ROOT: ${{ env.PILOT_ARTIFACT_ROOT }}
+          SAMPLES_PER_REGION: '100'
+          TRAINING_REGION_KEYS: himalayas_nepal
+          FORECAST_MODE: full
+          TRAINING_SNOWPACK_PROXY_MODE: regional_day
+          OPEN_METEO_RETRIES: '2'
+          PSS_FLOOR: '0.45'
+          MIN_EVENTS_FOR_TRAINING: '30'
+          ALLOW_DRIFT_SKIP: 'false'
+          ALLOW_SYNTHETIC_BOOTSTRAP: 'false'
+          TRAINING_PREFLIGHT_STRICT: 'true'
+          TRAINING_RESEARCH_OVERRIDE: 'false'
+          OPEN_METEO_TIMEOUT: '10'
+          ML_SEED: '42'
+          PYTHONPATH: ${{ github.workspace }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          project_ref=$(printf '%s' "${SUPABASE_URL}" | sed -n 's|.*://\([a-z0-9]*\)\.supabase\.co.*|\1|p')
+          test "${project_ref}" = "eyyellmffzzujyssaayb"
+          python -m backend.train_model
+          python - "${ARTIFACT_ROOT}" "${SNAPSHOT_MANIFEST}" "${SNAPSHOT_OVERLAP_REPORT}" <<'PY'
+          import json
+          import os
+          import re
+          import shutil
+          import sys
+          from pathlib import Path
+
+          root = Path(sys.argv[1])
+          snapshot_manifest = Path(sys.argv[2])
+          overlap_report = Path(sys.argv[3])
+          candidates = sorted(
+              path for path in root.iterdir()
+              if path.is_dir()
+              and re.fullmatch(r"\d{8}T\d{6}Z", path.name)
+          ) if root.is_dir() else []
+          if len(candidates) != 1:
+              raise SystemExit(f"expected exactly one pilot artifact directory, found {len(candidates)}")
+          artifact_dir = candidates[0]
+          required = ("model.joblib", "training_metrics.json", "event_rows.jsonl", "reproducibility_manifest.json", "split_manifest.json", "training_preflight.json")
+          missing = [name for name in required if not (artifact_dir / name).is_file()]
+          if missing:
+              raise SystemExit(f"pilot artifact is missing required evidence: {missing}")
+          metrics = json.loads((artifact_dir / "training_metrics.json").read_text(encoding="utf-8"))
+          dataset = metrics.get("dataset_manifest")
+          if not isinstance(dataset, dict):
+              raise SystemExit("training_metrics.json has no dataset_manifest")
+          if dataset.get("is_synthetic") is True or str(dataset.get("training_dataset_version", "")).startswith(("synthetic_", "cold_start_")):
+              raise SystemExit("synthetic or cold-start artifact cannot be uploaded")
+          if not isinstance(dataset.get("open_source_label_manifest"), dict):
+              raise SystemExit("pilot artifact did not record the open-source label manifest")
+          shutil.copyfile(snapshot_manifest, artifact_dir / "open_source_snapshot_manifest.json")
+          shutil.copyfile(overlap_report, artifact_dir / "source_overlap_report.json")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"artifact_dir={artifact_dir}\n")
+          print(f"Selected exact pilot artifact directory: {artifact_dir}")
+          PY
+
+      - name: Strict post-training metadata preflight
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          ARTIFACT_DIR: ${{ steps.train.outputs.artifact_dir }}
+        run: |
+          set -euo pipefail
+          test -n "${ARTIFACT_DIR}"
+          python -m backend.scripts.audit_training_dataset \
+            --artifact-dir "${ARTIFACT_DIR}" \
+            --snapshot-manifest "${SNAPSHOT_MANIFEST}" \
+            --source-request-manifest "${SOURCE_REQUEST_MANIFEST}" \
+            --source-request-payload "${SOURCE_REQUEST_PAYLOAD}" \
+            --source-request-events-jsonl "${SOURCE_REQUEST_EVENTS_JSONL}" \
+            --region-keys "${TRAINING_REGION_KEYS}" \
+            --output "${RUNNER_TEMP}/post-training-preflight.json" \
+            --strict
+
+      - name: Upload and verify remote pilot artifact
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ARTIFACT_DIR: ${{ steps.train.outputs.artifact_dir }}
+        run: |
+          set -euo pipefail
+          test -d "${ARTIFACT_DIR}"
+          run_id="pilot-${GITHUB_RUN_ID}"
+          artifact_files=(
+            model.joblib
+            training_metrics.json
+            event_rows.jsonl
+            reproducibility_manifest.json
+            split_manifest.json
+            training_preflight.json
+            open_source_snapshot_manifest.json
+            source_overlap_report.json
+          )
+          for artifact_file in "${artifact_files[@]}"; do
+            source_path="${ARTIFACT_DIR}/${artifact_file}"
+            test -f "${source_path}"
+            object_url="${SUPABASE_URL%/}/storage/v1/object/model-artifacts/${run_id}/${artifact_file}"
+            curl --fail --silent --show-error --location \
+              -X POST \
+              -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H 'x-upsert: true' \
+              -H 'Content-Type: application/octet-stream' \
+              --data-binary @"${source_path}" \
+              "${object_url}"
+          done
+          echo "::group::Download and verify remote pilot artifact"
+          download_dir=$(mktemp -d)
+          trap 'rm -rf "${download_dir}"' EXIT
+          for artifact_file in "${artifact_files[@]}"; do
+            source_path="${ARTIFACT_DIR}/${artifact_file}"
+            object_url="${SUPABASE_URL%/}/storage/v1/object/model-artifacts/${run_id}/${artifact_file}"
+            restored_path="${download_dir}/${artifact_file}"
+            curl --fail --silent --show-error --location \
+              -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+              "${object_url}" \
+              --output "${restored_path}"
+            expected_sha=$(sha256sum "${source_path}" | awk '{print $1}')
+            actual_sha=$(sha256sum "${restored_path}" | awk '{print $1}')
+            test "${expected_sha}" = "${actual_sha}"
+            echo "Verified ${artifact_file} sha256=${actual_sha}"
+          done
+          python - "${download_dir}" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          import joblib
+
+          root = Path(sys.argv[1])
+          model = joblib.load(root / "model.joblib")
+          metrics = json.loads((root / "training_metrics.json").read_text(encoding="utf-8"))
+          snapshot = json.loads((root / "open_source_snapshot_manifest.json").read_text(encoding="utf-8"))
+          overlap = json.loads((root / "source_overlap_report.json").read_text(encoding="utf-8"))
+          dataset = metrics.get("dataset_manifest") if isinstance(metrics, dict) else None
+          if model is None or not isinstance(metrics, dict) or not isinstance(dataset, dict):
+              raise SystemExit("remote pilot artifact restore is invalid")
+          if dataset.get("is_synthetic") is True:
+              raise SystemExit("remote artifact is synthetic")
+          if snapshot.get("event_rows_sha256") != dataset.get("open_source_label_manifest", {}).get("snapshot_sha256"):
+              raise SystemExit("remote source manifest does not match the training manifest")
+          if overlap.get("status") != "reviewed":
+              raise SystemExit("remote source overlap report is not reviewed")
+          print("Remote model.joblib loaded; metrics, source snapshot, and reviewed overlap report parsed")
+          PY
+          echo "::endgroup::"
+          echo "::notice::PILOT_ARTIFACT_VERSION=${run_id}"

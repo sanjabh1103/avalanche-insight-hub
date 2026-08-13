@@ -1,0 +1,20 @@
+{
+  "schema_version": "snowpack_approved_geometry_manifest_v1",
+  "id": "pir-panjal-srtm-geometry-34-021875-74-347536-middle-v1",
+  "kind": "geometry",
+  "source": "repository-bound SRTM-derived terrain geometry",
+  "licence": "Internal-use POC geometry derived from the repository-bound SRTM asset; no public raw DEM redistribution",
+  "units": "EPSG:4326 coordinates; elevation metres; slope degrees; aspect degrees clockwise from north",
+  "region": "pir_panjal_nw_himalaya",
+  "elevation_band": "middle",
+  "valid_from": "2023-10-01T00:00:00Z",
+  "valid_to": "2024-02-24T00:00:00Z",
+  "approval_valid_from": "2026-08-12T00:00:00Z",
+  "approval_valid_to": "2026-12-31T23:59:59Z",
+  "approval_state": "approved",
+  "payload_path": "snowpack_poc/geometry-payload.json",
+  "payload_sha256": "0afed118d60c776582e5cbd7ae7eb2322b79cda158363f39182b235ea5385b6c",
+  "geometry_semantics": "Customer-selected coordinate with deterministic SRTM-derived candidate terrain; not a Partner-approved survey",
+  "target_grid_m": 3000.0,
+  "no_3km_skill_claim": true
+}

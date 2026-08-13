@@ -1,0 +1,387 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avalanche-insight-hub.local/schemas/source_manifest.schema.json",
+  "title": "MVP4 reviewed source request manifest",
+  "description": "Evidence contract for candidate avalanche label sources. Non-core entries are never training or production eligible.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source_id",
+    "source_name",
+    "source_owner",
+    "source_url",
+    "source_reference",
+    "source_role",
+    "review_status",
+    "license_review_id",
+    "license",
+    "coverage",
+    "time_semantics",
+    "spatial_semantics",
+    "event_id_field",
+    "provenance",
+    "independence",
+    "training_eligible",
+    "production_scoring_eligible",
+    "required_next_action"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "mvp4_source_request_manifest_v1"
+    },
+    "source_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.-]*$"
+    },
+    "source_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_owner": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_url": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_reference": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_role": {
+      "enum": [
+        "requested_core",
+        "core",
+        "shadow",
+        "benchmark",
+        "context"
+      ]
+    },
+    "review_status": {
+      "enum": [
+        "requested",
+        "pending_review",
+        "reviewed",
+        "approved",
+        "rejected_from_core",
+        "access_restricted"
+      ]
+    },
+    "license_review_id": {
+      "type": ["string", "null"]
+    },
+    "license": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reuse_scope", "attribution_required"],
+      "properties": {
+        "status": {
+          "enum": [
+            "permissive_core_reviewed",
+            "permissive_shadow_reviewed",
+            "pending_review",
+            "pending_rights_review",
+            "research_only",
+            "access_restricted",
+            "unknown"
+          ]
+        },
+        "reuse_scope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attribution_required": {
+          "type": "boolean"
+        },
+        "terms_url": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "regions",
+        "positive_seasons",
+        "exact_time_positive_seasons",
+        "minimum_positive_seasons_gate",
+        "coverage_note"
+      ],
+      "properties": {
+        "regions": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "positive_seasons": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "exact_time_positive_seasons": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "minimum_positive_seasons_gate": {
+          "const": 3
+        },
+        "coverage_note": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "time_semantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_time_field",
+        "event_time_kind",
+        "timezone",
+        "precision",
+        "release_time_proven",
+        "source_time_is_avalanche_occurrence_time"
+      ],
+      "properties": {
+        "event_time_field": {
+          "type": "string",
+          "minLength": 1
+        },
+        "event_time_kind": {
+          "enum": [
+            "requested_release_time",
+            "observed_avalanche_release_time",
+            "source_reported_avalanche_occurrence_time",
+            "source_reported_injury_or_death_time",
+            "source_reported_calendar_date",
+            "catalog_reported_calendar_date",
+            "satellite_detection_interval",
+            "satellite_acquisition_date",
+            "bulletin_validity_window",
+            "satellite_detected_or_historical_date"
+          ]
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 1
+        },
+        "precision": {
+          "enum": ["exact", "day", "interval", "unknown"]
+        },
+        "release_time_proven": {
+          "type": "boolean"
+        },
+        "source_time_is_avalanche_occurrence_time": {
+          "type": "boolean"
+        }
+      }
+    },
+    "spatial_semantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "geometry_type",
+        "coordinate_reference",
+        "coordinate_precision",
+        "has_exact_coordinates"
+      ],
+      "properties": {
+        "geometry_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "coordinate_reference": {
+          "type": "string",
+          "minLength": 1
+        },
+        "coordinate_precision": {
+          "enum": [
+            "exact_event_point",
+            "event_polygon",
+            "point",
+            "general_slope",
+            "district_or_region",
+            "peak_or_location_text",
+            "not_available",
+            "unknown"
+          ]
+        },
+        "has_exact_coordinates": {
+          "type": "boolean"
+        }
+      }
+    },
+    "event_id_field": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_rows_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-fA-F]{64}$"
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_hash",
+        "source_hash_algorithm",
+        "retrieved_at",
+        "version_or_commit"
+      ],
+      "properties": {
+        "source_hash": {
+          "type": ["string", "null"]
+        },
+        "source_hash_algorithm": {
+          "enum": ["sha256", "not_available"]
+        },
+        "retrieved_at": {
+          "type": ["string", "null"]
+        },
+        "version_or_commit": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "independence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "origin_source_family",
+        "independent_of_source_ids",
+        "independence_status",
+        "overlap_review_status"
+      ],
+      "properties": {
+        "origin_source_family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "independent_of_source_ids": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "independence_status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "overlap_review_status": {
+          "enum": ["not_started", "pending", "reviewed", "clean", "overlap_found"]
+        }
+      }
+    },
+    "training_eligible": {
+      "type": "boolean"
+    },
+    "production_scoring_eligible": {
+      "type": "boolean"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "required_next_action": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source_role": {"const": "core"}
+        }
+      },
+      "then": {
+        "required": ["license_review_id", "evidence_refs", "event_rows_sha256"],
+        "properties": {
+          "license_review_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "review_status": {"const": "approved"},
+          "training_eligible": {"const": true},
+          "production_scoring_eligible": {"const": false},
+          "evidence_refs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "event_rows_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$"
+          },
+          "coverage": {
+            "properties": {
+              "regions": {"minItems": 1},
+              "positive_seasons": {
+                "minItems": 3,
+                "uniqueItems": true
+              },
+              "exact_time_positive_seasons": {
+                "minItems": 3,
+                "uniqueItems": true
+              }
+            }
+          },
+          "provenance": {
+            "properties": {
+              "source_hash": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{64}$"
+              },
+              "source_hash_algorithm": {"const": "sha256"},
+              "retrieved_at": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "license": {
+            "properties": {
+              "status": {"const": "permissive_core_reviewed"}
+            }
+          },
+          "time_semantics": {
+            "properties": {
+              "event_time_kind": {
+                "enum": [
+                  "observed_avalanche_release_time",
+                  "source_reported_avalanche_occurrence_time"
+                ]
+              },
+              "precision": {"const": "exact"},
+              "release_time_proven": {"const": true},
+              "source_time_is_avalanche_occurrence_time": {"const": true}
+            }
+          },
+          "spatial_semantics": {
+            "properties": {
+              "coordinate_precision": {
+                "enum": ["exact_event_point", "event_polygon"]
+              },
+              "has_exact_coordinates": {"const": true}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source_role": {
+            "enum": ["requested_core", "shadow", "benchmark", "context"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "training_eligible": {"const": false},
+          "production_scoring_eligible": {"const": false}
+        }
+      }
+    }
+  ]
+}

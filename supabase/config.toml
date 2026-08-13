@@ -1,0 +1,39 @@
+project_id = "eyyellmffzzujyssaayb"
+
+[functions.trigger-job]
+verify_jwt = true
+
+[functions.run-forecast]
+verify_jwt = true
+
+[functions.field-report-enrichment]
+verify_jwt = true
+
+[functions.submit-field-report]
+verify_jwt = true
+
+[functions.ingest-event]
+verify_jwt = true
+
+[functions.ingest-snow-cover]
+verify_jwt = true
+
+[functions.label-forecast-outcomes]
+verify_jwt = true
+
+[functions.recent-activity-refresh]
+verify_jwt = true
+
+[functions.run-evaluation]
+verify_jwt = true
+
+[functions.promote-report]
+verify_jwt = true
+
+# FIX-1 (RB-1): Platform-level JWT enforcement for the knowledge-graph-model
+# edge function. The function also verifies JWT in its own code (layer 2),
+# but this config entry ensures the Supabase platform rejects unauthenticated
+# requests before they reach the function code (layer 1, defense-in-depth).
+# Matches the pattern of all other functions in this file.
+[functions.knowledge-graph-model]
+verify_jwt = true

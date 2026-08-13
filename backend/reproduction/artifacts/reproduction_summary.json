@@ -1,0 +1,115 @@
+{
+  "full_operational_detection_claim_allowed": false,
+  "headline_metrics": {
+    "elev_simple_station_row_accuracy": 0.8014184397163121,
+    "elev_simple_station_row_macro_f1": 0.7798178241302179,
+    "gpxyz_decision": "blocked_station_coordinates_required",
+    "rf4_accuracy": 0.894575678040245,
+    "rf4_class_4_f1": 0.37209302325581395,
+    "rf4_macro_f1": 0.7534442748560497
+  },
+  "model_status_mutation_allowed": false,
+  "next_actions": [
+    "Run RF4 feature/parity audit before presenting the current accuracy as paper-comparable.",
+    "Request or derive reviewed Swiss station metadata with station_code, latitude, longitude, and elevation_m.",
+    "Add official warning-region polygons before claiming full RAvaFcast Stage-3 parity.",
+    "Keep avalanche/landslide remote-sensing detection maps shadow-only until separate validation datasets and gates exist.",
+    "Use the customer wishlist delta as a product-scope backlog, not as evidence of operational readiness."
+  ],
+  "production_scoring_allowed": false,
+  "remaining_blockers": [
+    {
+      "blocker": "station_coordinates_required_for_gpxyz",
+      "needed_input": "station_code, latitude, longitude, elevation_m station metadata table",
+      "severity": "high",
+      "why": "The downloaded RF1/RF2 CSVs include station id and elevation but not latitude/longitude."
+    },
+    {
+      "blocker": "official_warning_region_geometry_required",
+      "needed_input": "official warning-region polygons and elevation-band policy",
+      "severity": "high",
+      "why": "Stage-3 RAvaFcast parity needs warning-region polygons and grid aggregation, not only station-row grouping."
+    },
+    {
+      "blocker": "operational_detection_validation_required",
+      "needed_input": "task-specific avalanche and landslide detection labels, alert policy, and release gates",
+      "severity": "high",
+      "why": "The customer wishlist adds avalanche/landslide detection maps and alerts, which need separate labeled validation datasets."
+    }
+  ],
+  "rf4_claim_boundary": "initial_reproduction_signal_pending_parity_audit",
+  "sar_remote_sensing_shadow_gated": true,
+  "schema_version": "swiss_ravafcast_reproduction_summary_v1",
+  "stage3_claim_boundary": "station_row_baseline_not_full_ravafcast_grid_warning_region_parity",
+  "swiss_reproduction_phase_status": [
+    {
+      "evidence": "backend/reproduction/swiss_ravafcast isolated from production scoring",
+      "name": "research_only_reproduction_sandbox",
+      "phase": 0,
+      "status": "complete"
+    },
+    {
+      "evidence": {
+        "resource_count": 2,
+        "row_counts": {
+          "data_rf1_forecast": 292837,
+          "data_rf2_tidy": 29296
+        }
+      },
+      "name": "envidat_data_acquisition_and_validation",
+      "phase": 1,
+      "status": "complete"
+    },
+    {
+      "evidence": {
+        "accuracy": 0.894575678040245,
+        "class_4_f1": 0.37209302325581395,
+        "macro_f1": 0.7534442748560497
+      },
+      "name": "stage1_rf4_danger_reproduction",
+      "phase": 2,
+      "status": "initial_reproduction_signal_pending_parity_audit"
+    },
+    {
+      "evidence": {
+        "missing_required_columns": [
+          "latitude",
+          "longitude"
+        ],
+        "station_count": 129
+      },
+      "name": "stage2_gpxyz_interpolation",
+      "phase": 3,
+      "status": "blocked_station_coordinates_required"
+    },
+    {
+      "evidence": {
+        "accuracy": 0.8014184397163121,
+        "claim_boundary": "station_row_baseline_until_gpxyz_grid_and_warning_region_polygons_are_available",
+        "macro_f1": 0.7798178241302179
+      },
+      "name": "stage3_elevation_band_aggregation",
+      "phase": 4,
+      "status": "station_row_baseline_only_pending_gpxyz_grid_and_warning_polygons"
+    },
+    {
+      "evidence": "swiss_ravafcast_reproduction_summary_v1",
+      "name": "consolidated_reproduction_summary",
+      "phase": 5,
+      "status": "complete"
+    },
+    {
+      "evidence": "docs/EnviDat_to_Partner_Schema_Mapping.md and docs/MVP V2/Remote_Sensing_Operational_Wishlist_Delta.md",
+      "name": "partner_schema_and_customer_wishlist_delta",
+      "phase": 6,
+      "status": "documented_pending_partner_data"
+    },
+    {
+      "evidence": "no full operational detection claim is allowed from Swiss reproduction artifacts alone",
+      "name": "operational_avalanche_landslide_detection",
+      "phase": 7,
+      "status": "not_authorized_pending_validation_datasets_and_release_gates"
+    }
+  ],
+  "usage_boundary": "research_only"
+}

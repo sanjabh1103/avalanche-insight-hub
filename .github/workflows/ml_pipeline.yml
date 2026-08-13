@@ -1,0 +1,1433 @@
+name: Avalanche Async ML Pipeline
+
+on:
+  # The private repository is manual-only for this workflow. The public
+  # scrubbed release receives the nine approved schedule entries from
+  # config/public_cron_schedule.yml during the controlled sync.
+  schedule:
+    - cron: '7 4 * * 1'  # weekly training (Monday)
+    - cron: '7 4 * * 4'  # mid-week drift-check retrain (Thursday)
+    - cron: '3 3 * * 1'  # weekly SAR extraction (Monday, only runs when GEE secrets present)
+    - cron: '3 3 * * 4'  # Thursday SAR extraction (only runs when GEE secrets present)
+    - cron: '12 5 * * *'  # daily Gemini-assisted news ingest (05:12 UTC)
+    - cron: '17 6 * * *'  # daily same-day forecast publication proof (06:17 UTC)
+    - cron: '0 5 * * 1'  # weekly LSTM shadow training (Monday 05:00 UTC)
+    - cron: '30 5 * * 1'  # weekly LSTM shadow inference (Monday 05:30 UTC)
+    - cron: '0 3 * * *'  # daily forecast retention cleanup (03:00 UTC, before inference)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Pipeline mode'
+        required: true
+        default: 'train'
+        type: choice
+        options:
+          - train
+          - infer
+          - gee
+          - news
+          - sar_segment
+          - train_sar_unet
+          - train_mtslstm
+          - infer_mtslstm
+          - evaluate_release
+          - cleanup
+          - s2_snow
+          - anomaly_check
+      samples_per_region:
+        description: 'Training samples per region (caps real positive events per region)'
+        required: false
+        default: '500'
+      training_region_keys:
+        description: 'Comma-separated region keys to filter training events. Empty = all regions.'
+        required: false
+        default: ''
+      model_artifact_version:
+        description: 'Model artifact version (timestamp slug) to restore for inference. Empty = use latest available.'
+        required: false
+        default: ''
+      forecast_hours:
+        description: 'Forecast horizon hours'
+        required: false
+        default: '72'
+      region_keys:
+        description: 'Comma-separated region keys for inference publication proof. Defaults to 5 Himalayan technical-reference regions; this configuration is not Himalayan validation evidence.'
+        required: false
+        default: 'himalayas_nepal,pir_panjal_nw_himalaya,shamshabari_nw_himalaya,great_himalaya_nw_himalaya,karakoram_&_ladakh'
+      snowpack_proxy_mode:
+        description: 'Snowpack proxy mode for public inference publication. Synthetic is intentionally excluded from this workflow input.'
+        required: false
+        type: choice
+        default: 'regional'
+        options:
+          - regional
+          - cell
+      dataset_snapshot_id:
+        description: 'Dataset snapshot requested by the Modal worker. Use latest for automatic resolution.'
+        required: false
+        default: 'latest'
+      mts_lstm_epochs:
+        description: 'Requested MTS-LSTM training epochs for the Modal worker.'
+        required: false
+        default: '50'
+      sar_release_gate_passed:
+        description: 'Whether SAR release evaluation already passed and promoted SAR labels may contribute to cutover gating.'
+        required: false
+        default: 'false'
+      pss_floor:
+        description: 'PSS artifact gate floor (train + backfill). Defaults to 0.45; override to 0.0 for cold-start warmup.'
+        required: false
+        default: '0.45'
+      forecast_mode:
+        description: 'Forecast training mode: full (default), cold_start (3-winter data-efficient with zone-calibrated synthetic augmentation)'
+        required: false
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - cold_start
+      require_full_grid_publication:
+        description: 'Fail inference unless every requested region is full-grid-ready. Use true for demo-primary proof subsets, not broad all-region accumulation.'
+        required: false
+        type: choice
+        default: 'false'
+        options:
+          - 'false'
+          - 'true'
+      reference_set_key:
+        description: 'Authoritative SnowSlide held-out reference-set key for the official evaluate_release gate.'
+        required: false
+        default: ''
+      prediction_model_version:
+        description: 'Held-out SAR prediction model version used to resolve prediction_mask refs.'
+        required: false
+        default: 'sar_unet_resnet34_shadow_v1'
+      sar_training_manifest_path:
+        description: 'Path, URL, or storage ref to the supervised SAR training manifest.'
+        required: false
+        default: ''
+      sar_candidate_model_version:
+        description: 'Optional SAR candidate model version override for train_sar_unet.'
+        required: false
+        default: ''
+      sar_patch_size:
+        description: 'SAR training patch size.'
+        required: false
+        default: '128'
+      sar_patch_stride:
+        description: 'SAR training patch stride.'
+        required: false
+        default: '64'
+      sar_epochs:
+        description: 'SAR training epochs.'
+        required: false
+        default: '8'
+      sar_batch_size:
+        description: 'SAR training batch size.'
+        required: false
+        default: '8'
+      sar_learning_rate:
+        description: 'SAR training learning rate.'
+        required: false
+        default: '0.0001'
+      sar_loss:
+        description: 'SAR training loss name.'
+        required: false
+        default: 'focal_tversky'
+      gee_region_keys:
+        description: 'Comma-separated region keys for GEE extraction. Defaults to all 12 configured regions.'
+        required: false
+        default: 'colorado_rockies,swiss_alps,french_alps,himalayas_nepal,andes_patagonia,cascades_wa,scandinavia_norway,japanese_alps,pir_panjal_nw_himalaya,shamshabari_nw_himalaya,great_himalaya_nw_himalaya,karakoram_&_ladakh'
+      gee_dry_run:
+        description: 'Run GEE extraction without inserting rows.'
+        required: false
+        type: choice
+        default: 'false'
+        options:
+          - 'false'
+          - 'true'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  train:
+    # Fail closed until the reviewed MVP4 snapshot, feature policy, and
+    # customer/data-owner gates are complete.  An unset repository variable
+    # evaluates false and prevents scheduled minute consumption.
+    if: vars.MVP4_TRAINING_ENABLED == 'true' && ((github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'train') || (github.event_name == 'schedule' && (github.event.schedule == '7 4 * * 1' || github.event.schedule == '7 4 * * 4')))
+    concurrency:
+      group: av-ml-heavy
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      OPEN_SOURCE_LABEL_SNAPSHOT: backend/data/open_source_labels/hiaval_hma_rebuilt_20260803/events.jsonl
+      OPEN_SOURCE_LABEL_SOURCE_KEY: hiaval_hma
+      OPEN_SOURCE_LABEL_ROLE: shadow_training
+      OPEN_SOURCE_LABEL_LICENSE_REVIEW_ID: mvp4-hiaval-cc-by4-review-20260801
+      SNAPSHOT_MANIFEST: backend/data/open_source_labels/hiaval_hma_rebuilt_20260803/snapshot_manifest.json
+      # These repository variables intentionally default to empty. The
+      # pre-remote gate must be explicitly configured before any training
+      # runner can proceed beyond metadata preflight.
+      PRE_REMOTE_SCOPE_MANIFEST: ${{ vars.MVP4_PRE_REMOTE_SCOPE_MANIFEST || '' }}
+      PRE_REMOTE_APPROVAL_MANIFEST: ${{ vars.MVP4_PRE_REMOTE_APPROVAL_MANIFEST || '' }}
+      SOURCE_REQUEST_MANIFEST: ${{ vars.MVP4_SOURCE_REQUEST_MANIFEST || '' }}
+      SOURCE_REQUEST_PAYLOAD: ${{ vars.MVP4_SOURCE_REQUEST_PAYLOAD || '' }}
+      SOURCE_REQUEST_EVENTS_JSONL: ${{ vars.MVP4_SOURCE_REQUEST_EVENTS || '' }}
+      SHADOW_BUNDLE_DIR: ${{ vars.MVP4_SHADOW_BUNDLE_DIR || '' }}
+      SHADOW_ATTESTATION: ${{ vars.MVP4_SHADOW_ATTESTATION || '' }}
+      TRAINING_REGION_KEYS: ${{ github.event_name == 'schedule' && 'himalayas_nepal' || github.event.inputs.training_region_keys || '' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+          lfs: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/locks/core-py312.txt
+
+      - name: Metadata-only training preflight
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          test -s "${SNAPSHOT_MANIFEST}"
+          python -m backend.scripts.audit_training_dataset \
+            --artifact-root backend/artifacts \
+            --snapshot-manifest "${SNAPSHOT_MANIFEST}" \
+            --region-keys "${TRAINING_REGION_KEYS}" \
+            --output "${RUNNER_TEMP}/training-preflight.json" \
+            --strict
+
+      - name: Fail-closed pre-remote MVP4 gate
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          mkdir -p backend/artifacts
+          python scripts/verify_mvp4_pre_remote_gate.py \
+            --scope-manifest "${PRE_REMOTE_SCOPE_MANIFEST}" \
+            --approval-manifest "${PRE_REMOTE_APPROVAL_MANIFEST}" \
+            --snapshot-manifest "${SNAPSHOT_MANIFEST}" \
+            --artifact-root backend/artifacts \
+            --source-request-manifest "${SOURCE_REQUEST_MANIFEST}" \
+            --source-request-payload "${SOURCE_REQUEST_PAYLOAD}" \
+            --source-request-events-jsonl "${SOURCE_REQUEST_EVENTS_JSONL}" \
+            --region-keys "${TRAINING_REGION_KEYS}" \
+            --shadow-bundle-dir "${SHADOW_BUNDLE_DIR}" \
+            --attestation "${SHADOW_ATTESTATION}"
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Validate required secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY}" ]; then
+            echo "::error::SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured as GitHub secrets"
+            exit 1
+          fi
+          # Non-secret preflight: assert project ref matches expected project
+          PROJECT_REF=$(echo "${SUPABASE_URL}" | sed -n 's|.*://\([a-z0-9]*\).supabase.co.*|\1|p')
+          if [ -z "${PROJECT_REF}" ]; then
+            echo "::error::Could not extract project ref from SUPABASE_URL"
+            exit 1
+          fi
+          echo "::notice::Active Supabase project: ${PROJECT_REF}"
+          if [ "${PROJECT_REF}" != "eyyellmffzzujyssaayb" ]; then
+            echo "::error::SUPABASE_URL points to ${PROJECT_REF}, expected eyyellmffzzujyssaayb"
+            exit 1
+          fi
+
+      - name: Record training artifact baseline
+        env:
+          ARTIFACT_ROOT: backend/artifacts
+        run: |
+          set -euo pipefail
+          python - "${ARTIFACT_ROOT}" "${RUNNER_TEMP}/training-artifacts-before.json" <<'PY'
+          import json
+          import re
+          import sys
+          from pathlib import Path
+
+          root = Path(sys.argv[1])
+          candidates = []
+          if root.is_dir():
+              candidates = sorted(
+                  path.name
+                  for path in root.iterdir()
+                  if path.is_dir() and re.fullmatch(r"\d{8}T\d{6}Z", path.name)
+              )
+          Path(sys.argv[2]).write_text(json.dumps(candidates), encoding="utf-8")
+          print(f"Recorded {len(candidates)} pre-existing training artifact directories")
+          PY
+
+      - name: Train model
+        env:
+          ARTIFACT_ROOT: backend/artifacts
+          # Scheduled runs stay bounded for the pilot; manual runs can opt
+          # into broader coverage explicitly through workflow inputs.
+          SAMPLES_PER_REGION: ${{ github.event_name == 'schedule' && '100' || github.event.inputs.samples_per_region || '500' }}
+          TRAINING_REGION_KEYS: ${{ github.event_name == 'schedule' && 'himalayas_nepal' || github.event.inputs.training_region_keys || '' }}
+          ML_SEED: '42'
+          PSS_FLOOR: ${{ github.event.inputs.pss_floor || '0.45' }}
+          FORECAST_MODE: ${{ github.event.inputs.forecast_mode || 'full' }}
+          TRAINING_SNOWPACK_PROXY_MODE: regional_day
+          OPEN_METEO_RETRIES: '2'
+          MIN_EVENTS_FOR_TRAINING: '30'
+          ALLOW_DRIFT_SKIP: 'false'
+          ALLOW_SYNTHETIC_BOOTSTRAP: 'false'
+          TRAINING_PREFLIGHT_STRICT: 'true'
+          TRAINING_RESEARCH_OVERRIDE: 'false'
+          OPEN_METEO_TIMEOUT: '10'
+          PYTHONPATH: ${{ github.workspace }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m backend.train_model
+
+      - name: Select exact newly trained artifact
+        id: select_train_artifact
+        env:
+          ARTIFACT_ROOT: backend/artifacts
+        run: |
+          set -euo pipefail
+          python - "${ARTIFACT_ROOT}" "${RUNNER_TEMP}/training-artifacts-before.json" "${GITHUB_OUTPUT}" <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          root = Path(sys.argv[1])
+          before = set(json.loads(Path(sys.argv[2]).read_text(encoding="utf-8")))
+          candidates = sorted(
+              path for path in root.iterdir()
+              if path.is_dir()
+              and re.fullmatch(r"\d{8}T\d{6}Z", path.name)
+              and path.name not in before
+          ) if root.is_dir() else []
+          if len(candidates) != 1:
+              raise SystemExit(
+                  f"expected exactly one newly-created training artifact directory, found {len(candidates)}"
+              )
+          artifact_dir = candidates[0]
+          required = (
+              "model.joblib",
+              "training_metrics.json",
+              "feature_schema.json",
+              "event_rows.jsonl",
+              "reproducibility_manifest.json",
+              "split_manifest.json",
+              "training_preflight.json",
+          )
+          missing = [name for name in required if not (artifact_dir / name).is_file()]
+          if missing:
+              raise SystemExit(f"new training artifact is missing required evidence: {missing}")
+          metrics = json.loads((artifact_dir / "training_metrics.json").read_text(encoding="utf-8"))
+          dataset = metrics.get("dataset_manifest")
+          if not isinstance(dataset, dict):
+              raise SystemExit("training artifact has no dataset_manifest")
+          version = str(dataset.get("training_dataset_version") or "")
+          if dataset.get("is_synthetic") is True or version.startswith(("synthetic_", "cold_start_")):
+              raise SystemExit("synthetic or cold-start artifact cannot be cached")
+          if not isinstance(dataset.get("open_source_label_manifest"), dict):
+              raise SystemExit("training artifact did not record the open-source label manifest")
+          output = Path(sys.argv[3])
+          with output.open("a", encoding="utf-8") as handle:
+              handle.write(f"artifact_dir={artifact_dir}\n")
+              handle.write(f"artifact_version={artifact_dir.name}\n")
+          print(f"Selected exact newly-trained artifact: {artifact_dir}")
+          PY
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: avalanche-train-artifacts
+          path: ${{ steps.select_train_artifact.outputs.artifact_dir }}
+
+      - name: Cache model to Supabase Storage (pilot versioned path)
+        if: success()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ARTIFACT_DIR: ${{ steps.select_train_artifact.outputs.artifact_dir }}
+          RUN_ID: ${{ steps.select_train_artifact.outputs.artifact_version }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY}" ]; then
+            echo "::warning::SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set; skipping model cache upload."
+            exit 0
+          fi
+          for artifact_file in model.joblib training_metrics.json feature_schema.json; do
+            src_path="${ARTIFACT_DIR}/${artifact_file}"
+            test -f "${src_path}"
+            object_url="${SUPABASE_URL%/}/storage/v1/object/model-artifacts/pilot/${RUN_ID}/${artifact_file}"
+            curl --fail --silent --show-error --location \
+              -X POST \
+              -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary @"${src_path}" \
+              "${object_url}"
+            echo "Cached exact ${artifact_file} to model-artifacts/pilot/${RUN_ID}/"
+          done
+          echo "::notice::Pilot artifact version: ${RUN_ID}"
+
+  infer:
+    # Inference is disabled until a reviewed pilot artifact has been uploaded
+    # and restored successfully. This prevents repeated 45-minute artifact
+    # recovery failures while the data/model gate remains NO-GO.
+    if: vars.MVP4_INFERENCE_ENABLED == 'true' && ((github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'infer') || (github.event_name == 'schedule' && github.event.schedule == '17 6 * * *'))
+    concurrency:
+      group: av-ml-infer
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+          lfs: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/locks/core-py312.txt
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Validate required secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY}" ]; then
+            echo "::error::SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured as GitHub secrets"
+            exit 1
+          fi
+          # Non-secret preflight: assert project ref matches expected project
+          PROJECT_REF=$(echo "${SUPABASE_URL}" | sed -n 's|.*://\([a-z0-9]*\).supabase.co.*|\1|p')
+          if [ -z "${PROJECT_REF}" ]; then
+            echo "::error::Could not extract project ref from SUPABASE_URL"
+            exit 1
+          fi
+          echo "::notice::Active Supabase project: ${PROJECT_REF}"
+          if [ "${PROJECT_REF}" != "eyyellmffzzujyssaayb" ]; then
+            echo "::error::SUPABASE_URL points to ${PROJECT_REF}, expected eyyellmffzzujyssaayb"
+            exit 1
+          fi
+
+      - name: Download training artifacts (optional recovery)
+        # G-17: Allowlisted continue-on-error — this is an optional artifact download.
+        # If it fails, the next step restores a vetted recovery model from Supabase storage.
+        # Machine-checkable: step ID is registered in the allowlist in backend/tests/test_ci_suppression_allowlist.py
+        id: download_train_artifacts_1
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: avalanche-train-artifacts
+          path: backend/artifacts
+        continue-on-error: true
+
+      - name: Restore vetted recovery model artifact
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MODEL_RECOVERY_VERSION: ${{ vars.MODEL_RECOVERY_VERSION || '20260427T095428Z' }}
+          MODEL_ARTIFACT_VERSION: ${{ github.event.inputs.model_artifact_version || '' }}
+        run: |
+          set -euo pipefail
+          if [ -n "${MODEL_ARTIFACT_VERSION}" ] && [ -f "backend/artifacts/${MODEL_ARTIFACT_VERSION}/model.joblib" ]; then
+            echo "Explicit pilot model ${MODEL_ARTIFACT_VERSION} already exists; skipping recovery restore."
+            exit 0
+          fi
+          if [ -z "${MODEL_ARTIFACT_VERSION}" ] && [ -f "backend/artifacts/${MODEL_RECOVERY_VERSION}/model.joblib" ]; then
+            echo "Exact recovery model ${MODEL_RECOVERY_VERSION} already exists; skipping recovery restore."
+            exit 0
+          fi
+          # Try infer-cache first (uploaded by previous infer runs)
+          infer_cache_dir="backend/artifacts/infer-cache"
+          mkdir -p "${infer_cache_dir}"
+          for artifact_file in model.joblib training_metrics.json feature_schema.json; do
+            object_url="${SUPABASE_URL%/}/storage/v1/object/model-artifacts/infer-cache/${MODEL_RECOVERY_VERSION}/${artifact_file}"
+            if curl --fail --silent --show-error --location \
+              -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+              "${object_url}" \
+              --output "${infer_cache_dir}/${artifact_file}"; then
+              echo "Restored ${artifact_file} from infer-cache."
+            else
+              rm -f "${infer_cache_dir}/${artifact_file}"
+            fi
+          done
+          if [ -f "${infer_cache_dir}/model.joblib" ]; then
+            echo "Model restored from infer-cache; skipping recovery bucket."
+            # Use the requested recovery version as the only source of truth;
+            # do not create an untracked timestamp that a later find could
+            # accidentally select over the explicit model version.
+            restore_dir="backend/artifacts/${MODEL_RECOVERY_VERSION}"
+            mkdir -p "${restore_dir}"
+            cp "${infer_cache_dir}"/* "${restore_dir}"/ 2>/dev/null || true
+            echo "Restored infer-cache model to exact ${restore_dir}"
+            exit 0
+          fi
+          # Fall back to vetted recovery model
+          restore_dir="backend/artifacts/${MODEL_RECOVERY_VERSION}"
+          mkdir -p "${restore_dir}"
+          restored=false
+          for artifact_file in model.joblib training_metrics.json feature_schema.json; do
+            object_url="${SUPABASE_URL%/}/storage/v1/object/model-artifacts/recovery/${MODEL_RECOVERY_VERSION}/${artifact_file}"
+            if curl --fail --silent --show-error --location \
+              -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+              "${object_url}" \
+              --output "${restore_dir}/${artifact_file}"; then
+              restored=true
+              echo "Restored ${artifact_file} from private model-artifacts bucket."
+            else
+              rm -f "${restore_dir}/${artifact_file}"
+              echo "::warning::Could not restore ${artifact_file} from private model-artifacts bucket."
+            fi
+          done
+          if [ "${restored}" = "true" ] && [ -f "${restore_dir}/model.joblib" ]; then
+            echo "Vetted recovery model artifact restored."
+          fi
+
+      - name: Restore pilot model artifact (explicit version)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MODEL_ARTIFACT_VERSION: ${{ github.event.inputs.model_artifact_version || '' }}
+          MODEL_RECOVERY_VERSION: ${{ vars.MODEL_RECOVERY_VERSION || '20260427T095428Z' }}
+        run: |
+          set -euo pipefail
+          if [ -n "${MODEL_ARTIFACT_VERSION}" ] && [ -f "backend/artifacts/${MODEL_ARTIFACT_VERSION}/model.joblib" ]; then
+            echo "Exact pilot model ${MODEL_ARTIFACT_VERSION} already exists; skipping download."
+            exit 0
+          fi
+          if [ -z "${MODEL_ARTIFACT_VERSION}" ] && [ -f "backend/artifacts/${MODEL_RECOVERY_VERSION}/model.joblib" ]; then
+            echo "Exact recovery model ${MODEL_RECOVERY_VERSION} already exists; no pilot version required for scheduled inference."
+            exit 0
+          fi
+          if [ -z "${MODEL_ARTIFACT_VERSION}" ]; then
+            echo "::error::No model.joblib found and no model_artifact_version specified. Inference requires a pre-trained artifact."
+            echo "::error::Run the train job first, then specify the resulting RUN_ID as model_artifact_version."
+            exit 1
+          fi
+          echo "Restoring pilot artifact version: ${MODEL_ARTIFACT_VERSION}"
+          restore_dir="backend/artifacts/${MODEL_ARTIFACT_VERSION}"
+          mkdir -p "${restore_dir}"
+          restored=false
+          for artifact_file in model.joblib training_metrics.json feature_schema.json; do
+            object_url="${SUPABASE_URL%/}/storage/v1/object/model-artifacts/pilot/${MODEL_ARTIFACT_VERSION}/${artifact_file}"
+            if curl --fail --silent --show-error --location \
+              -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+              "${object_url}" \
+              --output "${restore_dir}/${artifact_file}"; then
+              restored=true
+              echo "Restored ${artifact_file} from pilot path."
+            else
+              rm -f "${restore_dir}/${artifact_file}"
+              echo "::warning::Could not restore ${artifact_file} from pilot path."
+            fi
+          done
+          if [ "${restored}" = "true" ] && [ -f "${restore_dir}/model.joblib" ]; then
+            echo "Pilot model artifact restored successfully."
+            # Verify checksum if available
+            if [ -f "${restore_dir}/training_metrics.json" ]; then
+              echo "Artifact verified: model.joblib + training_metrics.json present."
+            fi
+          else
+            echo "::error::Failed to restore model.joblib from pilot/${MODEL_ARTIFACT_VERSION}/"
+            echo "::error::Ensure the train job has completed and uploaded artifacts for this version."
+            exit 1
+          fi
+
+      - name: Cache model to Supabase Storage
+        if: success()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MODEL_CACHE_VERSION: ${{ github.event.inputs.model_artifact_version || vars.MODEL_RECOVERY_VERSION || '20260427T095428Z' }}
+          MODEL_SOURCE_DIR: backend/artifacts/${{ github.event.inputs.model_artifact_version || vars.MODEL_RECOVERY_VERSION || '20260427T095428Z' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY}" ]; then
+            echo "::warning::SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set; skipping model cache upload."
+            exit 0
+          fi
+          if [ ! -f "${MODEL_SOURCE_DIR}/model.joblib" ]; then
+            echo "::warning::Exact model source ${MODEL_SOURCE_DIR}/model.joblib is absent; refusing cache upload."
+            exit 0
+          fi
+          for artifact_file in model.joblib training_metrics.json feature_schema.json; do
+            src_path="${MODEL_SOURCE_DIR}/${artifact_file}"
+            if [ ! -f "${src_path}" ]; then
+              echo "::warning::${src_path} is absent; skipping that cache object."
+              continue
+            fi
+            object_url="${SUPABASE_URL%/}/storage/v1/object/model-artifacts/infer-cache/${MODEL_CACHE_VERSION}/${artifact_file}"
+            if curl --fail --silent --show-error --location \
+              -X POST \
+              -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary @"${src_path}" \
+              "${object_url}"; then
+              echo "Cached ${artifact_file} to Supabase Storage model-artifacts/infer-cache/${MODEL_CACHE_VERSION}/"
+            else
+              echo "::warning::Failed to cache ${artifact_file} to Supabase Storage (bucket may not exist)."
+            fi
+          done
+
+      - name: Run daily inference
+        env:
+          ARTIFACT_ROOT: backend/artifacts
+          FORECAST_HOURS: ${{ github.event.inputs.forecast_hours || '72' }}
+          REGION_KEYS: ${{ github.event_name == 'schedule' && 'himalayas_nepal,pir_panjal_nw_himalaya' || github.event.inputs.region_keys || 'himalayas_nepal,pir_panjal_nw_himalaya,shamshabari_nw_himalaya,great_himalaya_nw_himalaya,karakoram_&_ladakh' }}
+          GRID_SIZE: '20'
+          SNOWPACK_PROXY_MODE: ${{ github.event.inputs.snowpack_proxy_mode || 'regional' }}
+          # Physics/runout execution is intentionally disabled; no dispatch input exists.
+          RUN_PHYSICS_RUNOUT: 'false'
+          REQUIRE_FULL_GRID_PUBLICATION: ${{ github.event.inputs.require_full_grid_publication || 'false' }}
+          PYTHONPATH: ${{ github.workspace }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VERIFICATION_SPINE_ENABLED: 'true'
+          GIBS_ENABLED: 'true'
+          S2_SNOW_ENABLED: 'true'
+          S1_DEPTH_ENABLED: 'true'
+          SNOW_DEPTH_FUSION_ENABLED: 'true'
+          VAE_ANOMALY_ENABLED: 'true'
+          ACTIVE_LEARNING_ENABLED: 'true'
+          GEE_SERVICE_ACCOUNT_JSON: ${{ secrets.GEE_SERVICE_ACCOUNT_JSON }}
+          GEE_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GEE_SERVICE_ACCOUNT_EMAIL }}
+        run: |
+          set -euo pipefail
+          region_args=()
+          IFS=',' read -ra requested_regions <<< "${REGION_KEYS}"
+          for region_key in "${requested_regions[@]}"; do
+            region_key="$(echo "${region_key}" | xargs)"
+            if [ -n "${region_key}" ]; then
+              region_args+=(--region-key "${region_key}")
+            fi
+          done
+          proof_args=(--require-same-day-publication)
+          if [ "${REQUIRE_FULL_GRID_PUBLICATION}" = "true" ]; then
+            proof_args+=(--require-full-grid-publication)
+          fi
+          # Scheduled/public inference keeps ranked per-cell attribution but
+          # uses SHAP's approximate traversal; exact SHAP remains the local
+          # review default and is available by omitting this flag.
+          python -m backend.daily_inference \
+            --forecast-hours "${FORECAST_HOURS}" \
+            --snowpack-proxy-mode "${SNOWPACK_PROXY_MODE}" \
+            "${proof_args[@]}" \
+            --approximate-tree-shap \
+            --emit-stage-metrics \
+            "${region_args[@]}"
+
+      # P0.2: Surface the inference manifest as a step output so failures show
+      # the last-known-good state inline in the GitHub UI.
+      - name: Emit inference summary
+        if: always()
+        run: |
+          if [ -f backend/artifacts/*/inference_manifest.json ]; then
+            cat backend/artifacts/*/inference_manifest.json | tail -n 200
+          else
+            echo '::warning::inference_manifest.json not written; daily inference probably failed before regions_written stage.'
+          fi
+          if [ -f backend/artifacts/*/publication_proof.json ]; then
+            cat backend/artifacts/*/publication_proof.json | tail -n 200
+          else
+            echo '::warning::publication_proof.json not written; same-day publication proof was not generated.'
+          fi
+
+      - name: Upload inference artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: avalanche-inference-artifacts
+          path: backend/artifacts
+
+  gee:
+    # Story 21 SAR Shadow Fix + Edit 4: Sentinel-1 wet-snow extraction with
+    # mandatory SRTM layover/shadow mask BEFORE VV/VH thresholding.
+    # Runs only when GEE service-account secrets are configured; otherwise
+    # the Python script exits 0 cleanly so the job never fails.
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'gee') || (github.event_name == 'schedule' && (github.event.schedule == '3 3 * * 1' || github.event.schedule == '3 3 * * 4'))
+    concurrency:
+      group: av-ml-heavy
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/locks/core-py312.txt
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Check GEE credentials
+        env:
+          GEE_SERVICE_ACCOUNT_JSON: ${{ secrets.GEE_SERVICE_ACCOUNT_JSON }}
+          GEE_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GEE_SERVICE_ACCOUNT_EMAIL }}
+        run: |
+          if [ -z "${GEE_SERVICE_ACCOUNT_JSON}" ] || [ -z "${GEE_SERVICE_ACCOUNT_EMAIL}" ]; then
+            echo "::warning::GEE credentials not set. Sentinel-1 extraction will skip. Set GEE_SERVICE_ACCOUNT_JSON and GEE_SERVICE_ACCOUNT_EMAIL in repo secrets."
+          else
+            echo "GEE credentials present."
+          fi
+
+      - name: Run GEE Sentinel-1 extractor
+        env:
+          GEE_SERVICE_ACCOUNT_JSON: ${{ secrets.GEE_SERVICE_ACCOUNT_JSON }}
+          GEE_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GEE_SERVICE_ACCOUNT_EMAIL }}
+          GEE_LOOKBACK_DAYS: '7'
+          GEE_REGION_KEYS: ${{ github.event.inputs.gee_region_keys || 'colorado_rockies,swiss_alps,french_alps,himalayas_nepal,andes_patagonia,cascades_wa,scandinavia_norway,japanese_alps,pir_panjal_nw_himalaya,shamshabari_nw_himalaya,great_himalaya_nw_himalaya,karakoram_&_ladakh' }}
+          GEE_DRY_RUN: ${{ github.event.inputs.gee_dry_run || 'false' }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m backend.gee_extractor
+
+  news:
+    # Daily Gemini-assisted news ingest. Queries newsdata.io for avalanche
+    # articles, extracts structured events via Gemini Flash, and POSTs
+    # qualifying events through the ingest-event edge function (so they go
+    # through the standard topo-snap + deposit-zone pipeline). Skips cleanly
+    # (exit 0) when NEWSDATA_API_KEY or GEMINI_API_KEY secrets are absent.
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'news') || (github.event_name == 'schedule' && github.event.schedule == '12 5 * * *')
+    concurrency:
+      group: av-ml-light
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Validate required secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY}" ]; then
+            echo "::error::SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured as GitHub secrets"
+            exit 1
+          fi
+
+      - name: Check news ingest credentials
+        env:
+          NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -z "${NEWSDATA_API_KEY}" ]; then
+            echo "::warning::NEWSDATA_API_KEY not set. News ingest will skip. Set it in repo secrets."
+          fi
+          if [ -z "${GEMINI_API_KEY}" ]; then
+            echo "::warning::GEMINI_API_KEY not set. News ingest will skip. Set it in repo secrets."
+          fi
+          if [ -n "${NEWSDATA_API_KEY}" ] && [ -n "${GEMINI_API_KEY}" ]; then
+            echo "News ingest credentials present."
+          fi
+
+      - name: Run Gemini news ingest
+        env:
+          NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEWS_LOOKBACK_HOURS: '48'
+          NEWS_MAX_ARTICLES: '10'
+          NEWS_MIN_CONFIDENCE: '0.6'
+        run: python -m backend.news_ingest
+
+  sar_segment:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'sar_segment'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+      - name: Dispatch SAR segmentation worker
+        env:
+          MODAL_WORKER_URL: ${{ secrets.MODAL_WORKER_URL }}
+          MODAL_WORKER_TOKEN: ${{ secrets.MODAL_WORKER_TOKEN }}
+          MODAL_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          MODAL_INPUT_MANIFEST_ID: ${{ vars.MODAL_INPUT_MANIFEST_ID || '' }}
+          MODAL_INPUT_MANIFEST_SHA256: ${{ vars.MODAL_INPUT_MANIFEST_SHA256 || '' }}
+          MODAL_MODEL_VERSION: ${{ vars.MODAL_MODEL_VERSION || '' }}
+          REFERENCE_SET_KEY: ${{ github.event.inputs.reference_set_key }}
+          PREDICTION_MODEL_VERSION: ${{ github.event.inputs.prediction_model_version || 'sar_unet_resnet34_shadow_v1' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MODAL_WORKER_URL}" ]; then
+            echo "::notice::MODAL_WORKER_URL not configured — skipping sar_segment (graceful skip)"
+            exit 1
+          fi
+          if [ -z "${MODAL_WORKER_TOKEN}" ]; then
+            echo "::error::MODAL_WORKER_TOKEN not configured — refusing to dispatch without bearer auth"
+            exit 1
+          fi
+          if [ -n "${REFERENCE_SET_KEY}" ]; then
+            cat > payload.json <<JSON
+          {
+            "hazard_type": "avalanche",
+            "requested_by": "github_actions",
+            "request_type": "sar_segment",
+            "run_id": "${MODAL_RUN_ID}",
+            "shadow_mode": true,
+            "reference_set_key": "${REFERENCE_SET_KEY}",
+            "prediction_model_version": "${PREDICTION_MODEL_VERSION}",
+            "persist_events": false,
+            "training_eligible": false,
+            "training_eligible_reason": "heldout_release_eval"
+          }
+          JSON
+          else
+            cat > payload.json <<JSON
+          {
+            "hazard_type": "avalanche",
+            "requested_by": "github_actions",
+            "request_type": "sar_segment",
+            "run_id": "${MODAL_RUN_ID}",
+            "shadow_mode": true,
+            "persist_events": true,
+            "training_eligible": false,
+            "training_eligible_reason": "sar_unet_shadow_mode"
+          }
+          JSON
+          fi
+          python backend/scripts/poll_modal_http_job.py \
+            --route sar-segment \
+            --payload payload.json \
+            --submission-output sar-segment-submission.json \
+            --terminal-output sar-segment-terminal.json \
+            --poll-interval-seconds 5 \
+            --timeout-seconds 600 \
+            --expected-run-id "${MODAL_RUN_ID}" \
+            --expected-compute-job-id "client-${MODAL_RUN_ID}-sar-segment"
+
+      - name: Upload SAR segment terminal evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sar-segment-terminal-evidence
+          path: |
+            sar-segment-submission.json
+            sar-segment-terminal.json
+
+  train_sar_unet:
+    # SAR segmentation is a separate, explicitly opt-in shadow lane.  It must
+    # not be reachable from a manual dispatch while the MVP4 data gate is
+    # disabled, even though its manifest contract differs from the surrogate
+    # avalanche training snapshot.
+    if: vars.MVP4_TRAINING_ENABLED == 'true' && vars.MVP4_SAR_TRAINING_ENABLED == 'true' && github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'train_sar_unet'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+      - name: Dispatch SAR trainer worker
+        env:
+          MODAL_WORKER_URL: ${{ secrets.MODAL_WORKER_URL }}
+          MODAL_WORKER_TOKEN: ${{ secrets.MODAL_WORKER_TOKEN }}
+          MODAL_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          MODAL_INPUT_MANIFEST_ID: ${{ vars.MODAL_INPUT_MANIFEST_ID || '' }}
+          MODAL_INPUT_MANIFEST_SHA256: ${{ vars.MODAL_INPUT_MANIFEST_SHA256 || '' }}
+          MODAL_MODEL_VERSION: ${{ vars.MODAL_MODEL_VERSION || '' }}
+          SAR_TRAINING_MANIFEST_PATH: ${{ github.event.inputs.sar_training_manifest_path }}
+          SAR_CANDIDATE_MODEL_VERSION: ${{ github.event.inputs.sar_candidate_model_version }}
+          SAR_INITIAL_CHECKPOINT_PATH: ''
+          SAR_PATCH_SIZE: ${{ github.event.inputs.sar_patch_size || '128' }}
+          SAR_PATCH_STRIDE: ${{ github.event.inputs.sar_patch_stride || '64' }}
+          SAR_EPOCHS: ${{ github.event.inputs.sar_epochs || '8' }}
+          SAR_BATCH_SIZE: ${{ github.event.inputs.sar_batch_size || '8' }}
+          SAR_LEARNING_RATE: ${{ github.event.inputs.sar_learning_rate || '0.0001' }}
+          SAR_LOSS: ${{ github.event.inputs.sar_loss || 'focal_tversky' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MODAL_WORKER_URL}" ]; then
+            echo "::notice::MODAL_WORKER_URL not configured — skipping train_sar_unet (graceful skip)"
+            exit 1
+          fi
+          if [ -z "${SAR_TRAINING_MANIFEST_PATH}" ]; then
+            echo "::error::sar_training_manifest_path is required for train_sar_unet"
+            exit 1
+          fi
+          if [ -z "${MODAL_WORKER_TOKEN}" ]; then
+            echo "::error::MODAL_WORKER_TOKEN not configured — refusing to dispatch without bearer auth"
+            exit 1
+          fi
+          cat > payload.json <<JSON
+          {
+            "hazard_type": "avalanche",
+            "requested_by": "github_actions",
+            "request_type": "train_sar_unet",
+            "run_id": "${MODAL_RUN_ID}",
+            "training_manifest_path": "${SAR_TRAINING_MANIFEST_PATH}",
+            "model_family": "swinunet_tiny_diff",
+            "patch_size": ${SAR_PATCH_SIZE},
+            "stride": ${SAR_PATCH_STRIDE},
+            "epochs": ${SAR_EPOCHS},
+            "batch_size": ${SAR_BATCH_SIZE},
+            "learning_rate": ${SAR_LEARNING_RATE},
+            "loss": "${SAR_LOSS}"
+          }
+          JSON
+          python - <<'PY'
+          import json
+          import os
+
+          with open('payload.json', 'r', encoding='utf-8') as handle:
+              payload = json.load(handle)
+          candidate = os.environ.get('SAR_CANDIDATE_MODEL_VERSION', '').strip()
+          if candidate:
+              payload["candidate_model_version"] = candidate
+          checkpoint = os.environ.get('SAR_INITIAL_CHECKPOINT_PATH', '').strip()
+          if checkpoint:
+              payload["initial_checkpoint_path"] = checkpoint
+          with open('payload.json', 'w', encoding='utf-8') as handle:
+              json.dump(payload, handle, indent=2, sort_keys=True)
+          PY
+          python backend/scripts/poll_modal_http_job.py \
+            --route train-sar-unet \
+            --payload payload.json \
+            --submission-output train-sar-unet-submission.json \
+            --terminal-output train-sar-unet-terminal.json \
+            --poll-interval-seconds 5 \
+            --timeout-seconds 600 \
+            --expected-run-id "${MODAL_RUN_ID}" \
+            --expected-compute-job-id "client-${MODAL_RUN_ID}-train-sar-unet"
+
+      - name: Upload SAR train terminal evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: train-sar-unet-terminal-evidence
+          path: |
+            train-sar-unet-submission.json
+            train-sar-unet-terminal.json
+
+  train_mtslstm:
+    # Keep the shadow path dormant until the reviewed snapshot and release
+    # gates are explicitly enabled; this also prevents avoidable cron-minute
+    # consumption while the data gate is NO-GO.
+    if: vars.MVP4_TRAINING_ENABLED == 'true' && ((github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'train_mtslstm') || (github.event_name == 'schedule' && github.event.schedule == '0 5 * * 1'))
+    concurrency:
+      group: av-ml-mtslstm
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      SNAPSHOT_MANIFEST: backend/data/open_source_labels/mvp4_reviewed_hma_catalog/snapshot_manifest.json
+      OPEN_SOURCE_LABEL_SNAPSHOT: backend/data/open_source_labels/mvp4_reviewed_hma_catalog/events.jsonl
+      OPEN_SOURCE_LABEL_SOURCE_KEY: ''
+      OPEN_SOURCE_LABEL_ROLE: reviewed_multi_source_shadow_catalog
+      OPEN_SOURCE_LABEL_LICENSE_REVIEW_ID: ''
+      PRE_REMOTE_SCOPE_MANIFEST: ${{ vars.MVP4_PRE_REMOTE_SCOPE_MANIFEST || '' }}
+      PRE_REMOTE_APPROVAL_MANIFEST: ${{ vars.MVP4_PRE_REMOTE_APPROVAL_MANIFEST || '' }}
+      SOURCE_REQUEST_MANIFEST: ${{ vars.MVP4_SOURCE_REQUEST_MANIFEST || '' }}
+      SOURCE_REQUEST_PAYLOAD: ${{ vars.MVP4_SOURCE_REQUEST_PAYLOAD || '' }}
+      SOURCE_REQUEST_EVENTS_JSONL: ${{ vars.MVP4_SOURCE_REQUEST_EVENTS || '' }}
+      SHADOW_BUNDLE_DIR: ${{ vars.MVP4_SHADOW_BUNDLE_DIR || '' }}
+      SHADOW_ATTESTATION: ${{ vars.MVP4_SHADOW_ATTESTATION || '' }}
+      TRAINING_REGION_KEYS: ${{ github.event_name == 'schedule' && 'himalayas_nepal' || github.event.inputs.training_region_keys || '' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+          lfs: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+
+      - name: Metadata-only training preflight
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          test -s "${SNAPSHOT_MANIFEST}"
+          python -m backend.scripts.audit_training_dataset \
+            --artifact-root backend/artifacts \
+            --snapshot-manifest "${SNAPSHOT_MANIFEST}" \
+            --region-keys "${TRAINING_REGION_KEYS}" \
+            --output "${RUNNER_TEMP}/mts-lstm-training-preflight.json" \
+            --strict
+
+      - name: Fail-closed pre-remote MVP4 gate
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          mkdir -p backend/artifacts
+          python scripts/verify_mvp4_pre_remote_gate.py \
+            --scope-manifest "${PRE_REMOTE_SCOPE_MANIFEST}" \
+            --approval-manifest "${PRE_REMOTE_APPROVAL_MANIFEST}" \
+            --snapshot-manifest "${SNAPSHOT_MANIFEST}" \
+            --artifact-root backend/artifacts \
+            --source-request-manifest "${SOURCE_REQUEST_MANIFEST}" \
+            --source-request-payload "${SOURCE_REQUEST_PAYLOAD}" \
+            --source-request-events-jsonl "${SOURCE_REQUEST_EVENTS_JSONL}" \
+            --region-keys "${TRAINING_REGION_KEYS}" \
+            --shadow-bundle-dir "${SHADOW_BUNDLE_DIR}" \
+            --attestation "${SHADOW_ATTESTATION}"
+
+      - name: Dispatch MTS-LSTM training worker
+        env:
+          MODAL_WORKER_URL: ${{ secrets.MODAL_WORKER_URL }}
+          MODAL_WORKER_TOKEN: ${{ secrets.MODAL_WORKER_TOKEN }}
+          MODAL_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          MODAL_INPUT_MANIFEST_ID: ${{ vars.MODAL_INPUT_MANIFEST_ID || '' }}
+          MODAL_INPUT_MANIFEST_SHA256: ${{ vars.MODAL_INPUT_MANIFEST_SHA256 || '' }}
+          MODAL_MODEL_VERSION: ${{ vars.MODAL_MODEL_VERSION || '' }}
+          SAMPLES_PER_REGION: ${{ github.event.inputs.samples_per_region || '500' }}
+          DATASET_SNAPSHOT_ID: ${{ github.event.inputs.dataset_snapshot_id || 'latest' }}
+          OPEN_SOURCE_LABEL_SNAPSHOT: backend/data/open_source_labels/mvp4_reviewed_hma_catalog/events.jsonl
+          OPEN_SOURCE_LABEL_SOURCE_KEY: ''
+          OPEN_SOURCE_LABEL_ROLE: reviewed_multi_source_shadow_catalog
+          OPEN_SOURCE_LABEL_LICENSE_REVIEW_ID: ''
+          MTS_LSTM_EPOCHS: ${{ github.event.inputs.mts_lstm_epochs || '50' }}
+          SAR_RELEASE_GATE_PASSED: ${{ github.event.inputs.sar_release_gate_passed || 'false' }}
+          PSS_FLOOR: ${{ github.event.inputs.pss_floor || '0.45' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MODAL_WORKER_URL}" ]; then
+            echo "::notice::MODAL_WORKER_URL not configured — skipping train_mtslstm (graceful skip)"
+            exit 1
+          fi
+          if [ -z "${MODAL_WORKER_TOKEN}" ]; then
+            echo "::error::MODAL_WORKER_TOKEN not configured — refusing to dispatch without bearer auth"
+            exit 1
+          fi
+          cat > payload.json <<JSON
+          {
+            "hazard_type": "avalanche",
+            "requested_by": "github_actions",
+            "request_type": "train_mtslstm",
+            "run_id": "${MODAL_RUN_ID}",
+            "dataset_snapshot_id": "${DATASET_SNAPSHOT_ID}",
+            "snapshot_manifest": "${SNAPSHOT_MANIFEST}",
+            "open_source_label_snapshot": "${OPEN_SOURCE_LABEL_SNAPSHOT}",
+            "open_source_label_source_key": "${OPEN_SOURCE_LABEL_SOURCE_KEY}",
+            "open_source_label_role": "${OPEN_SOURCE_LABEL_ROLE}",
+            "open_source_label_license_review_id": "${OPEN_SOURCE_LABEL_LICENSE_REVIEW_ID}",
+            "training_region_keys": "${TRAINING_REGION_KEYS}",
+            "epochs": ${MTS_LSTM_EPOCHS},
+            "early_stopping": true,
+            "minimum_epochs_before_early_stopping": 10,
+            "patience_early_stopping": 7,
+            "shadow_mode": true,
+            "allow_publish": false,
+            "training_preflight_strict": true,
+            "promotion_rule": "strict_pss_gt_rf_and_brier_lte_rf",
+            "sar_release_gate_passed": ${SAR_RELEASE_GATE_PASSED},
+            "samples_per_region": ${SAMPLES_PER_REGION},
+            "pss_floor": ${PSS_FLOOR}
+          }
+          JSON
+          python backend/scripts/poll_modal_http_job.py \
+            --route train-mtslstm \
+            --payload payload.json \
+            --submission-output train-mtslstm-submission.json \
+            --terminal-output train-mtslstm-terminal.json \
+            --poll-interval-seconds 5 \
+            --timeout-seconds 600 \
+            --expected-run-id "${MODAL_RUN_ID}" \
+            --expected-compute-job-id "client-${MODAL_RUN_ID}-train-mtslstm"
+
+      - name: Upload MTS-LSTM train terminal evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: train-mtslstm-terminal-evidence
+          path: |
+            train-mtslstm-submission.json
+            train-mtslstm-terminal.json
+
+  infer_mtslstm:
+    # Shadow inference remains dormant until the model/artifact gate is
+    # explicitly enabled; MTS-LSTM quality activation remains a separate gate.
+    if: vars.MVP4_TRAINING_ENABLED == 'true' && vars.MVP4_INFERENCE_ENABLED == 'true' && ((github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'infer_mtslstm') || (github.event_name == 'schedule' && github.event.schedule == '30 5 * * 1'))
+    concurrency:
+      group: av-ml-mtslstm
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+      - name: Dispatch MTS-LSTM inference worker
+        env:
+          MODAL_WORKER_URL: ${{ secrets.MODAL_WORKER_URL }}
+          MODAL_WORKER_TOKEN: ${{ secrets.MODAL_WORKER_TOKEN }}
+          MODAL_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          MODAL_INPUT_MANIFEST_ID: ${{ vars.MODAL_INPUT_MANIFEST_ID || '' }}
+          MODAL_INPUT_MANIFEST_SHA256: ${{ vars.MODAL_INPUT_MANIFEST_SHA256 || '' }}
+          MODAL_MODEL_VERSION: ${{ vars.MODAL_MODEL_VERSION || '' }}
+          FORECAST_HOURS: ${{ github.event.inputs.forecast_hours || '72' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MODAL_WORKER_URL}" ]; then
+            echo "::notice::MODAL_WORKER_URL not configured — skipping infer_mtslstm (graceful skip)"
+            exit 1
+          fi
+          if [ -z "${MODAL_WORKER_TOKEN}" ]; then
+            echo "::error::MODAL_WORKER_TOKEN not configured — refusing to dispatch without bearer auth"
+            exit 1
+          fi
+          cat > payload.json <<JSON
+          {
+            "hazard_type": "avalanche",
+            "requested_by": "github_actions",
+            "request_type": "infer_mtslstm",
+            "run_id": "${MODAL_RUN_ID}",
+            "dataset_snapshot_id": "${{ github.event.inputs.dataset_snapshot_id || 'latest' }}",
+            "forecast_hours": ${FORECAST_HOURS}
+          }
+          JSON
+          python backend/scripts/poll_modal_http_job.py \
+            --route infer-mtslstm \
+            --payload payload.json \
+            --submission-output infer-mtslstm-submission.json \
+            --terminal-output infer-mtslstm-terminal.json \
+            --poll-interval-seconds 5 \
+            --timeout-seconds 600 \
+            --expected-run-id "${MODAL_RUN_ID}" \
+            --expected-compute-job-id "client-${MODAL_RUN_ID}-infer-mtslstm"
+
+      - name: Upload MTS-LSTM infer terminal evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: infer-mtslstm-terminal-evidence
+          path: |
+            infer-mtslstm-submission.json
+            infer-mtslstm-terminal.json
+
+  evaluate_release:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'evaluate_release'
+    concurrency:
+      group: av-ml-heavy
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Python dependencies required for manifest building
+        run: python -m pip install --upgrade pip && pip install --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Dispatch release-evaluation worker
+        env:
+          MODAL_WORKER_URL: ${{ secrets.MODAL_WORKER_URL }}
+          MODAL_WORKER_TOKEN: ${{ secrets.MODAL_WORKER_TOKEN }}
+          MODAL_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          MODAL_INPUT_MANIFEST_ID: ${{ vars.MODAL_INPUT_MANIFEST_ID || '' }}
+          MODAL_INPUT_MANIFEST_SHA256: ${{ vars.MODAL_INPUT_MANIFEST_SHA256 || '' }}
+          MODAL_MODEL_VERSION: ${{ vars.MODAL_MODEL_VERSION || '' }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          REFERENCE_SET_KEY: ${{ github.event.inputs.reference_set_key }}
+          PREDICTION_MODEL_VERSION: ${{ github.event.inputs.prediction_model_version || 'sar_unet_resnet34_shadow_v1' }}
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MODAL_WORKER_URL}" ]; then
+            echo "::notice::MODAL_WORKER_URL not configured — skipping evaluate_release (graceful skip)"
+            exit 1
+          fi
+          if [ -z "${REFERENCE_SET_KEY}" ]; then
+            echo "::error::reference_set_key is required for the official evaluate_release gate."
+            exit 1
+          fi
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY}" ]; then
+            echo "::error::SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required to build the authoritative held-out manifest."
+            exit 1
+          fi
+          if [ -z "${MODAL_WORKER_TOKEN}" ]; then
+            echo "::error::MODAL_WORKER_TOKEN not configured — refusing to dispatch without bearer auth"
+            exit 1
+          fi
+          python -m backend.sar_release_manifest \
+            --reference-set-key "${REFERENCE_SET_KEY}" \
+            --prediction-model-version "${PREDICTION_MODEL_VERSION}" \
+            --skip-validate-refs \
+            --output manifest.json
+          python - <<'PY'
+          import json
+          import os
+
+          with open('manifest.json', 'r', encoding='utf-8') as handle:
+            manifest = json.load(handle)
+          payload = dict(manifest)
+          payload.update({
+            "hazard_type": "avalanche",
+            "requested_by": "github_actions",
+            "request_type": "evaluate_release",
+            "run_id": os.environ.get("MODAL_RUN_ID", ""),
+            "release_target": "sar_unet",
+          })
+          with open('payload.json', 'w', encoding='utf-8') as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+          PY
+          python backend/scripts/poll_modal_http_job.py \
+            --route evaluate-release \
+            --payload payload.json \
+            --submission-output evaluate-release-submission.json \
+            --terminal-output evaluate-release-terminal.json \
+            --poll-interval-seconds 5 \
+            --timeout-seconds 600 \
+            --expected-run-id "${MODAL_RUN_ID}" \
+            --expected-compute-job-id "client-${MODAL_RUN_ID}-evaluate-release"
+
+      - name: Fail on invalid evaluation response
+        run: |
+          python - <<'PY'
+          import json
+
+          with open('evaluate-release-terminal.json', 'r', encoding='utf-8') as handle:
+            response = json.load(handle)
+
+          status = str(response.get('status') or '')
+          if status != 'ok':
+            raise SystemExit(
+              f"evaluate_release returned status={status or 'missing'}: "
+              f"{response.get('reason') or response.get('error') or 'no reason provided'}"
+            )
+
+          print(
+            json.dumps(
+              {
+                'status': status,
+                'beats_baseline': bool(response.get('beats_baseline')),
+                'baseline_f1_floor_used': response.get('baseline_f1_floor_used'),
+                'f1': response.get('f1'),
+                'iou': response.get('iou'),
+              },
+              indent=2,
+              sort_keys=True,
+            )
+          )
+          PY
+
+      - name: Upload release-evaluation terminal evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evaluate-release-terminal-evidence
+          path: |
+            evaluate-release-submission.json
+            evaluate-release-terminal.json
+
+  forecast-cleanup:
+    # Daily retention cleanup: deletes non-active forecast runs older than
+    # FORECAST_RETENTION_DAYS (default 14) from both PostgreSQL and Supabase
+    # Storage. Runs at 03:00 UTC before the 06:17 inference run.
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'cleanup') || (github.event_name == 'schedule' && github.event.schedule == '0 3 * * *')
+    concurrency:
+      group: av-ml-light
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/locks/core-py312.txt
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Validate required secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY}" ]; then
+            echo "::error::SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured as GitHub secrets"
+            exit 1
+          fi
+
+      - name: Run forecast retention cleanup
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_DB_HOST: ${{ vars.SUPABASE_DB_HOST || 'aws-0-ap-south-1.pooler.supabase.com' }}
+          SUPABASE_DB_PORT: ${{ vars.SUPABASE_DB_PORT || '6543' }}
+          SUPABASE_DB_USER: ${{ vars.SUPABASE_DB_USER || 'postgres.eyyellmffzzujyssaayb' }}
+          SUPABASE_DB_NAME: ${{ vars.SUPABASE_DB_NAME || 'postgres' }}
+          SUPABASE_S3_ACCESS_KEY_ID: ${{ secrets.SUPABASE_S3_ACCESS_KEY_ID }}
+          SUPABASE_S3_ACCESS_KEY_SECRET: ${{ secrets.SUPABASE_S3_ACCESS_KEY_SECRET }}
+          FORECAST_RETENTION_DAYS: '14'
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pip install psycopg2-binary boto3 --quiet
+          python -m backend.scripts.cleanup_old_storage
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Sentinel-2 optical snow-cover batch. Manual dispatch only until the
+  # Great Himalaya pilot establishes quota, cloud-gap, and lineage metrics.
+  # ──────────────────────────────────────────────────────────────────────
+  s2-snow:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 's2_snow'
+    concurrency:
+      group: av-ml-light
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+          lfs: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/locks/core-py312.txt
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Run Sentinel-2 snow-cover batch
+        env:
+          S2_SNOW_ENABLED: 'true'
+          GEE_SERVICE_ACCOUNT_JSON: ${{ secrets.GEE_SERVICE_ACCOUNT_JSON }}
+          GEE_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GEE_SERVICE_ACCOUNT_EMAIL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python3 scripts/run_s2_snow.py \
+            --date "$(date -u +%F)" \
+            --region-key "${{ github.event.inputs.region_keys || 'himalayas_nepal,pir_panjal_nw_himalaya,shamshabari_nw_himalaya,great_himalaya_nw_himalaya,karakoram_&_ladakh' }}"
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Evidence-gated anomaly check. With no input bundle this is a safe manual
+  # dispatch smoke check; a checked-out JSON bundle enables real review rows.
+  # ──────────────────────────────────────────────────────────────────────
+  anomaly-check:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'anomaly_check'
+    concurrency:
+      group: av-ml-light
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+          lfs: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/locks/core-py312.txt
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Run anomaly-check entrypoint
+        env:
+          VERIFICATION_SPINE_ENABLED: 'true'
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PYTHONPATH: ${{ github.workspace }}
+          ANOMALY_INPUT_PATH: ${{ vars.ANOMALY_INPUT_PATH || '' }}
+        run: |
+          if [ -n "${ANOMALY_INPUT_PATH}" ]; then
+            ANOMALY_INPUT_FILE="$(python3 - "${ANOMALY_INPUT_PATH}" <<'PY'
+          from pathlib import Path
+          import sys
+
+          candidate = Path(sys.argv[1])
+          root = Path.cwd().resolve()
+          if candidate.is_absolute() or ".." in candidate.parts:
+              raise SystemExit("ANOMALY_INPUT_PATH must be a relative repository path without '..'")
+          resolved = (root / candidate).resolve()
+          if root not in resolved.parents or not resolved.is_file():
+              raise SystemExit("ANOMALY_INPUT_PATH must resolve to an existing file inside the repository")
+          print(resolved)
+          PY
+          )"
+            python3 scripts/run_anomaly_check.py --input "${ANOMALY_INPUT_FILE}"
+          else
+            python3 scripts/run_anomaly_check.py --dry-run
+          fi

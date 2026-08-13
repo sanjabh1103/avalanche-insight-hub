@@ -1,0 +1,14 @@
+{
+  "description": "Partner bulletin provenance registry. Each entry maps a bulletin ID to its reviewed SHA-256 hash. Entries with status 'placeholder_awaiting_scientist_review' are NOT verified — they block publication until a scientist reviews and updates the hash.",
+  "entries": [
+    {
+      "bulletin_id": "Partner_AWB_05-Apr-2026",
+      "source_url": "https://www.Partner.gov.in/Partner/sites/default/files/avalanche_warning_bulletin/Partner_AWB_05-Apr-2026.pdf",
+      "sha256": "",
+      "status": "placeholder_awaiting_scientist_review",
+      "reviewed_by": null,
+      "reviewed_at": null,
+      "notes": "Live bulletin hash must be computed and entered by a scientist before this entry can verify provenance."
+    }
+  ]
+}
