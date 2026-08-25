@@ -17,6 +17,7 @@ from backend.common.continuous_learning import (
     LABEL_SOURCE_SYNTHETIC,
     EXCLUDED_LABEL_SOURCES,
     HUMAN_REVIEW_PENDING,
+    ORIGIN_LANE_GENERIC,
     VERIFICATION_BASIS_NONE,
     add_to_training_manifest,
     auto_label_field_report,
@@ -164,6 +165,7 @@ class TrainingManifestTests(unittest.TestCase):
             confidence=0.85,
             region_key='test',
             metadata={'detection_id': 'det_001'},
+            origin_lane=ORIGIN_LANE_GENERIC,
         )
         result = add_to_training_manifest(label, self.manifest_path)
         self.assertTrue(result)
@@ -188,6 +190,7 @@ class TrainingManifestTests(unittest.TestCase):
                 label=1,
                 confidence=0.8,
                 region_key='test',
+                origin_lane=ORIGIN_LANE_GENERIC,
             )
             add_to_training_manifest(label, self.manifest_path)
 
@@ -205,6 +208,7 @@ class TrainingManifestTests(unittest.TestCase):
                 label=1,
                 confidence=0.8,
                 region_key=region,
+                origin_lane=ORIGIN_LANE_GENERIC,
             )
             add_to_training_manifest(label, self.manifest_path)
 
@@ -221,6 +225,7 @@ class TrainingManifestTests(unittest.TestCase):
             label=1,
             confidence=0.8,
             region_key='test',
+            origin_lane=ORIGIN_LANE_GENERIC,
         )
         second = AutoLabel(
             label_id='chain_002',
@@ -231,6 +236,7 @@ class TrainingManifestTests(unittest.TestCase):
             label=1,
             confidence=0.7,
             region_key='test',
+            origin_lane=ORIGIN_LANE_GENERIC,
         )
         self.assertTrue(add_to_training_manifest(first, self.manifest_path))
         self.assertTrue(add_to_training_manifest(second, self.manifest_path))
@@ -258,6 +264,7 @@ class TrainingManifestTests(unittest.TestCase):
             label=1,
             confidence=0.8,
             region_key='test',
+            origin_lane=ORIGIN_LANE_GENERIC,
         )
         self.assertTrue(add_to_training_manifest(label, self.manifest_path))
 
@@ -445,6 +452,7 @@ class TestSyntheticExclusionAndVerificationBasis(unittest.TestCase):
             label=1,
             confidence=0.99,
             region_key='test',
+            origin_lane=ORIGIN_LANE_GENERIC,
         )
         result = add_to_training_manifest(label, self.manifest_path)
         self.assertFalse(result)
@@ -463,6 +471,7 @@ class TestSyntheticExclusionAndVerificationBasis(unittest.TestCase):
             label=1,
             confidence=0.85,
             region_key='test',
+            origin_lane=ORIGIN_LANE_GENERIC,
         )
         result = add_to_training_manifest(label, self.manifest_path)
         self.assertTrue(result)
@@ -481,6 +490,7 @@ class TestSyntheticExclusionAndVerificationBasis(unittest.TestCase):
             label=1,
             confidence=0.85,
             region_key='test',
+            origin_lane=ORIGIN_LANE_GENERIC,
         )
         self.assertEqual(label.verification_basis, VERIFICATION_BASIS_NONE)
         self.assertEqual(label.human_review_state, HUMAN_REVIEW_PENDING)
