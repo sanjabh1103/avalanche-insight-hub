@@ -25,7 +25,11 @@ from backend.common.audit_metadata import build_latest_benchmark_summary
 from backend.common.config import load_settings
 from backend.common.features import FEATURE_COLUMNS, generate_cold_start_synthetic_frame
 from backend.common.label_governance import GOVERNANCE_VERSION, is_auto_label_eligible
-from backend.common.continuous_learning import get_auto_label_audit_trail, CONTINUOUS_LEARNING_ENABLED
+from backend.common.continuous_learning import (
+    get_auto_label_audit_trail,
+    read_training_audit_trail,
+    CONTINUOUS_LEARNING_ENABLED,
+)
 from backend.common.model_status_state import (
     build_autonomous_evidence_summary,
     build_drift_mode_state,
@@ -1085,7 +1089,7 @@ def main() -> int:
     # F19: Continuous Learning — include auto-generated labels in training
     auto_label_count = 0
     if CONTINUOUS_LEARNING_ENABLED:
-        audit_entries = get_auto_label_audit_trail(limit=1000)
+        audit_entries = read_training_audit_trail(limit=1000)
         auto_label_count = len(audit_entries)
         if auto_label_count > 0:
             print(f'[train_model] F19: Including {auto_label_count} auto-generated labels from continuous learning', flush=True)

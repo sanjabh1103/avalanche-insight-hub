@@ -89,11 +89,11 @@ class TestHimalayaDryRunFlagsOff(unittest.TestCase):
         finally:
             pass
 
-    def test_flags_off_Partner_disabled(self):
-        os.environ['Partner_BULLETIN_VALIDATION_ENABLED'] = 'false'
+    def test_flags_off_dgre_disabled(self):
+        os.environ['DGRE_BULLETIN_VALIDATION_ENABLED'] = 'false'
         try:
-            from backend.common.Partner_bulletin_adapter import Partner_BULLETIN_VALIDATION_ENABLED
-            self.assertFalse(Partner_BULLETIN_VALIDATION_ENABLED)
+            from backend.common.dgre_bulletin_adapter import DGRE_BULLETIN_VALIDATION_ENABLED
+            self.assertFalse(DGRE_BULLETIN_VALIDATION_ENABLED)
         finally:
             pass
 
@@ -138,6 +138,7 @@ class TestSyntheticExclusionIntegration(unittest.TestCase):
             AutoLabel,
             LABEL_SOURCE_SYNTHETIC,
             EXCLUDED_LABEL_SOURCES,
+            ORIGIN_LANE_GENERIC,
             add_to_training_manifest,
         )
         import tempfile
@@ -155,6 +156,7 @@ class TestSyntheticExclusionIntegration(unittest.TestCase):
             label=1,
             confidence=0.99,
             region_key='great_himalaya',
+            origin_lane=ORIGIN_LANE_GENERIC,
         )
 
         result = add_to_training_manifest(label, manifest)
