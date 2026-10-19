@@ -1,0 +1,66 @@
+{
+  "measuredAt": "2026-08-04T06:53:17Z",
+  "browserDeviceProfile": "Not measured \u2014 requires browser runtime",
+  "buildTime": {
+    "buildTimeSeconds": 71.66,
+    "buildExitCode": 0
+  },
+  "bundleSizes": {
+    "index-gfeP4EDl.js": {
+      "sizeBytes": 45122,
+      "sizeKB": 44.06
+    },
+    "index-CkmWZGGR.css": {
+      "sizeBytes": 957,
+      "sizeKB": 0.93
+    },
+    "router-B-dTo4Gw.js": {
+      "sizeBytes": 22096,
+      "sizeKB": 21.58
+    },
+    "react-core-5TPL3RWa.js": {
+      "sizeBytes": 142216,
+      "sizeKB": 138.88
+    }
+  },
+  "dataSizes": {
+    "forecast-map.json": {
+      "sizeBytes": 658,
+      "sizeMB": 0.0
+    },
+    "code-graph-manifest.json": {
+      "sizeBytes": 1511,
+      "sizeMB": 0.0
+    },
+    "source-ledger.json": {
+      "sizeBytes": 2248,
+      "sizeMB": 0.0
+    },
+    "forecast-map-manifest.json": {
+      "sizeBytes": 1440,
+      "sizeMB": 0.0
+    },
+    "code-graph.json": {
+      "sizeBytes": 4280374,
+      "sizeMB": 4.08
+    },
+    "explanations.json": {
+      "sizeBytes": 1784600,
+      "sizeMB": 1.7
+    }
+  },
+  "totalInitialLoad": {
+    "totalInitialLoadBytes": 211406,
+    "totalInitialLoadKB": 206.45,
+    "totalInitialLoadMB": 0.2
+  },
+  "graphJsonParseEstimateSeconds": 0.054,
+  "notes": [
+    "Graph view defaults to 'architecture' perspective (bounded) \u2014 not all 4,926 nodes",
+    "Table view paginates at 50 nodes per page",
+    "Canvas renderer caps at 2,000 visible nodes for O(n\u00b2) force simulation",
+    "Search is client-side, debounced at 300ms",
+    "No external network requests at runtime \u2014 static JSON is fetched from the same origin",
+    "Interactive browser verification is a separate release gate recorded in handoff/GLM_HANDOFF.md"
+  ]
+}

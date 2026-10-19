@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "clean_source_snapshot_v1",
+  "status": "approved",
+  "sourceCommit": "f582d1822b3994a6d10832e66e085ab58c8304f4",
+  "parentSourceCommit": "787758a54117900bc4cdc487e731314159e50c98",
+  "scopePathCount": 209,
+  "sourceGraphSha256": "5c1c5e28bf6a9502a5fab9fa4e9d0fedf33d569c1de0ac3bab2b9448aee24cef",
+  "sourceManifestSha256": "356f7518b1f1efcb9c4a5a03fbe663439450a66781a4c1e07001ed23ff47f47d",
+  "sourceWorktreeDirty": false,
+  "nonGeneratedDirtyEntryCount": 0,
+  "sourceGraphNodeCount": 4926,
+  "sourceGraphEdgeCount": 8183,
+  "publicGraphContentHash": "cc26ff2f74f49fc3632cb2ba1b8504bde2e18d430e8f07348db8c018b9c3a040",
+  "publicGraphFileSha256": "df77d44e305e0877c4024e343b93da2c29ac7bf2dea9402e3ae1d0588caf3224",
+  "graphOnlyV1": true,
+  "mapStatus": "blocked",
+  "contentApproval": "APPROVED_PUBLIC_CONTENT",
+  "semanticStatus": "structural_only_semantic_unavailable",
+  "notes": [
+    "The snapshot is a scoped clean source commit for the public knowledge graph, not a claim that the separate main checkout is clean.",
+    "The graph generator rejects absolute/traversal paths and scans actual values while allowing structural parameter names.",
+    "No map data is published without a rights-cleared snapshot."
+  ]
+}

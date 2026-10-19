@@ -1,0 +1,184 @@
+{
+  "graphCounts": {
+    "nodes": 4916,
+    "edges": 8158
+  },
+  "sampleNodes": {
+    "file": [
+      {
+        "relativePath": "backend/__init__.py",
+        "id": "file:backend/__init__.py",
+        "language": "python",
+        "lineCount": 1,
+        "name": "__init__.py",
+        "sourceHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "summary": "Deterministic structural node; semantic summary unavailable.",
+        "tags": [
+          "structural_only",
+          "python"
+        ],
+        "type": "file"
+      },
+      {
+        "relativePath": "backend/common/__init__.py",
+        "id": "file:backend/common/__init__.py",
+        "language": "python",
+        "lineCount": 1,
+        "name": "__init__.py",
+        "sourceHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "summary": "Deterministic structural node; semantic summary unavailable.",
+        "tags": [
+          "structural_only",
+          "python"
+        ],
+        "type": "file"
+      },
+      {
+        "relativePath": "backend/common/aavds_adapter.py",
+        "id": "file:backend/common/aavds_adapter.py",
+        "language": "python",
+        "lineCount": 263,
+        "name": "aavds_adapter.py",
+        "sourceHash": "780bdb295a5ca10b1c98b401531ef07e7f8b18dd2fe0f79e11ebf972fb9d20a4",
+        "summary": "Deterministic structural node; semantic summary unavailable.",
+        "tags": [
+          "structural_only",
+          "python"
+        ],
+        "type": "file"
+      }
+    ],
+    "function": [
+      {
+        "relativePath": "backend/common/abc_optimizer.py",
+        "id": "function:backend/common/abc_optimizer.py:_evaluate",
+        "name": "_evaluate",
+        "summary": "Deterministically extracted function; semantic summary unavailable.",
+        "tags": [
+          "structural_only",
+          "function"
+        ],
+        "type": "function",
+        "language": null,
+        "lineCount": null,
+        "sourceHash": null
+      },
+      {
+        "relativePath": "backend/common/abc_optimizer.py",
+        "id": "function:backend/common/abc_optimizer.py:_normalize_weights",
+        "name": "_normalize_weights",
+        "summary": "Deterministically extracted function; semantic summary unavailable.",
+        "tags": [
+          "structural_only",
+          "function"
+        ],
+        "type": "function",
+        "language": null,
+        "lineCount": null,
+        "sourceHash": null
+      },
+      {
+        "relativePath": "backend/common/abc_optimizer.py",
+        "id": "function:backend/common/abc_optimizer.py:_peirce_skill_score_max",
+        "name": "_peirce_skill_score_max",
+        "summary": "Deterministically extracted function; semantic summary unavailable.",
+        "tags": [
+          "structural_only",
+          "function"
+        ],
+        "type": "function",
+        "language": null,
+        "lineCount": null,
+        "sourceHash": null
+      }
+    ],
+    "class": [
+      {
+        "relativePath": "backend/common/aavds_adapter.py",
+        "id": "class:backend/common/aavds_adapter.py:AAVDSAdapter",
+        "name": "AAVDSAdapter",
+        "summary": "Deterministically extracted class; semantic summary unavailable.",
+        "tags": [
+          "structural_only",
+          "class"
+        ],
+        "type": "class",
+        "language": null,
+        "lineCount": null,
+        "sourceHash": null
+      },
+      {
+        "relativePath": "backend/common/aavds_adapter.py",
+        "id": "class:backend/common/aavds_adapter.py:AAVDSEvent",
+        "name": "AAVDSEvent",
+        "summary": "Deterministically extracted class; semantic summary unavailable.",
+        "tags": [
+          "structural_only",
+          "class"
+        ],
+        "type": "class",
+        "language": null,
+        "lineCount": null,
+        "sourceHash": null
+      },
+      {
+        "relativePath": "backend/common/abc_optimizer.py",
+        "id": "class:backend/common/abc_optimizer.py:ABCResult",
+        "name": "ABCResult",
+        "summary": "Deterministically extracted class; semantic summary unavailable.",
+        "tags": [
+          "structural_only",
+          "class"
+        ],
+        "type": "class",
+        "language": null,
+        "lineCount": null,
+        "sourceHash": null
+      }
+    ]
+  },
+  "sampleEdges": [
+    {
+      "source": "file:backend/common/aavds_adapter.py",
+      "target": "class:backend/common/aavds_adapter.py:AAVDSAdapter",
+      "type": "contains",
+      "weight": 1.0,
+      "direction": "forward"
+    },
+    {
+      "source": "file:backend/common/aavds_adapter.py",
+      "target": "class:backend/common/aavds_adapter.py:AAVDSEvent",
+      "type": "contains",
+      "weight": 1.0,
+      "direction": "forward"
+    },
+    {
+      "source": "file:backend/common/abc_optimizer.py",
+      "target": "class:backend/common/abc_optimizer.py:ABCResult",
+      "type": "contains",
+      "weight": 1.0,
+      "direction": "forward"
+    },
+    {
+      "source": "file:backend/common/abc_optimizer.py",
+      "target": "function:backend/common/abc_optimizer.py:_evaluate",
+      "type": "contains",
+      "weight": 1.0,
+      "direction": "forward"
+    },
+    {
+      "source": "file:backend/common/abc_optimizer.py",
+      "target": "function:backend/common/abc_optimizer.py:_normalize_weights",
+      "type": "contains",
+      "weight": 1.0,
+      "direction": "forward"
+    }
+  ],
+  "sampleExplanations": {
+    "class:backend/common/aavds_adapter.py:AAVDSAdapter": "This is the None class 'AAVDSAdapter', defined in backend/common/aavds_adapter.py. It is tagged as: structural_only, class. It is defined within a file in the project structure. This class is part of the shared backend utilities that support avalanche risk modeling and data processing.",
+    "class:backend/common/aavds_adapter.py:AAVDSEvent": "This is the None class 'AAVDSEvent', defined in backend/common/aavds_adapter.py. It is tagged as: structural_only, class. It is defined within a file in the project structure. This class is part of the shared backend utilities that support avalanche risk modeling and data processing.",
+    "class:backend/common/abc_optimizer.py:ABCResult": "This is the None class 'ABCResult', defined in backend/common/abc_optimizer.py. It is tagged as: structural_only, class. It is defined within a file in the project structure. This class is part of the shared backend utilities that support avalanche risk modeling and data processing."
+  },
+  "mapStatus": "blocked",
+  "mapCells": 0
+}

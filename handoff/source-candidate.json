@@ -1,0 +1,35 @@
+{
+  "sourceCommit": "f582d1822b3994a6d10832e66e085ab58c8304f4",
+  "parentSourceCommit": "787758a54117900bc4cdc487e731314159e50c98",
+  "sourceBranch": "scoped-knowledge-graph-snapshot",
+  "sourceDirtyEntryCount": 0,
+  "worktreeDirty": false,
+  "graph": {
+    "path": ".understand-anything/phase2-structural-graph.json",
+    "sha256": "5c1c5e28bf6a9502a5fab9fa4e9d0fedf33d569c1de0ac3bab2b9448aee24cef",
+    "nodeCount": 4926,
+    "edgeCount": 8183,
+    "sizeBytes": 3710304
+  },
+  "manifest": {
+    "path": ".understand-anything/phase2-structural-manifest.json",
+    "sha256": "356f7518b1f1efcb9c4a5a03fbe663439450a66781a4c1e07001ed23ff47f47d",
+    "analyzedAt": "2026-08-04T06:35:56.363104Z",
+    "analyzedCommit": "f582d1822b3994a6d10832e66e085ab58c8304f4",
+    "worktreeDirty": false,
+    "status": "structural_only_semantic_unavailable"
+  },
+  "eligibility": {
+    "eligibleForPublicRelease": true,
+    "exportStatus": "approved",
+    "blocker": null,
+    "proof": "handoff/CLEAN_SOURCE_SNAPSHOT_MANIFEST.json"
+  },
+  "mapSnapshot": {
+    "approvedSnapshotFound": false,
+    "blocker": "No rights-cleared static forecast artifact exists in source repo",
+    "v1Decision": "graph_only",
+    "see": "handoff/MAP_INPUT_REQUEST.md"
+  },
+  "contentApproval": "APPROVED_PUBLIC_CONTENT"
+}

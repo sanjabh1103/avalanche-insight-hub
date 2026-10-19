@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "public_forecast_map_v1",
+  "status": "blocked",
+  "blockedReason": "No rights-cleared static map snapshot exists in the source repository. The Envidat Swiss research forecast dataset (backend/data/swiss_envidat/) contains private station identifiers and is not cleared for public redistribution. No other approved static forecast artifact was found.",
+  "region": null,
+  "validFrom": null,
+  "validTo": null,
+  "source": null,
+  "cells": [],
+  "disclaimer": "Map snapshot not available. An approved, rights-cleared static forecast snapshot must be supplied before the map can be displayed.",
+  "license": null,
+  "attribution": null
+}
