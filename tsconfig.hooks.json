@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "strict": true,
+    "noUnusedLocals": true,
+    "noImplicitAny": true
+  },
+  "include": [
+    "src/hooks/**/*.ts",
+    "src/hooks/**/*.tsx"
+  ]
+}

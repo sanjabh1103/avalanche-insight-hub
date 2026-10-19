@@ -1,0 +1,140 @@
+name: Authoritative Release Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      reference_set_key:
+        description: 'Held-out reference set key to evaluate'
+        required: true
+        default: 'snowslide-heldout-v1'
+        type: string
+      prediction_model_version:
+        description: 'SAR prediction model version used to resolve prediction masks'
+        required: false
+        default: 'sar_unet_resnet34_shadow_v1'
+        type: string
+      execute_promotion:
+        description: 'Actually promote when the authoritative release gate passes'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Materialize release-gate environment file
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MODAL_WORKER_URL: ${{ secrets.MODAL_WORKER_URL }}
+          MODAL_WORKER_TOKEN: ${{ secrets.MODAL_WORKER_TOKEN }}
+          SAR_UNET_MODEL_PATH: ${{ secrets.SAR_UNET_MODEL_PATH }}
+          SAR_UNET_MODEL_VERSION: ${{ github.event.inputs.prediction_model_version }}
+          SAR_UNET_MODEL_FAMILY: ${{ secrets.SAR_UNET_MODEL_FAMILY }}
+          SAR_UNET_DEVICE: ${{ secrets.SAR_UNET_DEVICE }}
+        run: |
+          set -euo pipefail
+          : "${SAR_UNET_MODEL_VERSION:=sar_unet_resnet34_shadow_v1}"
+          : "${SAR_UNET_MODEL_FAMILY:=resnet34_unet}"
+          : "${SAR_UNET_DEVICE:=cpu}"
+          cat > .release-gate.env <<EOF
+          SUPABASE_URL=${SUPABASE_URL}
+          SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+          MODAL_WORKER_URL=${MODAL_WORKER_URL}
+          MODAL_WORKER_TOKEN=${MODAL_WORKER_TOKEN}
+          SAR_UNET_MODEL_PATH=${SAR_UNET_MODEL_PATH}
+          SAR_UNET_MODEL_VERSION=${SAR_UNET_MODEL_VERSION}
+          SAR_UNET_MODEL_FAMILY=${SAR_UNET_MODEL_FAMILY}
+          SAR_UNET_DEVICE=${SAR_UNET_DEVICE}
+          EOF
+
+      - name: Run authoritative release gate
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          extra_args=()
+          if [ "${{ github.event.inputs.execute_promotion }}" != "true" ]; then
+            extra_args+=(--dry-run)
+          fi
+          python -m backend.scripts.run_authoritative_release_gate \
+            --env-file .release-gate.env \
+            --reference-set-key "${{ github.event.inputs.reference_set_key }}" \
+            --prediction-model-version "${{ github.event.inputs.prediction_model_version }}" \
+            "${extra_args[@]}" | tee authoritative_release_gate.json
+
+      - name: Write readable release-gate summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          source = Path('authoritative_release_gate.json')
+          if source.exists():
+              payload = json.loads(source.read_text(encoding='utf-8'))
+          else:
+              payload = {'decision': 'missing', 'decision_reason': 'authoritative_release_gate.json was not written'}
+          summary = {
+              'schema_version': 'authoritative-release-gate-summary/v1',
+              'reference_set_key': '${{ github.event.inputs.reference_set_key }}',
+              'prediction_model_version': '${{ github.event.inputs.prediction_model_version }}',
+              'execute_promotion': '${{ github.event.inputs.execute_promotion }}' == 'true',
+              'decision': payload.get('decision'),
+              'decision_reason': payload.get('decision_reason') or payload.get('reason') or payload.get('error'),
+              'promotion_executed': isinstance(payload.get('promotion_result'), dict),
+              'customer_claim_boundary': (
+                  'candidate_path_only'
+                  if payload.get('decision') != 'promote'
+                  else 'promotion_artifact_available_recheck_before_public_claim'
+              ),
+          }
+          Path('authoritative_release_gate_summary.json').write_text(
+              json.dumps(summary, indent=2, sort_keys=True),
+              encoding='utf-8',
+          )
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          PY
+
+      - name: Enforce execute-promotion gate
+        if: ${{ github.event.inputs.execute_promotion == 'true' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path('authoritative_release_gate.json').read_text(encoding='utf-8'))
+          if payload.get('decision') != 'promote':
+              raise SystemExit(
+                  f"authoritative release gate rejected promotion: {payload.get('decision_reason')}"
+              )
+          if not isinstance(payload.get('promotion_result'), dict):
+              raise SystemExit('promotion_result missing despite execute_promotion=true')
+          print('authoritative release gate promotion passed')
+          PY
+
+      - name: Upload authoritative gate artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: authoritative-release-gate
+          path: |
+            authoritative_release_gate.json
+            authoritative_release_gate_summary.json

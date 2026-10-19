@@ -1,0 +1,6 @@
+cosipymodel==2.0
+xarray==2025.6.1
+netCDF4==1.7.2
+dask==2025.5.0
+pybind11==2.13.6
+PyYAML==6.0.2

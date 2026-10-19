@@ -1,0 +1,214 @@
+from __future__ import annotations
+
+import json
+import tempfile
+import unittest
+from datetime import datetime, timezone
+from pathlib import Path
+from unittest.mock import patch
+
+import requests
+
+from backend.common import snowpack_proxy
+from backend.common.snowpack_proxy import (
+    SnowpackProxy,
+    fetch_batched_cell_snowpack_proxies_partial,
+    fetch_batched_cell_snowpack_proxies_strict,
+    snowpack_proxy_to_payload,
+)
+
+
+class FakeResponse:
+    def __init__(self, status_code: int, payload, *, headers: dict[str, str] | None = None):
+        self.status_code = status_code
+        self._payload = payload
+        self.headers = headers or {}
+        self.text = json.dumps(payload)
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise requests.HTTPError(f'HTTP {self.status_code}', response=self)
+
+
+def _daily_payload(*, temp_mean: float = -6.0, temp_min: float = -10.0, snowfall: float = 12.0, precipitation: float = 20.0):
+    return {
+        'daily': {
+            'time': ['2026-04-20'],
+            'temperature_2m_mean': [temp_mean],
+            'temperature_2m_min': [temp_min],
+            'snowfall_sum': [snowfall],
+            'precipitation_sum': [precipitation],
+        }
+    }
+
+
+class SnowpackProxyBatchTests(unittest.TestCase):
+    def test_fetch_batched_cell_snowpack_proxies_partial_localizes_missing_daily_payload(self) -> None:
+        response = FakeResponse(200, [_daily_payload(), {}])
+
+        with patch.object(snowpack_proxy.requests, 'get', return_value=response):
+            results = fetch_batched_cell_snowpack_proxies_partial(
+                coordinates=[(46.8, 9.8), (46.9, 9.9)],
+                as_of=datetime(2026, 4, 28, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0].status, 'ready')
+        self.assertIsNotNone(results[0].proxy)
+        self.assertEqual(results[1].status, 'unavailable_weather')
+        self.assertIsNone(results[1].proxy)
+        self.assertIn('Missing daily seasonal weather payload', results[1].error or '')
+
+    def test_fetch_batched_cell_snowpack_proxies_partial_localizes_batch_failures(self) -> None:
+        mismatch = FakeResponse(200, [_daily_payload()])
+
+        with patch.object(snowpack_proxy.requests, 'get', return_value=mismatch):
+            results = fetch_batched_cell_snowpack_proxies_partial(
+                coordinates=[(46.8, 9.8), (46.9, 9.9)],
+                as_of=datetime(2026, 4, 28, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(len(results), 2)
+        self.assertTrue(all(result.status == 'unavailable_weather' for result in results))
+        self.assertTrue(all(result.proxy is None for result in results))
+        self.assertTrue(all('count mismatch' in (result.error or '') for result in results))
+
+    def test_fetch_batched_cell_snowpack_proxies_strict_parses_multi_coordinate_payload(self) -> None:
+        response = FakeResponse(200, [_daily_payload(), _daily_payload(temp_mean=-3.0, snowfall=8.0)])
+
+        with patch.object(snowpack_proxy.requests, 'get', return_value=response) as get_mock:
+            proxies = fetch_batched_cell_snowpack_proxies_strict(
+                coordinates=[(46.8, 9.8), (46.9, 9.9)],
+                as_of=datetime(2026, 4, 28, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(len(proxies), 2)
+        self.assertTrue(all(proxy.method == 'seasonal_cumulative_v1' for proxy in proxies))
+        self.assertTrue(all(proxy.source_class == 'proxy' for proxy in proxies))
+        self.assertTrue(all(proxy.execution_status == 'fallback_proxy' for proxy in proxies))
+        self.assertTrue(all(proxy.official_warning_eligible is False for proxy in proxies))
+        self.assertEqual(proxies[0].season_start, '2025-11-01')
+        params = get_mock.call_args.kwargs['params']
+        self.assertEqual(params['latitude'], '46.8000,46.9000')
+        self.assertEqual(params['longitude'], '9.8000,9.9000')
+
+    def test_fetch_batched_cell_snowpack_proxies_strict_respects_minute_budget(self) -> None:
+        first_batch = [_daily_payload() for _ in range(36)]
+        second_batch = [_daily_payload(temp_mean=-2.0, snowfall=6.0) for _ in range(15)]
+
+        with patch.object(snowpack_proxy, 'OPEN_METEO_MINUTE_BUDGET', 480):
+            with patch.object(
+                snowpack_proxy.requests,
+                'get',
+                side_effect=[FakeResponse(200, first_batch), FakeResponse(200, second_batch)],
+            ) as get_mock:
+                with patch.object(snowpack_proxy.time, 'sleep', return_value=None) as sleep_mock:
+                    proxies = fetch_batched_cell_snowpack_proxies_strict(
+                        coordinates=[(46.8 + idx * 0.001, 9.8 + idx * 0.001) for idx in range(51)],
+                        as_of=datetime(2026, 4, 28, tzinfo=timezone.utc),
+                    )
+
+        self.assertEqual(len(proxies), 51)
+        self.assertEqual(get_mock.call_count, 2)
+        first_params = get_mock.call_args_list[0].kwargs['params']
+        second_params = get_mock.call_args_list[1].kwargs['params']
+        self.assertEqual(first_params['latitude'].count(','), 35)
+        self.assertEqual(second_params['latitude'].count(','), 14)
+        sleep_mock.assert_called_once()
+
+    def test_fetch_batched_cell_snowpack_proxies_strict_retries_rate_limits(self) -> None:
+        transient = FakeResponse(429, {'error': 'rate limited'}, headers={'Retry-After': '0'})
+        success = FakeResponse(200, [_daily_payload()])
+
+        with patch.object(snowpack_proxy.requests, 'get', side_effect=[transient, success]) as get_mock:
+            with patch.object(snowpack_proxy.time, 'sleep', return_value=None) as sleep_mock:
+                proxies = fetch_batched_cell_snowpack_proxies_strict(
+                    coordinates=[(46.8, 9.8)],
+                    as_of=datetime(2026, 4, 28, tzinfo=timezone.utc),
+                )
+
+        self.assertEqual(len(proxies), 1)
+        self.assertEqual(get_mock.call_count, 2)
+        sleep_mock.assert_called_once()
+
+    def test_fetch_batched_cell_snowpack_proxies_strict_fails_on_count_mismatch(self) -> None:
+        with patch.object(snowpack_proxy.requests, 'get', return_value=FakeResponse(200, [_daily_payload()])):
+            with self.assertRaisesRegex(RuntimeError, 'count mismatch'):
+                fetch_batched_cell_snowpack_proxies_strict(
+                    coordinates=[(46.8, 9.8), (46.9, 9.9)],
+                    as_of=datetime(2026, 4, 28, tzinfo=timezone.utc),
+                )
+
+    def test_fetch_batched_cell_snowpack_proxies_strict_fails_on_missing_daily_payload(self) -> None:
+        with patch.object(snowpack_proxy.requests, 'get', return_value=FakeResponse(200, [{}])):
+            with self.assertRaisesRegex(RuntimeError, 'Missing daily seasonal weather payload'):
+                fetch_batched_cell_snowpack_proxies_strict(
+                    coordinates=[(46.8, 9.8)],
+                    as_of=datetime(2026, 4, 28, tzinfo=timezone.utc),
+                )
+
+    def test_fetch_batched_cell_snowpack_proxies_strict_reads_cached_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cache_path = Path(tmp_dir) / 'snowpack-cache.json'
+            cache_path.write_text(
+                json.dumps(
+                    {
+                        '46.8000,9.8000,2026-04-28': {
+                            'estimated_shear_strength': 3.4,
+                            'snow_settlement_index': 0.62,
+                            'season_start': '2025-11-01',
+                            'method': 'seasonal_cumulative_v1',
+                        }
+                    }
+                ),
+                encoding='utf-8',
+            )
+
+            with patch.object(snowpack_proxy.requests, 'get') as get_mock:
+                proxies = fetch_batched_cell_snowpack_proxies_strict(
+                    coordinates=[(46.8, 9.8)],
+                    as_of=datetime(2026, 4, 28, tzinfo=timezone.utc),
+                    cache_path=cache_path,
+                )
+
+        self.assertEqual(len(proxies), 1)
+        self.assertEqual(proxies[0].estimated_shear_strength, 3.4)
+        self.assertEqual(proxies[0].method, 'seasonal_cumulative_v1')
+        get_mock.assert_not_called()
+
+    def test_proxy_payload_preserves_provenance_and_warning_boundary(self) -> None:
+        proxy = SnowpackProxy(
+            estimated_shear_strength=3.4,
+            snow_settlement_index=0.62,
+            season_start='2025-11-01',
+            method='seasonal_cumulative_v1',
+            source_class='proxy',
+            source='open_meteo_archive',
+            quality_flags=('candidate_source', 'uncalibrated'),
+            execution_status='fallback_proxy',
+            official_warning_eligible=False,
+        )
+        payload = snowpack_proxy_to_payload(proxy)
+        self.assertEqual(payload['source_class'], 'proxy')
+        self.assertEqual(payload['source'], 'open_meteo_archive')
+        self.assertEqual(payload['quality_flags'], ['candidate_source', 'uncalibrated'])
+        self.assertEqual(payload['execution_status'], 'fallback_proxy')
+        self.assertFalse(payload['official_warning_eligible'])
+
+    def test_malformed_cached_provenance_is_rejected(self) -> None:
+        cached = {
+            'estimated_shear_strength': 3.4,
+            'snow_settlement_index': 0.62,
+            'season_start': '2025-11-01',
+            'method': 'seasonal_cumulative_v1',
+            'uncertainty': 'not-a-number',
+            'quality_flags': 'proxy',
+        }
+        self.assertIsNone(snowpack_proxy._proxy_from_cache_value(cached))
+
+
+if __name__ == '__main__':
+    unittest.main()

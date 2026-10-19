@@ -1,0 +1,8 @@
+# Keep credentials, repository history, and unrelated working-tree artifacts
+# out of the Snowpack build context. The Dockerfile only needs these inputs.
+**
+!Dockerfile.snowpack
+!config.toml
+!constants.toml
+!backend/locks/
+!backend/locks/snowpack-native-poc-py312.txt

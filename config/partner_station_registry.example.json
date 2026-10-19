@@ -1,0 +1,17 @@
+{
+  "_comment": "Example partner station registry. Copy to config/partner_station_registry.json and set PARTNER_STATION_REGISTRY_PATH env var to enable. Stations not in this registry will be rejected during assimilation.",
+  "stations": [
+    {
+      "station_id": "STN-001",
+      "latitude": 34.05,
+      "longitude": 74.10,
+      "elevation_m": 3200.0
+    },
+    {
+      "station_id": "STN-002",
+      "latitude": 34.15,
+      "longitude": 74.25,
+      "elevation_m": 3500.0
+    }
+  ]
+}

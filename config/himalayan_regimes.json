@@ -1,0 +1,182 @@
+{
+  "schema_version": "himalayan_regimes_v1",
+  "description": "Himalayan regime configuration with internal elevation/process bands per Imp_plan.md Phase 1b. Western-Himalaya lower/middle/upper classifications are NOT copied mechanically into Nepal — each zone has its own band structure.",
+  "calibration_version": "candidate_v0",
+  "regimes": {
+    "himalayas_nepal": {
+      "region_key": "himalayas_nepal",
+      "tier": "A",
+      "climate_class": "continental",
+      "seasonal_phases": ["storm_new_snow", "wind_slab", "persistent_weak_layer", "wet_snow_rain_on_snow"],
+      "elevation_bands": [
+        {
+          "name": "lower",
+          "elevation_min_m": 3500,
+          "elevation_max_m": 4200,
+          "dominant_processes": ["wet_snow_rain_on_snow", "storm_new_snow"],
+          "aspect_classes": ["N", "E", "S", "W"],
+          "observation_coverage": "sparse"
+        },
+        {
+          "name": "middle",
+          "elevation_min_m": 4200,
+          "elevation_max_m": 5000,
+          "dominant_processes": ["wind_slab", "persistent_weak_layer"],
+          "aspect_classes": ["N", "E", "S", "W"],
+          "observation_coverage": "very_sparse"
+        },
+        {
+          "name": "upper",
+          "elevation_min_m": 5000,
+          "elevation_max_m": 5500,
+          "dominant_processes": ["wind_slab", "persistent_weak_layer"],
+          "aspect_classes": ["N", "E", "S", "W"],
+          "observation_coverage": "no_direct_observations"
+        }
+      ],
+      "expected_problem_types": ["storm_slab", "wind_slab", "persistent_weak_layer", "wet_snow"],
+      "calibration_version": "candidate_v0",
+      "notes": "Nepal Himalaya has distinct monsoon-influenced snow regime. Do not copy Western Himalaya lower/middle/upper thresholds directly."
+    },
+    "pir_panjal_nw_himalaya": {
+      "region_key": "pir_panjal_nw_himalaya",
+      "tier": "B",
+      "climate_class": "maritime",
+      "seasonal_phases": ["storm_new_snow", "wind_slab", "persistent_weak_layer", "wet_snow_rain_on_snow"],
+      "elevation_bands": [
+        {
+          "name": "lower",
+          "elevation_min_m": 2500,
+          "elevation_max_m": 3200,
+          "dominant_processes": ["wet_snow_rain_on_snow", "storm_new_snow"],
+          "aspect_classes": ["N", "E", "S", "W"],
+          "observation_coverage": "sparse"
+        },
+        {
+          "name": "middle",
+          "elevation_min_m": 3200,
+          "elevation_max_m": 4000,
+          "dominant_processes": ["storm_new_snow", "wind_slab"],
+          "aspect_classes": ["N", "E", "S", "W"],
+          "observation_coverage": "sparse"
+        },
+        {
+          "name": "upper",
+          "elevation_min_m": 4000,
+          "elevation_max_m": 4500,
+          "dominant_processes": ["wind_slab", "persistent_weak_layer"],
+          "aspect_classes": ["N", "E", "S", "W"],
+          "observation_coverage": "very_sparse"
+        }
+      ],
+      "expected_problem_types": ["storm_slab", "wind_slab", "persistent_weak_layer", "wet_snow"],
+      "calibration_version": "candidate_v0",
+      "notes": "Pir Panjal receives heavy Western Disturbance precipitation. Maritime climate class with rapid storm loading."
+    },
+    "shamshabari_nw_himalaya": {
+      "region_key": "shamshabari_nw_himalaya",
+      "tier": "B",
+      "climate_class": "transition",
+      "seasonal_phases": ["storm_new_snow", "wind_slab", "persistent_weak_layer", "wet_snow_rain_on_snow"],
+      "elevation_bands": [
+        {
+          "name": "lower",
+          "elevation_min_m": 3000,
+          "elevation_max_m": 3700,
+          "dominant_processes": ["wet_snow_rain_on_snow", "storm_new_snow"],
+          "aspect_classes": ["N", "E", "S", "W"],
+          "observation_coverage": "very_sparse"
+        },
+        {
+          "name": "middle",
+          "elevation_min_m": 3700,
+          "elevation_max_m": 4400,
+          "dominant_processes": ["wind_slab", "persistent_weak_layer"],
+          "aspect_classes": ["N", "E", "S", "W"],
+          "observation_coverage": "very_sparse"
+        },
+        {
+          "name": "upper",
+          "elevation_min_m": 4400,
+          "elevation_max_m": 5000,
+          "dominant_processes": ["wind_slab", "persistent_weak_layer"],
+          "aspect_classes": ["N", "E", "S", "W"],
+          "observation_coverage": "no_direct_observations"
+        }
+      ],
+      "expected_problem_types": ["storm_slab", "wind_slab", "persistent_weak_layer", "wet_snow"],
+      "calibration_version": "candidate_v0",
+      "notes": "Shamshabari is a transition zone between maritime Pir Panjal and continental Great Himalaya."
+    },
+    "great_himalaya_nw_himalaya": {
+      "region_key": "great_himalaya_nw_himalaya",
+      "tier": "B",
+      "climate_class": "continental",
+      "seasonal_phases": ["storm_new_snow", "wind_slab", "persistent_weak_layer", "wet_snow_rain_on_snow"],
+      "elevation_bands": [
+        {
+          "name": "lower",
+          "elevation_min_m": 3500,
+          "elevation_max_m": 4200,
+          "dominant_processes": ["storm_new_snow", "wet_snow_rain_on_snow"],
+          "aspect_classes": ["N", "E", "S", "W"],
+          "observation_coverage": "very_sparse"
+        },
+        {
+          "name": "middle",
+          "elevation_min_m": 4200,
+          "elevation_max_m": 5000,
+          "dominant_processes": ["wind_slab", "persistent_weak_layer"],
+          "aspect_classes": ["N", "E", "S", "W"],
+          "observation_coverage": "no_direct_observations"
+        },
+        {
+          "name": "upper",
+          "elevation_min_m": 5000,
+          "elevation_max_m": 5500,
+          "dominant_processes": ["wind_slab", "persistent_weak_layer"],
+          "aspect_classes": ["N", "E", "S", "W"],
+          "observation_coverage": "no_direct_observations"
+        }
+      ],
+      "expected_problem_types": ["storm_slab", "wind_slab", "persistent_weak_layer", "wet_snow"],
+      "calibration_version": "candidate_v0",
+      "notes": "Great Himalaya range — continental, cold, persistent weak layers are a major concern."
+    },
+    "karakoram_&_ladakh": {
+      "region_key": "karakoram_&_ladakh",
+      "tier": "B",
+      "climate_class": "polar_dry",
+      "seasonal_phases": ["storm_new_snow", "wind_slab", "persistent_weak_layer", "wet_snow_rain_on_snow"],
+      "elevation_bands": [
+        {
+          "name": "lower",
+          "elevation_min_m": 4000,
+          "elevation_max_m": 4700,
+          "dominant_processes": ["storm_new_snow", "wind_slab"],
+          "aspect_classes": ["N", "E", "S", "W"],
+          "observation_coverage": "no_direct_observations"
+        },
+        {
+          "name": "middle",
+          "elevation_min_m": 4700,
+          "elevation_max_m": 5400,
+          "dominant_processes": ["wind_slab", "persistent_weak_layer"],
+          "aspect_classes": ["N", "E", "S", "W"],
+          "observation_coverage": "no_direct_observations"
+        },
+        {
+          "name": "upper",
+          "elevation_min_m": 5400,
+          "elevation_max_m": 6000,
+          "dominant_processes": ["wind_slab", "persistent_weak_layer"],
+          "aspect_classes": ["N", "E", "S", "W"],
+          "observation_coverage": "no_direct_observations"
+        }
+      ],
+      "expected_problem_types": ["wind_slab", "persistent_weak_layer", "storm_slab"],
+      "calibration_version": "candidate_v0",
+      "notes": "Karakoram/Ladakh is polar-dry with very cold temperatures. Wet snow problems are rare. Season starts earlier (Oct 15)."
+    }
+  }
+}

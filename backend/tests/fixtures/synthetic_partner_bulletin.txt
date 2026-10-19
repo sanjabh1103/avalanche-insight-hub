@@ -1,0 +1,7 @@
+Date: 16/04/2026
+Danger Level: 3
+District: Baramulla  Altitude: 3000-4000 m  Danger Level: 3
+District: Gulmarg  Altitude: 3500-4500 m  Danger Level: 4
+District: Kupwara  Altitude: 2800-3800 m  Danger Level: 2
+District: Bandipora  Altitude: 3000-4000 m  Danger Level: 3
+District: Gurez  Altitude: 3500-4500 m  Danger Level: 4

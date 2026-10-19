@@ -1,0 +1,24 @@
+{
+  "schema_version": "snowpack_forecast_semantics_v1",
+  "contract": {
+    "mode": "historical_forecast_replay",
+    "source": "Open-Meteo Historical Forecast API:gfs_seamless",
+    "forecast_cycle": "2023-09-29T00:00:00Z",
+    "valid_from": "2023-10-01T00:00:00Z",
+    "valid_to": "2024-02-24T00:00:00Z",
+    "as_of": "2023-09-29T00:00:00Z",
+    "lead_time_h": 48,
+    "region_key": "pir_panjal_nw_himalaya",
+    "elevation_band": "middle",
+    "forcing_manifest_id": "pir-panjal-open-meteo-gfs-seamless-2023-10-01-2024-02-24-v2",
+    "member_id": "",
+    "ensemble_members": 1
+  },
+  "source_semantics": "gfs_seamless is a stitched historical forecast archive. The archive anchor is retained for contract chronology; this is not a single issued forecast replay.",
+  "retrospective": true,
+  "not_issued_forecast": true,
+  "headline_window": "2024-02-22T00:00:00Z/2024-02-24T00:00:00Z",
+  "headline_horizon_hours": 48,
+  "operational_forecast": false,
+  "mapping_audit": "v2 corrects the prior terrestrial_radiation-to-ILWR mapping; a hosted rerun is required before current verified evidence is exposed"
+}

@@ -1,0 +1,21 @@
+{
+  "manned_3h": {
+    "station_id": "station_id",
+    "timestamp": "obs_time",
+    "temperature_c": "air_temp",
+    "snow_depth_cm": "snow_depth",
+    "new_snow_cm": "new_snow_24h",
+    "wind_speed_ms": "wind_speed",
+    "wind_direction_deg": "wind_dir",
+    "precipitation_mm": "precip_24h"
+  },
+  "aws_1h": {
+    "station_id": "station_id",
+    "timestamp": "timestamp",
+    "temperature_c": "temp_2m",
+    "snow_depth_cm": "snow_depth",
+    "wind_speed_ms": "wind_speed_10m",
+    "wind_direction_deg": "wind_dir_10m",
+    "precipitation_mm": "precip_1h"
+  }
+}

@@ -1,0 +1,20 @@
+# SNOWPACK C++ native build dependencies (Phase 2B)
+# These are OPTIONAL — the pipeline falls back to COSIPY/heuristic when absent.
+# Install with: pip install -r requirements-snowpack.txt
+
+# COSIPY — pure Python snowpack model (Phase 2A, GPL v3)
+cosipymodel==2.0
+xarray==2025.6.1
+netCDF4==1.7.2
+dask==2025.5.0
+
+# SNOWPACK Python bindings (Phase 2B, LGPL v3)
+# Requires C++ SNOWPACK + MeteoIO compiled from source first:
+#   bash scripts/build_snowpack.sh
+# Then install the Python wrapper:
+pybind11==2.13.6
+
+# AWSOME toolchain support (Phase 4, AGPL v3)
+# AWSOME itself is a separate repo, not a pip package.
+# See: https://gitlab.com/avalanche-warning/awesome
+PyYAML==6.0.2

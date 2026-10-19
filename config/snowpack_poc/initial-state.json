@@ -1,0 +1,33 @@
+{
+  "schema_version": "snowpack_initial_state_v1",
+  "contract": {
+    "state_id": "pir-panjal-internal-poc-snow-free-2023-10-01",
+    "state_type": "snow_free",
+    "start_time": "2023-10-01T00:00:00Z",
+    "source": "customer_accepted_bounded_internal_poc_assumption",
+    "state_sha256": "fe7bc94ac6433c5768f54010c657cf8ce6b88ceab40ed9caf2ea7a88f72d171f",
+    "state_file_path": "",
+    "provenance": {
+      "source": "customer_accepted_bounded_internal_poc_assumption",
+      "source_class": "synthetic",
+      "licence": "Internal-use POC assumption; not a site observation or scientific validation input",
+      "timestamp": "2026-08-12T00:00:00Z",
+      "latitude": 34.021875,
+      "longitude": 74.347536111,
+      "elevation_m": 3730.0,
+      "units": {
+        "state": "snow-free declaration"
+      },
+      "hash": "17155bbda1fab56a993337321e71a6a5898c942d44dcb7ceac61fa1967607574",
+      "run_id": "__RUN_ID__",
+      "provenance_chain": [
+        "customer_decision_addendum_2",
+        "PIR_PANJAL_POC_DECISION_RECORD.json"
+      ]
+    }
+  },
+  "approval_state": "approved_for_bounded_internal_poc",
+  "approved": true,
+  "scientific_validation_eligible": false,
+  "rationale": "Customer accepted the snow-free starting assumption for the bounded internal retrospective demonstration. This approval is limited to the POC execution input and does not establish observed site conditions or scientific validation."
+}

@@ -1,0 +1,27 @@
+# Minimal, pinned Python 3.12 runtime for the real COSIPY smoke gate.
+#
+# cosipymodel==2.0.0 is installed separately with --no-deps because its
+# optional cartography/GDAL stack is not required by cpkernel.cosipy_core and
+# cannot be installed on every runner. These versions are copied from the
+# Python 3.12 snowpack/CI lock set.
+numpy==2.4.6
+pandas==3.0.3
+numba==0.66.0
+llvmlite==0.48.0
+scipy==1.18.0
+xarray==2025.6.1
+netCDF4==1.7.2
+cftime==1.6.5
+matplotlib==3.11.0
+python-dateutil==2.9.0.post0
+pytz==2025.2
+tzdata==2025.2
+packaging==25.0
+six==1.17.0
+pillow==11.3.0
+cycler==0.12.1
+contourpy==1.3.3
+fonttools==4.63.0
+kiwisolver==1.4.9
+pyparsing==3.2.5
+coverage==7.15.0

@@ -1,0 +1,26 @@
+# This file is maintained from backend/requirements-snowpack-native-poc.in.
+# It is intentionally smaller than snowpack-py312.txt: the native POC
+# producer/consumer does not import COSIPY's optional cartography stack.
+certifi==2026.7.22 \
+    --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775
+    # via requests
+charset-normalizer==3.4.9 \
+    --hash=sha256:68e5f26a1ad57ded6d1cfb85331d1c1a195314756471d97758c48498bb4dcdf5
+    # via requests
+idna==3.18 \
+    --hash=sha256:7f952cbe720b688055e3f87de14f5c3e5fdaa8bc3928985c4077ca689de849a2
+    # via requests
+numpy==2.4.6 \
+    --hash=sha256:5f9fb9157b4ce2971008323afe46053787b526ef624fea915b261468a8421a0f \
+    --hash=sha256:90f9849678c75fe7afa2d348ac842c168b0a4d3d61919687216dfc547976d853
+    # via -r backend/requirements-snowpack-native-poc.in
+pyyaml==6.0.2 \
+    --hash=sha256:1f71ea527786de97d1a0cc0eacd1defc0985dcf6b3f17bb77dcfc8c34bec4dc5 \
+    --hash=sha256:80bab7bfc629882493af4aa31a4cfa43a4c57c83813253626916b8c7ada83476
+    # via -r backend/requirements-snowpack-native-poc.in
+requests==2.34.2 \
+    --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0
+    # via -r backend/requirements-snowpack-native-poc.in
+urllib3==2.7.0 \
+    --hash=sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897
+    # via requests
