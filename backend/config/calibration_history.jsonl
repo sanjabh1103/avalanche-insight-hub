@@ -1,0 +1,504 @@
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": null, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-promote-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-promote-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "run-compat-fail", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "run-proof-1", "generated_at": "", "empirical_coverage": 1.0, "held_out_coverage": 0.8, "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}
+{"run_id": "R1", "alpha": 0.1}

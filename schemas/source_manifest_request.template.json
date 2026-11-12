@@ -1,0 +1,56 @@
+{
+  "schema_version": "mvp4_source_request_manifest_v1",
+  "source_id": "requested_source_id",
+  "source_name": "<dataset or source name>",
+  "source_owner": "<institution or data owner>",
+  "source_url": "<download or API URL>",
+  "source_reference": "<DOI, repository commit, release, or signed owner reference>",
+  "source_role": "requested_core",
+  "review_status": "requested",
+  "license_review_id": null,
+  "license": {
+    "status": "pending_review",
+    "reuse_scope": "<explicit training and redistribution scope>",
+    "attribution_required": true,
+    "terms_url": null
+  },
+  "coverage": {
+    "regions": ["himalayas_nepal", "pir_panjal_nw_himalaya"],
+    "positive_seasons": [],
+    "exact_time_positive_seasons": [],
+    "minimum_positive_seasons_gate": 3,
+    "coverage_note": "Provide at least three positive snow seasons, including target-AOI evidence."
+  },
+  "time_semantics": {
+    "event_time_field": "<avalanche release time field>",
+    "event_time_kind": "requested_release_time",
+    "timezone": "<IANA timezone or UTC offset>",
+    "precision": "exact",
+    "release_time_proven": false,
+    "source_time_is_avalanche_occurrence_time": false
+  },
+  "spatial_semantics": {
+    "geometry_type": "point_or_polygon",
+    "coordinate_reference": "EPSG:4326",
+    "coordinate_precision": "exact_event_point",
+    "has_exact_coordinates": false
+  },
+  "event_id_field": "<stable source event identifier>",
+  "event_rows_sha256": null,
+  "provenance": {
+    "source_hash": null,
+    "source_hash_algorithm": "not_available",
+    "retrieved_at": null,
+    "version_or_commit": "<immutable version, commit, or retrieval declaration>"
+  },
+  "independence": {
+    "origin_source_family": "<independent source family>",
+    "independent_of_source_ids": ["hiaval_hma", "gee_sar_scene_aware", "everest_sentinel1"],
+    "independence_status": "pending_overlap_review",
+    "overlap_review_status": "not_started"
+  },
+  "training_eligible": false,
+  "production_scoring_eligible": false,
+  "evidence_refs": [],
+  "required_next_action": "Supply the immutable payload, exact semantics, rights, coverage, and overlap evidence for review."
+}

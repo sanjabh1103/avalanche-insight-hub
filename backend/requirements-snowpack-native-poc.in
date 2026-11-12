@@ -1,0 +1,6 @@
+# Minimal Python runtime for the native SNOWPACK POC producer and consumer.
+# COSIPY is an optional research lane; its full distribution pulls optional
+# GDAL/cartography dependencies and is intentionally not part of this image.
+numpy==2.4.6
+requests==2.34.2
+PyYAML==6.0.2

@@ -1,0 +1,148 @@
+version: '3.8'
+
+# F15: Edge Deployment Mode — Air-gapped Docker Compose profile
+# For Partner Dhruva-3 or similar HPC. No external API calls.
+# All services run on internal network only.
+
+services:
+  # Local PostgreSQL (replaces Supabase)
+  postgres:
+    image: postgres:16-alpine
+    container_name: avalanche_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-avalanche_insight}
+      POSTGRES_USER: ${POSTGRES_USER:-avalanche}
+      # MUST CHANGE before deployment. Override via .env file or POSTGRES_PASSWORD env var.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_edge}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - edge_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-avalanche}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for task queue (optional, for async jobs)
+  redis:
+    image: redis:7-alpine
+    container_name: avalanche_redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - edge_internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend inference engine
+  backend:
+    build:
+      context: ../..
+      dockerfile: deployment/edge/Dockerfile.backend
+    container_name: avalanche_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      EDGE_MODE: "true"
+      LOCAL_DB_URL: "postgresql://${POSTGRES_USER:-avalanche}:${POSTGRES_PASSWORD:-changeme_edge}@postgres:5432/${POSTGRES_DB:-avalanche_insight}"
+      REDIS_URL: "redis://redis:6379/0"
+      LOCAL_MODEL_WEIGHTS_PATH: /opt/model_weights
+      EDGE_SAR_CACHE_DIR: /opt/sar_cache
+      DEM_ROOT: /opt/dem
+      ARTIFACT_ROOT: /opt/artifacts
+      SUPABASE_URL: ""
+      SUPABASE_SERVICE_ROLE_KEY: ""
+      GEE_PROJECT_ID: ""
+      GEE_SERVICE_ACCOUNT_KEY: ""
+      OPEN_METEO_BASE_URL: ""
+      USGS_API_URL: ""
+      SEISMIC_ENABLED: "false"
+      GNN_RUNOUT_ENABLED: "true"
+      BRIER_BLOCK_THRESHOLD: "0.15"
+      CONFORMAL_ALPHA: "0.1"
+      CONTINUOUS_LEARNING_ENABLED: "true"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ${MODEL_WEIGHTS_DIR:-./data/model_weights}:/opt/model_weights:ro
+      - ${DEM_DIR:-./data/dem}:/opt/dem:ro
+      - ${SAR_CACHE_DIR:-./data/sar_cache}:/opt/sar_cache
+      - ${ARTIFACT_DIR:-./data/artifacts}:/opt/artifacts
+      - ${CONFIG_DIR:-./config}:/app/config:ro
+    networks:
+      - edge_internal
+    command: >
+      python -m backend.daily_inference
+      --region-key all
+      --forecast-hours 72
+      --grid-size 20
+      --profile edge
+
+  # Frontend (static build served by nginx)
+  frontend:
+    image: nginx:alpine
+    container_name: avalanche_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    volumes:
+      - ${FRONTEND_DIST_DIR:-./data/frontend_dist}:/usr/share/nginx/html:ro
+      - ./nginx/edge.nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - edge_internal
+
+  # SAR processor (local, no GEE)
+  sar_processor:
+    build:
+      context: ../..
+      dockerfile: deployment/edge/Dockerfile.backend
+    container_name: avalanche_sar
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      EDGE_MODE: "true"
+      LOCAL_DB_URL: "postgresql://${POSTGRES_USER:-avalanche}:${POSTGRES_PASSWORD:-changeme_edge}@postgres:5432/${POSTGRES_DB:-avalanche_insight}"
+      EDGE_SAR_CACHE_DIR: /opt/sar_cache
+      SAR_PROCESSOR_MODE: local
+      GEE_PROJECT_ID: ""
+      GEE_SERVICE_ACCOUNT_KEY: ""
+    volumes:
+      - ${SAR_CACHE_DIR:-./data/sar_cache}:/opt/sar_cache
+      - ${DEM_DIR:-./data/dem}:/opt/dem:ro
+    networks:
+      - edge_internal
+    profiles:
+      - sar
+    command: >
+      python -m backend.historical_sar_backfill
+      --local-mode
+      --cache-dir /opt/sar_cache
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  edge_internal:
+    driver: bridge
+    # Set to false during initial setup to pull Docker images, then back to true for production air-gapped
+    internal: true

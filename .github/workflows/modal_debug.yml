@@ -1,0 +1,196 @@
+name: Modal Debug
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Modal debug action
+        required: true
+        default: list-apps
+        type: choice
+        options:
+          - list-apps
+          - logs
+          - list-containers
+          - stop-container
+          - cancel-call
+          - stop-app
+      app_identifier:
+        description: Modal app name or app ID
+        required: false
+        default: avalanche-modal-worker
+        type: string
+      app_id:
+        description: Modal app ID for container operations
+        required: false
+        default: ""
+        type: string
+      container_id:
+        description: Modal container ID (ta-*) for stop-container
+        required: false
+        default: ""
+        type: string
+      since:
+        description: Logs start time (ISO 8601 or relative, e.g. 2h)
+        required: false
+        default: 2h
+        type: string
+      until:
+        description: Logs end time (ISO 8601 or relative)
+        required: false
+        default: ""
+        type: string
+      tail:
+        description: Number of log entries to fetch
+        required: false
+        default: "200"
+        type: string
+      function_call:
+        description: Optional FunctionCall ID filter (fc-*)
+        required: false
+        default: ""
+        type: string
+      source:
+        description: Optional log source filter
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - stdout
+          - stderr
+          - system
+      modal_environment:
+        description: Optional Modal environment override
+        required: false
+        default: ""
+        type: string
+      confirmation:
+        description: Required confirmation token for destructive actions
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+
+      - name: Install Modal CLI
+        run: |
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r backend/locks/ci-py312.txt
+
+      - name: Run Modal debug command
+        env:
+          ACTION: ${{ inputs.action }}
+          APP_IDENTIFIER: ${{ inputs.app_identifier }}
+          SINCE: ${{ inputs.since }}
+          UNTIL: ${{ inputs.until }}
+          TAIL: ${{ inputs.tail }}
+          FUNCTION_CALL: ${{ inputs.function_call }}
+          APP_ID: ${{ inputs.app_id }}
+          CONTAINER_ID: ${{ inputs.container_id }}
+          SOURCE: ${{ inputs.source }}
+          MODAL_ENVIRONMENT_INPUT: ${{ inputs.modal_environment }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MODAL_TOKEN_ID}" ] || [ -z "${MODAL_TOKEN_SECRET}" ]; then
+            echo "::error::MODAL_TOKEN_ID and MODAL_TOKEN_SECRET secrets are required"
+            exit 1
+          fi
+
+          env_args=()
+          if [ -n "${MODAL_ENVIRONMENT_INPUT}" ]; then
+            env_args+=(--env "${MODAL_ENVIRONMENT_INPUT}")
+            export MODAL_ENVIRONMENT="${MODAL_ENVIRONMENT_INPUT}"
+          fi
+
+          case "${ACTION}" in
+            list-apps)
+              modal app list --json "${env_args[@]}"
+              ;;
+            logs)
+              cmd=(
+                modal app logs "${APP_IDENTIFIER}"
+                --tail "${TAIL}"
+                --timestamps
+                --show-function-id
+                --show-function-call-id
+                --show-container-id
+              )
+              if [ -n "${SINCE}" ]; then
+                cmd+=(--since "${SINCE}")
+              fi
+              if [ -n "${UNTIL}" ]; then
+                cmd+=(--until "${UNTIL}")
+              fi
+              if [ -n "${FUNCTION_CALL}" ]; then
+                cmd+=(--function-call "${FUNCTION_CALL}")
+              fi
+              if [ "${SOURCE}" != "all" ]; then
+                cmd+=(--source "${SOURCE}")
+              fi
+              cmd+=("${env_args[@]}")
+              "${cmd[@]}"
+              ;;
+            list-containers)
+              if [ -z "${APP_ID}" ]; then
+                echo "::error::app_id is required for list-containers"
+                exit 1
+              fi
+              modal container list --app-id "${APP_ID}" --json "${env_args[@]}"
+              ;;
+            stop-container)
+              if [ -z "${CONTAINER_ID}" ]; then
+                echo "::error::container_id is required for stop-container"
+                exit 1
+              fi
+              expected_confirmation="stop-container:${CONTAINER_ID}"
+              if [ "${CONFIRMATION}" != "${expected_confirmation}" ]; then
+                echo "::error::Refusing to stop container without confirmation=${expected_confirmation}"
+                exit 1
+              fi
+              modal container stop "${CONTAINER_ID}" -y
+              ;;
+            cancel-call)
+              if [ -z "${FUNCTION_CALL}" ]; then
+                echo "::error::function_call is required for cancel-call"
+                exit 1
+              fi
+              expected_confirmation="cancel-call:${FUNCTION_CALL}"
+              if [ "${CONFIRMATION}" != "${expected_confirmation}" ]; then
+                echo "::error::Refusing to cancel call without confirmation=${expected_confirmation}"
+                exit 1
+              fi
+              python -c 'import os, modal; call_id = os.environ["FUNCTION_CALL"]; modal.FunctionCall.from_id(call_id).cancel(); print({"status": "cancelled", "function_call": call_id})'
+              ;;
+            stop-app)
+              expected_confirmation="stop-app:${APP_IDENTIFIER}"
+              if [ "${CONFIRMATION}" != "${expected_confirmation}" ]; then
+                echo "::error::Refusing to stop app without confirmation=${expected_confirmation}"
+                exit 1
+              fi
+              modal app stop "${APP_IDENTIFIER}" -y "${env_args[@]}"
+              ;;
+            *)
+              echo "::error::Unsupported action: ${ACTION}"
+              exit 1
+              ;;
+          esac

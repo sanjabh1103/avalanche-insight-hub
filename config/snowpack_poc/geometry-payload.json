@@ -1,0 +1,20 @@
+{
+  "schema_version": "snowpack_approved_geometry_payload_v1",
+  "latitude": 34.021875,
+  "longitude": 74.347536111,
+  "elevation_m": 3730.0,
+  "slope_angle": 26.262132,
+  "aspect": 36.885404,
+  "crs": "EPSG:4326",
+  "zone_id": "pir-panjal-nw-himalaya-middle-internal-poc",
+  "dem_sha256": "1dd4cbc36a5bc52cb72aa5c2be7c4c7a3cd18cfdd657a1f8d46c91c5f3eed7db",
+  "dem_source": "repository-bound SRTM N34E074.hgt.gz",
+  "terrain_method": "srtm_hgt_horn_3x3_v1",
+  "quality_status": "derived_geometry_approved_for_bounded_internal_poc",
+  "provider_resolved_latitude": 34.03189,
+  "provider_resolved_longitude": 74.296875,
+  "provider_resolved_elevation_m": 3727.0,
+  "source_point_distance_km": 4.8,
+  "target_grid_m": 3000.0,
+  "no_3km_skill_claim": true
+}

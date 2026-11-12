@@ -1,0 +1,135 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.env*
+!.env.local.example
+
+# Local Netlify folder
+.netlify
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+backend/artifacts/
+backend/data/models/
+backend/data/swiss_envidat/*
+!backend/data/swiss_envidat/.gitkeep
+backend/data/swiss_warning_regions/*
+!backend/data/swiss_warning_regions/.gitkeep
+backend/env_info.json
+
+# vite-plugin-pwa generated artifacts under dist/
+dev-dist/
+
+# Secrets — NEVER commit service-account keys or credential blobs
+docs/key.json
+docs/*key*.json
+docs/*credentials*.json
+docs/*service-account*.json
+config/earth-engine-key.json
+*.pem
+gee-service-account*.json
+
+# Local browser automation/session artifacts
+.playwright-mcp/
+docs/MVP/presentation/rendered/assets/tmp/
+
+# Local DEM staging (raw pre-compression copies, if any)
+backend/data/dem/raw/
+
+# Local Supabase CLI temp state
+supabase/.temp/
+
+# Local migration/recovery outputs
+scripts/migration_backup/
+scripts/migration_errors.log
+
+# Local credential files — NEVER commit
+scientist_credentials.txt
+test_output.txt
+
+# Vitest coverage output (can shadow Python package imports if left in repo root)
+coverage/
+
+# Local ad-hoc test scripts (not part of the test suite)
+test_all_features*.mjs
+build_feature_tracker.py
+
+# Local binary spreadsheets (tracked externally)
+docs/MVP_V2/*.xlsx
+docs/MVP_V2/07_demo_assets/*.xlsx
+
+# Local test result artifacts
+docs/MVP_V2/07_demo_assets/test-results*.json
+docs/MVP_V2/07_demo_assets/test-screenshots/
+
+# Local personal notes
+#docs/MVP/mails.md
+config/earth-engine-key.json.disabled-ba40536e
+
+# Phase 2 structural snapshot — tracked in repo so team members get the current graph
+# without needing the Understand plugin. Regenerate with:
+#   bash scripts/refresh_knowledge_graph_structural.sh
+# or (snapshot-only, no plugin):
+#   python3 scripts/build_structural_knowledge_snapshot.py --root . --intermediate .understand-anything/intermediate
+.understand-anything/intermediate/
+.understand-anything/tmp/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Local reference folders (NOT synced to GitHub)
+# These hold infographics, decks, narration, customer packs, and utility
+# scripts that are preserved locally but excluded from the repository.
+# Use anchored patterns (/learn/ and /temp/) so they only match root-level
+# directories and do NOT catch docs/learning/Learn/ (case-insensitive safe).
+# ─────────────────────────────────────────────────────────────────────────────
+/learn/
+/temp/
+
+# ML caches and tooling metadata (local only, never commit)
+.fastembed_cache/
+.phase-loop/
+.devin/
+.githooks/
+
+# Large data snapshots (provenance/license review required before commit)
+backend/data/gee_sar_archive_pre_provenance/
+backend/data/open_source_labels/
+
+# Generated understand-anything graph output (not the intermediate/ dir which is already ignored)
+.understand-anything/phase2-structural-graph.json
+.understand-anything/phase2-structural-manifest.json
+.venv-py312/
+
+# graphify CLI output (generated, not source)
+graphify-out/
+
+# G10: SNOWPACK version probing artifact (CWD pollution prevention)
+--version.pro
+--version.smet
+--version.sno
+--version.haz
+--version.log
+docs/Strategy_Vs_tactic.md

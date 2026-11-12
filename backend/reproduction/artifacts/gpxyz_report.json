@@ -1,0 +1,22 @@
+{
+  "model_status_mutation_allowed": false,
+  "production_scoring_allowed": false,
+  "readiness": {
+    "decision": "blocked_station_coordinates_required",
+    "elevation_column": "elevation_station",
+    "latitude_column": null,
+    "longitude_column": null,
+    "missing_required_columns": [
+      "latitude",
+      "longitude"
+    ],
+    "ready": false,
+    "row_count": 29296,
+    "station_column": "station_code",
+    "station_count": 129,
+    "usage_boundary": "research_only"
+  },
+  "schema_version": "swiss_gpxyz_readiness_report_v1",
+  "stage": "stage2_gpxyz_interpolation",
+  "usage_boundary": "research_only"
+}

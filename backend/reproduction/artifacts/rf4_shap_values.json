@@ -1,0 +1,405 @@
+{
+  "feature_importance_all": [
+    {
+      "feature": "elevation_th",
+      "mean_abs_shap": 0.07795871659148419
+    },
+    {
+      "feature": "HN72_24",
+      "mean_abs_shap": 0.04602555408397288
+    },
+    {
+      "feature": "HN24_7d",
+      "mean_abs_shap": 0.03499283856087737
+    },
+    {
+      "feature": "Pen_depth",
+      "mean_abs_shap": 0.026173182439897726
+    },
+    {
+      "feature": "HN24",
+      "mean_abs_shap": 0.025537403801494735
+    },
+    {
+      "feature": "MS_Snow",
+      "mean_abs_shap": 0.01785857872073315
+    },
+    {
+      "feature": "wind_trans24_3d",
+      "mean_abs_shap": 0.015986700634887326
+    },
+    {
+      "feature": "min_ccl_pen",
+      "mean_abs_shap": 0.014846355718377426
+    },
+    {
+      "feature": "wind_trans24_7d",
+      "mean_abs_shap": 0.01228212036364539
+    },
+    {
+      "feature": "wind_trans24",
+      "mean_abs_shap": 0.010514028296893935
+    },
+    {
+      "feature": "RH",
+      "mean_abs_shap": 0.009144068959184534
+    },
+    {
+      "feature": "TA",
+      "mean_abs_shap": 0.006732349328560408
+    },
+    {
+      "feature": "LWR_net",
+      "mean_abs_shap": 0.005369857891377572
+    },
+    {
+      "feature": "VW",
+      "mean_abs_shap": 0.005012570098279132
+    },
+    {
+      "feature": "Qw",
+      "mean_abs_shap": 0.004834806362281709
+    },
+    {
+      "feature": "TS2",
+      "mean_abs_shap": 0.004255857097691427
+    },
+    {
+      "feature": "S4",
+      "mean_abs_shap": 0.004096832778059729
+    },
+    {
+      "feature": "ISWR",
+      "mean_abs_shap": 0.004076267510109156
+    },
+    {
+      "feature": "ccl_pwl",
+      "mean_abs_shap": 0.003842724766042273
+    },
+    {
+      "feature": "Qs",
+      "mean_abs_shap": 0.0036967225754410303
+    },
+    {
+      "feature": "pAlbedo",
+      "mean_abs_shap": 0.0036724839358558132
+    },
+    {
+      "feature": "OSWR",
+      "mean_abs_shap": 0.00364698719507144
+    },
+    {
+      "feature": "ccl_pwl_100",
+      "mean_abs_shap": 0.0036282381629263462
+    },
+    {
+      "feature": "SWE",
+      "mean_abs_shap": 0.0035760097256360645
+    },
+    {
+      "feature": "elevation_station",
+      "mean_abs_shap": 0.003442968950175858
+    },
+    {
+      "feature": "Sn",
+      "mean_abs_shap": 0.00335880729969329
+    },
+    {
+      "feature": "sn38_pwl",
+      "mean_abs_shap": 0.0033343442849059018
+    },
+    {
+      "feature": "ISWR_h",
+      "mean_abs_shap": 0.0032028874040369924
+    },
+    {
+      "feature": "TS0",
+      "mean_abs_shap": 0.0031464342114134575
+    },
+    {
+      "feature": "TS1",
+      "mean_abs_shap": 0.003016425807984117
+    },
+    {
+      "feature": "VW_drift",
+      "mean_abs_shap": 0.0027270532717074214
+    },
+    {
+      "feature": "ISWR_dir",
+      "mean_abs_shap": 0.0026172437353762647
+    },
+    {
+      "feature": "OLWR",
+      "mean_abs_shap": 0.0026006184048433883
+    },
+    {
+      "feature": "T_bottom",
+      "mean_abs_shap": 0.002516103399084799
+    },
+    {
+      "feature": "HS_meas",
+      "mean_abs_shap": 0.002478740946098019
+    },
+    {
+      "feature": "HS_mod",
+      "mean_abs_shap": 0.002422789400915204
+    },
+    {
+      "feature": "sn38_pwl_100",
+      "mean_abs_shap": 0.0023953538486651284
+    },
+    {
+      "feature": "zSs",
+      "mean_abs_shap": 0.0023700108100682144
+    },
+    {
+      "feature": "Sd",
+      "mean_abs_shap": 0.0023549352031945713
+    },
+    {
+      "feature": "zS4",
+      "mean_abs_shap": 0.0023273576382119962
+    },
+    {
+      "feature": "TSS_meas",
+      "mean_abs_shap": 0.002306300895179012
+    },
+    {
+      "feature": "ISWR_diff",
+      "mean_abs_shap": 0.002256500360613223
+    },
+    {
+      "feature": "S5",
+      "mean_abs_shap": 0.0022433008826039354
+    },
+    {
+      "feature": "TSS_mod",
+      "mean_abs_shap": 0.0021713277279456914
+    },
+    {
+      "feature": "ILWR",
+      "mean_abs_shap": 0.002165556902176067
+    },
+    {
+      "feature": "Qg0",
+      "mean_abs_shap": 0.0020767686357847067
+    },
+    {
+      "feature": "hoar_size",
+      "mean_abs_shap": 0.0020655803675018133
+    },
+    {
+      "feature": "MS_water",
+      "mean_abs_shap": 0.0020395024111454878
+    },
+    {
+      "feature": "sk38_pwl",
+      "mean_abs_shap": 0.002008843196773204
+    },
+    {
+      "feature": "TSG",
+      "mean_abs_shap": 0.0019922900163774075
+    },
+    {
+      "feature": "Ss",
+      "mean_abs_shap": 0.0019466687530070783
+    },
+    {
+      "feature": "ssi_pwl",
+      "mean_abs_shap": 0.0018772089864694085
+    },
+    {
+      "feature": "sk38_pwl_100",
+      "mean_abs_shap": 0.0017631913022607252
+    },
+    {
+      "feature": "zSn",
+      "mean_abs_shap": 0.001743855768417664
+    },
+    {
+      "feature": "MS_Wind",
+      "mean_abs_shap": 0.001693342261214322
+    },
+    {
+      "feature": "Ql",
+      "mean_abs_shap": 0.0016561890359164714
+    },
+    {
+      "feature": "zSd_mean",
+      "mean_abs_shap": 0.001644097542779571
+    },
+    {
+      "feature": "DW",
+      "mean_abs_shap": 0.0015287702617200027
+    },
+    {
+      "feature": "ssi_pwl_100",
+      "mean_abs_shap": 0.0014813172093563443
+    },
+    {
+      "feature": "MS_Sublimation",
+      "mean_abs_shap": 0.0013696470228836142
+    },
+    {
+      "feature": "Sclass2",
+      "mean_abs_shap": 0.0009993499832082551
+    },
+    {
+      "feature": "pwl_100_15",
+      "mean_abs_shap": 0.000708219338676902
+    },
+    {
+      "feature": "MS_Evap",
+      "mean_abs_shap": 0.0005183392809098473
+    },
+    {
+      "feature": "pwl_100",
+      "mean_abs_shap": 0.00030458385953845916
+    },
+    {
+      "feature": "MS_Rain",
+      "mean_abs_shap": 0.0002682522609819612
+    },
+    {
+      "feature": "base_pwl",
+      "mean_abs_shap": 0.00022102944197342146
+    },
+    {
+      "feature": "MS_SN_Runoff",
+      "mean_abs_shap": 0.00021067943976339832
+    },
+    {
+      "feature": "Qr",
+      "mean_abs_shap": 0.00020115619500569572
+    },
+    {
+      "feature": "Qg_mean",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "mAlbedo_mean",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "MS_Soil_Runoff_mean",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "TS3_mean",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "TS4_mean",
+      "mean_abs_shap": 0.0
+    },
+    {
+      "feature": "zS5",
+      "mean_abs_shap": 0.0
+    }
+  ],
+  "feature_importance_top20": [
+    {
+      "feature": "elevation_th",
+      "mean_abs_shap": 0.07795871659148419,
+      "rank": 1
+    },
+    {
+      "feature": "HN72_24",
+      "mean_abs_shap": 0.04602555408397288,
+      "rank": 2
+    },
+    {
+      "feature": "HN24_7d",
+      "mean_abs_shap": 0.03499283856087737,
+      "rank": 3
+    },
+    {
+      "feature": "Pen_depth",
+      "mean_abs_shap": 0.026173182439897726,
+      "rank": 4
+    },
+    {
+      "feature": "HN24",
+      "mean_abs_shap": 0.025537403801494735,
+      "rank": 5
+    },
+    {
+      "feature": "MS_Snow",
+      "mean_abs_shap": 0.01785857872073315,
+      "rank": 6
+    },
+    {
+      "feature": "wind_trans24_3d",
+      "mean_abs_shap": 0.015986700634887326,
+      "rank": 7
+    },
+    {
+      "feature": "min_ccl_pen",
+      "mean_abs_shap": 0.014846355718377426,
+      "rank": 8
+    },
+    {
+      "feature": "wind_trans24_7d",
+      "mean_abs_shap": 0.01228212036364539,
+      "rank": 9
+    },
+    {
+      "feature": "wind_trans24",
+      "mean_abs_shap": 0.010514028296893935,
+      "rank": 10
+    },
+    {
+      "feature": "RH",
+      "mean_abs_shap": 0.009144068959184534,
+      "rank": 11
+    },
+    {
+      "feature": "TA",
+      "mean_abs_shap": 0.006732349328560408,
+      "rank": 12
+    },
+    {
+      "feature": "LWR_net",
+      "mean_abs_shap": 0.005369857891377572,
+      "rank": 13
+    },
+    {
+      "feature": "VW",
+      "mean_abs_shap": 0.005012570098279132,
+      "rank": 14
+    },
+    {
+      "feature": "Qw",
+      "mean_abs_shap": 0.004834806362281709,
+      "rank": 15
+    },
+    {
+      "feature": "TS2",
+      "mean_abs_shap": 0.004255857097691427,
+      "rank": 16
+    },
+    {
+      "feature": "S4",
+      "mean_abs_shap": 0.004096832778059729,
+      "rank": 17
+    },
+    {
+      "feature": "ISWR",
+      "mean_abs_shap": 0.004076267510109156,
+      "rank": 18
+    },
+    {
+      "feature": "ccl_pwl",
+      "mean_abs_shap": 0.003842724766042273,
+      "rank": 19
+    },
+    {
+      "feature": "Qs",
+      "mean_abs_shap": 0.0036967225754410303,
+      "rank": 20
+    }
+  ],
+  "method": "TreeSHAP",
+  "n_features": 74,
+  "n_samples": 500
+}

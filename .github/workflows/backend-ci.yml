@@ -1,0 +1,226 @@
+name: Backend CI
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  # Keep the newest pull-request verification run and preserve all main/manual
+  # runs for auditability and release evidence.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/locks/ci-py312.txt
+
+      - name: Install verification dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools==81.0.0
+          pip install --require-hashes -r backend/locks/core-py312.txt
+          pip install --require-hashes -r backend/locks/ci-py312.txt
+
+      - name: Validate requirements are pinned
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          for req_file in ['backend/requirements.txt', 'backend/requirements-ci.txt', 'backend/requirements-snowpack.txt']:
+              p = Path(req_file)
+              if not p.exists():
+                  continue
+              req = p.read_text()
+              unpinned = []
+              for line in req.splitlines():
+                  line = line.strip()
+                  if not line or line.startswith('#'):
+                      continue
+                  if '>=' in line and '==' not in line:
+                      unpinned.append(line)
+              if unpinned:
+                  print(f'FAIL: Unpinned requirements in {req_file}: {unpinned}')
+                  raise SystemExit(1)
+              else:
+                  print(f'{req_file}: all requirements pinned with ==')
+          PY
+
+      - name: Record environment info
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/record_env_info.py
+
+      - name: Upload env info artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: env-info
+          path: backend/env_info.json
+          retention-days: 30
+
+      - name: Validate workflow YAML syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          for path in sorted(Path('.github/workflows').glob('*.yml')):
+              with path.open('r', encoding='utf-8') as handle:
+                  yaml.safe_load(handle)
+          print('workflow yaml ok')
+          PY
+
+      - name: Validate ML pipeline schedule/job condition contract
+        run: python scripts/verify_schedule_contract.py
+
+      - name: Modal app import smoke
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          MODAL_WORKER_TOKEN: ci-smoke-token
+          AVALANCHE_SKIP_MODAL_IMPORT: '1'
+        run: |
+          python - <<'PY'
+          from backend.modal_worker_app import create_fastapi_app
+
+          app = create_fastapi_app()
+          routes = {route.path for route in app.routes}
+          expected = {'/health', '/sar-segment', '/train-sar-unet', '/train-mtslstm', '/infer-mtslstm', '/evaluate-release'}
+          missing = expected - routes
+          if missing:
+              raise SystemExit(f'missing modal worker routes: {sorted(missing)}')
+          print('modal app routes ok')
+          PY
+
+      - name: Assert pdfplumber installed at pinned version
+        run: |
+          python - <<'PY'
+          import pdfplumber
+          expected = '0.11.9'
+          actual = pdfplumber.__version__
+          assert actual == expected, (
+              f'pdfplumber version mismatch: expected {expected}, got {actual}. '
+              f'Partner bulletin parsing requires pdfplumber=={expected}.'
+          )
+          print(f'pdfplumber version ok: {actual}')
+          PY
+
+      - name: Run backend unit and gate-lock tests (parallel)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          NUMBA_DISABLE_COVERAGE: '1'
+        run: |
+          python -m pytest backend/tests/ -n 1 -q --timeout=30 -p no:cacheprovider
+
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/locks/ci-py312.txt
+
+      - name: Install dependencies for audit
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools==81.0.0
+          pip install --require-hashes -r backend/locks/core-py312.txt
+          pip install --require-hashes -r backend/locks/ci-py312.txt
+
+      - name: Run pip-audit (Python dependency scan)
+        run: |
+          pip-audit --strict --desc \
+            --ignore-vuln PYSEC-2026-161 \
+            --ignore-vuln PYSEC-2026-248 \
+            --ignore-vuln PYSEC-2026-249 \
+            --ignore-vuln PYSEC-2026-1845 \
+            --ignore-vuln PYSEC-2026-1942 \
+            --ignore-vuln PYSEC-2026-2280 \
+            --ignore-vuln PYSEC-2026-2281 \
+            --ignore-vuln PYSEC-2026-3447
+
+  deno-edge-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb # v2.0.3
+        with:
+          deno-version: v2.x
+
+      - name: Run Deno edge-function tests
+        run: |
+          deno test --no-check --allow-env supabase/functions/trigger-job/index.test.ts
+          deno test --no-check --allow-env supabase/functions/trigger-job/handlers/daily_enrichment.test.ts
+
+      - name: Typecheck knowledge-graph-model edge function
+        run: |
+          deno check supabase/functions/knowledge-graph-model/index.ts
+          deno check supabase/functions/knowledge-graph-model/snapshot-storage.test.ts
+
+  ravafcast-conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/locks/ci-py312.txt
+
+      - name: Run RAvaFcast conformance checks
+        run: bash scripts/check_ravafcast_conformance.sh
+
+      - name: Install locked dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r backend/locks/core-py312.txt
+          pip install --require-hashes -r backend/locks/ci-py312.txt
+
+      - name: Run RAvaFcast contract and cadence tests
+        run: |
+          python -m unittest backend.tests.test_ravafcast_contracts backend.tests.test_ravafcast_runtime_gate backend.tests.test_forecast_cadence_slots backend.tests.test_forecast_persistence_four_slots backend.tests.test_forecast_publication_issue_slot backend.tests.test_Partner_cell_input_contract backend.tests.test_projected_grid_fail_closed backend.tests.test_ravafcast_six_hour_integration backend.tests.test_per_cell_weather_wiring backend.tests.test_grid_mode_selection backend.tests.test_ravafcast_e2e_integration -q
+          python -m unittest backend.tests.test_ravafcast_entrypoint_guard backend.tests.test_ravafcast_write_policy backend.tests.test_daily_inference_runtime_gate -q
+
+  upload-pack-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'

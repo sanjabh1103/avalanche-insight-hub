@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Avalanche Insight Hub">
+  <rect width="64" height="64" rx="14" fill="#082f49"/>
+  <path d="M10 48 27 16l8 15 5-8 14 25H10Z" fill="#e0f2fe"/>
+  <path d="m27 16 8 15-5 3-5-8-7 14h-8l17-24Z" fill="#38bdf8"/>
+  <path d="M16 48h38L40 23l-6 10 6 15H16Z" fill="#f8fafc"/>
+  <path d="M22 44h22l-7-12-5 7-4-5-6 10Z" fill="#0f766e"/>
+</svg>

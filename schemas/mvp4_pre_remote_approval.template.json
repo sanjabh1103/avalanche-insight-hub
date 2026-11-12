@@ -1,0 +1,26 @@
+{
+  "schema_version": "mvp4_pre_remote_approval_v1",
+  "decision": "PENDING",
+  "scope_manifest_path": ".phase-loop/approved-mvp4-scope.json",
+  "scope_manifest_sha256": null,
+  "snapshot_manifest_path": "backend/data/open_source_labels/approved_exact_time_snapshot/snapshot_manifest.json",
+  "snapshot_manifest_sha256": null,
+  "approved_candidate_selection_hash": null,
+  "selected_region_keys": [
+    "himalayas_nepal"
+  ],
+  "approved_by": [
+    {
+      "role": "scientist",
+      "name": null,
+      "approval_ref": null
+    },
+    {
+      "role": "customer",
+      "name": null,
+      "approval_ref": null
+    }
+  ],
+  "approved_at": null,
+  "notes": "Complete only after path-level scope, source rights, exact-time semantics, feature cutoff, labels, thresholds, and uncertainty decisions are approved."
+}

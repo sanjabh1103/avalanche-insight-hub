@@ -1,0 +1,5 @@
+-- Remote baseline placeholder.
+--
+-- This migration version is already recorded as applied in the linked
+-- Supabase project, but the SQL source was missing locally. Keep this file so
+-- `supabase db push` can compare local and remote migration history safely.

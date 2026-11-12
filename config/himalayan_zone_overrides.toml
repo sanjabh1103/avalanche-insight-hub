@@ -1,0 +1,45 @@
+# Zone-specific COSIPY/SNOWPACK parameter overrides for NW Himalayan regions.
+#
+# Values are sourced from:
+#   - COSIPY v1.3 (Copernicus GMD 2020) Col de Porte calibration (maritime default)
+#   - Finsterwalder et al. (Nature 2022) High Mountain Asia calibration
+#   - Interpolated values for transition/continental zones
+#
+# When a region has a zone_type matching a section below, these values
+# override the base constants in constants.toml for snowpack physics.
+
+[pir_panjal]
+albedo_mod_snow_aging = 22
+albedo_mod_snow_depth = 3
+initial_top_density_snowpack = 300.0
+initial_bottom_density_snowpack = 600.0
+temperature_bottom = 270.16
+t_star_dry = 30
+t_star_wet = 10
+
+[shamshabari]
+albedo_mod_snow_aging = 14
+albedo_mod_snow_depth = 5
+initial_top_density_snowpack = 280.0
+initial_bottom_density_snowpack = 700.0
+temperature_bottom = 260.0
+t_star_dry = 35
+t_star_wet = 10
+
+[great_himalaya]
+albedo_mod_snow_aging = 8
+albedo_mod_snow_depth = 7
+initial_top_density_snowpack = 250.0
+initial_bottom_density_snowpack = 750.0
+temperature_bottom = 255.0
+t_star_dry = 40
+t_star_wet = 10
+
+[karakoram_ladakh]
+albedo_mod_snow_aging = 6
+albedo_mod_snow_depth = 8
+initial_top_density_snowpack = 220.0
+initial_bottom_density_snowpack = 800.0
+temperature_bottom = 248.35
+t_star_dry = 50
+t_star_wet = 10

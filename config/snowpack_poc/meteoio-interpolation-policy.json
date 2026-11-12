@@ -1,0 +1,45 @@
+{
+  "schema_version": "meteoio_interpolation_policy_v1",
+  "policy_status": "provisional_operator_profile_numeric_customer_approval_pending",
+  "customer_requested_method": "interpolation",
+  "active_candidate_mode": "strict_upstream_input_qa",
+  "interpolation_enabled_for_current_run": false,
+  "reason_current_run_is_not_interpolated": "The current full-season source is contiguous and has zero core missing values; strict validation preserves the observed source without unnecessary reconstruction.",
+  "recommended_profile_if_a_gap_occurs": {
+    "maximum_missing_duration_seconds": 3600,
+    "maximum_bounding_interval_seconds": 7200,
+    "no_edge_extrapolation": true,
+    "scalar_linear_fields": ["TA", "RH", "VW", "ISWR", "ILWR"],
+    "direction_nearest_fields": ["DW"],
+    "never_interpolate_independently": ["PSUM", "PSUM_PH", "HS"],
+    "precipitation_treatment": "preserve source precipitation and apply explicit PSUM accumulation/resampling; do not linearly invent precipitation",
+    "phase_treatment": "derive PSUM_PH only after the temperature and precipitation contract is satisfied",
+    "snow_depth_treatment": "source QA only; do not fill or assimilate as HS"
+  },
+  "failure_threshold": {
+    "abort_before_native_run_when": [
+      "any unresolved core field gap remains",
+      "any leading or trailing gap would require extrapolation",
+      "any internal gap exceeds the provisional one-hour missing-duration profile",
+      "any precipitation, phase, or snow-depth value would be invented or filled",
+      "field-level fill counts cannot be reproduced from the input-quality report"
+    ],
+    "customer_numeric_approval_required_before": "enabling interpolation in a future run or changing the provisional profile"
+  },
+  "required_reporting": {
+    "counts": "per-field interpolated values, per-field unresolved values, total fills, and maximum observed gap",
+    "evidence": "source timeline, corrected timeline, policy version, algorithm, gap locations, and resulting manifest hash",
+    "current_run_observed": {
+      "core_missing_values": 0,
+      "interpolated_values": 0,
+      "generator_events": 0,
+      "unresolved_core_gaps": 0
+    }
+  },
+  "may_change_later": true,
+  "references": {
+    "meteoio_resampling": "https://meteoio.slf.ch/doc-release/html/resampling.html",
+    "meteoio_build_io": "https://meteoio.slf.ch/doc-dev/html/build_io.html",
+    "snowpack_requirements": "https://snowpack.slf.ch/doc-release/html/requirements.html"
+  }
+}

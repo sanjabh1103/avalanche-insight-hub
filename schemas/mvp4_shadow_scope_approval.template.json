@@ -1,0 +1,75 @@
+{
+  "schema_version": "mvp4_shadow_scope_approval_v1",
+  "decision": "PENDING",
+  "scope_name": "nepal_interval_shadow_evidence",
+  "selected_region_keys": [
+    "himalayas_nepal"
+  ],
+  "label_sources": [
+    {
+      "source_key": "hiaval_hma",
+      "precision": "day",
+      "role": "shadow",
+      "training_eligible": false,
+      "production_scoring_eligible": false
+    },
+    {
+      "source_key": "everest_sentinel1",
+      "precision": "interval",
+      "role": "shadow",
+      "training_eligible": false,
+      "production_scoring_eligible": false
+    }
+  ],
+  "feature_sources": [
+    {
+      "source_key": "era5",
+      "role": "station_free_shadow_forcing",
+      "station_file_required": false
+    }
+  ],
+  "policy": {
+    "shadow_only": true,
+    "model_fit_allowed": false,
+    "training_eligible": false,
+    "production_scoring_eligible": false,
+    "remote_pilot_allowed": false,
+    "point_time_synthesis_forbidden": true,
+    "core_exact_time_gate_unchanged": true,
+    "feature_cutoff_rule": "feature_cutoff_at<=interval_start",
+    "interval_semantics": "[start,end)"
+  },
+  "approval_decisions": {
+    "station_free_interpretation": "PENDING",
+    "historical_feature_cutoff": "PENDING",
+    "interval_label_semantics": "PENDING",
+    "negative_sampling": "PENDING",
+    "customer_claims": "PENDING",
+    "source_rights_and_api_scope": "PENDING"
+  },
+  "snapshot_bindings": [
+    {
+      "path": "backend/data/open_source_labels/mvp4_interval_nepal_pilot_era5_20260803/shadow/join_report.json",
+      "sha256": null
+    },
+    {
+      "path": "backend/data/open_source_labels/mvp4_interval_nepal_pilot_era5_20260803/shadow/interval_training_preparation_manifest.json",
+      "sha256": null
+    }
+  ],
+  "approved_by": [
+    {
+      "role": "scientist",
+      "name": null,
+      "approval_ref": null
+    },
+    {
+      "role": "customer",
+      "name": null,
+      "approval_ref": null
+    }
+  ],
+  "approved_at": null,
+  "scope_change_reference": null,
+  "notes": "This contract can authorize shadow evidence only. It never authorizes exact-time core training, model fitting, production scoring, remote pilots, or timestamp synthesis. Complete only after the corresponding customer/scientist decisions, including source rights and API/use scope, are documented."
+}

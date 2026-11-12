@@ -1,0 +1,1018 @@
+name: Avalanche ML Pipeline — Manual Jobs
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Manual pipeline mode'
+        required: true
+        default: 'backfill'
+        type: choice
+        options:
+          - backfill
+          - sar_backfill
+          - weather_check
+          - snowpack_physics
+          - snowpack_native
+          - snowpack_release
+          - snowpack_poc_release
+          - ingest_edmrg
+          - ingest_aavds
+          - ingest_sensor
+          - gibs
+          - six_hour_reference
+      backfill_start_date:
+        description: 'Historical SAR backfill start (YYYY-MM-DD). Used only for mode=sar_backfill.'
+        required: false
+        default: '2023-11-01'
+      backfill_end_date:
+        description: 'Historical SAR backfill end (YYYY-MM-DD). Used only for mode=sar_backfill.'
+        required: false
+        default: '2024-04-30'
+      samples_per_region:
+        description: 'Training samples per region'
+        required: false
+        default: '500'
+      forecast_hours:
+        description: 'Forecast horizon hours'
+        required: false
+        default: '72'
+      pss_floor:
+        description: 'PSS artifact gate floor (train + backfill). Defaults to 0.45; override to 0.0 for cold-start warmup.'
+        required: false
+        default: '0.45'
+      forecast_mode:
+        description: 'Forecast training mode: full (default), cold_start (3-winter data-efficient with zone-calibrated synthetic augmentation)'
+        required: false
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - cold_start
+      region_keys:
+        description: 'Comma-separated region keys for GIBS/sensor ingest.'
+        required: false
+        default: 'himalayas_nepal,pir_panjal_nw_himalaya,shamshabari_nw_himalaya,great_himalaya_nw_himalaya,karakoram_&_ladakh'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  backfill:
+    # Manual backfill is still a model-training path. Keep it behind the same
+    # explicit release flag as scheduled training so a reviewed snapshot
+    # cannot be accidentally consumed before the owner enables MVP4 training.
+    if: vars.MVP4_TRAINING_ENABLED == 'true' && github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'backfill'
+    concurrency:
+      group: av-ml-heavy
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OPEN_SOURCE_LABEL_SNAPSHOT: backend/data/open_source_labels/hiaval_hma_rebuilt_20260803/events.jsonl
+      OPEN_SOURCE_LABEL_SOURCE_KEY: hiaval_hma
+      OPEN_SOURCE_LABEL_ROLE: shadow_training
+      OPEN_SOURCE_LABEL_LICENSE_REVIEW_ID: mvp4-hiaval-cc-by4-review-20260801
+      SNAPSHOT_MANIFEST: backend/data/open_source_labels/hiaval_hma_rebuilt_20260803/snapshot_manifest.json
+      # Empty by default: manual backfill cannot bypass the pre-remote gate.
+      PRE_REMOTE_SCOPE_MANIFEST: ${{ vars.MVP4_PRE_REMOTE_SCOPE_MANIFEST || '' }}
+      PRE_REMOTE_APPROVAL_MANIFEST: ${{ vars.MVP4_PRE_REMOTE_APPROVAL_MANIFEST || '' }}
+      SOURCE_REQUEST_MANIFEST: ${{ vars.MVP4_SOURCE_REQUEST_MANIFEST || '' }}
+      SOURCE_REQUEST_PAYLOAD: ${{ vars.MVP4_SOURCE_REQUEST_PAYLOAD || '' }}
+      SOURCE_REQUEST_EVENTS_JSONL: ${{ vars.MVP4_SOURCE_REQUEST_EVENTS || '' }}
+      SHADOW_BUNDLE_DIR: ${{ vars.MVP4_SHADOW_BUNDLE_DIR || '' }}
+      SHADOW_ATTESTATION: ${{ vars.MVP4_SHADOW_ATTESTATION || '' }}
+      TRAINING_REGION_KEYS: ${{ github.event.inputs.region_keys || '' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/locks/core-py312.txt
+
+      - name: Metadata-only training preflight
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          test -s "${SNAPSHOT_MANIFEST}"
+          python -m backend.scripts.audit_training_dataset \
+            --artifact-root backend/artifacts \
+            --snapshot-manifest "${SNAPSHOT_MANIFEST}" \
+            --region-keys "${TRAINING_REGION_KEYS}" \
+            --output "${RUNNER_TEMP}/training-preflight.json" \
+            --strict
+
+      - name: Fail-closed pre-remote MVP4 gate
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          mkdir -p backend/artifacts
+          python scripts/verify_mvp4_pre_remote_gate.py \
+            --scope-manifest "${PRE_REMOTE_SCOPE_MANIFEST}" \
+            --approval-manifest "${PRE_REMOTE_APPROVAL_MANIFEST}" \
+            --snapshot-manifest "${SNAPSHOT_MANIFEST}" \
+            --artifact-root backend/artifacts \
+            --source-request-manifest "${SOURCE_REQUEST_MANIFEST}" \
+            --source-request-payload "${SOURCE_REQUEST_PAYLOAD}" \
+            --source-request-events-jsonl "${SOURCE_REQUEST_EVENTS_JSONL}" \
+            --region-keys "${TRAINING_REGION_KEYS}" \
+            --shadow-bundle-dir "${SHADOW_BUNDLE_DIR}" \
+            --attestation "${SHADOW_ATTESTATION}"
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Run backfill training
+        env:
+          ARTIFACT_ROOT: backend/artifacts
+          SAMPLES_PER_REGION: ${{ github.event.inputs.samples_per_region || '500' }}
+          ML_SEED: '42'
+          PSS_FLOOR: ${{ github.event.inputs.pss_floor || '0.45' }}
+          FORECAST_MODE: ${{ github.event.inputs.forecast_mode || 'full' }}
+          TRAINING_SNOWPACK_PROXY_MODE: regional_day
+          OPEN_METEO_RETRIES: '2'
+          ALLOW_DRIFT_SKIP: 'false'
+          ALLOW_SYNTHETIC_BOOTSTRAP: 'false'
+          TRAINING_PREFLIGHT_STRICT: 'true'
+          TRAINING_RESEARCH_OVERRIDE: 'false'
+          PYTHONPATH: ${{ github.workspace }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m backend.train_model
+
+      - name: Run backfill inference
+        env:
+          ARTIFACT_ROOT: backend/artifacts
+          FORECAST_HOURS: ${{ github.event.inputs.forecast_hours || '72' }}
+          GRID_SIZE: '20'
+          RUN_PHYSICS_RUNOUT: ${{ github.event.inputs.run_physics_runout || 'false' }}
+          PYTHONPATH: ${{ github.workspace }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python -m backend.daily_inference
+
+      - name: Upload backfill artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: avalanche-backfill-artifacts
+          path: backend/artifacts
+
+
+  sar_backfill:
+    # One-shot historical Sentinel-1 SAR backfill with LOCAL topo extraction.
+    # Dispatch-only (no schedule). Detects SAR centroids via GEE, then opens
+    # local Git LFS DEMs with rasterio to compute elevation/slope/aspect
+    # (Horn 3x3) and applies the 25-65 deg physics gate before batch insert.
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'sar_backfill')
+    concurrency:
+      group: av-ml-heavy
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+          lfs: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/locks/core-py312.txt
+
+      - name: Install system deps for rasterio
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gdal-bin libgdal-dev
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Verify DEM bundle
+        run: |
+          ls -la backend/data/dem/
+          python -c "import rasterio; ds=rasterio.open('backend/data/dem/colorado_rockies.tif'); print('DEM shape', ds.shape, 'bounds', ds.bounds)"
+
+      - name: Run historical SAR backfill (local topo)
+        env:
+          GEE_SERVICE_ACCOUNT_JSON: ${{ secrets.GEE_SERVICE_ACCOUNT_JSON }}
+          GEE_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GEE_SERVICE_ACCOUNT_EMAIL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BACKFILL_START_DATE: ${{ github.event.inputs.backfill_start_date }}
+          BACKFILL_END_DATE: ${{ github.event.inputs.backfill_end_date }}
+          BACKFILL_CHUNK_DAYS: '7'
+          PHYSICS_SLOPE_MIN_DEG: '25'
+          PHYSICS_SLOPE_MAX_DEG: '65'
+        run: python -m backend.historical_sar_backfill
+
+
+  weather_check:
+    # Weather delta check — triggers inference if significant weather change
+    # detected. Runs 3×/day at 00:23, 12:23, 18:23 UTC (skips 06:23 since
+    # regular inference runs at 06:17). Compares latest Open-Meteo forecast
+    # against last published forecast. If thresholds exceeded, runs full
+    # inference within the same job (no PAT needed).
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'weather_check'
+    concurrency:
+      group: av-ml-weather
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      trigger: ${{ steps.check.outputs.trigger }}
+      regions: ${{ steps.check.outputs.regions }}
+      reasons: ${{ steps.check.outputs.reasons }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+          lfs: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/locks/core-py312.txt
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Validate required secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY}" ]; then
+            echo "::error::SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured as GitHub secrets"
+            exit 1
+          fi
+
+      - name: Run weather delta check
+        id: check
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PYTHONPATH: ${{ github.workspace }}
+          WEATHER_DELTA_SNOWFALL_CM: '15'
+          WEATHER_DELTA_WIND_KMH: '25'
+          WEATHER_DELTA_TEMP_C: '8'
+          WEATHER_DELTA_RAIN_MM: '5'
+          WEATHER_DELTA_HOURS: '6'
+        run: python -m backend.weather_delta_check
+
+      - name: Download training artifacts (optional recovery)
+        # G-17: Allowlisted continue-on-error — this is an optional artifact download.
+        # If it fails, the next step restores a vetted recovery model from Supabase storage.
+        # Machine-checkable: step ID is registered in the allowlist in backend/tests/test_ci_suppression_allowlist.py
+        id: download_train_artifacts_2
+        if: steps.check.outputs.trigger == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: avalanche-train-artifacts
+          path: backend/artifacts
+        continue-on-error: true
+
+      - name: Restore vetted recovery model artifact
+        if: steps.check.outputs.trigger == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MODEL_RECOVERY_VERSION: ${{ vars.MODEL_RECOVERY_VERSION || '20260427T095428Z' }}
+        run: |
+          set -euo pipefail
+          recovery_dir="backend/artifacts/${MODEL_RECOVERY_VERSION}"
+          if [ -f "${recovery_dir}/model.joblib" ]; then
+            echo "Existing model.joblib found; skipping recovery artifact restore."
+            exit 0
+          fi
+          # Try infer-cache first (uploaded by previous infer runs)
+          infer_cache_dir="backend/artifacts/infer-cache"
+          mkdir -p "${infer_cache_dir}"
+          for artifact_file in model.joblib training_metrics.json feature_schema.json; do
+            object_url="${SUPABASE_URL%/}/storage/v1/object/model-artifacts/infer-cache/${MODEL_RECOVERY_VERSION}/${artifact_file}"
+            if curl --fail --silent --show-error --location \
+              -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+              "${object_url}" \
+              --output "${infer_cache_dir}/${artifact_file}"; then
+              echo "Restored ${artifact_file} from infer-cache."
+            else
+              rm -f "${infer_cache_dir}/${artifact_file}"
+            fi
+          done
+          if [ -f "${infer_cache_dir}/model.joblib" ]; then
+            echo "Model restored from infer-cache; skipping recovery bucket."
+            mkdir -p "${recovery_dir}"
+            for artifact_file in model.joblib training_metrics.json feature_schema.json; do
+              if [ -f "${infer_cache_dir}/${artifact_file}" ]; then
+                cp "${infer_cache_dir}/${artifact_file}" "${recovery_dir}/${artifact_file}"
+              fi
+            done
+            echo "Moved infer-cache model to exact ${recovery_dir}"
+            exit 0
+          fi
+          # Fall back to vetted recovery model
+          mkdir -p "${recovery_dir}"
+          restored=false
+          for artifact_file in model.joblib training_metrics.json feature_schema.json; do
+            object_url="${SUPABASE_URL%/}/storage/v1/object/model-artifacts/recovery/${MODEL_RECOVERY_VERSION}/${artifact_file}"
+            if curl --fail --silent --show-error --location \
+              -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+              "${object_url}" \
+              --output "${recovery_dir}/${artifact_file}"; then
+              restored=true
+              echo "Restored ${artifact_file} from private model-artifacts bucket."
+            else
+              rm -f "${recovery_dir}/${artifact_file}"
+              echo "::warning::Could not restore ${artifact_file} from private model-artifacts bucket."
+            fi
+          done
+          if [ "${restored}" = "true" ] && [ -f "${recovery_dir}/model.joblib" ]; then
+            echo "Vetted recovery model artifact restored."
+          fi
+
+      - name: Assert model artifact is available
+        if: steps.check.outputs.trigger == 'true'
+        env:
+          MODEL_RECOVERY_VERSION: ${{ vars.MODEL_RECOVERY_VERSION || '20260427T095428Z' }}
+        run: |
+          set -euo pipefail
+          if [ -f "backend/artifacts/${MODEL_RECOVERY_VERSION}/model.joblib" ]; then
+            echo "Existing model.joblib found; proceeding with inference."
+            exit 0
+          fi
+          echo "::error::No model.joblib available for weather-triggered inference."
+          echo "::error::Run the train job first (mode=train) to produce a model artifact."
+          exit 1
+
+      - name: Run triggered inference
+        if: steps.check.outputs.trigger == 'true'
+        env:
+          ARTIFACT_ROOT: backend/artifacts
+          FORECAST_HOURS: '72'
+          REGION_KEYS: ${{ steps.check.outputs.regions }}
+          GRID_SIZE: '20'
+          SNOWPACK_PROXY_MODE: 'regional'
+          RUN_PHYSICS_RUNOUT: 'false'
+          PYTHONPATH: ${{ github.workspace }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VERIFICATION_SPINE_ENABLED: 'true'
+          GIBS_ENABLED: 'true'
+          S2_SNOW_ENABLED: 'true'
+          S1_DEPTH_ENABLED: 'true'
+          SNOW_DEPTH_FUSION_ENABLED: 'true'
+          VAE_ANOMALY_ENABLED: 'true'
+          ACTIVE_LEARNING_ENABLED: 'true'
+          GEE_SERVICE_ACCOUNT_JSON: ${{ secrets.GEE_SERVICE_ACCOUNT_JSON }}
+          GEE_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GEE_SERVICE_ACCOUNT_EMAIL }}
+        run: |
+          set -euo pipefail
+          region_args=()
+          IFS=',' read -ra requested_regions <<< "${REGION_KEYS}"
+          for region_key in "${requested_regions[@]}"; do
+            region_key="$(echo "${region_key}" | xargs)"
+            if [ -n "${region_key}" ]; then
+              region_args+=(--region-key "${region_key}")
+            fi
+          done
+          python -m backend.daily_inference \
+            --forecast-hours "${FORECAST_HOURS}" \
+            --snowpack-proxy-mode "${SNOWPACK_PROXY_MODE}" \
+            --approximate-tree-shap \
+            --emit-stage-metrics \
+            "${region_args[@]}"
+
+      - name: Emit weather check summary
+        if: always()
+        run: |
+          echo "Weather check trigger: ${{ steps.check.outputs.trigger }}"
+          echo "Triggered regions: ${{ steps.check.outputs.regions }}"
+          echo "Trigger reasons: ${{ steps.check.outputs.reasons }}"
+          if [ -f backend/artifacts/*/inference_manifest.json ]; then
+            cat backend/artifacts/*/inference_manifest.json | tail -n 200
+          fi
+
+      - name: Upload weather-triggered inference artifacts
+        if: steps.check.outputs.trigger == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: weather-triggered-inference-artifacts
+          path: backend/artifacts
+
+
+  snowpack_physics:
+    # Run SNOWPACK C++ / COSIPY physics simulations for snowpack stratigraphy.
+    # Weekly schedule (Sunday 02:00 UTC) + manual dispatch. Uses Docker image with SNOWPACK pre-compiled.
+    # Falls back to COSIPY/heuristic proxy when SNOWPACK binary unavailable.
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'snowpack_physics'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: production
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r backend/locks/core-py312.txt
+          pip install --require-hashes -r backend/locks/snowpack-py312.txt
+          pip install --require-hashes -r backend/locks/ci-py312.txt
+
+      - name: Run integration tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m pytest backend/tests/test_snowpack_physics.py -v
+
+      # Phase 0.5: Separated CI jobs — configuration/dry-run runs on host.
+      # Toolchain preflight and native integration are separate jobs below.
+
+      - name: Validate SNOWPACK/AWSOME setup (on host — expected to report unavailable)
+        run: |
+          python -m backend.common.awsome_runner --validate
+          echo "NOTE: Host validation is expected to report toolchain_unavailable."
+          echo "Native execution requires the pinned Docker container (see snowpack_native job)."
+
+      - name: Validate canonical region config sync
+        run: |
+          python -c "from backend.common.config_validator import validate_awsome_regions_sync; r = validate_awsome_regions_sync(); assert r.valid, f'Config drift: {r.errors}'; print(f'OK: {len(r.region_keys)} regions in sync')"
+
+      - name: Validate Himalayan regime configuration
+        run: |
+          python -c "from backend.common.himalayan_regimes import validate_all_regimes; errors = validate_all_regimes(); assert not errors, f'Regime errors: {errors}'; print('OK: all Himalayan regimes valid')"
+
+      - name: Run snowpack physics for all regions (dry-run — NOT execution success)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          SNOWPACK_PHYSICS_ENABLED: '1'
+        run: |
+          set -euo pipefail
+          python -m backend.common.awsome_runner --all-regions --dry-run
+          echo "---"
+          echo "NOTE: This is a dry-run (status=configuration_validated). NOT execution success."
+          echo "Native execution: see snowpack_native job (requires pinned Docker container)."
+
+      - name: Upload snowpack physics results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: snowpack-physics-results
+          path: |
+            backend/artifacts/snowpack_*
+            *.json
+
+  # Phase 0.5: Toolchain preflight — builds Docker image with pinned revisions
+  # and verifies the snowpack binary inside the container.
+  snowpack_toolchain_preflight:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      (github.event.inputs.mode == 'snowpack_physics' ||
+       github.event.inputs.mode == 'snowpack_native' ||
+       github.event.inputs.mode == 'snowpack_release')
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Build SNOWPACK Docker image (pinned revisions)
+        # yamllint: disable rule:line-length
+        # Phase 0.5: pinned revisions required as build args.
+        # Operator must set METEOIO_COMMIT and SNOWPACK_COMMIT as GitHub Variables
+        # (repo Settings → Secrets and variables → Actions → Variables tab).
+        # If not supplied, the Dockerfile fails closed (no floating heads).
+        # The vars.* linter warnings are expected until the operator sets them.
+        run: |
+          set -euo pipefail
+          IMAGE_REF="avalanche-snowpack:${GITHUB_SHA}"
+          METEOIO_COMMIT="${{ vars.METEOIO_COMMIT }}"
+          SNOWPACK_COMMIT="${{ vars.SNOWPACK_COMMIT }}"
+          TOOLCHAIN_MANIFEST_ID="${{ vars.SNOWPACK_TOOLCHAIN_MANIFEST_ID }}"
+          UBUNTU_BASE_DIGEST="${{ vars.UBUNTU_BASE_DIGEST }}"
+          PYTHON_BASE_DIGEST="${{ vars.PYTHON_BASE_DIGEST }}"
+          if [[ ! "$METEOIO_COMMIT" =~ ^[0-9a-fA-F]{40}$ || ! "$SNOWPACK_COMMIT" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "ERROR: exact 40-character source commit variables are required"; exit 1
+          fi
+          if [[ ! "$UBUNTU_BASE_DIGEST" =~ ^sha256:[0-9a-fA-F]{64}$ || ! "$PYTHON_BASE_DIGEST" =~ ^sha256:[0-9a-fA-F]{64}$ ]]; then
+            echo "ERROR: immutable Ubuntu and Python base-image digests are required"; exit 1
+          fi
+          if [[ -z "$TOOLCHAIN_MANIFEST_ID" ]]; then
+            echo "ERROR: SNOWPACK_TOOLCHAIN_MANIFEST_ID is required"; exit 1
+          fi
+          docker build -f Dockerfile.snowpack \
+            --build-arg METEOIO_COMMIT="$METEOIO_COMMIT" \
+            --build-arg SNOWPACK_COMMIT="$SNOWPACK_COMMIT" \
+            --build-arg TOOLCHAIN_MANIFEST_ID="$TOOLCHAIN_MANIFEST_ID" \
+            --build-arg UBUNTU_BASE_DIGEST="$UBUNTU_BASE_DIGEST" \
+            --build-arg PYTHON_BASE_DIGEST="$PYTHON_BASE_DIGEST" \
+            -t "$IMAGE_REF" .
+          docker image inspect "$IMAGE_REF" --format '{{.Id}}' > snowpack-image-id.txt
+          printf '%s\n' "$IMAGE_REF" > snowpack-image-ref.txt
+          docker save "$IMAGE_REF" -o snowpack-image.tar
+          sha256sum snowpack-image.tar > snowpack-image.tar.sha256
+          echo "Docker image built and captured: $IMAGE_REF"
+
+      - name: Verify SNOWPACK binary inside container
+        env:
+          IMAGE_REF: avalanche-snowpack:${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # Phase 0.5: verify the binary actually runs inside the container.
+          # This is the toolchain preflight — it proves the binary exists and runs.
+          docker run --rm "$IMAGE_REF" sh -c "snowpack --version && echo 'SNOWPACK binary verified in container' || (echo 'ERROR: snowpack --version failed in container' && exit 1)"
+
+      - name: "G14: Verify runtime toolchain manifest"
+        # C0.18: Verify the final runtime image, not intermediate /build paths.
+        run: |
+          set -euo pipefail
+          EXPECTED_METEOIO="${{ vars.METEOIO_COMMIT }}"
+          EXPECTED_SNOWPACK="${{ vars.SNOWPACK_COMMIT }}"
+          if [[ ! "$EXPECTED_METEOIO" =~ ^[0-9a-fA-F]{40}$ || ! "$EXPECTED_SNOWPACK" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "ERROR: exact 40-character METEOIO_COMMIT and SNOWPACK_COMMIT variables are required"
+            exit 1
+          fi
+          IMAGE_REF="avalanche-snowpack:${GITHUB_SHA}"
+          docker run --rm "$IMAGE_REF" sh -c 'test -s /opt/snowpack/toolchain-manifest.json'
+          docker run --rm \
+            -e EXPECTED_METEOIO="$EXPECTED_METEOIO" \
+            -e EXPECTED_SNOWPACK="$EXPECTED_SNOWPACK" \
+            "$IMAGE_REF" python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          manifest = json.loads(Path('/opt/snowpack/toolchain-manifest.json').read_text())
+          binary = Path(manifest['binary_path'])
+          actual_hash = hashlib.sha256(binary.read_bytes()).hexdigest()
+          assert manifest['meteoio_commit'] == os.environ['EXPECTED_METEOIO'], manifest
+          assert manifest['snowpack_commit'] == os.environ['EXPECTED_SNOWPACK'], manifest
+          assert manifest['binary_sha256'] == actual_hash, manifest
+          assert manifest['binary_version'], manifest
+          print('OK: runtime toolchain manifest, commits, binary hash, and version verified')
+          PY
+
+      - name: Upload toolchain preflight results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: snowpack-toolchain-preflight
+          path: |
+            snowpack-image.tar
+            snowpack-image.tar.sha256
+            snowpack-image-id.txt
+            snowpack-image-ref.txt
+            *.json
+
+  # Phase 0.5: Native integration — runs inside the pinned container.
+  # This job is BLOCKED until the operator supplies verified commit hashes
+  # and the toolchain preflight passes.
+  # G1: snowpack_poc_release mode derives region, band, and horizon from the
+  # Pir Panjal POC decision record instead of hardcoding himalayas_nepal/lower.
+  snowpack_native:
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.mode == 'snowpack_native' || github.event.inputs.mode == 'snowpack_release' || github.event.inputs.mode == 'snowpack_poc_release')
+    needs: snowpack_toolchain_preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: production
+    # G13: Concurrency protection — prevent parallel snowpack release runs
+    concurrency:
+      group: snowpack-release-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Load immutable preflight Docker image
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: snowpack-toolchain-preflight
+          path: snowpack-toolchain-preflight
+
+      - name: Verify and load exact preflight image
+        run: |
+          set -euo pipefail
+          cd snowpack-toolchain-preflight
+          sha256sum --check snowpack-image.tar.sha256
+          docker load --input snowpack-image.tar
+          IMAGE_REF="$(cat snowpack-image-ref.txt)"
+          ACTUAL_ID="$(docker image inspect "$IMAGE_REF" --format '{{.Id}}')"
+          EXPECTED_ID="$(cat snowpack-image-id.txt)"
+          IMAGE_ARCHIVE_SHA256="$(awk '{print $1}' snowpack-image.tar.sha256)"
+          test "$ACTUAL_ID" = "$EXPECTED_ID"
+          printf '%s' "$IMAGE_ARCHIVE_SHA256" | grep -Eq '^[0-9a-fA-F]{64}$'
+          echo "SNOWPACK_IMAGE_REF=$IMAGE_REF" >> "$GITHUB_ENV"
+          echo "SNOWPACK_IMAGE_ID=$ACTUAL_ID" >> "$GITHUB_ENV"
+          echo "SNOWPACK_IMAGE_ARCHIVE_SHA256=$IMAGE_ARCHIVE_SHA256" >> "$GITHUB_ENV"
+          echo "OK: native job loaded exact preflight image ID $ACTUAL_ID and archive $IMAGE_ARCHIVE_SHA256"
+
+      - name: Resolve approved native manifests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          SNOWPACK_FORCING_MANIFEST_ID: ${{ vars.SNOWPACK_FORCING_MANIFEST_ID }}
+          SNOWPACK_GEOMETRY_MANIFEST_ID: ${{ vars.SNOWPACK_GEOMETRY_MANIFEST_ID }}
+          SNOWPACK_TOOLCHAIN_MANIFEST_ID: ${{ vars.SNOWPACK_TOOLCHAIN_MANIFEST_ID }}
+          POC_MODE: ${{ github.event.inputs.mode }}
+        run: |
+          set -euo pipefail
+          # G6: In POC mode, derive region/band from the decision record
+          # instead of hardcoding himalayas_nepal/lower.
+          if [ "$POC_MODE" = "snowpack_poc_release" ]; then
+            # P1-7/P1-8: Use the shared CLI helper that verifies the external
+            # SHA-256 BEFORE parsing. No inline json.loads in the workflow.
+            test -n "$PIR_PANJAL_DECISION_RECORD_SHA256"
+            printf '%s' "$PIR_PANJAL_DECISION_RECORD_SHA256" | grep -Eq '^[0-9a-fA-F]{64}$'
+            python3 -m backend.scripts.derive_poc_scope \
+              --decision-record-path docs/MVP4/00_governance/PIR_PANJAL_POC_DECISION_RECORD.json \
+              --expected-sha256 "$PIR_PANJAL_DECISION_RECORD_SHA256" \
+              --emit github-env
+            RESOLVE_REGION="$POC_REGION"
+            RESOLVE_BAND="$POC_ELEVATION_BAND"
+          else
+            RESOLVE_REGION="himalayas_nepal"
+            RESOLVE_BAND="lower"
+          fi
+          python3 - "$RESOLVE_REGION" "$RESOLVE_BAND" <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+          from backend.common.snowpack_manifest_registry import validate_release_manifest_ids
+          errors = validate_release_manifest_ids(
+              forcing_id=os.environ.get('SNOWPACK_FORCING_MANIFEST_ID', ''),
+              geometry_id=os.environ.get('SNOWPACK_GEOMETRY_MANIFEST_ID', ''),
+              toolchain_id=os.environ.get('SNOWPACK_TOOLCHAIN_MANIFEST_ID', ''),
+              registry_path=Path('config/snowpack_manifest_registry.json'),
+              region_key=sys.argv[1],
+              elevation_band=sys.argv[2],
+          )
+          if errors:
+              for error in errors:
+                  print(f'ERROR: {error}', file=sys.stderr)
+              raise SystemExit(1)
+          print(f'OK: forcing, geometry, and toolchain IDs resolve to approved hash-verified manifests for {sys.argv[1]}/{sys.argv[2]}')
+          PY
+
+      - name: Verify runtime toolchain manifest before native execution
+        run: |
+          set -euo pipefail
+          docker run --rm "$SNOWPACK_IMAGE_REF" sh -c 'test -s /opt/snowpack/toolchain-manifest.json && snowpack --version'
+
+      - name: Run native SNOWPACK inside pinned container
+        env:
+          PYTHONPATH: /app/workspace
+          POC_MODE: ${{ github.event.inputs.mode }}
+          PIR_PANJAL_DECISION_RECORD_SHA256: ${{ vars.PIR_PANJAL_DECISION_RECORD_SHA256 }}
+          EXPECTED_REGISTRY_SHA256: ${{ vars.SNOWPACK_REGISTRY_SHA256 }}
+        run: |
+          set -euo pipefail
+          # C0-S2: Use the dedicated release orchestrator, not the runner directly.
+          # C0-S4: Generate explicit run ID from GitHub run identity.
+          # G1: snowpack_poc_release mode derives region, band, and horizon from
+          # the Pir Panjal POC decision record instead of hardcoding
+          # himalayas_nepal/lower. The decision record SHA-256 must be supplied
+          # as a protected repository variable.
+          # G1: --expected-registry-sha256 is now passed to the producer so the
+          # bundle's registry snapshot is validated at production time, not just
+          # at the consumer gate.
+          test -n "$EXPECTED_REGISTRY_SHA256"
+          printf '%s' "$EXPECTED_REGISTRY_SHA256" | grep -Eq '^[0-9a-fA-F]{64}$'
+          DECISION_RECORD_PATH="docs/MVP4/00_governance/PIR_PANJAL_POC_DECISION_RECORD.json"
+          DECISION_RECORD_ARGS=""
+          if [ "$POC_MODE" = "snowpack_poc_release" ]; then
+            # P1-7/P1-8: Use the shared CLI helper that verifies the external
+            # SHA-256 BEFORE parsing. No inline json.loads in the workflow.
+            test -n "$PIR_PANJAL_DECISION_RECORD_SHA256"
+            printf '%s' "$PIR_PANJAL_DECISION_RECORD_SHA256" | grep -Eq '^[0-9a-fA-F]{64}$'
+            python3 -m backend.scripts.derive_poc_scope \
+              --decision-record-path "$DECISION_RECORD_PATH" \
+              --expected-sha256 "$PIR_PANJAL_DECISION_RECORD_SHA256" \
+              --emit github-env
+            REGION="$POC_REGION"
+            ELEVATION_BAND="$POC_ELEVATION_BAND"
+            RUN_ID="snowpack-${{ github.run_id }}-${{ github.run_attempt }}-${REGION}-${ELEVATION_BAND}"
+            DECISION_RECORD_ARGS="--decision-record-path $DECISION_RECORD_PATH --poc-mode"
+            if [ -n "$PIR_PANJAL_DECISION_RECORD_SHA256" ]; then
+              DECISION_RECORD_ARGS="$DECISION_RECORD_ARGS --expected-decision-record-sha256 $PIR_PANJAL_DECISION_RECORD_SHA256"
+            else
+              echo "ERROR: snowpack_poc_release requires vars.PIR_PANJAL_DECISION_RECORD_SHA256"
+              exit 1
+            fi
+          else
+            REGION="himalayas_nepal"
+            ELEVATION_BAND="lower"
+            RUN_ID="snowpack-${{ github.run_id }}-${{ github.run_attempt }}-${REGION}-${ELEVATION_BAND}"
+          fi
+          INITIAL_STATE_MANIFEST="${{ vars.SNOWPACK_INITIAL_STATE_MANIFEST_PATH }}"
+          FORECAST_SEMANTICS_MANIFEST="${{ vars.SNOWPACK_FORECAST_SEMANTICS_MANIFEST_PATH }}"
+          # C2-prep: native release cannot proceed without explicit state and
+          # forecast-window contracts. These paths are operator-supplied inputs.
+          test -n "$INITIAL_STATE_MANIFEST"
+          test -n "$FORECAST_SEMANTICS_MANIFEST"
+          test -f "$INITIAL_STATE_MANIFEST"
+          test -f "$FORECAST_SEMANTICS_MANIFEST"
+          docker run --rm \
+            -e SNOWPACK_IMAGE_ID="$SNOWPACK_IMAGE_ID" \
+            -e SNOWPACK_IMAGE_ARCHIVE_SHA256="$SNOWPACK_IMAGE_ARCHIVE_SHA256" \
+            -v "$PWD:/app/workspace" -w /app/workspace "$SNOWPACK_IMAGE_REF" \
+            python3 -m backend.scripts.run_snowpack_release \
+              --region "$REGION" \
+              --elevation-band "$ELEVATION_BAND" \
+              --run-id "$RUN_ID" \
+              --engine snowpack_direct \
+              --toolchain-id "${{ vars.SNOWPACK_TOOLCHAIN_MANIFEST_ID }}" \
+              --forcing-id "${{ vars.SNOWPACK_FORCING_MANIFEST_ID }}" \
+              --geometry-id "${{ vars.SNOWPACK_GEOMETRY_MANIFEST_ID }}" \
+              --initial-state-manifest "$INITIAL_STATE_MANIFEST" \
+              --forecast-semantics-manifest "$FORECAST_SEMANTICS_MANIFEST" \
+              --manifest-registry config/snowpack_manifest_registry.json \
+              --expected-registry-sha256 "$EXPECTED_REGISTRY_SHA256" \
+              --output-bundle backend/artifacts/snowpack/bundle \
+              $DECISION_RECORD_ARGS
+
+      - name: Upload native execution results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: snowpack-native-results
+          path: |
+            backend/artifacts/snowpack/bundle/
+
+  # Phase 0.5 P0.7+P0.8: Release gate — uses the real release_gate.py CLI.
+  # C0.6: Uses if: always() at job level so the gate runs even if native job fails.
+  # The gate then explicitly checks the native job result and fails if it wasn't successful.
+  # G1: snowpack_poc_release mode also runs the release gate, deriving the
+  # expected run ID from the decision record's sector and band.
+  snowpack_release_gate:
+    if: always() && github.event_name == 'workflow_dispatch' && (github.event.inputs.mode == 'snowpack_release' || github.event.inputs.mode == 'snowpack_poc_release')
+    needs: snowpack_native
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r backend/locks/core-py312.txt
+          pip install --require-hashes -r backend/locks/snowpack-py312.txt
+          pip install --require-hashes -r backend/locks/ci-py312.txt
+
+      - name: Verify native job succeeded
+        # C0.6: Explicitly fail if the native job did not succeed.
+        # This prevents the gate from passing on a failed/skipped native job.
+        run: |
+          if [ "${{ needs.snowpack_native.result }}" != "success" ]; then
+            echo "ERROR: snowpack_native job result was '${{ needs.snowpack_native.result }}' (expected 'success')"
+            echo "Release gate cannot proceed without successful native execution."
+            exit 1
+          fi
+          echo "OK: snowpack_native job succeeded"
+
+      - name: Download native execution artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: snowpack-native-results
+          path: native-artifacts
+
+      - name: Run release gate CLI
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          # Protected operator-supplied digest of the exact approved registry
+          # bytes. The downloaded bundle is never allowed to define its own
+          # trust root.
+          EXPECTED_REGISTRY_SHA256: ${{ vars.SNOWPACK_REGISTRY_SHA256 }}
+          PIR_PANJAL_DECISION_RECORD_SHA256: ${{ vars.PIR_PANJAL_DECISION_RECORD_SHA256 }}
+          POC_MODE: ${{ github.event.inputs.mode }}
+        run: |
+          set -euo pipefail
+          # C0.6: Pass --expected-run-id to verify the bundle belongs to this workflow run.
+          # G1: In POC mode, derive the run ID from the decision record's sector and band.
+          if [ "$POC_MODE" = "snowpack_poc_release" ]; then
+            # P1-7/P1-8: Use the shared CLI helper that verifies the external
+            # SHA-256 BEFORE parsing. No inline json.loads in the workflow.
+            test -n "$PIR_PANJAL_DECISION_RECORD_SHA256"
+            printf '%s' "$PIR_PANJAL_DECISION_RECORD_SHA256" | grep -Eq '^[0-9a-fA-F]{64}$'
+            python3 -m backend.scripts.derive_poc_scope \
+              --decision-record-path docs/MVP4/00_governance/PIR_PANJAL_POC_DECISION_RECORD.json \
+              --expected-sha256 "$PIR_PANJAL_DECISION_RECORD_SHA256" \
+              --emit github-env
+            EXPECTED_RUN_ID="snowpack-${{ github.run_id }}-${{ github.run_attempt }}-${POC_REGION}-${POC_ELEVATION_BAND}"
+            DECISION_RECORD_ARGS="--expected-decision-record-sha256 $PIR_PANJAL_DECISION_RECORD_SHA256 --poc-mode"
+          else
+            EXPECTED_RUN_ID="snowpack-${{ github.run_id }}-${{ github.run_attempt }}-himalayas_nepal-lower"
+            DECISION_RECORD_ARGS=""
+          fi
+          test -n "$EXPECTED_REGISTRY_SHA256"
+          printf '%s' "$EXPECTED_REGISTRY_SHA256" | grep -Eq '^[0-9a-fA-F]{64}$'
+          python3 -m backend.scripts.release_gate \
+            --artifacts-dir native-artifacts \
+            --expected-run-id "$EXPECTED_RUN_ID" \
+            --expected-registry-sha256 "$EXPECTED_REGISTRY_SHA256" \
+            $DECISION_RECORD_ARGS
+
+
+  # ──────────────────────────────────────────────────────────────────────
+  # eDMRG telemetry ingest: fetches from EDMRG_FEED_URL (if configured)
+  # and parses manned + AWS station data via the eDMRG adapter.
+  # Skips cleanly (exit 0) when EDMRG_FEED_URL is not set.
+  # ──────────────────────────────────────────────────────────────────────
+  edmrg-ingest:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'ingest_edmrg'
+    concurrency:
+      group: av-ml-light
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/locks/core-py312.txt
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Run eDMRG feed ingest
+        env:
+          EDMRG_FEED_URL: ${{ secrets.EDMRG_FEED_URL }}
+          PYTHONPATH: ${{ github.workspace }}
+        run: python3 scripts/ingest_edmrg_feed.py
+
+
+  # ──────────────────────────────────────────────────────────────────────
+  # AAVDS detection event ingest: fetches from AAVDS_FEED_URL (if configured)
+  # and parses detection events via the AAVDS adapter.
+  # Skips cleanly (exit 0) when AAVDS_FEED_URL is not set.
+  # ──────────────────────────────────────────────────────────────────────
+  aavds-ingest:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'ingest_aavds'
+    concurrency:
+      group: av-ml-light
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/locks/core-py312.txt
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Run AAVDS feed ingest
+        env:
+          AAVDS_FEED_URL: ${{ secrets.AAVDS_FEED_URL }}
+          PYTHONPATH: ${{ github.workspace }}
+        run: python3 scripts/ingest_aavds_feed.py
+
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Ground sensor / geophone ingest: fetches from SENSOR_FEED_URL (if configured)
+  # and parses sensor events via the sensor_ingestion module.
+  # Skips cleanly (exit 0) when SENSOR_FEED_URL is not set.
+  # ──────────────────────────────────────────────────────────────────────
+  sensor-ingest:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'ingest_sensor'
+    concurrency:
+      group: av-ml-light
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/locks/core-py312.txt
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Run sensor feed ingest
+        env:
+          SENSOR_FEED_URL: ${{ secrets.SENSOR_FEED_URL }}
+          PYTHONPATH: ${{ github.workspace }}
+        run: python3 scripts/ingest_sensor_feed.py
+
+
+  # ──────────────────────────────────────────────────────────────────────
+  # GIBS MODIS snow-cover fetch: fetches NASA GIBS MODIS Terra snow-cover
+  # fraction tiles for all regions. Free, no auth required.
+  # Manual quota-pilot dispatch only; no daily schedule until coverage and
+  # request-cost metrics are accepted for the Great Himalaya pilot.
+  # ──────────────────────────────────────────────────────────────────────
+  gibs:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'gibs'
+    concurrency:
+      group: av-ml-light
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/locks/core-py312.txt
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Run GIBS snow-cover fetch
+        env:
+          GIBS_ENABLED: '1'
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python3 scripts/run_gibs_snow.py \
+            --date "$(date -u +%F)" \
+            --region-key "${{ github.event.inputs.region_keys || 'himalayas_nepal,pir_panjal_nw_himalaya,shamshabari_nw_himalaya,great_himalaya_nw_himalaya,karakoram_&_ladakh' }}"
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Six-hour technical-reference dispatch (G8).
+  # Manual only — no recurring cron. Sets RAVAFCAST_CADENCE_HOURS=6
+  # to produce four isolated forecast slots per day.
+  # Do NOT enable recurring six-hour cron until Partner approval.
+  # ──────────────────────────────────────────────────────────────────────
+  six_hour_reference:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'six_hour_reference'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Research-only by default. This job must not write to the production
+    # Supabase project until Partner has selected a hypothesis and a separate
+    # staging/write approval exists.
+    env:
+      RAVAFCAST_CADENCE_HOURS: '6'
+      RAVAFCAST_REFERENCE_TARGET: 'dry_run'
+      RAVAFCAST_REFERENCE_WRITE_APPROVED: 'false'
+      RAVAFCAST_PIPELINE_ENABLED: 'false'
+      DRY_RUN: 'true'
+      PYTHONPATH: ${{ github.workspace }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/locks/core-py312.txt
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Run six-hour technical-reference inference
+        run: |
+          python -m backend.daily_inference \
+            --dry-run \
+            --regions "${{ github.event.inputs.region_keys || 'himalayas_nepal,pir_panjal_nw_himalaya,shamshabari_nw_himalaya,great_himalaya_nw_himalaya,karakoram_&_ladakh' }}"

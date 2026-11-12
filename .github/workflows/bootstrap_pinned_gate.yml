@@ -1,0 +1,285 @@
+name: Bootstrap Pinned Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      DATASET_URL:
+        description: 'Direct truth/vector held-out archive URL on an allowlisted academic or trusted cloud mirror host'
+        required: true
+        type: string
+      SAR_RASTER_URL:
+        description: 'Direct Sentinel-1 VV/VH GeoTIFF archive URL on an allowlisted cloud or EO host; use the same URL as DATASET_URL only for a bundled AvalCD-style archive that already contains truth plus bi-temporal SAR members'
+        required: true
+        type: string
+      REFERENCE_SET_KEY:
+        description: 'Held-out reference set key; use a non-production key for canary mode'
+        required: false
+        default: 'snowslide-heldout-v1'
+        type: string
+      SOURCE_VERSION:
+        description: 'External dataset version identifier; defaults to current UTC date when omitted'
+        required: false
+        default: ''
+        type: string
+      BOOTSTRAP_MODE:
+        description: 'Bootstrap mode: authoritative for real SAR activation, canary for synthetic plumbing validation without activation'
+        required: false
+        default: 'authoritative'
+        type: choice
+        options:
+          - authoritative
+          - canary
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bootstrap-pinned-gate
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    name: Seed Sentinel-1 SAR refs
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      DATASET_URL: ${{ inputs.DATASET_URL }}
+      SAR_RASTER_URL: ${{ inputs.SAR_RASTER_URL }}
+      REFERENCE_SET_KEY: ${{ inputs.REFERENCE_SET_KEY }}
+      SOURCE_VERSION_INPUT: ${{ inputs.SOURCE_VERSION }}
+      BOOTSTRAP_MODE: ${{ inputs.BOOTSTRAP_MODE }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 1
+          lfs: false
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+
+      - name: Validate required secrets
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY}" ]; then
+            echo "::error::SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured as GitHub secrets"
+            exit 1
+          fi
+
+      - name: Install backend dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install --no-cache-dir --require-hashes -r backend/locks/core-py312.txt
+
+      - name: Resolve source version
+        id: resolve_source_version
+        run: |
+          set -euo pipefail
+          if [ -n "${SOURCE_VERSION_INPUT}" ]; then
+            value="${SOURCE_VERSION_INPUT}"
+          else
+            value="$(date -u +%F)"
+          fi
+          echo "value=${value}" >> "${GITHUB_OUTPUT}"
+
+      - name: Validate bootstrap mode and reference-set key
+        run: |
+          set -euo pipefail
+          case "${BOOTSTRAP_MODE}" in
+            authoritative|canary) ;;
+            *)
+              echo "::error::BOOTSTRAP_MODE must be authoritative or canary"
+              exit 1
+              ;;
+          esac
+          if [ "${BOOTSTRAP_MODE}" = "canary" ] && [ "${REFERENCE_SET_KEY}" = "snowslide-heldout-v1" ]; then
+            echo "::error::canary mode must not target the production reference set key snowslide-heldout-v1"
+            exit 1
+          fi
+
+      - name: Validate truth and SAR URL allowlists
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+
+          truth_allowed_hosts = {
+              'envidat.ch',
+              'www.envidat.ch',
+              'zenodo.org',
+              'www.zenodo.org',
+              'slf.ch',
+              'www.slf.ch',
+              'storage.googleapis.com',
+              's3.amazonaws.com',
+          }
+          truth_allowed_suffixes = ('.s3.amazonaws.com',)
+          raster_allowed_hosts = {
+              'storage.googleapis.com',
+              's3.amazonaws.com',
+              'dataspace.copernicus.eu',
+          }
+          raster_allowed_suffixes = ('.s3.amazonaws.com',)
+
+          def validate_url(env_name: str, *, exact_hosts: set[str], host_suffixes: tuple[str, ...] = ()) -> None:
+              url = os.environ[env_name]
+              parsed = urlparse(url)
+              if parsed.scheme != 'https':
+                  raise SystemExit(f'{env_name} must use https: {url}')
+              hostname = parsed.hostname or ''
+              if hostname not in exact_hosts and not any(hostname.endswith(suffix) for suffix in host_suffixes):
+                  raise SystemExit(
+                      f'{env_name} host must be one of {sorted(exact_hosts)} or end with {host_suffixes}; got {hostname!r}'
+                  )
+              if parsed.username or parsed.password or parsed.port:
+                  raise SystemExit(f'{env_name} must not include credentials or a custom port')
+              if not parsed.path or parsed.path.endswith('/'):
+                  raise SystemExit(f'{env_name} must point to a direct archive file, not a landing page')
+              print(f'validated {env_name}: {hostname}')
+
+          validate_url('DATASET_URL', exact_hosts=truth_allowed_hosts, host_suffixes=truth_allowed_suffixes)
+          if os.environ['DATASET_URL'] == os.environ['SAR_RASTER_URL']:
+              print('bundled archive mode: DATASET_URL and SAR_RASTER_URL match; reusing truth-host validation for SAR payload')
+          else:
+              validate_url('SAR_RASTER_URL', exact_hosts=raster_allowed_hosts, host_suffixes=raster_allowed_suffixes)
+          PY
+
+      - name: Download truth/vector archive
+        run: |
+          set -euo pipefail
+          wget "${DATASET_URL}" -O truth_archive.zip
+
+      - name: Download Sentinel-1 VV/VH raster archive
+        run: |
+          set -euo pipefail
+          if [ "${DATASET_URL}" = "${SAR_RASTER_URL}" ]; then
+            cp truth_archive.zip sar_rasters.zip
+          else
+            wget "${SAR_RASTER_URL}" -O sar_rasters.zip
+          fi
+
+      - name: Verify ZIP payloads
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+
+          truth_archive = Path('truth_archive.zip')
+          sar_archive = Path('sar_rasters.zip')
+          if not truth_archive.exists():
+              raise SystemExit('truth_archive.zip was not downloaded')
+          if not sar_archive.exists():
+              raise SystemExit('sar_rasters.zip was not downloaded')
+          if not zipfile.is_zipfile(truth_archive):
+              raise SystemExit('downloaded truth payload is not a valid ZIP archive; use a direct dataset file URL')
+          if not zipfile.is_zipfile(sar_archive):
+              raise SystemExit('downloaded SAR raster payload is not a valid ZIP archive; use a direct dataset file URL')
+          with zipfile.ZipFile(sar_archive) as archive:
+              tif_members = [
+                  name for name in archive.namelist()
+                  if Path(name).suffix.lower() in {'.tif', '.tiff'}
+              ]
+          if not tif_members:
+              raise SystemExit('SAR raster archive does not contain any .tif/.tiff members')
+          print('zip payloads ok')
+          PY
+
+      - name: Assemble truth and Sentinel-1 SAR inputs
+        run: |
+          set -euo pipefail
+          python -m backend.scripts.assemble_seed_archive \
+            --truth-zip truth_archive.zip \
+            --sar-zip sar_rasters.zip \
+            --output-dir assembled_seed_dir | tee assemble_result.json
+
+      - name: Preflight assembled Sentinel-1 SAR dataset
+        run: |
+          set -euo pipefail
+          python -m backend.scripts.seed_snowslide_truth \
+            --source-dir assembled_seed_dir \
+            --set-key "${REFERENCE_SET_KEY}" \
+            --source-version "${{ steps.resolve_source_version.outputs.value }}" \
+            --validate-only | tee validate_result.json
+
+      - name: Seed assembled Sentinel-1 SAR refs
+        run: |
+          set -euo pipefail
+          seed_args=()
+          if [ "${BOOTSTRAP_MODE}" = "canary" ]; then
+            seed_args+=(--non-authoritative)
+          fi
+          python -m backend.scripts.seed_snowslide_truth \
+            --source-dir assembled_seed_dir \
+            --set-key "${REFERENCE_SET_KEY}" \
+            --source-version "${{ steps.resolve_source_version.outputs.value }}" \
+            "${seed_args[@]}" | tee seed_result.json
+
+      - name: Materialize baselines and finalize reference set
+        run: |
+          set -euo pipefail
+          baseline_args=()
+          if [ "${BOOTSTRAP_MODE}" = "canary" ]; then
+            baseline_args+=(--no-activate)
+          fi
+          python -m backend.scripts.materialize_release_baseline_masks \
+            --reference-set-key "${REFERENCE_SET_KEY}" \
+            --source-dir assembled_seed_dir \
+            "${baseline_args[@]}" | tee baseline_result.json
+
+      - name: Verify bootstrap results
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          assembled = json.loads(Path('assemble_result.json').read_text(encoding='utf-8'))
+          validate = json.loads(Path('validate_result.json').read_text(encoding='utf-8'))
+          seed = json.loads(Path('seed_result.json').read_text(encoding='utf-8'))
+          baseline = json.loads(Path('baseline_result.json').read_text(encoding='utf-8'))
+
+          if assembled.get('status') != 'ok':
+              raise SystemExit(f'assemble_seed_archive failed: {assembled}')
+          if validate.get('status') != 'ok':
+              raise SystemExit(f'assembled Sentinel-1 SAR dataset preflight failed: {validate}')
+          if seed.get('status') != 'ok':
+              raise SystemExit(f'seed_snowslide_truth failed: {seed}')
+          if baseline.get('status') != 'ok':
+              raise SystemExit(f'materialize_release_baseline_masks failed: {baseline}')
+          mode = '${{ inputs.BOOTSTRAP_MODE }}'
+          expected_status = 'active' if mode == 'authoritative' else 'draft'
+          expected_authoritative = mode == 'authoritative'
+          if baseline.get('reference_set_status') != expected_status:
+              raise SystemExit(f'bootstrap mode {mode} expected reference_set_status={expected_status}: {baseline}')
+          if bool(seed.get('authoritative')) != expected_authoritative:
+              raise SystemExit(f'bootstrap mode {mode} expected authoritative={expected_authoritative}: {seed}')
+
+          print(
+              json.dumps(
+                  {
+                      'bootstrap_mode': mode,
+                      'reference_set_key': baseline.get('reference_set_key'),
+                      'assembled_scene_count': assembled.get('scene_count'),
+                      'scene_count': baseline.get('scene_count'),
+                      'authoritative': seed.get('authoritative'),
+                      'reference_set_status': baseline.get('reference_set_status'),
+                  },
+                  sort_keys=True,
+              )
+          )
+          PY
+
+      - name: Cleanup bootstrap artifacts
+        if: always()
+        run: |
+          set -euo pipefail
+          rm -rf truth_archive.zip sar_rasters.zip assembled_seed_dir assemble_result.json validate_result.json seed_result.json baseline_result.json

@@ -1,0 +1,29 @@
+{
+  "schema_version": "snowpack_approved_toolchain_manifest_v1",
+  "id": "pir-panjal-snowpack-3-7-0-meteoio-2-11-0-hosted-v1",
+  "kind": "toolchain",
+  "source": "Dockerfile.snowpack with pinned SNOWPACK and MeteoIO source commits",
+  "licence": "SNOWPACK/MeteoIO project licenses; internal-use POC runtime",
+  "units": "Pinned source commits, Docker base digests, binary and image identity attestation",
+  "region": "pir_panjal_nw_himalaya",
+  "elevation_band": "middle",
+  "valid_from": "2023-10-01T00:00:00Z",
+  "valid_to": "2024-02-24T00:00:00Z",
+  "approval_valid_from": "2026-08-12T00:00:00Z",
+  "approval_valid_to": "2026-12-31T23:59:59Z",
+  "approval_state": "approved",
+  "runtime_versions": {
+    "snowpack": "3.7.0",
+    "meteoio": "2.11.0"
+  },
+  "snowpack_commit": "349b857af07ddb090b3e7b36fb6a45ec87ec2338",
+  "meteoio_commit": "aefd3c94aed5d2542f2ed1fdbf54dcf03e91c75d",
+  "ubuntu_base_image": "ubuntu:22.04",
+  "ubuntu_base_digest": "sha256:3b06811b2afd352be909dd088a004166d665dc76d38b13eada33522a9d915c6f",
+  "python_base_image": "python:3.12-slim",
+  "python_base_digest": "sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36",
+  "runtime_identity_policy": "Hosted build must emit the real binary hash, image ID, image archive hash, and optional registry digest; this record does not authorize production",
+  "hosted_approved": true,
+  "production_eligible": false,
+  "research_only": true
+}
